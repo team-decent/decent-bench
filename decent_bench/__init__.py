@@ -1,2 +1,3 @@
-def _a() -> None:
-  pass
+def _a() -> str:
+
+    return "Hello!"
