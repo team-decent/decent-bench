@@ -5,14 +5,18 @@ envlist = ["lint"]
 description = "Run linters"
 deps = ["mypy", "ruff"]
 commands = [
-  ["ruff", "format", "decent_bench"],
-  ["mypy", "decent_bench", "--strict"],
-  ["ruff", "check", "decent_bench"]
+  ["mypy", "decent_bench"],
+  ["ruff", "check", "decent_bench"],
+  ["ruff", "format", "decent_bench", "--check"]
 ]
+
+[tool.mypy]
+strict = true
 
 [tool.ruff]
 lint.select = ["ALL"]
 lint.ignore = [
+  "COM812", # missing-trailing-comma (COM812) may cause conflicts when used with the formatter
   "CPY001", # Missing copyright notice at top of file
   "D100",   # Missing docstring in public module
   "D104",   # Missing docstring in public package
@@ -20,6 +24,5 @@ lint.ignore = [
   "D203",   # incorrect-blank-line-before-class (D203) and no-blank-line-before-class (D211) are incompatible
   "D212"    # multi-line-summary-first-line (D212) and multi-line-summary-second-line (D213) are incompatible
 ]
-fix = true
 preview = true
 line-length = 120
