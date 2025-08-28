@@ -1,2 +1,2 @@
-def a() -> None:
+def _a() -> None:
   pass
