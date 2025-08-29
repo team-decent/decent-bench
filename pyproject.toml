@@ -1,14 +1,27 @@
 [tool.tox]
-envlist = ["lint"]
+envlist = ["mypy", "pytest", "ruff"]
 
-[tool.tox.env.lint]
-description = "Run linters"
-deps = ["mypy", "ruff"]
+[tool.tox.env.mypy]
+description = "Run mypy (static type checker)"
+deps = ["mypy"]
+commands = [["mypy", "decent_bench"]]
+
+[tool.tox.env.pytest]
+description = "Run pytest (test executor)"
+deps = ["pytest"]
+commands = [["pytest"]]
+
+[tool.tox.env.ruff]
+description = "Run ruff (format and style checker)"
+deps = ["ruff"]
 commands = [
-  ["mypy", "decent_bench"],
   ["ruff", "check", "decent_bench"],
   ["ruff", "format", "decent_bench", "--check"]
 ]
+
+[tool.pytest.ini_options]
+addopts = "-q -W error"
+testpaths = ["test"]
 
 [tool.mypy]
 strict = true
