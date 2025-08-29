@@ -5,8 +5,8 @@ on:
     branches: [ main ]
 
 jobs:
-  tox:
-    runs-on: ubuntu-latest
+  mypy:
+    runs-on: macos-latest
 
     steps:
       - name: Check out code
@@ -20,5 +20,77 @@ jobs:
       - name: Install tox
         run: pip install tox
 
-      - name: Run tox
-        run: tox
+      - name: Run mypy
+        run: tox -e mypy
+
+  pytest-macos-latest:
+    runs-on: "macos-latest"
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install tox
+        run: pip install tox
+
+      - name: Run pytest
+        run: tox -e pytest
+
+  pytest-ubuntu-latest:
+    runs-on: "ubuntu-latest"
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install tox
+        run: pip install tox
+
+      - name: Run pytest
+        run: tox -e pytest
+    
+  pytest-windows-latest:
+    runs-on: "windows-latest"
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install tox
+        run: pip install tox
+
+      - name: Run pytest
+        run: tox -e pytest
+
+  ruff:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install tox
+        run: pip install tox
+
+      - name: Run ruff
+        run: tox -e ruff
