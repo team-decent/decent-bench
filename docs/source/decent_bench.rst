@@ -1,9 +1,6 @@
 decent\_bench package
 =====================
 
-Subpackages
------------
-
 Module contents
 ---------------
 
