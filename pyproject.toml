@@ -12,6 +12,18 @@ deps = [
   "mypy",
   "pytest",
   "ruff",
+  "sphinx",
+  "sphinx_rtd_theme",
+]
+
+[tool.tox.env.sphinx]
+description = "Generate rst and html files using sphinx"
+deps = ["sphinx", "sphinx_rtd_theme"]
+allowlist_externals = ["make"]
+commands = [
+  ["sphinx-apidoc", "-o", "docs/source", "decent_bench", "--no-toc"],
+  ["make", "-C", "docs", "clean"],
+  ["make", "-C", "docs", "html"],
 ]
 
 [tool.tox.env.mypy]
