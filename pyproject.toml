@@ -4,17 +4,21 @@ version = "0.0.0"
 requires-python = ">=3.13"
 dependencies = []
 
-[tool.tox]
-envlist = ["dev", "mypy", "pytest", "ruff"]
-
-[tool.tox.env.dev]
-deps = [
+[project.optional-dependencies]
+dev = [
   "mypy",
   "pytest",
   "ruff",
   "sphinx",
-  "sphinx_rtd_theme",
+  "sphinx_rtd_theme"
 ]
+
+[tool.tox]
+envlist = ["dev", "mypy", "pytest", "ruff", "sphinx"]
+
+[tool.tox.env.dev]
+description = "Generate dev venv with all dependencies, active with `source .tox/dev/bin/activate`"
+deps = [".[dev]"]
 
 [tool.tox.env.sphinx]
 description = "Generate rst and html files using sphinx"
