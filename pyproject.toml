@@ -1,5 +1,10 @@
+[project]
+name = "decent-bench"
+version = "0.0.0"
+dependencies = []
+
 [tool.tox]
-envlist = ["mypy", "pytest", "ruff"]
+envlist = ["py313", "mypy", "pytest", "ruff"]
 
 [tool.tox.env.mypy]
 description = "Run mypy (static type checker)"
