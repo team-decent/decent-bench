@@ -21,10 +21,11 @@ description = "Generate dev venv with all dependencies, active with `source .tox
 deps = [".[dev]"]
 
 [tool.tox.env.sphinx]
-description = "Generate rst and html files using sphinx"
+description = "Clean up and regenerate rst and html files using sphinx"
 deps = ["sphinx", "sphinx_rtd_theme"]
-allowlist_externals = ["make"]
+allowlist_externals = ["find", "make"]
 commands = [
+  ["find", "docs/source", "-name", "*.rst", "!", "-name", "index.rst", "-delete"],
   ["sphinx-apidoc", "-o", "docs/source", "decent_bench", "--no-toc"],
   ["make", "-C", "docs", "clean"],
   ["make", "-C", "docs", "html"],

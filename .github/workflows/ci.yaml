@@ -94,3 +94,24 @@ jobs:
 
       - name: Run ruff
         run: tox -e ruff
+
+  sphinx:
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install tox
+        run: pip install tox
+
+      - name: Run sphinx
+        run: tox -e sphinx
+
+      - name: Check git diff
+        run: git diff --exit-code || { echo 'Error - Docs are stale, please regenerate with `tox -e sphinx`.'; exit 1; }
