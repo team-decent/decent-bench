@@ -1,5 +1,5 @@
-decent\_bench package
-=====================
+decent\_bench.library package
+=============================
 
 Subpackages
 -----------
@@ -7,12 +7,12 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
-   decent_bench.library
+   decent_bench.library.core
 
 Module contents
 ---------------
 
-.. automodule:: decent_bench
+.. automodule:: decent_bench.library
    :members:
    :show-inheritance:
    :undoc-members:
