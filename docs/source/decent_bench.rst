@@ -5,6 +5,6 @@ Module contents
 ---------------
 
 .. automodule:: decent_bench
-   :members:
+   :members:w
    :show-inheritance:
    :undoc-members:
