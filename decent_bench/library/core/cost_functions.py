@@ -35,8 +35,8 @@ class CostFunction(ABC):
         The proximal operator is defined as
 
         .. math::
-            \operatorname{prox}_{\rho f}(\pmb{y})
-            = \arg\min_{\pmb{x}}  \left\{ f(\pmb{x}) + \frac{1}{2\rho} \| \pmb{x} - \pmb{y} \|^2 \right\}
+            \operatorname{prox}_{\rho f}(\mathbf{y})
+            = \arg\min_{\mathbf{x}}  \left\{ f(\mathbf{x}) + \frac{1}{2\rho} \| \mathbf{x} - \mathbf{y} \|^2 \right\}
 
         where :math:`\rho > 0` is the penalty and :math:`f` the cost function.
         """
@@ -58,7 +58,7 @@ class QuadraticCostFunction(CostFunction):
     r"""
     Quadratic cost function.
 
-    .. math:: f(\pmb{x}) = \frac{1}{2} \pmb{x}^T \pmb{Ax} + \pmb{b}^T \pmb{x} + c
+    .. math:: f(\mathbf{x}) = \frac{1}{2} \mathbf{x}^T \mathbf{Ax} + \mathbf{b}^T \mathbf{x} + c
     """
 
     def __init__(self, A: NDArray[float64], b: NDArray[float64], c: float):  # noqa: N803
@@ -82,7 +82,7 @@ class QuadraticCostFunction(CostFunction):
         r"""
         Evaluate function at x.
 
-        .. math:: \frac{1}{2} \pmb{x}^T \pmb{Ax} + \pmb{b}^T \pmb{x} + c
+        .. math:: \frac{1}{2} \mathbf{x}^T \mathbf{Ax} + \mathbf{b}^T \mathbf{x} + c
         """
         return float(0.5 * x.dot(self.A.dot(x)) + self.b.dot(x) + self.c)
 
@@ -90,7 +90,7 @@ class QuadraticCostFunction(CostFunction):
         r"""
         Gradient at x.
 
-        .. math:: \pmb{Ax} + \pmb{b}
+        .. math:: \mathbf{Ax} + \mathbf{b}
         """
         return self.A @ x + self.b
 
@@ -98,7 +98,7 @@ class QuadraticCostFunction(CostFunction):
         r"""
         Hessian at x.
 
-        .. math:: \pmb{A}
+        .. math:: \mathbf{A}
         """
         return self.A
 
@@ -107,7 +107,7 @@ class QuadraticCostFunction(CostFunction):
         Proximal at y.
 
         .. math::
-            (\rho \pmb{A} + \pmb{I})^{-1} (\pmb{y} - \rho \pmb{b})
+            (\rho \mathbf{A} + \mathbf{I})^{-1} (\mathbf{y} - \rho \mathbf{b})
 
         where :math:`\rho > 0` is the penalty.
 
@@ -144,13 +144,15 @@ class LinearRegression(CostFunction):
     r"""
     Linear regression cost function.
 
-    .. math:: f(\pmb{x}) = \frac{1}{2} \| \pmb{Ax} - \pmb{b} \|^2
+    .. math:: f(\mathbf{x}) = \frac{1}{2} \| \mathbf{Ax} - \mathbf{b} \|^2
 
     or in the general quadratic form
 
     .. math::
-        f(\pmb{x})
-        = \frac{1}{2} \pmb{x}^T\pmb{A}^T\pmb{Ax} - (\pmb{A}^T \pmb{b})^T \pmb{x} + \frac{1}{2} \pmb{b}^T\pmb{b}
+        f(\mathbf{x})
+        = \frac{1}{2} \mathbf{x}^T\mathbf{A}^T\mathbf{Ax}
+        - (\mathbf{A}^T \mathbf{b})^T \mathbf{x}
+        + \frac{1}{2} \mathbf{b}^T\mathbf{b}
     """
 
     def __init__(self, A: NDArray[float64], b: NDArray[float64]):  # noqa: N803
@@ -168,7 +170,7 @@ class LinearRegression(CostFunction):
         r"""
         Evaluate function at x.
 
-        .. math:: \frac{1}{2} \| \pmb{Ax} - \pmb{b} \|^2
+        .. math:: \frac{1}{2} \| \mathbf{Ax} - \mathbf{b} \|^2
         """
         return self.quadratic_cf.evaluate(x)
 
@@ -176,7 +178,7 @@ class LinearRegression(CostFunction):
         r"""
         Gradient at x.
 
-        .. math:: \pmb{A}^T\pmb{Ax} - \pmb{A}^T \pmb{b}
+        .. math:: \mathbf{A}^T\mathbf{Ax} - \mathbf{A}^T \mathbf{b}
         """
         return self.quadratic_cf.gradient(x)
 
@@ -184,7 +186,7 @@ class LinearRegression(CostFunction):
         r"""
         Hessian at x.
 
-        .. math:: \pmb{A}^T\pmb{A}
+        .. math:: \mathbf{A}^T\mathbf{A}
         """
         return self.quadratic_cf.hessian(x)
 
@@ -193,7 +195,7 @@ class LinearRegression(CostFunction):
         Proximal at y.
 
         .. math::
-            (\rho \pmb{A}^T \pmb{A} + \pmb{I})^{-1} (\pmb{y} + \rho \pmb{A}^T\pmb{b})
+            (\rho \mathbf{A}^T \mathbf{A} + \mathbf{I})^{-1} (\mathbf{y} + \rho \mathbf{A}^T\mathbf{b})
 
         where :math:`\rho > 0` is the penalty.
 
@@ -270,9 +272,9 @@ class ProximalCost(CostFunction):
     The function minimized by the proximal operator.
 
     .. math::
-            f_{prox}(\pmb{x}) = f(\pmb{x}) + \frac{1}{2\rho} \| \pmb{x} - \pmb{y} \|^2
+            f_{prox}(\mathbf{x}) = f(\mathbf{x}) + \frac{1}{2\rho} \| \mathbf{x} - \mathbf{y} \|^2
 
-    where :math:`f`, :math:`\pmb{y}`, and :math:`\rho` are the cost function, input, and penalty respectively,
+    where :math:`f`, :math:`\mathbf{y}`, and :math:`\rho` are the cost function, input, and penalty respectively,
     all fixed by the proximal operator.
 
     See :meth:`CostFunction.proximal` for how the proximal operator is defined and relates to this function.
@@ -295,7 +297,7 @@ class ProximalCost(CostFunction):
         r"""
         Evaluate function at x.
 
-        .. math:: f(\pmb{x}) + \frac{1}{2\rho} \| \pmb{x} - \pmb{y} \|^2
+        .. math:: f(\mathbf{x}) + \frac{1}{2\rho} \| \mathbf{x} - \mathbf{y} \|^2
         """
         return self.inner.evaluate(x)
 
@@ -303,7 +305,7 @@ class ProximalCost(CostFunction):
         r"""
         Gradient at x.
 
-        .. math:: \nabla f(\pmb{x}) + \frac{1}{\rho} (\pmb{x} - \pmb{y})
+        .. math:: \nabla f(\mathbf{x}) + \frac{1}{\rho} (\mathbf{x} - \mathbf{y})
         """
         return self.inner.gradient(x)
 
@@ -311,7 +313,7 @@ class ProximalCost(CostFunction):
         r"""
         Hessian at x.
 
-        .. math:: \nabla^2 f(\pmb{x}) + \frac{1}{\rho} \pmb{I}
+        .. math:: \nabla^2 f(\mathbf{x}) + \frac{1}{\rho} \mathbf{I}
         """
         return self.inner.hessian(x)
 

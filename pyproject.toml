@@ -64,16 +64,17 @@ lint.pydocstyle.ignore-decorators = ["property"]
 lint.select = ["ALL"]
 lint.ignore = [
   "COM812",   # missing-trailing-comma (COM812) may cause conflicts when used with the formatter
-  "CPY001",   # Missing copyright notice at top of file
-  "D100",     # Missing docstring in public module
-  "D104",     # Missing docstring in public package
-  "D107",     # Missing docstring in __init__
+  "CPY001",   # missing-copyright-notice
+  "D100",     # undocumented-public-module
+  "D104",     # undocumented-public-package
+  "D107",     # undocumented-public-init
   "D203",     # incorrect-blank-line-before-class (D203) and no-blank-line-before-class (D211) are incompatible
   "D212",     # multi-line-summary-first-line (D212) and multi-line-summary-second-line (D213) are incompatible
   "D415",     # missing-terminal-punctuation, D400 already enforces first line to end with period
   "DOC201",   # docstring-missing-returns, always documenting the return value is too verbose
   "EM101",    # raw-string-in-exception, complains about putting raw string as error msg
   "EM102",    # f-string-in-exception, complains about putting f string as error msg
+  "PLR0913",  # too-many-arguments, complains when there are more than 5 arguments
   "PLR2004",  # magic-value-comparison, complains about dimension checks in cost functions
   "TC002",    # typing-only-third-party-import, reduces rt overhead but slows down development and makes imports messy
   "TRY003",   # raise-vanilla-args, complains about simple error messages like `ValueError('Matrix A must be 2D')`
