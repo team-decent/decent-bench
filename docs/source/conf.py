@@ -27,6 +27,9 @@ extensions = [
     "sphinx.ext.viewcode",  # View source code
 ]
 
+autodoc_default_options = {"special-members": "__add__"}
+
+autodoc_member_order = "bysource"
 
 intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable/", None),
