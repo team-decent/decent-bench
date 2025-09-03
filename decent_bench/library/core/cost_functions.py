@@ -47,14 +47,14 @@ class CostFunction(ABC):
         Add another cost function to create a new one.
 
         :class:`SumCost` be used as the result of a cost function's :meth:`__add__`. However, it's often more efficient
-        to preserve the cost function type if possible. For example, the addition of two :class:`QuadraticCostFunction`
-        objects benefits from returning a new :class:`QuadraticCostFunction` instead of a :class:`SumCost` as this
+        to preserve the cost function type if possible. For example, the addition of two :class:`QuadraticCost`
+        objects benefits from returning a new :class:`QuadraticCost` instead of a :class:`SumCost` as this
         preserves the closed form proximal solution and only requires one evaluation instead of two when calling
         :meth:`evaluate`, :meth:`gradient`, and :meth:`hessian`.
         """
 
 
-class QuadraticCostFunction(CostFunction):
+class QuadraticCost(CostFunction):
     r"""
     Quadratic cost function.
 
@@ -90,17 +90,17 @@ class QuadraticCostFunction(CostFunction):
         r"""
         Gradient at x.
 
-        .. math:: \mathbf{Ax} + \mathbf{b}
+        .. math:: \frac{1}{2} (\mathbf{A}+\mathbf{A^T})\mathbf{x} + \mathbf{b}
         """
-        return self.A @ x + self.b
+        return 0.5 * (self.A + self.A.T) @ x + self.b
 
     def hessian(self, x: NDArray[float64]) -> NDArray[float64]:  # noqa: ARG002
         r"""
         Hessian at x.
 
-        .. math:: \mathbf{A}
+        .. math:: \frac{1}{2} (\mathbf{A}+\mathbf{A^T})
         """
-        return self.A
+        return 0.5 * (self.A + self.A.T)
 
     def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
         r"""
@@ -122,7 +122,7 @@ class QuadraticCostFunction(CostFunction):
         Add another cost function.
 
         Returns:
-            :class:`QuadraticCostFunction` if *other* is :class:`QuadraticCostFunction` or :class:`LinearRegression`,
+            :class:`QuadraticCost` if *other* is :class:`QuadraticCost` or :class:`LinearRegression`,
             else :class:`SumCost`
 
         Raises:
@@ -131,10 +131,10 @@ class QuadraticCostFunction(CostFunction):
         """
         if self.domain_shape != other.domain_shape:
             raise ValueError(f"Mismatching domain shapes: {self.domain_shape} vs {other.domain_shape}")
-        if isinstance(other, QuadraticCostFunction):
-            return QuadraticCostFunction(self.A + other.A, self.b + other.b, self.c + other.c)
+        if isinstance(other, QuadraticCost):
+            return QuadraticCost(self.A + other.A, self.b + other.b, self.c + other.c)
         if isinstance(other, LinearRegression):
-            return QuadraticCostFunction(
+            return QuadraticCost(
                 self.A + other.quadratic_cf.A, self.b + other.quadratic_cf.b, self.c + other.quadratic_cf.c
             )
         return SumCost([self, other])
@@ -158,7 +158,7 @@ class LinearRegression(CostFunction):
     def __init__(self, A: NDArray[float64], b: NDArray[float64]):  # noqa: N803
         if A.shape[0] != b.shape[0]:
             raise ValueError(f"Dimension mismatch: A has {A.shape[0]} rows but b has {b.shape[0]} elements")
-        self.quadratic_cf = QuadraticCostFunction(A.T.dot(A), -A.T.dot(b), 0.5 * b.dot(b))
+        self.quadratic_cf = QuadraticCost(A.T.dot(A), -A.T.dot(b), 0.5 * b.dot(b))
         self.A = A
         self.b = b
 
@@ -208,7 +208,7 @@ class LinearRegression(CostFunction):
         Add another cost function.
 
         Returns:
-            :class:`QuadraticCostFunction` if *other* is :class:`LinearRegression` or :class:`QuadraticCostFunction`,
+            :class:`QuadraticCost` if *other* is :class:`LinearRegression` or :class:`QuadraticCost`,
             else :class:`SumCost`
 
         Raises:
@@ -218,13 +218,13 @@ class LinearRegression(CostFunction):
         if self.domain_shape != other.domain_shape:
             raise ValueError(f"Mismatching domain shapes: {self.domain_shape} vs {other.domain_shape}")
         if isinstance(other, LinearRegression):
-            return QuadraticCostFunction(
+            return QuadraticCost(
                 self.quadratic_cf.A + other.quadratic_cf.A,
                 self.quadratic_cf.b + other.quadratic_cf.b,
                 self.quadratic_cf.c + other.quadratic_cf.c,
             )
-        if isinstance(other, QuadraticCostFunction):
-            return QuadraticCostFunction(
+        if isinstance(other, QuadraticCost):
+            return QuadraticCost(
                 self.quadratic_cf.A + other.A, self.quadratic_cf.b + other.b, self.quadratic_cf.c + other.c
             )
         return SumCost([self, other])
@@ -287,7 +287,7 @@ class ProximalCost(CostFunction):
             raise ValueError("Cost function domain and y need to have the same shape")
         if rho <= 0:
             raise ValueError("Penalty term `rho` must be greater than 0")
-        self.inner = f + QuadraticCostFunction(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho))
+        self.inner = f + QuadraticCost(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho))
 
     @property
     def domain_shape(self) -> tuple[int, ...]:
