@@ -6,6 +6,8 @@ import numpy as np
 from numpy import float64
 from numpy.typing import NDArray
 
+from decent_bench.library.core import centralized_algorithms as ca
+
 
 class CostFunction(ABC):
     """Used by agents to evaluate the cost and its derivatives at a certain x."""
@@ -403,7 +405,8 @@ class SumCost(CostFunction):
 
         See :meth:`CostFunction.proximal` for the general proximal definition.
         """
-        raise NotImplementedError
+        prox_cf = ProximalCost(self, y, rho)
+        return ca.accelerated_gradient_descent(prox_cf, y, max_iter=100, stop_tol=1e-10, max_tol=None)
 
     def __add__(self, other: CostFunction) -> SumCost:
         """Add another cost function."""
@@ -488,7 +491,8 @@ class ProximalCost(CostFunction):
 
         See :meth:`CostFunction.proximal` for the general proximal definition.
         """
-        raise NotImplementedError
+        prox_cf = ProximalCost(self, y, rho)
+        return ca.accelerated_gradient_descent(prox_cf, y, max_iter=100, stop_tol=1e-10, max_tol=None)
 
     def __add__(self, other: CostFunction) -> CostFunction:
         """Add another cost function."""
