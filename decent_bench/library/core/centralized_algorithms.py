@@ -54,8 +54,6 @@ def accelerated_gradient_descent(
     cost_function: CostFunction,
     x0: NDArray[float64],
     *,
-    m_smooth: float,
-    m_cvx: float,
     max_iter: int,
     stop_tol: float | None,
     max_tol: float | None,
@@ -66,40 +64,40 @@ def accelerated_gradient_descent(
     Args:
         cost_function: cost function to minimize
         x0: initial guess
-        m_smooth: smoothness constant,
-            see :attr:`CostFunction.m_smooth <decent_bench.library.core.cost_functions.CostFunction.m_smooth>`
-            for full definition
-        m_cvx: convexity constant,
-            see :attr:`CostFunction.m_cvx <decent_bench.library.core.cost_functions.CostFunction.m_cvx>`
-            for full definition
         max_iter: maximum number of iterations to run
         stop_tol: early stopping criteria - stop if ``norm(x_new - x) <= stop_tol``
         max_tol: maximum tolerated ``norm(x_new - x)`` at the end
 
     Raises:
         RuntimeError: if ``norm(x_new - x) > max_tol`` at the end
-        ValueError: if *m_smooth* or *m_cvx* is negative
+        ValueError: if ``cost_function.m_smooth < 0``, ``cost_function.m_cvx < 0``, or cost function is affine
 
     Returns:
         x that minimizes the cost function.
 
     """
-    if m_cvx < 0:
-        raise ValueError("Strong convexity constant must be non-negative")
-    if m_smooth < 0:
-        raise ValueError("Lipschitz constant must be non-negative")
-    if m_smooth == np.inf:
-        raise NotImplementedError(
-            "Support for unknown Lipschitz constant is not implemented yet, please use non-accelerated gradient descent"
-        )
+    if cost_function.m_smooth == 0:
+        raise ValueError("Function must not be affine")
+    if cost_function.m_smooth < 0:
+        raise ValueError("m_smooth must not be negative")
+    if cost_function.m_cvx < 0:
+        raise ValueError("m_cvx must not be negative")
+    if cost_function.m_smooth == np.inf:
+        raise NotImplementedError("Support for non-L-smoothness is not implemented yet")
+    if np.isnan(cost_function.m_smooth):
+        raise NotImplementedError("Support for non-global differentiability is not implemented yet")
+    if np.isnan(cost_function.m_cvx):
+        raise NotImplementedError("Support for non-convexity is not implemented yet")
     x = x0
     y = x0
-    c = (np.sqrt(m_smooth) - np.sqrt(m_cvx)) / (np.sqrt(m_smooth) + np.sqrt(m_cvx))
+    c = (np.sqrt(cost_function.m_smooth) - np.sqrt(cost_function.m_cvx)) / (
+        np.sqrt(cost_function.m_smooth) + np.sqrt(cost_function.m_cvx)
+    )
     delta = np.inf
     for k in range(1, max_iter + 1):
-        x_new = y - cost_function.gradient(y) / m_smooth
+        x_new = y - cost_function.gradient(y) / cost_function.m_smooth
         delta = float(la.norm(x_new - x))
-        beta = c if m_cvx > 0 else (k - 1) / (k + 2)
+        beta = c if cost_function.m_cvx > 0 else (k - 1) / (k + 2)
         y_new = x_new + beta * (x_new - x)
         x, y = x_new, y_new
         if stop_tol is not None and delta <= stop_tol:
