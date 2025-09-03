@@ -28,15 +28,15 @@ class CostFunction(ABC):
         """Hessian at x."""
 
     @abstractmethod
-    def proximal(self, x: NDArray[float64], penalty: float) -> NDArray[float64]:
+    def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
         r"""
-        Proximal at x.
+        Proximal at y.
 
         The proximal operator is defined as
 
         .. math::
-            \operatorname{prox}_{\rho f}(\pmb{x})
-            = \arg\min_{\pmb{y}}  \left\{ f(\pmb{y}) + \frac{1}{2\rho} \| \pmb{y} - \pmb{x} \|^2 \right\}
+            \operatorname{prox}_{\rho f}(\pmb{y})
+            = \arg\min_{\pmb{x}}  \left\{ f(\pmb{x}) + \frac{1}{2\rho} \| \pmb{x} - \pmb{y} \|^2 \right\}
 
         where :math:`\rho > 0` is the penalty and :math:`f` the cost function.
         """
@@ -102,19 +102,19 @@ class QuadraticCostFunction(CostFunction):
         """
         return self.A
 
-    def proximal(self, x: NDArray[float64], penalty: float) -> NDArray[float64]:
+    def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
         r"""
-        Proximal at x.
+        Proximal at y.
 
         .. math::
-            (\rho \pmb{A} + \pmb{I})^{-1} (\pmb{x} - \rho \pmb{b})
+            (\rho \pmb{A} + \pmb{I})^{-1} (\pmb{y} - \rho \pmb{b})
 
         where :math:`\rho > 0` is the penalty.
 
         This is a closed form solution, see :meth:`CostFunction.proximal` for the general proximal definition.
         """
-        lhs = self.A * penalty + np.eye(self.A.shape[1])
-        rhs = x - self.b * penalty
+        lhs = self.A * rho + np.eye(self.A.shape[1])
+        rhs = y - self.b * rho
         return np.asarray(np.linalg.solve(lhs, rhs), dtype=np.float64)
 
     def __add__(self, other: CostFunction) -> CostFunction:
@@ -188,18 +188,18 @@ class LinearRegression(CostFunction):
         """
         return self.quadratic_cf.hessian(x)
 
-    def proximal(self, x: NDArray[float64], penalty: float) -> NDArray[float64]:
+    def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
         r"""
-        Proximal at x.
+        Proximal at y.
 
         .. math::
-            (\rho \pmb{A}^T \pmb{A} + \pmb{I})^{-1} (\pmb{x} + \rho \pmb{A}^T\pmb{b})
+            (\rho \pmb{A}^T \pmb{A} + \pmb{I})^{-1} (\pmb{y} + \rho \pmb{A}^T\pmb{b})
 
         where :math:`\rho > 0` is the penalty.
 
         This is a closed form solution, see :meth:`CostFunction.proximal` for the general proximal definition.
         """
-        return self.quadratic_cf.proximal(x, penalty)
+        return self.quadratic_cf.proximal(y, rho)
 
     def __add__(self, other: CostFunction) -> CostFunction:
         """
@@ -252,9 +252,9 @@ class SumCost(CostFunction):
         """Sum the :meth:`hessian` of each cost function."""
         return np.asarray(np.sum([cf.hessian(x) for cf in self.cost_functions], axis=0))
 
-    def proximal(self, x: NDArray[float64], penalty: float) -> NDArray[float64]:
+    def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
         """
-        Proximal at x solved using an iterative method.
+        Proximal at y solved using an iterative method.
 
         See :meth:`CostFunction.proximal` for the general proximal definition.
         """
@@ -263,3 +263,66 @@ class SumCost(CostFunction):
     def __add__(self, other: CostFunction) -> SumCost:
         """Add another cost function."""
         return SumCost([*self.cost_functions, other])
+
+
+class ProximalCost(CostFunction):
+    r"""
+    The function minimized by the proximal operator.
+
+    .. math::
+            f_{prox}(\pmb{x}) = f(\pmb{x}) + \frac{1}{2\rho} \| \pmb{x} - \pmb{y} \|^2
+
+    where :math:`f`, :math:`\pmb{y}`, and :math:`\rho` are the cost function, input, and penalty respectively,
+    all fixed by the proximal operator.
+
+    See :meth:`CostFunction.proximal` for how the proximal operator is defined and relates to this function.
+    """
+
+    def __init__(self, f: CostFunction, y: NDArray[float64], rho: float):
+        if len(f.domain_shape) > 1 or len(y.shape) > 1:
+            raise ValueError("Shape of cost function domain and y must have exactly one axis")
+        if f.domain_shape != y.shape:
+            raise ValueError("Cost function domain and y need to have the same shape")
+        if rho <= 0:
+            raise ValueError("Penalty term `rho` must be greater than 0")
+        self.inner = f + QuadraticCostFunction(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho))
+
+    @property
+    def domain_shape(self) -> tuple[int, ...]:
+        return self.inner.domain_shape
+
+    def evaluate(self, x: NDArray[float64]) -> float:
+        r"""
+        Evaluate function at x.
+
+        .. math:: f(\pmb{x}) + \frac{1}{2\rho} \| \pmb{x} - \pmb{y} \|^2
+        """
+        return self.inner.evaluate(x)
+
+    def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
+        r"""
+        Gradient at x.
+
+        .. math:: \nabla f(\pmb{x}) + \frac{1}{\rho} (\pmb{x} - \pmb{y})
+        """
+        return self.inner.gradient(x)
+
+    def hessian(self, x: NDArray[float64]) -> NDArray[float64]:
+        r"""
+        Hessian at x.
+
+        .. math:: \nabla^2 f(\pmb{x}) + \frac{1}{\rho} \pmb{I}
+        """
+        return self.inner.hessian(x)
+
+    def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
+        """
+        Proximal at y solved using an iterative method.
+
+        See :meth:`CostFunction.proximal` for the general proximal definition.
+        """
+        raise NotImplementedError
+
+    def __add__(self, other: CostFunction) -> CostFunction:
+        """Add another cost function."""
+        return SumCost([self, other])
