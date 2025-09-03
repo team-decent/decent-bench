@@ -66,18 +66,12 @@ def accelerated_gradient_descent(
     Args:
         cost_function: cost function to minimize
         x0: initial guess
-        m_smooth: Lipschitz constant of the cost function's gradient, i.e. the smallest value such that
-            :math:`||\nabla f(\mathbf{x_1}) - \nabla f(\mathbf{x_2})|| \leq \text{m_smooth}
-            \cdot \|\mathbf{x_1} - \mathbf{x_2}\|`
-            for all :math:`\mathbf{x_1}` and :math:`\mathbf{x_2}`
-        m_cvx: strong convexity constant of the cost function, i.e. the largest value such that
-            :math:`f(\mathbf{x_1})
-            \geq f(\mathbf{x_2})
-            + \nabla f(\mathbf{x_2})^T (\mathbf{x_1} - \mathbf{x_2})
-            + \frac{\text{m_cvx}}{2} \|\mathbf{x_1} - \mathbf{x_2}\|^2`
-            for all :math:`\mathbf{x_1}` and :math:`\mathbf{x_2}`.
-            If zero, the method assumes convexity (not strong convexity) and uses a time-varying momentum schedule
-            instead of a constant one.
+        m_smooth: smoothness constant,
+            see :attr:`CostFunction.m_smooth <decent_bench.library.core.cost_functions.CostFunction.m_smooth>`
+            for full definition
+        m_cvx: convexity constant,
+            see :attr:`CostFunction.m_cvx <decent_bench.library.core.cost_functions.CostFunction.m_cvx>`
+            for full definition
         max_iter: maximum number of iterations to run
         stop_tol: early stopping criteria - stop if ``norm(x_new - x) <= stop_tol``
         max_tol: maximum tolerated ``norm(x_new - x)`` at the end
