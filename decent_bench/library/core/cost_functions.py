@@ -15,6 +15,43 @@ class CostFunction(ABC):
     def domain_shape(self) -> tuple[int, ...]:
         """Required shape of x."""
 
+    @property
+    @abstractmethod
+    def m_smooth(self) -> float:
+        r"""
+        Lipschitz constant of the cost function's gradient.
+
+        The gradient's Lipschitz constant m_smooth is the smallest value such that
+        :math:`\| \nabla f(\mathbf{x_1}) - \nabla f(\mathbf{x_2}) \| \leq \text{m_smooth}
+        \cdot \|\mathbf{x_1} - \mathbf{x_2}\|`
+        for all :math:`\mathbf{x_1}` and :math:`\mathbf{x_2}`.
+
+        Returns:
+            - non-negative finite number if function is L-smooth
+            - ``np.inf`` if function is differentiable everywhere but not L-smooth
+            - ``np.nan`` if function is not differentiable everywhere
+
+        """
+
+    @property
+    @abstractmethod
+    def m_cvx(self) -> float:
+        r"""
+        Convexity constant of the cost function.
+
+        The convexity constant m_cvx is the largest value such that
+        :math:`f(\mathbf{x_1}) \geq f(\mathbf{x_2})
+        + \nabla f(\mathbf{x_2})^T (\mathbf{x_1} - \mathbf{x_2})
+        + \frac{\text{m_cvx}}{2} \|\mathbf{x_1} - \mathbf{x_2}\|^2`
+        for all :math:`\mathbf{x_1}` and :math:`\mathbf{x_2}`.
+
+        Returns:
+            - positive finite number if function is strongly convex
+            - ``0`` if function is convex but not strongly convex
+            - ``np.nan`` if function is not guaranteed to be convex
+
+        """
+
     @abstractmethod
     def evaluate(self, x: NDArray[float64]) -> float:
         """Evaluate function at x."""
@@ -76,8 +113,47 @@ class QuadraticCost(CostFunction):
         self.c = c
 
     @property
-    def domain_shape(self) -> tuple[int, ...]:
+    def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
         return self.b.shape
+
+    @property
+    def m_smooth(self) -> float:
+        r"""
+        The cost function's smoothness constant.
+
+        .. math::
+            \max_{i} \left| \lambda_i \right|
+
+        where :math:`\lambda_i` are the eigenvalues of :math:`\frac{1}{2} (\mathbf{A}+\mathbf{A}^T)`.
+
+        For the general definition, see :meth:`CostFunction.m_smooth`.
+        """
+        eigs = np.linalg.eigvalsh(self.A_sym)
+        return float(np.max(np.abs(eigs)))
+
+    @property
+    def m_cvx(self) -> float:
+        r"""
+        The cost function's convexity constant.
+
+        .. math::
+            \begin{array}{ll}
+                \min_i \lambda_i, & \text{if } \min_i \lambda_i > 0, \\
+                0, & \text{if } \min_i \lambda_i = 0, \\
+                \text{NaN}, & \text{if } \min_i \lambda_i < 0
+            \end{array}
+
+        where :math:`\lambda_i` are the eigenvalues of :math:`\frac{1}{2} (\mathbf{A}+\mathbf{A}^T)`.
+
+        For the general definition, see :meth:`CostFunction.m_cvx`.
+        """
+        eigs = np.linalg.eigvalsh(self.A_sym)
+        l_min = float(np.min(eigs))
+        if l_min > 0:
+            return l_min
+        if l_min == 0:
+            return 0
+        return np.nan
 
     def evaluate(self, x: NDArray[float64]) -> float:
         r"""
@@ -164,8 +240,40 @@ class LinearRegression(CostFunction):
         self.b = b
 
     @property
-    def domain_shape(self) -> tuple[int, ...]:
+    def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
         return self.quadratic_cf.domain_shape
+
+    @property
+    def m_smooth(self) -> float:
+        r"""
+        The cost function's smoothness constant.
+
+        .. math::
+            \max_{i} \left| \lambda_i \right|
+
+        where :math:`\lambda_i` are the eigenvalues of :math:`\mathbf{A}^T \mathbf{A}`.
+
+        For the general definition, see :meth:`CostFunction.m_smooth`.
+        """
+        return self.quadratic_cf.m_smooth
+
+    @property
+    def m_cvx(self) -> float:
+        r"""
+        The cost function's convexity constant.
+
+        .. math::
+            \begin{array}{ll}
+                \min_i \lambda_i, & \text{if } \min_i \lambda_i > 0, \\
+                0, & \text{if } \min_i \lambda_i = 0, \\
+                \text{NaN}, & \text{if } \min_i \lambda_i < 0
+            \end{array}
+
+        where :math:`\lambda_i` are the eigenvalues of :math:`\mathbf{A}^T \mathbf{A}`.
+
+        For the general definition, see :meth:`CostFunction.m_cvx`.
+        """
+        return self.quadratic_cf.m_cvx
 
     def evaluate(self, x: NDArray[float64]) -> float:
         r"""
@@ -240,8 +348,42 @@ class SumCost(CostFunction):
         self.cost_functions = cost_functions
 
     @property
-    def domain_shape(self) -> tuple[int, ...]:
+    def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
         return self.cost_functions[0].domain_shape
+
+    @property
+    def m_smooth(self) -> float:
+        r"""
+        The cost function's smoothness constant.
+
+        .. math::
+            \sum f_{k_\text{m_smooth}}
+
+        provided all :math:`f_{k_\text{m_smooth}}` are finite.
+        If any :math:`f_{k_\text{m_smooth}} = \text{NaN}`,
+        the result is :math:`\text{NaN}`.
+
+        For the general definition, see :meth:`CostFunction.m_smooth`.
+        """
+        m_smooth_vals = [cf.m_smooth for cf in self.cost_functions]
+        return np.nan if any(np.isnan(v) for v in m_smooth_vals) else sum(m_smooth_vals)
+
+    @property
+    def m_cvx(self) -> float:
+        r"""
+        The cost function's convexity constant.
+
+        .. math::
+            \sum f_{k_\text{m_cvx}}
+
+        provided all :math:`f_{k_\text{m_cvx}}` are finite.
+        If any :math:`f_{k_\text{m_cvx}} = \text{NaN}`,
+        the result is :math:`\text{NaN}`.
+
+        For the general definition, see :meth:`CostFunction.m_cvx`.
+        """
+        m_cvx_vals = [cf.m_cvx for cf in self.cost_functions]
+        return np.nan if any(np.isnan(v) for v in m_cvx_vals) else sum(m_cvx_vals)
 
     def evaluate(self, x: NDArray[float64]) -> float:
         """Sum the :meth:`evaluate` of each cost function."""
@@ -291,8 +433,30 @@ class ProximalCost(CostFunction):
         self.inner = f + QuadraticCost(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho))
 
     @property
-    def domain_shape(self) -> tuple[int, ...]:
+    def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
         return self.inner.domain_shape
+
+    @property
+    def m_smooth(self) -> float:
+        r"""
+        The cost function's smoothness constant.
+
+        .. math:: f_\text{m_smooth} + \frac{1}{\rho}
+
+        For the general definition, see :meth:`CostFunction.m_smooth`.
+        """
+        return self.inner.m_smooth
+
+    @property
+    def m_cvx(self) -> float:
+        r"""
+        The cost function's convexity constant.
+
+        .. math:: f_\text{m_cvx} + \frac{1}{\rho}
+
+        For the general definition, see :meth:`CostFunction.m_cvx`.
+        """
+        return self.inner.m_cvx
 
     def evaluate(self, x: NDArray[float64]) -> float:
         r"""
