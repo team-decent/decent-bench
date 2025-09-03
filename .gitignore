@@ -1,5 +1,6 @@
-.tox
 .mypy_cache
+.tox
+.vscode
 *.egg-info
 **/__pycache__
 **/build
