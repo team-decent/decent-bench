@@ -4,6 +4,14 @@ decent\_bench.library.core package
 Submodules
 ----------
 
+decent\_bench.library.core.centralized\_algorithms module
+---------------------------------------------------------
+
+.. automodule:: decent_bench.library.core.centralized_algorithms
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 decent\_bench.library.core.cost\_functions module
 -------------------------------------------------
 
