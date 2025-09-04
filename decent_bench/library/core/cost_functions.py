@@ -201,7 +201,7 @@ class QuadraticCost(CostFunction):
         Add another cost function.
 
         Returns:
-            :class:`QuadraticCost` if *other* is :class:`QuadraticCost` or :class:`LinearRegression`,
+            :class:`QuadraticCost` if *other* is :class:`QuadraticCost` or :class:`LinearRegressionCost`,
             else :class:`SumCost`
 
         Raises:
@@ -212,14 +212,14 @@ class QuadraticCost(CostFunction):
             raise ValueError(f"Mismatching domain shapes: {self.domain_shape} vs {other.domain_shape}")
         if isinstance(other, QuadraticCost):
             return QuadraticCost(self.A + other.A, self.b + other.b, self.c + other.c)
-        if isinstance(other, LinearRegression):
+        if isinstance(other, LinearRegressionCost):
             return QuadraticCost(
                 self.A + other.quadratic_cf.A, self.b + other.quadratic_cf.b, self.c + other.quadratic_cf.c
             )
         return SumCost([self, other])
 
 
-class LinearRegression(CostFunction):
+class LinearRegressionCost(CostFunction):
     r"""
     Linear regression cost function.
 
@@ -319,7 +319,7 @@ class LinearRegression(CostFunction):
         Add another cost function.
 
         Returns:
-            :class:`QuadraticCost` if *other* is :class:`LinearRegression` or :class:`QuadraticCost`,
+            :class:`QuadraticCost` if *other* is :class:`LinearRegressionCost` or :class:`QuadraticCost`,
             else :class:`SumCost`
 
         Raises:
@@ -328,7 +328,7 @@ class LinearRegression(CostFunction):
         """
         if self.domain_shape != other.domain_shape:
             raise ValueError(f"Mismatching domain shapes: {self.domain_shape} vs {other.domain_shape}")
-        if isinstance(other, LinearRegression):
+        if isinstance(other, LinearRegressionCost):
             return QuadraticCost(
                 self.quadratic_cf.A + other.quadratic_cf.A,
                 self.quadratic_cf.b + other.quadratic_cf.b,
