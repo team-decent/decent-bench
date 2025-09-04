@@ -27,7 +27,7 @@ extensions = [
     "sphinx.ext.viewcode",  # View source code
 ]
 
-autodoc_default_options = {"special-members": "__add__"}
+autodoc_default_options = {"special-members": "__add__, __iter__"}
 
 autodoc_member_order = "bysource"
 

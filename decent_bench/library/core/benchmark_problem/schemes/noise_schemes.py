@@ -16,7 +16,7 @@ class NoiseScheme(ABC):
 class NoNoise(NoiseScheme):
     """Scheme that leaves messages untouched."""
 
-    def make_noise(self, msg: NDArray[float64]) -> NDArray[float64]:  # noqa: PLR6301, D102
+    def make_noise(self, msg: NDArray[float64]) -> NDArray[float64]:  # noqa: D102
         return msg
 
 
