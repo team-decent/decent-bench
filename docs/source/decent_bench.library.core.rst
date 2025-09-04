@@ -1,6 +1,14 @@
 decent\_bench.library.core package
 ==================================
 
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   decent_bench.library.core.benchmark_problem
+
 Submodules
 ----------
 
