@@ -32,7 +32,7 @@ commands = [
   ["find", "docs/source", "-name", "*.rst", "!", "-name", "index.rst", "-delete"],
   ["sphinx-apidoc", "-o", "docs/source", "decent_bench", "--no-toc"],
   ["make", "-C", "docs", "clean"],
-  ["make", "-C", "docs", "html"],
+  ["make", "-C", "docs", "html", "SPHINXOPTS=-W"],
 ]
 
 [tool.tox.env.mypy]
