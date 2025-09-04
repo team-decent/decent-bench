@@ -4,6 +4,14 @@ decent\_bench.library.core.benchmark\_problem.schemes package
 Submodules
 ----------
 
+decent\_bench.library.core.benchmark\_problem.schemes.agent\_activation\_schemes module
+---------------------------------------------------------------------------------------
+
+.. automodule:: decent_bench.library.core.benchmark_problem.schemes.agent_activation_schemes
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 decent\_bench.library.core.benchmark\_problem.schemes.compression\_schemes module
 ---------------------------------------------------------------------------------
 

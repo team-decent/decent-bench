@@ -13,7 +13,7 @@ class DropScheme(ABC):
 class NoDrops(DropScheme):
     """Scheme that never drops messages."""
 
-    def should_drop(self) -> bool:  # noqa: D102, PLR6301
+    def should_drop(self) -> bool:  # noqa: D102
         return False
 
 

@@ -16,7 +16,7 @@ class CompressionScheme(ABC):
 class NoCompression(CompressionScheme):
     """Scheme that leaves messages uncompressed."""
 
-    def compress(self, msg: NDArray[float64]) -> NDArray[float64]:  # noqa: D102, PLR6301
+    def compress(self, msg: NDArray[float64]) -> NDArray[float64]:  # noqa: D102
         return msg
 
 
