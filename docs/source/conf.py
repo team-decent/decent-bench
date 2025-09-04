@@ -31,6 +31,9 @@ autodoc_default_options = {"special-members": "__add__"}
 
 autodoc_member_order = "bysource"
 
+nitpicky = True
+nitpick_ignore = [("py:class", "numpy.float64")]
+
 intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable/", None),
     "python": ("https://docs.python.org/3", None),
