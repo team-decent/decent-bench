@@ -77,6 +77,7 @@ lint.ignore = [
   "EM102",    # f-string-in-exception, complains about putting f string as error msg
   "PLR0913",  # too-many-arguments, complains when there are more than 5 arguments
   "PLR2004",  # magic-value-comparison, complains about dimension checks in cost functions
+  "S311",     # suspicious-non-cryptographic-random-usage, complains about `random.random()`
   "TC002",    # typing-only-third-party-import, reduces rt overhead but slows down development and makes imports messy
   "TRY003",   # raise-vanilla-args, complains about simple error messages like `ValueError('Matrix A must be 2D')`
 ]
