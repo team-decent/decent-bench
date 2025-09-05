@@ -434,8 +434,7 @@ class LogisticRegressionCost(CostFunction):
 
         See :meth:`CostFunction.proximal` for the general proximal definition.
         """
-        prox_cf = ProximalCost(self, y, rho)
-        return ca.accelerated_gradient_descent(prox_cf, y, max_iter=100, stop_tol=1e-10, max_tol=None)
+        return ProximalCost(self, y, rho).minimize()
 
 
 class SumCost(CostFunction):
@@ -502,8 +501,7 @@ class SumCost(CostFunction):
 
         See :meth:`CostFunction.proximal` for the general proximal definition.
         """
-        prox_cf = ProximalCost(self, y, rho)
-        return ca.accelerated_gradient_descent(prox_cf, y, max_iter=100, stop_tol=1e-10, max_tol=None)
+        return ProximalCost(self, y, rho).minimize()
 
     def __add__(self, other: CostFunction) -> SumCost:
         """Add another cost function."""
@@ -530,6 +528,7 @@ class ProximalCost(CostFunction):
             raise ValueError("Cost function domain and y need to have the same shape")
         if rho <= 0:
             raise ValueError("Penalty term `rho` must be greater than 0")
+        self.y = y
         self.inner = f + QuadraticCost(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho))
 
     @property
@@ -588,8 +587,17 @@ class ProximalCost(CostFunction):
 
         See :meth:`CostFunction.proximal` for the general proximal definition.
         """
-        prox_cf = ProximalCost(self, y, rho)
-        return ca.accelerated_gradient_descent(prox_cf, y, max_iter=100, stop_tol=1e-10, max_tol=None)
+        return ProximalCost(self, y, rho).minimize()
+
+    def minimize(self) -> NDArray[float64]:
+        """
+        Find x that minimizes the proximal cost function using accelerated gradient descent.
+
+        This is the solution to the proximal operator described in :meth:`CostFunction.proximal`. Therefore,
+        :meth:`ProximalCost.minimize` can be used to solve the proximal for cost functions lacking a closed
+        form solution.
+        """
+        return ca.accelerated_gradient_descent(self, self.y, max_iter=100, stop_tol=1e-10, max_tol=None)
 
     def __add__(self, other: CostFunction) -> CostFunction:
         """Add another cost function."""
