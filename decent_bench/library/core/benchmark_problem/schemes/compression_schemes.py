@@ -6,7 +6,7 @@ from numpy.typing import NDArray
 
 
 class CompressionScheme(ABC):
-    """Schema defining how messages are compressed when sent over the network."""
+    """Scheme defining how messages are compressed when sent over the network."""
 
     @abstractmethod
     def compress(self, msg: NDArray[float64]) -> NDArray[float64]:
