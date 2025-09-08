@@ -38,8 +38,8 @@ class BenchmarkProblem:
 
     Args:
         topology_structure: graph defining how agents are connected
-        cost_functions: local cost_functions, each one is given to one agent
-        optimal_x: solution that minimizes the sum of the cost functions, used for calculating metrics after execution
+        cost_functions: local cost functions, each one is given to one agent
+        optimal_x: solution that minimizes the sum of the cost functions, used for calculating metrics
         agent_activation_schemes: setting for agent activation/participation, each scheme is applied to one agent
         compression_scheme: message compression setting
         noise_scheme: message noise setting
