@@ -1,12 +1,10 @@
-from __future__ import annotations
-
 import itertools
 import random
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 
 
-class ActivationScheme(ABC):
+class AgentActivationScheme(ABC):
     """Scheme defining how agents go active/inactive over the course of the algorithm execution."""
 
     @abstractmethod
@@ -20,13 +18,13 @@ class ActivationScheme(ABC):
         """
 
 
-class AlwaysActive(ActivationScheme):
+class AlwaysActive(AgentActivationScheme):
     """Scheme that makes the agent always active."""
 
     def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
         return True
 
-    def __iter__(self) -> Iterator[ActivationScheme]:
+    def __iter__(self) -> Iterator[AgentActivationScheme]:
         """
         Return an iterator that repeats *self* when calling ``iter()`` on this object.
 
@@ -35,7 +33,7 @@ class AlwaysActive(ActivationScheme):
         return itertools.repeat(self)
 
 
-class UniformActivationRate(ActivationScheme):
+class UniformActivationRate(AgentActivationScheme):
     """Scheme where the agent's probability of being active is uniformly distributed."""
 
     def __init__(self, activation_probability: float):
@@ -44,7 +42,7 @@ class UniformActivationRate(ActivationScheme):
     def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
         return random.random() < self.activation_probability
 
-    def __iter__(self) -> Iterator[ActivationScheme]:
+    def __iter__(self) -> Iterator[AgentActivationScheme]:
         """
         Return an iterator that repeats *self* when calling ``iter()`` on this object.
 

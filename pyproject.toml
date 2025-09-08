@@ -3,6 +3,7 @@ name = "decent-bench"
 version = "0.0.0"
 requires-python = ">=3.13"
 dependencies = [
+  "networkx",
   "numpy",
   "scipy",
   "scikit-learn",
@@ -16,7 +17,8 @@ dev = [
   "ruff",
   "scipy-stubs",
   "sphinx",
-  "sphinx_rtd_theme"
+  "sphinx_rtd_theme",
+  "types-networkx",
 ]
 
 [tool.tox]
@@ -66,23 +68,26 @@ strict = true
 lint.flake8-annotations.mypy-init-return = true
 lint.select = ["ALL"]
 lint.ignore = [
-  "COM812",   # missing-trailing-comma (COM812) may cause conflicts when used with the formatter
+  "C901",     # complex-structure, complains when there are many branches
+  "COM812",   # missing-trailing-comma, may cause conflicts when used with the formatter
   "CPY001",   # missing-copyright-notice
   "D100",     # undocumented-public-module
   "D104",     # undocumented-public-package
   "D107",     # undocumented-public-init
-  "D203",     # incorrect-blank-line-before-class (D203) and no-blank-line-before-class (D211) are incompatible
-  "D212",     # multi-line-summary-first-line (D212) and multi-line-summary-second-line (D213) are incompatible
+  "D203",     # incorrect-blank-line-before-class, incompatible with no-blank-line-before-class (D211)
+  "D212",     # multi-line-summary-first-line, incompatible with multi-line-summary-second-line (D213)
   "D415",     # missing-terminal-punctuation, D400 already enforces first line to end with period
   "DOC201",   # docstring-missing-returns, always documenting the return value is too verbose
   "EM101",    # raw-string-in-exception, complains about putting raw string as error msg
   "EM102",    # f-string-in-exception, complains about putting f string as error msg
+  "FURB140",  # reimplemented-starmap, wants to replace comprehensions with the less efficient itertools.starmap
   "PLR0913",  # too-many-arguments, complains when there are more than 5 arguments
   "PLR2004",  # magic-value-comparison, complains about dimension checks in cost functions
   "PLR6301",  # no-self-use, complains when self is unused even when implementing an abstract method
   "S311",     # suspicious-non-cryptographic-random-usage, complains about `random.random()`
-  "TC002",    # typing-only-third-party-import, reduced rt overhead but slowed development and messy imports
-  "TC003",    # typing-only-standard-library-import, reduced rt overhead but slowed development and messy imports
+  "TC001",    # typing-only-first-party-import, reduced rt overhead but slower development and messy imports
+  "TC002",    # typing-only-third-party-import, reduced rt overhead but slower development and messy imports
+  "TC003",    # typing-only-standard-library-import, reduced rt overhead but slower development and messy imports
   "TRY003",   # raise-vanilla-args, complains about simple error messages like `ValueError('Matrix A must be 2D')`
 ]
 preview = true

@@ -23,8 +23,9 @@ class NoCompression(CompressionScheme):
 class Quantization(CompressionScheme):
     """Scheme that rounds each element in a message to *significant_digits*."""
 
-    def __init__(self, significant_digits: int):
-        self.significant_digits = significant_digits
+    def __init__(self, n_significant_digits: int):
+        self.n_significant_digits = n_significant_digits
 
     def compress(self, msg: NDArray[float64]) -> NDArray[float64]:  # noqa: D102
-        return np.vectorize(lambda x: float(f"%.{self.significant_digits - 1}e" % x))(msg)  # type: ignore[no-any-return]
+        res: NDArray[float64] = np.vectorize(lambda x: float(f"%.{self.n_significant_digits - 1}e" % x))(msg)
+        return res
