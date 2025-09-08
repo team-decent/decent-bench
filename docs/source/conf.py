@@ -35,6 +35,7 @@ nitpicky = True
 nitpick_ignore = [("py:class", "numpy.float64")]
 
 intersphinx_mapping = {
+    "networkx": ("https://networkx.org/documentation/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "python": ("https://docs.python.org/3", None),
 }

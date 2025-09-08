@@ -52,7 +52,7 @@ def gradient_descent(
 
 def accelerated_gradient_descent(
     cost_function: CostFunction,
-    x0: NDArray[float64],
+    x0: NDArray[float64] | None,
     *,
     max_iter: int,
     stop_tol: float | None,
@@ -63,7 +63,7 @@ def accelerated_gradient_descent(
 
     Args:
         cost_function: cost function to minimize
-        x0: initial guess
+        x0: initial guess, defaults to ``np.zeros()`` if ``None`` is provided
         max_iter: maximum number of iterations to run
         stop_tol: early stopping criteria - stop if ``norm(x_new - x) <= stop_tol``
         max_tol: maximum tolerated ``norm(x_new - x)`` at the end
@@ -76,6 +76,8 @@ def accelerated_gradient_descent(
         x that minimizes the cost function.
 
     """
+    if x0 is not None and x0.shape != cost_function.domain_shape:
+        raise ValueError("x0 and cost function domain must have same shape")
     if cost_function.m_smooth == 0:
         raise ValueError("Function must not be affine")
     if cost_function.m_smooth < 0:
@@ -88,6 +90,7 @@ def accelerated_gradient_descent(
         raise NotImplementedError("Support for non-global differentiability is not implemented yet")
     if np.isnan(cost_function.m_cvx):
         raise NotImplementedError("Support for non-convexity is not implemented yet")
+    x0 = x0 if x0 is not None else np.zeros(cost_function.domain_shape)
     x = x0
     y = x0
     c = (np.sqrt(cost_function.m_smooth) - np.sqrt(cost_function.m_cvx)) / (

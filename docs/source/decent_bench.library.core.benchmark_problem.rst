@@ -12,6 +12,14 @@ Subpackages
 Submodules
 ----------
 
+decent\_bench.library.core.benchmark\_problem.benchmark\_problems module
+------------------------------------------------------------------------
+
+.. automodule:: decent_bench.library.core.benchmark_problem.benchmark_problems
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 decent\_bench.library.core.benchmark\_problem.datasets module
 -------------------------------------------------------------
 
