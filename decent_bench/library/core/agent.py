@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from types import MappingProxyType
 
 from numpy import float64
@@ -50,7 +51,7 @@ class Agent:
         self._historical_x.append(x)
 
     @property
-    def received_messages(self) -> MappingProxyType[Agent, NDArray[float64]]:
+    def received_messages(self) -> Mapping[Agent, NDArray[float64]]:
         """Messages received by neighbors."""
         return MappingProxyType(self._received_messages)
 
