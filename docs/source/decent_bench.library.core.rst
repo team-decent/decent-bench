@@ -36,6 +36,14 @@ decent\_bench.library.core.cost\_functions module
    :show-inheritance:
    :undoc-members:
 
+decent\_bench.library.core.network module
+-----------------------------------------
+
+.. automodule:: decent_bench.library.core.network
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 Module contents
 ---------------
 

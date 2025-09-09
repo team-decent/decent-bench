@@ -10,9 +10,10 @@ from decent_bench.library.core.cost_functions import CostFunction
 
 
 class Agent:
-    """Agent with a local cost function and activation scheme."""
+    """Agent with unique id, local cost function, and activation scheme."""
 
-    def __init__(self, cost_function: CostFunction, activation_scheme: AgentActivationScheme):
+    def __init__(self, agent_id: int, cost_function: CostFunction, activation_scheme: AgentActivationScheme):
+        self._id = agent_id
         self._historical_x: list[NDArray[float64]] = []
         self._auxiliary_variables: dict[str, NDArray[float64]] = {}
         self._received_messages: dict[Agent, NDArray[float64]] = {}
@@ -20,6 +21,11 @@ class Agent:
         self._n_messages_received = 0
         self._activation_scheme = activation_scheme
         self._cost_function_proxy = _CallCountingCostFunctionProxy(cost_function)
+
+    @property
+    def id(self) -> int:
+        """Unique id for the agent."""
+        return self._id
 
     @property
     def cost_function(self) -> CostFunction:
@@ -75,6 +81,10 @@ class Agent:
             self._auxiliary_variables = aux_vars
         if received_msgs:
             self._received_messages = received_msgs
+
+    def __index__(self) -> int:
+        """Enable using agent as index, for example ``W[a1, a2]`` instead of ``W[a1.id, a2.id]``."""
+        return self._id
 
 
 class AgentMetricView:
