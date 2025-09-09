@@ -1,12 +1,14 @@
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+import networkx as nx
 import numpy as np
 from networkx import Graph
 from numpy import float64
 from numpy.typing import NDArray
 
 from decent_bench.library.core.agent import Agent
+from decent_bench.library.core.benchmark_problem.benchmark_problems import BenchmarkProblem
 from decent_bench.library.core.benchmark_problem.schemes.compression_schemes import CompressionScheme
 from decent_bench.library.core.benchmark_problem.schemes.drop_schemes import DropScheme
 from decent_bench.library.core.benchmark_problem.schemes.noise_schemes import NoiseScheme
@@ -40,7 +42,9 @@ class Network:
         self._noise_scheme = noise_scheme
         self._compression_scheme = compression_scheme
         self._drop_scheme = drop_scheme
-        self._drops = 0
+        self._n_messages_sent = 0
+        self._n_messages_received = 0
+        self._n_messages_dropped = 0
 
     @cached_property
     def metropolis_weights(self) -> NDArray[float64]:
@@ -91,9 +95,9 @@ class Network:
         The message will stay in-flight until it is received or replaced by a newer message from the same sender to the
         same receiver. After being received or replaced, the message is destroyed.
         """
-        sender._n_messages_sent += 1  # noqa: SLF001
+        self._n_messages_sent += 1
         if self._drop_scheme.should_drop():
-            self._drops += 1
+            self._n_messages_dropped += 1
             return
         msg = self._compression_scheme.compress(msg)
         msg = self._noise_scheme.make_noise(msg)
@@ -123,7 +127,7 @@ class Network:
         """
         msg = self._graph.edges[sender, receiver].get(str(receiver.id))
         if msg is not None:
-            receiver._n_messages_received += 1  # noqa: SLF001
+            self._n_messages_received += 1
             receiver._received_messages[sender] = msg  # noqa: SLF001
             self._graph.edges[sender, receiver][str(receiver.id)] = None
 
@@ -136,3 +140,42 @@ class Network:
         """
         for neighbor in self._graph.neighbors(receiver):
             self.receive(receiver, neighbor)
+
+
+class NetworkMetricView:
+    """View of network that exposes useful properties for calculating metrics."""
+
+    def __init__(self, network: Network):
+        self.n_messages_sent = network._n_messages_sent  # noqa: SLF001
+        self.n_messages_received = network._n_messages_received  # noqa: SLF001
+        self.n_messages_dropped = network._n_messages_dropped  # noqa: SLF001
+
+
+def generate_distributed_network(problem: BenchmarkProblem) -> Network:
+    """
+    Generate a distributed network - a network with peer-to-peer communication only, no coordinator.
+
+    Raises:
+        ValueError: if there are less agent activation schemes or cost functions than agents
+
+    """
+    n_agents = len(problem.topology_structure)
+    if len(problem.agent_activation_schemes) < n_agents:
+        raise ValueError("Insufficient number of agent activation schemes, please provide one per agent")
+    if len(problem.cost_functions) < n_agents:
+        raise ValueError("Insufficient number of cost functions, please provide one per agent")
+    if problem.topology_structure.is_directed():
+        raise NotImplementedError("Support for directed graphs has not been implemented yet")
+    if problem.topology_structure.is_multigraph():
+        raise NotImplementedError("Support for multi-graphs has not been implemented yet")
+    if not nx.is_connected(problem.topology_structure):
+        raise NotImplementedError("Support for disconnected graphs has not been implemented yet")
+    agents = [Agent(i, problem.cost_functions[i], problem.agent_activation_schemes[i]) for i in range(n_agents)]
+    agent_node_map = {node: agents[i] for i, node in enumerate(problem.topology_structure.nodes())}
+    graph = nx.relabel_nodes(problem.topology_structure, agent_node_map)
+    return Network(
+        graph=graph,
+        noise_scheme=problem.noise_scheme,
+        compression_scheme=problem.compression_scheme,
+        drop_scheme=problem.drop_scheme,
+    )

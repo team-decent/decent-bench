@@ -18,8 +18,6 @@ class Agent:
         self._historical_x: list[NDArray[float64]] = []
         self._auxiliary_variables: dict[str, NDArray[float64]] = {}
         self._received_messages: dict[Agent, NDArray[float64]] = {}
-        self._n_messages_sent = 0
-        self._n_messages_received = 0
         self._activation_scheme = activation_scheme
         self._cost_function_proxy = _CallCountingCostFunctionProxy(cost_function)
 
@@ -94,8 +92,6 @@ class AgentMetricView:
     def __init__(self, agent: Agent):
         cost_function_proxy = agent._cost_function_proxy  # noqa: SLF001
         self.historical_x = agent._historical_x  # noqa: SLF001
-        self.n_messages_sent = agent._n_messages_sent  # noqa: SLF001
-        self.n_messages_received = agent._n_messages_received  # noqa: SLF001
         self.n_evaluate_calls = cost_function_proxy.evaluate_calls
         self.n_gradient_calls = cost_function_proxy.gradient_calls
         self.n_hessian_calls = cost_function_proxy.hessian_calls
