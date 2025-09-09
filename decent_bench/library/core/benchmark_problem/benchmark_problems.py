@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import reduce
 from operator import add
@@ -48,9 +48,9 @@ class BenchmarkProblem:
     """
 
     topology_structure: AnyGraph
-    cost_functions: Sequence[CostFunction]
     optimal_x: NDArray[float64]
-    agent_activation_schemes: Iterable[AgentActivationScheme]
+    cost_functions: Sequence[CostFunction]
+    agent_activation_schemes: Sequence[AgentActivationScheme]
     compression_scheme: CompressionScheme
     noise_scheme: NoiseScheme
     drop_scheme: DropScheme
@@ -90,7 +90,7 @@ class SimpleBenchmarkProblemFactory:
         costs = [cost_function_cls(*p) for p in dataset.training_partitions]
         cost_sum = reduce(add, costs)
         optimal_x = ca.accelerated_gradient_descent(cost_sum, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-100)
-        agent_activation_schemes = UniformActivationRate(activation_probability=0.5) if asynchrony else AlwaysActive()
+        agent_activation_schemes = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
         compression_scheme = Quantization(n_significant_digits=4) if compressed else NoCompression()
         noise_scheme = GaussianNoise(mean=0, sd=0.001) if noisy else NoNoise()
         drop_scheme = UniformDropRate(drop_rate=0.5) if droppy else NoDrops()
