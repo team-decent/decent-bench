@@ -80,6 +80,9 @@ class CostFunction(ABC):
             = \arg\min_{\mathbf{x}}  \left\{ f(\mathbf{x}) + \frac{1}{2\rho} \| \mathbf{x} - \mathbf{y} \|^2 \right\}
 
         where :math:`\rho > 0` is the penalty and :math:`f` the cost function.
+
+        If the cost function's proximal does not have a closed form solution, it can be solved iteratively using
+        ``ProximalCost(self, y, rho).minimize()``.
         """
 
     @abstractmethod
@@ -87,11 +90,11 @@ class CostFunction(ABC):
         """
         Add another cost function to create a new one.
 
-        :class:`SumCost` be used as the result of a cost function's :meth:`__add__`. However, it's often more efficient
-        to preserve the cost function type if possible. For example, the addition of two :class:`QuadraticCost`
-        objects benefits from returning a new :class:`QuadraticCost` instead of a :class:`SumCost` as this
-        preserves the closed form proximal solution and only requires one evaluation instead of two when calling
-        :meth:`evaluate`, :meth:`gradient`, and :meth:`hessian`.
+        :class:`SumCost` can be used as the result of :meth:`__add__` by returning ``SumCost([self, other])``. However,
+        it's often more efficient to preserve the cost function type if possible. For example, the addition of two
+        :class:`QuadraticCost` objects benefits from returning a new :class:`QuadraticCost` instead of a
+        :class:`SumCost` as this preserves the closed form proximal solution and only requires one evaluation instead of
+        two when calling :meth:`evaluate`, :meth:`gradient`, and :meth:`hessian`.
         """
 
 
