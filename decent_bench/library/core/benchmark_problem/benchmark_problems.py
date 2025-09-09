@@ -26,9 +26,9 @@ from decent_bench.library.core.benchmark_problem.schemes.noise_schemes import Ga
 from decent_bench.library.core.cost_functions import CostFunction, LinearRegressionCost, LogisticRegressionCost
 
 if TYPE_CHECKING:
-    GraphAny = Graph[Any]
+    AnyGraph = Graph[Any]
 else:
-    GraphAny = Graph
+    AnyGraph = Graph
 
 
 @dataclass
@@ -47,7 +47,7 @@ class BenchmarkProblem:
 
     """
 
-    topology_structure: GraphAny
+    topology_structure: AnyGraph
     cost_functions: Sequence[CostFunction]
     optimal_x: NDArray[float64]
     agent_activation_schemes: Iterable[AgentActivationScheme]
