@@ -8,8 +8,6 @@ from numpy import float64
 from numpy.typing import NDArray
 from scipy import special
 
-from decent_bench.library.core import centralized_algorithms as ca
-
 
 class CostFunction(ABC):
     """Used by agents to evaluate the cost and its derivatives at a certain x."""
@@ -600,6 +598,8 @@ class ProximalCost(CostFunction):
         :meth:`ProximalCost.minimize` can be used to solve the proximal for cost functions lacking a closed
         form solution.
         """
+        from decent_bench.library.core import centralized_algorithms as ca  # noqa: PLC0415
+
         return ca.accelerated_gradient_descent(self, self.y, max_iter=100, stop_tol=1e-10, max_tol=None)
 
     def __add__(self, other: CostFunction) -> CostFunction:

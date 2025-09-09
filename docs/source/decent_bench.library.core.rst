@@ -12,6 +12,14 @@ Subpackages
 Submodules
 ----------
 
+decent\_bench.library.core.agent module
+---------------------------------------
+
+.. automodule:: decent_bench.library.core.agent
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 decent\_bench.library.core.centralized\_algorithms module
 ---------------------------------------------------------
 
