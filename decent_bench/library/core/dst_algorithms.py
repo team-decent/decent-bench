@@ -33,12 +33,12 @@ class DGD(DstAlgorithm):
     Distributed gradient descent characterized by the update step below.
 
     .. math::
-        \mathbf{x}_{i, k+1} = (\sum_{j} \mathbf{w}_{ij} \mathbf{x}_{j,k}) - \rho \nabla f_i(\mathbf{x}_{i,k})
+        \mathbf{x}_{i, k+1} = (\sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k}) - \rho \nabla f_i(\mathbf{x}_{i,k})
 
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
     j is a neighbor of i or i itself,
-    :math:`\mathbf{w}_{ij}` is the metropolis weight between agent i and j,
+    :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j,
     :math:`\rho` is the step size,
     and :math:`f_i` is agent i's local cost function.
 
@@ -80,14 +80,14 @@ class GT1(DstAlgorithm):
     .. math::
         \mathbf{y}_{i, k} = \mathbf{x}_{i, k} - \rho \nabla f_i(\mathbf{x}_{i,k})
     .. math::
-        \mathbf{x}_{i, k+1} = \mathbf{y}_{i, k} - \mathbf{y}_{i, k-1} + \sum_j \mathbf{w}_{ij} \mathbf{x}_{j,k}
+        \mathbf{x}_{i, k+1} = \mathbf{y}_{i, k} - \mathbf{y}_{i, k-1} + \sum_j \mathbf{W}_{ij} \mathbf{x}_{j,k}
 
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
     :math:`\rho` is the step size,
     :math:`f_i` is agent i's local cost function,
     j is a neighbor of i or i itself,
-    and :math:`\mathbf{w}_{ij}` is the metropolis weight between agent i and j.
+    and :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j.
 
     """
 
