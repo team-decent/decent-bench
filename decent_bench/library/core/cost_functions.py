@@ -507,7 +507,7 @@ class ProximalCost(CostFunction):
     The function minimized by the proximal operator.
 
     .. math::
-            f_{prox}(\mathbf{x}) = f(\mathbf{x}) + \frac{1}{2\rho} \| \mathbf{x} - \mathbf{y} \|^2
+        f_{prox}(\mathbf{x}) = f(\mathbf{x}) + \frac{1}{2\rho} \| \mathbf{x} - \mathbf{y} \|^2
 
     where :math:`f`, :math:`\mathbf{y}`, and :math:`\rho` are the cost function, input, and penalty respectively,
     all fixed by the proximal operator.
