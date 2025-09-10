@@ -129,7 +129,7 @@ class QuadraticCost(CostFunction):
         .. math::
             \max_{i} \left| \lambda_i \right|
 
-        where :math:`\lambda_i` are the eigenvalues of :math:`\frac{1}{2} (\mathbf{A}+\mathbf{A}^T)`.
+        where :math:`\lambda_i` are the eigenvalwues of :math:`\frac{1}{2} (\mathbf{A}+\mathbf{A}^T)`.
 
         For the general definition, see :attr:`CostFunction.m_smooth`.
         """
