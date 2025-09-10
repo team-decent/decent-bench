@@ -1,3 +1,4 @@
+pyrightconfig.json
 .mypy_cache
 .tox
 .vscode
