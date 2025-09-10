@@ -215,10 +215,8 @@ class QuadraticCost(CostFunction):
             raise ValueError(f"Mismatching domain shapes: {self.domain_shape} vs {other.domain_shape}")
         if isinstance(other, QuadraticCost):
             return QuadraticCost(self.A + other.A, self.b + other.b, self.c + other.c)
-        if isinstance(other, LinearRegressionCost):
-            return QuadraticCost(
-                self.A + other.quadratic_cf.A, self.b + other.quadratic_cf.b, self.c + other.quadratic_cf.c
-            )
+        if isinstance(other, (LinearRegressionCost, ProximalCost)):
+            return self + other.inner
         return SumCost([self, other])
 
 
@@ -240,13 +238,13 @@ class LinearRegressionCost(CostFunction):
     def __init__(self, A: NDArray[float64], b: NDArray[float64]):  # noqa: N803
         if A.shape[0] != b.shape[0]:
             raise ValueError(f"Dimension mismatch: A has {A.shape[0]} rows but b has {b.shape[0]} elements")
-        self.quadratic_cf = QuadraticCost(A.T.dot(A), -A.T.dot(b), 0.5 * b.dot(b))
+        self.inner = QuadraticCost(A.T.dot(A), -A.T.dot(b), 0.5 * b.dot(b))
         self.A = A
         self.b = b
 
     @property
     def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
-        return self.quadratic_cf.domain_shape
+        return self.inner.domain_shape
 
     @property
     def m_smooth(self) -> float:
@@ -260,7 +258,7 @@ class LinearRegressionCost(CostFunction):
 
         For the general definition, see :attr:`CostFunction.m_smooth`.
         """
-        return self.quadratic_cf.m_smooth
+        return self.inner.m_smooth
 
     @property
     def m_cvx(self) -> float:
@@ -278,7 +276,7 @@ class LinearRegressionCost(CostFunction):
 
         For the general definition, see :attr:`CostFunction.m_cvx`.
         """
-        return self.quadratic_cf.m_cvx
+        return self.inner.m_cvx
 
     def evaluate(self, x: NDArray[float64]) -> float:
         r"""
@@ -286,7 +284,7 @@ class LinearRegressionCost(CostFunction):
 
         .. math:: \frac{1}{2} \| \mathbf{Ax} - \mathbf{b} \|^2
         """
-        return self.quadratic_cf.evaluate(x)
+        return self.inner.evaluate(x)
 
     def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
         r"""
@@ -294,7 +292,7 @@ class LinearRegressionCost(CostFunction):
 
         .. math:: \mathbf{A}^T\mathbf{Ax} - \mathbf{A}^T \mathbf{b}
         """
-        return self.quadratic_cf.gradient(x)
+        return self.inner.gradient(x)
 
     def hessian(self, x: NDArray[float64]) -> NDArray[float64]:
         r"""
@@ -302,7 +300,7 @@ class LinearRegressionCost(CostFunction):
 
         .. math:: \mathbf{A}^T\mathbf{A}
         """
-        return self.quadratic_cf.hessian(x)
+        return self.inner.hessian(x)
 
     def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
         r"""
@@ -315,7 +313,7 @@ class LinearRegressionCost(CostFunction):
 
         This is a closed form solution, see :meth:`CostFunction.proximal` for the general proximal definition.
         """
-        return self.quadratic_cf.proximal(y, rho)
+        return self.inner.proximal(y, rho)
 
     def __add__(self, other: CostFunction) -> CostFunction:
         """
@@ -325,23 +323,8 @@ class LinearRegressionCost(CostFunction):
             :class:`QuadraticCost` if *other* is :class:`LinearRegressionCost` or :class:`QuadraticCost`,
             else :class:`SumCost`
 
-        Raises:
-            ValueError: if the domain shapes don't match
-
         """
-        if self.domain_shape != other.domain_shape:
-            raise ValueError(f"Mismatching domain shapes: {self.domain_shape} vs {other.domain_shape}")
-        if isinstance(other, LinearRegressionCost):
-            return QuadraticCost(
-                self.quadratic_cf.A + other.quadratic_cf.A,
-                self.quadratic_cf.b + other.quadratic_cf.b,
-                self.quadratic_cf.c + other.quadratic_cf.c,
-            )
-        if isinstance(other, QuadraticCost):
-            return QuadraticCost(
-                self.quadratic_cf.A + other.A, self.quadratic_cf.b + other.b, self.quadratic_cf.c + other.c
-            )
-        return SumCost([self, other])
+        return self.inner + other
 
 
 class LogisticRegressionCost(CostFunction):
@@ -444,7 +427,12 @@ class SumCost(CostFunction):
     def __init__(self, cost_functions: list[CostFunction]):
         if not all(cost_functions[0].domain_shape == cf.domain_shape for cf in cost_functions):
             raise ValueError("All cost functions must have the same domain shape")
-        self.cost_functions = cost_functions
+        self.cost_functions: list[CostFunction] = []
+        for cf in cost_functions:
+            if isinstance(cf, SumCost):
+                self.cost_functions.extend(cf.cost_functions)
+            else:
+                self.cost_functions.append(cf)
 
     @property
     def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
@@ -506,7 +494,7 @@ class SumCost(CostFunction):
 
     def __add__(self, other: CostFunction) -> SumCost:
         """Add another cost function."""
-        return SumCost([*self.cost_functions, other])
+        return SumCost([self, other])
 
 
 class ProximalCost(CostFunction):
@@ -604,4 +592,4 @@ class ProximalCost(CostFunction):
 
     def __add__(self, other: CostFunction) -> CostFunction:
         """Add another cost function."""
-        return SumCost([self, other])
+        return self.inner + other
