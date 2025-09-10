@@ -203,10 +203,6 @@ class QuadraticCost(CostFunction):
         """
         Add another cost function.
 
-        Returns:
-            :class:`QuadraticCost` if *other* is :class:`QuadraticCost` or :class:`LinearRegressionCost`,
-            else :class:`SumCost`
-
         Raises:
             ValueError: if the domain shapes don't match
 
@@ -316,14 +312,7 @@ class LinearRegressionCost(CostFunction):
         return self.inner.proximal(y, rho)
 
     def __add__(self, other: CostFunction) -> CostFunction:
-        """
-        Add another cost function.
-
-        Returns:
-            :class:`QuadraticCost` if *other* is :class:`LinearRegressionCost` or :class:`QuadraticCost`,
-            else :class:`SumCost`
-
-        """
+        """Add another cost function."""
         return self.inner + other
 
 
@@ -419,6 +408,22 @@ class LogisticRegressionCost(CostFunction):
         See :meth:`CostFunction.proximal` for the general proximal definition.
         """
         return ProximalCost(self, y, rho).minimize()
+
+    def __add__(self, other: CostFunction) -> CostFunction:
+        """
+        Add another cost function.
+
+        Raises:
+            ValueError: if the domain shapes don't match
+
+        """
+        if self.domain_shape != other.domain_shape:
+            raise ValueError(f"Mismatching domain shapes: {self.domain_shape} vs {other.domain_shape}")
+        if isinstance(other, LogisticRegressionCost):
+            return LogisticRegressionCost(np.vstack([self.A, other.A]), np.concatenate([self.b, other.b]))
+        if isinstance(other, ProximalCost):
+            return self + other.inner
+        return SumCost([self, other])
 
 
 class SumCost(CostFunction):
