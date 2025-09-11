@@ -64,8 +64,7 @@ class DGD(DstAlgorithm):
             for i in network.get_active_agents(k):
                 neighborhood_avg = np.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], axis=0)
                 neighborhood_avg += W[i, i] * i.x
-                gradient = i.cost_function.gradient(i.x)
-                i.x = neighborhood_avg - self.step_size * gradient
+                i.x = neighborhood_avg - self.step_size * i.cost_function.gradient(i.x)
             for i in network.get_active_agents(k):
                 network.broadcast(i, i.x)
             for i in network.get_active_agents(k):
@@ -166,12 +165,12 @@ class GT2(DstAlgorithm):
         W = 0.5 * (np.eye(*(network.metropolis_weights.shape)) + network.metropolis_weights)  # noqa: N806
         for k in range(self.iterations):
             for i in network.get_active_agents(k):
-                network.broadcast(i, i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
-            for i in network.get_active_agents(k):
-                network.receive_all(i)
-            for i in network.get_active_agents(k):
                 i.x = np.sum([W[i, j] * msg for j, msg in i.received_messages.items()], axis=0) + W[i, i] * (
                     i.x + i.aux_vars["y_new"] - i.aux_vars["y"]
                 )
                 i.aux_vars["y"] = i.aux_vars["y_new"]
                 i.aux_vars["y_new"] = i.x - self.step_size * i.cost_function.gradient(i.x)
+            for i in network.get_active_agents(k):
+                network.broadcast(i, i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
+            for i in network.get_active_agents(k):
+                network.receive_all(i)
