@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import numpy as np
+from numpy.typing import NDArray
 
 from decent_bench.library.core.network import Network
 
@@ -57,8 +58,8 @@ class DGD(DstAlgorithm):
 
         """
         for agent in network.get_all_agents():
-            x_0 = np.zeros(agent.cost_function.domain_shape)
-            agent.initialize(x=x_0, received_msgs=dict.fromkeys(network.get_neighbors(agent), x_0))
+            x0 = np.zeros(agent.cost_function.domain_shape)
+            agent.initialize(x=x0, received_msgs=dict.fromkeys(network.get_neighbors(agent), x0))
         W = network.metropolis_weights  # noqa: N806
         for k in range(self.iterations):
             for i in network.get_active_agents(k):
@@ -103,10 +104,10 @@ class GT1(DstAlgorithm):
 
         """
         for agent in network.get_all_agents():
-            x_0 = np.zeros(agent.cost_function.domain_shape)
-            y_0 = np.zeros(agent.cost_function.domain_shape)
+            x0 = np.zeros(agent.cost_function.domain_shape)
+            y0 = np.zeros(agent.cost_function.domain_shape)
             neighbors = network.get_neighbors(agent)
-            agent.initialize(x=x_0, received_msgs=dict.fromkeys(neighbors, x_0), aux_vars={"y": y_0})
+            agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
         W = network.metropolis_weights  # noqa: N806
         for k in range(self.iterations):
             for i in network.get_active_agents(k):
@@ -157,10 +158,12 @@ class GT2(DstAlgorithm):
             x0 = np.zeros(i.cost_function.domain_shape)
             y0 = np.zeros(i.cost_function.domain_shape)
             y1 = x0 - self.step_size * i.cost_function.gradient(x0)
+            # note: the message's y1 is an approximation of the neighbor's y1
+            msg0 = x0 + y1 - y0
             i.initialize(
                 x=x0,
                 aux_vars={"y": y0, "y_new": y1},
-                received_msgs=dict.fromkeys(network.get_neighbors(i), x0 + y1 - y0),
+                received_msgs=dict.fromkeys(network.get_neighbors(i), msg0),
             )
         W = 0.5 * (np.eye(*(network.metropolis_weights.shape)) + network.metropolis_weights)  # noqa: N806
         for k in range(self.iterations):
@@ -174,3 +177,64 @@ class GT2(DstAlgorithm):
                 network.broadcast(i, i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
             for i in network.get_active_agents(k):
                 network.receive_all(i)
+
+
+@dataclass
+class ADMM(DstAlgorithm):
+    r"""
+    Distributed Alternating Direction Method of Multipliers characterized by the update step below.
+
+    .. math::
+        \mathbf{x}_{i, k+1} = \operatorname{prox}_{\frac{1}{\rho N_i} f_i}
+        \left(\sum_j \mathbf{Z}_{ij, k} \frac{1}{\rho N_i} \right)
+    .. math::
+        \mathbf{Z}_{ij, k+1} = (1-\alpha) \mathbf{Z}_{ij, k} - \alpha (\mathbf{Z}_{ji, k} - 2 \rho \mathbf{x}_{j, k+1})
+
+    where
+    :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
+    :math:`\operatorname{prox}` is the proximal operator described in :meth:`CostFunction.proximal()
+    <decent_bench.library.core.cost_functions.CostFunction.proximal>`,
+    :math:`\rho > 0` is the Lagrangian penalty parameter,
+    :math:`N_i` is the number of neighbors of i,
+    :math:`f_i` is i's local cost function,
+    j is a neighbor of i,
+    and :math:`\alpha \in (0, 1)` is the relaxation parameter.
+
+    """
+
+    iterations: int
+    rho: float
+    alpha: float
+    name: str = "ADMM"
+
+    def run(self, network: Network) -> None:
+        """
+        Run the algorithm with all :math:`Z_{ij}` initialized using :func:`numpy.zeros`.
+
+        Args:
+            network: provides agents, neighbors etc.
+
+        """
+        pN = {i: self.rho * len(network.get_neighbors(i)) for i in network.get_all_agents()}  # noqa: N806
+        all_agents = network.get_all_agents()
+        for agent in all_agents:
+            z0 = np.zeros((len(all_agents), *(agent.cost_function.domain_shape)))
+            x1 = agent.cost_function.proximal(y=np.sum(z0, axis=0) / pN[agent], rho=1 / pN[agent])
+            # note: the message's x1 is an approximation of the neighbors x1
+            msg0: NDArray[np.float64] = z0[agent] - 2 * self.rho * x1
+            agent.initialize(
+                x=x1,
+                aux_vars={"z": z0},
+                received_msgs=dict.fromkeys(network.get_neighbors(agent), msg0),
+            )
+        for k in range(self.iterations):
+            for i in network.get_active_agents(k):
+                i.x = i.cost_function.proximal(y=np.sum(i.aux_vars["z"], axis=0) / pN[i], rho=1 / pN[i])
+            for i in network.get_active_agents(k):
+                for j in network.get_neighbors(i):
+                    network.send(i, j, i.aux_vars["z"][j] - 2 * self.rho * i.x)
+            for i in network.get_active_agents(k):
+                network.receive_all(i)
+            for i in network.get_active_agents(k):
+                for j in network.get_neighbors(i):
+                    i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (i.received_messages[j])
