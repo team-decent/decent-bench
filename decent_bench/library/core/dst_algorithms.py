@@ -50,8 +50,8 @@ class DGD(DstAlgorithm):
     name: str = "DGD"
 
     def run(self, network: Network) -> None:
-        """
-        Run the algorithm with all :math:`x_i` initialized using :func:`numpy.zeros`.
+        r"""
+        Run the algorithm with all :math:`\mathbf{x}` initialized using :func:`numpy.zeros`.
 
         Args:
             network: provides agents, neighbors etc.
@@ -96,8 +96,8 @@ class GT1(DstAlgorithm):
     name: str = "GT1"
 
     def run(self, network: Network) -> None:
-        """
-        Run the algorithm with all :math:`x_i` and :math:`y_i` initialized using :func:`numpy.zeros`.
+        r"""
+        Run the algorithm with all :math:`\mathbf{x}` and :math:`\mathbf{y}` initialized using :func:`numpy.zeros`.
 
         Args:
             network: provides agents, neighbors etc.
@@ -147,8 +147,8 @@ class GT2(DstAlgorithm):
     name: str = "GT2"
 
     def run(self, network: Network) -> None:
-        """
-        Run the algorithm with all :math:`x_i` and :math:`y_i` initialized using :func:`numpy.zeros`.
+        r"""
+        Run the algorithm with all :math:`\mathbf{x}` and :math:`\mathbf{y}` initialized using :func:`numpy.zeros`.
 
         Args:
             network: provides agents, neighbors etc.
@@ -208,8 +208,8 @@ class ADMM(DstAlgorithm):
     name: str = "ADMM"
 
     def run(self, network: Network) -> None:
-        """
-        Run the algorithm with all :math:`Z_{ij}` initialized using :func:`numpy.zeros`.
+        r"""
+        Run the algorithm with :math:`\mathbf{Z}` initialized using :func:`numpy.zeros`.
 
         Args:
             network: provides agents, neighbors etc.
@@ -220,7 +220,7 @@ class ADMM(DstAlgorithm):
         for agent in all_agents:
             z0 = np.zeros((len(all_agents), *(agent.cost_function.domain_shape)))
             x1 = agent.cost_function.proximal(y=np.sum(z0, axis=0) / pN[agent], rho=1 / pN[agent])
-            # note: the message's x1 is an approximation of the neighbors x1
+            # note: the message's x1 is an approximation of the neighbor's x1
             msg0: NDArray[np.float64] = z0[agent] - 2 * self.rho * x1
             agent.initialize(
                 x=x1,
