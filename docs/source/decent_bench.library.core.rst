@@ -20,10 +20,10 @@ decent\_bench.library.core.agent module
    :show-inheritance:
    :undoc-members:
 
-decent\_bench.library.core.centralized\_algorithms module
----------------------------------------------------------
+decent\_bench.library.core.cent\_algorithms module
+--------------------------------------------------
 
-.. automodule:: decent_bench.library.core.centralized_algorithms
+.. automodule:: decent_bench.library.core.cent_algorithms
    :members:
    :show-inheritance:
    :undoc-members:
