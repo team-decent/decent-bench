@@ -591,7 +591,7 @@ class ProximalCost(CostFunction):
         :meth:`ProximalCost.minimize` can be used to solve the proximal for cost functions lacking a closed
         form solution.
         """
-        from decent_bench.library.core import centralized_algorithms as ca  # noqa: PLC0415
+        from decent_bench.library.core import cent_algorithms as ca  # noqa: PLC0415
 
         return ca.accelerated_gradient_descent(self, self.y, max_iter=100, stop_tol=1e-10, max_tol=None)
 

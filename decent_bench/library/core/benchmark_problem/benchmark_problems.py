@@ -9,7 +9,7 @@ from networkx import Graph
 from numpy import float64
 from numpy.typing import NDArray
 
-import decent_bench.library.core.centralized_algorithms as ca
+import decent_bench.library.core.cent_algorithms as ca
 from decent_bench.library.core.benchmark_problem.datasets import SyntheticClassificationData
 from decent_bench.library.core.benchmark_problem.schemes.agent_activation_schemes import (
     AgentActivationScheme,
