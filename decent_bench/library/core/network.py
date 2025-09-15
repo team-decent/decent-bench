@@ -42,9 +42,6 @@ class Network:
         self._noise_scheme = noise_scheme
         self._compression_scheme = compression_scheme
         self._drop_scheme = drop_scheme
-        self._n_messages_sent = 0
-        self._n_messages_received = 0
-        self._n_messages_dropped = 0
 
     @cached_property
     def metropolis_weights(self) -> NDArray[float64]:
@@ -95,9 +92,9 @@ class Network:
         The message will stay in-flight until it is received or replaced by a newer message from the same sender to the
         same receiver. After being received or replaced, the message is destroyed.
         """
-        self._n_messages_sent += 1
+        sender._n_sent_messages += 1  # noqa: SLF001
         if self._drop_scheme.should_drop():
-            self._n_messages_dropped += 1
+            sender._n_sent_messages_dropped += 1  # noqa: SLF001
             return
         msg = self._compression_scheme.compress(msg)
         msg = self._noise_scheme.make_noise(msg)
@@ -127,7 +124,7 @@ class Network:
         """
         msg = self._graph.edges[sender, receiver].get(str(receiver.id))
         if msg is not None:
-            self._n_messages_received += 1
+            receiver._n_received_messages += 1  # noqa: SLF001
             receiver._received_messages[sender] = msg  # noqa: SLF001
             self._graph.edges[sender, receiver][str(receiver.id)] = None
 
@@ -140,15 +137,6 @@ class Network:
         """
         for neighbor in self._graph.neighbors(receiver):
             self.receive(receiver, neighbor)
-
-
-class NetworkMetricView:
-    """View of network that exposes useful properties for calculating metrics."""
-
-    def __init__(self, network: Network):
-        self.n_messages_sent = network._n_messages_sent  # noqa: SLF001
-        self.n_messages_received = network._n_messages_received  # noqa: SLF001
-        self.n_messages_dropped = network._n_messages_dropped  # noqa: SLF001
 
 
 def generate_distributed_network(problem: BenchmarkProblem) -> Network:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from types import MappingProxyType
 
 from numpy import float64
@@ -15,11 +16,14 @@ class Agent:
 
     def __init__(self, agent_id: int, cost_function: CostFunction, activation_scheme: AgentActivationScheme):
         self._id = agent_id
-        self._historical_x: list[NDArray[float64]] = []
+        self._x_per_iteration: list[NDArray[float64]] = []
         self._auxiliary_variables: dict[str, NDArray[float64]] = {}
         self._received_messages: dict[Agent, NDArray[float64]] = {}
         self._activation_scheme = activation_scheme
         self._cost_function_proxy = _CallCountingCostFunctionProxy(cost_function)
+        self._n_sent_messages = 0
+        self._n_received_messages = 0
+        self._n_sent_messages_dropped = 0
 
     @property
     def id(self) -> int:
@@ -40,13 +44,13 @@ class Agent:
             RuntimeError: if x is retrieved before being set or initialized
 
         """
-        if not self._historical_x:
+        if not self._x_per_iteration:
             raise RuntimeError("x must be initialized before being accessed")
-        return self._historical_x[-1]
+        return self._x_per_iteration[-1]
 
     @x.setter
     def x(self, x: NDArray[float64]) -> None:
-        self._historical_x.append(x)
+        self._x_per_iteration.append(x)
 
     @property
     def received_messages(self) -> Mapping[Agent, NDArray[float64]]:
@@ -75,7 +79,7 @@ class Agent:
 
         """
         if x is not None:
-            self._historical_x = [x]
+            self._x_per_iteration = [x]
         if aux_vars:
             self._auxiliary_variables = aux_vars
         if received_msgs:
@@ -86,26 +90,43 @@ class Agent:
         return self._id
 
 
-class AgentMetricView:
-    """View of agent that exposes useful properties for calculating metrics."""
+@dataclass(frozen=True)
+class AgentMetricsView:
+    """Immutable view of agent that exposes useful properties for calculating metrics."""
 
-    def __init__(self, agent: Agent):
-        cost_function_proxy = agent._cost_function_proxy  # noqa: SLF001
-        self.historical_x = agent._historical_x  # noqa: SLF001
-        self.n_evaluate_calls = cost_function_proxy.evaluate_calls
-        self.n_gradient_calls = cost_function_proxy.gradient_calls
-        self.n_hessian_calls = cost_function_proxy.hessian_calls
-        self.n_proximal_calls = cost_function_proxy.proximal_calls
-        self.cost_function = cost_function_proxy.inner_cost_function
+    cost_function: CostFunction
+    x_per_iteration: list[NDArray[float64]]
+    n_evaluate_calls: int
+    n_gradient_calls: int
+    n_hessian_calls: int
+    n_proximal_calls: int
+    n_sent_messages: int
+    n_received_messages: int
+    n_sent_messages_dropped: int
+
+    @staticmethod
+    def from_agent(agent: Agent) -> AgentMetricsView:
+        """Create from agent."""
+        return AgentMetricsView(
+            cost_function=agent._cost_function_proxy.inner_cost_function,  # noqa: SLF001
+            x_per_iteration=agent._x_per_iteration,  # noqa: SLF001
+            n_evaluate_calls=agent._cost_function_proxy.n_evaluate_calls,  # noqa: SLF001
+            n_gradient_calls=agent._cost_function_proxy.n_gradient_calls,  # noqa: SLF001
+            n_hessian_calls=agent._cost_function_proxy.n_hessian_calls,  # noqa: SLF001
+            n_proximal_calls=agent._cost_function_proxy.n_proximal_calls,  # noqa: SLF001
+            n_sent_messages=agent._n_sent_messages,  # noqa: SLF001
+            n_received_messages=agent._n_received_messages,  # noqa: SLF001
+            n_sent_messages_dropped=agent._n_sent_messages_dropped,  # noqa: SLF001
+        )
 
 
 class _CallCountingCostFunctionProxy(CostFunction):
     def __init__(self, inner_cost_function: CostFunction):
         self.inner_cost_function = inner_cost_function
-        self.evaluate_calls = 0
-        self.gradient_calls = 0
-        self.hessian_calls = 0
-        self.proximal_calls = 0
+        self.n_evaluate_calls = 0
+        self.n_gradient_calls = 0
+        self.n_hessian_calls = 0
+        self.n_proximal_calls = 0
 
     @property
     def m_smooth(self) -> float:
@@ -120,19 +141,19 @@ class _CallCountingCostFunctionProxy(CostFunction):
         return self.inner_cost_function.domain_shape
 
     def evaluate(self, x: NDArray[float64]) -> float:
-        self.evaluate_calls += 1
+        self.n_evaluate_calls += 1
         return self.inner_cost_function.evaluate(x)
 
     def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
-        self.gradient_calls += 1
+        self.n_gradient_calls += 1
         return self.inner_cost_function.gradient(x)
 
     def hessian(self, x: NDArray[float64]) -> NDArray[float64]:
-        self.hessian_calls += 1
+        self.n_hessian_calls += 1
         return self.inner_cost_function.hessian(x)
 
     def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
-        self.proximal_calls += 1
+        self.n_proximal_calls += 1
         return self.inner_cost_function.proximal(y, rho)
 
     def __add__(self, other: CostFunction) -> CostFunction:
