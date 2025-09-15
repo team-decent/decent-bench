@@ -197,7 +197,7 @@ class QuadraticCost(CostFunction):
         """
         lhs = rho * self.A_sym + np.eye(self.A.shape[1])
         rhs = y - self.b * rho
-        return np.asarray(np.linalg.solve(lhs, rhs), dtype=np.float64)
+        return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
 
     def __add__(self, other: CostFunction) -> CostFunction:
         """
@@ -483,11 +483,13 @@ class SumCost(CostFunction):
 
     def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
         """Sum the :meth:`gradient` of each cost function."""
-        return np.asarray(np.sum([cf.gradient(x) for cf in self.cost_functions], axis=0))
+        res: NDArray[float64] = np.sum([cf.gradient(x) for cf in self.cost_functions], axis=0)
+        return res
 
     def hessian(self, x: NDArray[float64]) -> NDArray[float64]:
         """Sum the :meth:`hessian` of each cost function."""
-        return np.asarray(np.sum([cf.hessian(x) for cf in self.cost_functions], axis=0))
+        res: NDArray[float64] = np.sum([cf.hessian(x) for cf in self.cost_functions], axis=0)
+        return res
 
     def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
         """

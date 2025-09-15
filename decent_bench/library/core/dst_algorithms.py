@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import numpy as np
+from numpy import float64
 from numpy.typing import NDArray
 
 from decent_bench.library.core.network import Network
@@ -221,7 +222,7 @@ class ADMM(DstAlgorithm):
             z0 = np.zeros((len(all_agents), *(agent.cost_function.domain_shape)))
             x1 = agent.cost_function.proximal(y=np.sum(z0, axis=0) / pN[agent], rho=1 / pN[agent])
             # note: the message's x1 is an approximation of the neighbor's x1
-            msg0: NDArray[np.float64] = z0[agent] - 2 * self.rho * x1
+            msg0: NDArray[float64] = z0[agent] - 2 * self.rho * x1
             agent.initialize(
                 x=x1,
                 aux_vars={"z": z0},
