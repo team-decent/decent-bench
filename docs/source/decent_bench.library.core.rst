@@ -8,6 +8,7 @@ Subpackages
    :maxdepth: 4
 
    decent_bench.library.core.benchmark_problem
+   decent_bench.library.core.metrics
 
 Submodules
 ----------
