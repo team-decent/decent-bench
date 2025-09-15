@@ -12,6 +12,14 @@ decent\_bench.library.core.metrics.metric\_utils module
    :show-inheritance:
    :undoc-members:
 
+decent\_bench.library.core.metrics.plot\_metrics module
+-------------------------------------------------------
+
+.. automodule:: decent_bench.library.core.metrics.plot_metrics
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 Module contents
 ---------------
 
