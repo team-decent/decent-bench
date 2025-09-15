@@ -28,7 +28,7 @@ class DstAlgorithm(ABC):
         """
 
 
-@dataclass
+@dataclass(eq=False)
 class DGD(DstAlgorithm):
     r"""
     Distributed gradient descent characterized by the update step below.
@@ -72,7 +72,7 @@ class DGD(DstAlgorithm):
                 network.receive_all(i)
 
 
-@dataclass
+@dataclass(eq=False)
 class GT1(DstAlgorithm):
     r"""
     Gradient tracking algorithm characterized by the update step below.
@@ -122,7 +122,7 @@ class GT1(DstAlgorithm):
                 network.receive_all(i)
 
 
-@dataclass
+@dataclass(eq=False)
 class GT2(DstAlgorithm):
     r"""
     Gradient tracking algorithm characterized by the update step below.
@@ -179,7 +179,7 @@ class GT2(DstAlgorithm):
                 network.receive_all(i)
 
 
-@dataclass
+@dataclass(eq=False)
 class ADMM(DstAlgorithm):
     r"""
     Distributed Alternating Direction Method of Multipliers characterized by the update step below.
