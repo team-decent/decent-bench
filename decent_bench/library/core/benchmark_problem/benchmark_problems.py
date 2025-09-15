@@ -31,7 +31,7 @@ else:
     AnyGraph = Graph
 
 
-@dataclass
+@dataclass(eq=False)
 class BenchmarkProblem:
     """
     Benchmark problem to run algorithms on, defining settings such as communication constraints and topology.
@@ -88,8 +88,8 @@ class SimpleBenchmarkProblemFactory:
             n_classes=2, n_partitions=n_agents, n_samples_per_partition=10, n_features=3, seed=0
         )
         costs = [cost_function_cls(*p) for p in dataset.training_partitions]
-        cost_sum = reduce(add, costs)
-        optimal_x = ca.accelerated_gradient_descent(cost_sum, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-100)
+        sum_cost = reduce(add, costs)
+        optimal_x = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-100)
         agent_activation_schemes = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
         compression_scheme = Quantization(n_significant_digits=4) if compressed else NoCompression()
         noise_scheme = GaussianNoise(mean=0, sd=0.001) if noisy else NoNoise()

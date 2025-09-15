@@ -90,7 +90,7 @@ class Agent:
         return self._id
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class AgentMetricsView:
     """Immutable view of agent that exposes useful properties for calculating metrics."""
 
