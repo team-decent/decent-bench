@@ -44,7 +44,7 @@ def mean_x(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> NDArray
     return res
 
 
-def global_cost_error(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int = -1) -> float:
+def global_cost_error_at_iter(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int = -1) -> float:
     r"""
     Calculate the global cost error as defined below.
 
@@ -63,9 +63,9 @@ def global_cost_error(agents: list[AgentMetricsView], problem: BenchmarkProblem,
     return abs(optimal_cost - actual_cost)
 
 
-def gradient_optimality(agents: list[AgentMetricsView], iteration: int = -1) -> float:
+def global_gradient_optimality_at_iter(agents: list[AgentMetricsView], iteration: int = -1) -> float:
     r"""
-    Calculate the gradient optimality as defined below.
+    Calculate the global gradient optimality as defined below.
 
     .. math::
         \| \frac{1}{N} \sum_i \nabla f_i(\mathbf{\bar{x}}_k) \|^2

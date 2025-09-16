@@ -12,28 +12,29 @@ def global_cost_error_per_iteration(agents: list[AgentMetricsView], problem: Ben
     r"""
     Calculate the global cost error (y-axis) for each iteration (x-axis).
 
-    Global cost error is defined at :func:`~decent_bench.library.core.metrics.metric_utils.global_cost_error`.
+    Global cost error is defined at :func:`~decent_bench.library.core.metrics.metric_utils.global_cost_error_at_iter`.
 
     All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
     iterations are disregarded. This is done to not miscalculate the global cost error which relies on all agents for
     its calculation.
     """
     iter_reached_by_all = min(len(a.x_per_iteration) for a in agents)
-    return [(i, utils.global_cost_error(agents, problem, i)) for i in range(iter_reached_by_all)]
+    return [(i, utils.global_cost_error_at_iter(agents, problem, i)) for i in range(iter_reached_by_all)]
 
 
-def gradient_optimality_per_iteration(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[tuple[X, Y]]:
+def global_gradient_optimality_per_iteration(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[tuple[X, Y]]:
     r"""
-    Calculate the gradient optimality (y-axis) for each iteration (x-axis).
+    Calculate the global gradient optimality (y-axis) for each iteration (x-axis).
 
-    Gradient optimality is defined at :func:`~decent_bench.library.core.metrics.metric_utils.gradient_optimality`.
+    Global gradient optimality is defined at
+    :func:`~decent_bench.library.core.metrics.metric_utils.global_gradient_optimality_at_iter`.
 
     All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
     iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are included in
     the calculation.
     """
     iter_reached_by_all = min(len(a.x_per_iteration) for a in agents)
-    return [(i, utils.gradient_optimality(agents, i)) for i in range(iter_reached_by_all)]
+    return [(i, utils.global_gradient_optimality_at_iter(agents, i)) for i in range(iter_reached_by_all)]
 
 
 @dataclass(eq=False)
@@ -70,17 +71,17 @@ DEFAULT_PLOT_METRICS = [
     ),
     PlotMetric(
         x_label="iteration",
-        y_label="gradient optimality",
+        y_label="global gradient optimality",
         x_log=False,
         y_log=True,
-        get_data_from_trial=gradient_optimality_per_iteration,
+        get_data_from_trial=global_gradient_optimality_per_iteration,
     ),
 ]
 """
 - Global cost error (y-axis) per iteration (x-axis). Semi-log plot.
   Details: :func:`global_cost_error_per_iteration`.
-- Gradient optimality (y-axis) per iteration (x-axis). Semi-log plot.
-  Details: :func:`gradient_optimality_per_iteration`.
+- Global gradient optimality (y-axis) per iteration (x-axis). Semi-log plot.
+  Details: :func:`global_gradient_optimality_per_iteration`.
 
 :meta hide-value:
 """
