@@ -20,6 +20,14 @@ decent\_bench.library.core.metrics.plot\_metrics module
    :show-inheritance:
    :undoc-members:
 
+decent\_bench.library.core.metrics.table\_metrics module
+--------------------------------------------------------
+
+.. automodule:: decent_bench.library.core.metrics.table_metrics
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 Module contents
 ---------------
 
