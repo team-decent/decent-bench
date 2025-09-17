@@ -5,6 +5,7 @@ requires-python = ">=3.13"
 dependencies = [
   "networkx",
   "numpy",
+  "rich",
   "scipy",
   "scikit-learn",
 ]

@@ -386,7 +386,8 @@ class LogisticRegressionCost(CostFunction):
         .. math:: \mathbf{A}^T (\sigma(\mathbf{Ax}) - \mathbf{b})
         """
         sig = special.expit(self.A.dot(x))
-        return self.A.T.dot(sig - self.b)  # type: ignore[no-any-return]
+        res: NDArray[float64] = self.A.T.dot(sig - self.b)
+        return res
 
     def hessian(self, x: NDArray[float64]) -> NDArray[float64]:
         r"""
@@ -399,7 +400,8 @@ class LogisticRegressionCost(CostFunction):
         """
         sig = special.expit(self.A.dot(x))
         D = np.diag(sig * (1 - sig))  # noqa: N806
-        return self.A.T.dot(D).dot(self.A)  # type: ignore[no-any-return]
+        res: NDArray[float64] = self.A.T.dot(D).dot(self.A)
+        return res
 
     def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
         """
