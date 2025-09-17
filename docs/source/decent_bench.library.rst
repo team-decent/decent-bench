@@ -8,6 +8,7 @@ Subpackages
    :maxdepth: 4
 
    decent_bench.library.core
+   decent_bench.library.utils
 
 Module contents
 ---------------
