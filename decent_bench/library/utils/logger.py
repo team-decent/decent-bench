@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 from logging import LogRecord
 from logging.handlers import QueueHandler, QueueListener
