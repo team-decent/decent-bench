@@ -12,6 +12,14 @@ decent\_bench.library.core.metrics.table\_metrics.default\_table\_metrics module
    :show-inheritance:
    :undoc-members:
 
+decent\_bench.library.core.metrics.table\_metrics.table\_generator module
+-------------------------------------------------------------------------
+
+.. automodule:: decent_bench.library.core.metrics.table_metrics.table_generator
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 decent\_bench.library.core.metrics.table\_metrics.table\_metrics\_constructs module
 -----------------------------------------------------------------------------------
 
