@@ -10,6 +10,7 @@ from decent_bench.library.core.benchmark_problem.benchmark_problems import Bench
 from decent_bench.library.core.dst_algorithms import DstAlgorithm
 from decent_bench.library.core.metrics.table_metrics.table_metrics_constructs import Statistic, TableMetric
 from decent_bench.library.core.network import Network
+from decent_bench.library.utils.logger import LOGGER
 
 
 def tabulate(
@@ -18,7 +19,7 @@ def tabulate(
     metrics: list[TableMetric],
     confidence_level: float,
     table_fmt: Literal["grid", "latex"],
-) -> str:
+) -> None:
     """
     Print table with confidence intervals, one row per metric and statistic, and one column per algorithm.
 
@@ -30,9 +31,6 @@ def tabulate(
         metrics: metrics to calculate
         confidence_level: confidence level of the confidence intervals
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
-
-    Returns:
-        formatted table with confidence intervals, one row per metric and statistic, and one column per algorithm
 
     """
     headers = ["Metric (statistic)"] + [alg.name for alg in resulting_nw_states_per_alg]
@@ -46,7 +44,8 @@ def tabulate(
                 formatted_confidence_interval = _format_confidence_interval(mean, margin_of_error)
                 row.append(formatted_confidence_interval)
             rows.append(row)
-    return tb.tabulate(rows, headers, tablefmt=table_fmt)
+    formatted_table = tb.tabulate(rows, headers, tablefmt=table_fmt)
+    LOGGER.info("\n" + formatted_table)
 
 
 def _get_aggregated_data_per_trial(
