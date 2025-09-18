@@ -43,15 +43,16 @@ def benchmark(
         benchmark_problem: problem to benchmark on, defines the network topology, cost functions, and communication
             constraints
         plot_metrics: metrics to plot after the execution, defaults to
-            `decent_bench.library.core.metrics.plot_metrics.default_plot_metrics.DEFAULT_PLOT_METRICS`
+            :const:`~decent_bench.library.core.metrics.plot_metrics.default_plot_metrics.DEFAULT_PLOT_METRICS`
         table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
-            `decent_bench.library.core.metrics.table_metrics.default_table_metrics.DEFAULT_TABLE_METRICS`
+            :const:`~decent_bench.library.core.metrics.table_metrics.default_table_metrics.DEFAULT_TABLE_METRICS`
+        table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         n_trials: number of times to run each algorithm on the benchmark problem, running more trials improves the
             statistical results, at least 30 trials are recommended for the central limit theorem to apply
         confidence_level: confidence level of the confidence intervals
-        table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         log_level: minimum level to log, e.g. :data:`logging.INFO`
-        run_trials_async: whether to use multiprocessing when running the trials
+        run_trials_async: whether to use multiprocessing when running trials, multiprocessing improves performance
+            but can be inhibiting when debugging or using a profiler
 
     """
     manager = Manager()
