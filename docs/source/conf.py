@@ -28,8 +28,8 @@ extensions = [
 ]
 
 autodoc_default_options = {"special-members": "__add__, __iter__"}
-
 autodoc_member_order = "bysource"
+autodoc_preserve_defaults = True
 
 nitpicky = True
 nitpick_ignore = [("py:class", "numpy.float64")]

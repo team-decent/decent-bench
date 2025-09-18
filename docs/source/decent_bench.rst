@@ -9,6 +9,17 @@ Subpackages
 
    decent_bench.library
 
+Submodules
+----------
+
+decent\_bench.benchmark module
+------------------------------
+
+.. automodule:: decent_bench.benchmark
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 Module contents
 ---------------
 
