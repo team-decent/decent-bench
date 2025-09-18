@@ -3,6 +3,7 @@ name = "decent-bench"
 version = "0.0.0"
 requires-python = ">=3.13"
 dependencies = [
+  "matplotlib",
   "networkx",
   "numpy",
   "rich",
