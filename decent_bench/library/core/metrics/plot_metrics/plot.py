@@ -25,7 +25,7 @@ def plot(
     metrics: list[PlotMetric],
 ) -> None:
     """
-    Plot the results with one subplot per metric.
+    Plot the execution results with one subplot per metric.
 
     Each algorithm's curve is its mean across the trials.
 

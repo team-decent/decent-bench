@@ -2,7 +2,7 @@ import warnings
 from typing import Literal
 
 import numpy as np
-import tabulate
+import tabulate as tb
 from scipy import stats
 
 from decent_bench.library.core.agent import AgentMetricsView
@@ -12,7 +12,7 @@ from decent_bench.library.core.metrics.table_metrics.table_metrics_constructs im
 from decent_bench.library.core.network import Network
 
 
-def generate_table(
+def tabulate(
     resulting_nw_states_per_alg: dict[DstAlgorithm, list[Network]],
     problem: BenchmarkProblem,
     metrics: list[TableMetric],
@@ -20,10 +20,10 @@ def generate_table(
     table_fmt: Literal["grid", "latex"],
 ) -> str:
     """
-    Generate table with confidence intervals, one row per metric and statistic, and one column per algorithm.
+    Print table with confidence intervals, one row per metric and statistic, and one column per algorithm.
 
     Args:
-        resulting_nw_states_per_alg: resulting network states from the trial executions, ordered by algorithm
+        resulting_nw_states_per_alg: resulting network states from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties, e.g.
             :attr:`~decent_bench.library.core.benchmark_problem.benchmark_problems.BenchmarkProblem.optimal_x`,
             are used for metric calculations
@@ -52,7 +52,7 @@ def generate_table(
                     formatted_confidence_interval = _format_confidence_interval(mean, margin_of_error)
                     row.append(formatted_confidence_interval)
                 rows.append(row)
-        return tabulate.tabulate(rows, headers, tablefmt=table_fmt)
+        return tb.tabulate(rows, headers, tablefmt=table_fmt)
 
 
 def _get_mean_and_margin_of_error(data: list[float], confidence_level: float) -> tuple[float, float]:
