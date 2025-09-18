@@ -139,9 +139,9 @@ class Network:
             self.receive(receiver, neighbor)
 
 
-def generate_distributed_network(problem: BenchmarkProblem) -> Network:
+def create_distributed_network(problem: BenchmarkProblem) -> Network:
     """
-    Generate a distributed network - a network with peer-to-peer communication only, no coordinator.
+    Create a distributed network - a network with peer-to-peer communication only, no coordinator.
 
     Raises:
         ValueError: if there are less agent activation schemes or cost functions than agents

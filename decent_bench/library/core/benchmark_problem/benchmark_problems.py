@@ -56,50 +56,46 @@ class BenchmarkProblem:
     drop_scheme: DropScheme
 
 
-class SimpleBenchmarkProblemFactory:
-    """Factory for simple, out-of-the-box benchmark problems."""
+def create_regression_problem(
+    cost_function_cls: type[LinearRegressionCost | LogisticRegressionCost],
+    *,
+    n_agents: int = 100,
+    n_neighbors_per_agent: int = 3,
+    asynchrony: bool = False,
+    compressed: bool = False,
+    noisy: bool = False,
+    droppy: bool = False,
+) -> BenchmarkProblem:
+    """
+    Create out-of-the-box regression problems.
 
-    @staticmethod
-    def generate_regression_problem(
-        cost_function_cls: type[LinearRegressionCost | LogisticRegressionCost],
-        *,
-        n_agents: int = 100,
-        n_neighbors_per_agent: int = 3,
-        asynchrony: bool = False,
-        compressed: bool = False,
-        noisy: bool = False,
-        droppy: bool = False,
-    ) -> BenchmarkProblem:
-        """
-        Generate out-of-the-box regression problems.
+    Args:
+        cost_function_cls: type of cost function
+        n_agents: number of agents
+        n_neighbors_per_agent: number of neighbors per agent
+        asynchrony: if true, agents only have a 50% probability of being active/participating at any given time
+        compressed: if true, messages are rounded to 4 significant digits
+        noisy: if true, messages are distorted by Gaussian noise
+        droppy: if true, messages have a 50% probability of being dropped
 
-        Args:
-            cost_function_cls: type of cost function
-            n_agents: number of agents
-            n_neighbors_per_agent: number of neighbors per agent
-            asynchrony: if true, agents only have a 50% probability of being active/participating at any given time
-            compressed: if true, messages are rounded to 4 significant digits
-            noisy: if true, messages are distorted by Gaussian noise
-            droppy: if true, messages have a 50% probability of being dropped
-
-        """
-        topology_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
-        dataset = SyntheticClassificationData(
-            n_classes=2, n_partitions=n_agents, n_samples_per_partition=10, n_features=3, seed=0
-        )
-        costs = [cost_function_cls(*p) for p in dataset.training_partitions]
-        sum_cost = reduce(add, costs)
-        optimal_x = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-100)
-        agent_activation_schemes = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
-        compression_scheme = Quantization(n_significant_digits=4) if compressed else NoCompression()
-        noise_scheme = GaussianNoise(mean=0, sd=0.001) if noisy else NoNoise()
-        drop_scheme = UniformDropRate(drop_rate=0.5) if droppy else NoDrops()
-        return BenchmarkProblem(
-            topology_structure=topology_structure,
-            cost_functions=costs,
-            optimal_x=optimal_x,
-            agent_activation_schemes=agent_activation_schemes,
-            compression_scheme=compression_scheme,
-            noise_scheme=noise_scheme,
-            drop_scheme=drop_scheme,
-        )
+    """
+    topology_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
+    dataset = SyntheticClassificationData(
+        n_classes=2, n_partitions=n_agents, n_samples_per_partition=10, n_features=3, seed=0
+    )
+    costs = [cost_function_cls(*p) for p in dataset.training_partitions]
+    sum_cost = reduce(add, costs)
+    optimal_x = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-100)
+    agent_activation_schemes = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
+    compression_scheme = Quantization(n_significant_digits=4) if compressed else NoCompression()
+    noise_scheme = GaussianNoise(mean=0, sd=0.001) if noisy else NoNoise()
+    drop_scheme = UniformDropRate(drop_rate=0.5) if droppy else NoDrops()
+    return BenchmarkProblem(
+        topology_structure=topology_structure,
+        cost_functions=costs,
+        optimal_x=optimal_x,
+        agent_activation_schemes=agent_activation_schemes,
+        compression_scheme=compression_scheme,
+        noise_scheme=noise_scheme,
+        drop_scheme=drop_scheme,
+    )
