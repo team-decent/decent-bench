@@ -8,7 +8,7 @@ from scipy import stats
 from decent_bench.library.core.agent import AgentMetricsView
 from decent_bench.library.core.benchmark_problem.benchmark_problems import BenchmarkProblem
 from decent_bench.library.core.dst_algorithms import DstAlgorithm
-from decent_bench.library.core.metrics.table_metrics.table_metrics_constructs import TableMetric
+from decent_bench.library.core.metrics.table_metrics.table_metrics_constructs import Statistic, TableMetric
 from decent_bench.library.core.network import Network
 
 
@@ -35,24 +35,31 @@ def tabulate(
         formatted table with confidence intervals, one row per metric and statistic, and one column per algorithm
 
     """
-    with warnings.catch_warnings(action="ignore"):
-        headers = ["Metric (statistic)"] + [alg.name for alg in resulting_nw_states_per_alg]
-        rows: list[list[str]] = []
-        for metric in metrics:
-            for statistic in metric.statistics:
-                row = [f"{metric.name} ({statistic.name})"]
-                for resulting_nw_states in resulting_nw_states_per_alg.values():
-                    aggregated_data_per_trial: list[float] = []
-                    for nw in resulting_nw_states:
-                        agent_metrics_views = [AgentMetricsView.from_agent(a) for a in nw.get_all_agents()]
-                        trial_data = metric.get_data_from_trial(agent_metrics_views, problem)
-                        aggregated_trial_data = statistic.agg_func(trial_data)
-                        aggregated_data_per_trial.append(aggregated_trial_data)
-                    mean, margin_of_error = _get_mean_and_margin_of_error(aggregated_data_per_trial, confidence_level)
-                    formatted_confidence_interval = _format_confidence_interval(mean, margin_of_error)
-                    row.append(formatted_confidence_interval)
-                rows.append(row)
-        return tb.tabulate(rows, headers, tablefmt=table_fmt)
+    headers = ["Metric (statistic)"] + [alg.name for alg in resulting_nw_states_per_alg]
+    rows: list[list[str]] = []
+    for metric in metrics:
+        for statistic in metric.statistics:
+            row = [f"{metric.name} ({statistic.name})"]
+            for nw_states in resulting_nw_states_per_alg.values():
+                aggregated_data_per_trial = _get_aggregated_data_per_trial(nw_states, problem, metric, statistic)
+                mean, margin_of_error = _get_mean_and_margin_of_error(aggregated_data_per_trial, confidence_level)
+                formatted_confidence_interval = _format_confidence_interval(mean, margin_of_error)
+                row.append(formatted_confidence_interval)
+            rows.append(row)
+    return tb.tabulate(rows, headers, tablefmt=table_fmt)
+
+
+def _get_aggregated_data_per_trial(
+    resulting_nw_states: list[Network], problem: BenchmarkProblem, metric: TableMetric, statistic: Statistic
+) -> list[float]:
+    aggregated_data_per_trial: list[float] = []
+    for nw in resulting_nw_states:
+        agent_metrics_views = [AgentMetricsView.from_agent(a) for a in nw.get_all_agents()]
+        with warnings.catch_warnings(action="ignore"):
+            trial_data = metric.get_data_from_trial(agent_metrics_views, problem)
+            aggregated_trial_data = statistic.agg_func(trial_data)
+        aggregated_data_per_trial.append(aggregated_trial_data)
+    return aggregated_data_per_trial
 
 
 def _get_mean_and_margin_of_error(data: list[float], confidence_level: float) -> tuple[float, float]:
