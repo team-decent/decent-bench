@@ -88,12 +88,12 @@ def _create_metric_subplots(metrics: list[PlotMetric]) -> list[tuple[PlotMetric,
 def _get_data_per_trial(
     resulting_nw_states: list[Network], problem: BenchmarkProblem, metric: PlotMetric
 ) -> list[Sequence[tuple[X, Y]]]:
-    with warnings.catch_warnings(action="ignore"):
-        data_per_trial: list[Sequence[tuple[X, Y]]] = []
-        for nw in resulting_nw_states:
-            agent_metrics_views = [AgentMetricsView.from_agent(a) for a in nw.get_all_agents()]
+    data_per_trial: list[Sequence[tuple[X, Y]]] = []
+    for nw in resulting_nw_states:
+        agent_metrics_views = [AgentMetricsView.from_agent(a) for a in nw.get_all_agents()]
+        with warnings.catch_warnings(action="ignore"):
             trial_data = metric.get_data_from_trial(agent_metrics_views, problem)
-            data_per_trial.append(trial_data)
+        data_per_trial.append(trial_data)
     return data_per_trial
 
 
