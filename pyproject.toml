@@ -6,6 +6,7 @@ dependencies = [
   "matplotlib",
   "networkx",
   "numpy",
+  "requests",
   "rich",
   "scipy",
   "scikit-learn",

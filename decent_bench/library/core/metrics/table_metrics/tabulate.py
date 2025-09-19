@@ -12,6 +12,8 @@ from decent_bench.library.core.metrics.table_metrics.table_metrics_constructs im
 from decent_bench.library.core.network import Network
 from decent_bench.library.utils.logger import LOGGER
 
+DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.library.core.metrics.table_metrics.html"
+
 
 def tabulate(
     resulting_nw_states_per_alg: dict[DstAlgorithm, list[Network]],
@@ -46,6 +48,7 @@ def tabulate(
             rows.append(row)
     formatted_table = tb.tabulate(rows, headers, tablefmt=table_fmt)
     LOGGER.info("\n" + formatted_table)
+    LOGGER.info(f"Metric definitions can be found here: {DOC_LINK}")
 
 
 def _get_aggregated_data_per_trial(
