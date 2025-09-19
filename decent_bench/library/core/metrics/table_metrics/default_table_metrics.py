@@ -9,7 +9,7 @@ from decent_bench.library.core.metrics.table_metrics.table_metrics_constructs im
 )
 
 DEFAULT_TABLE_METRICS = [
-    TableMetric("global cost error", [Single], data_extractors.global_cost_error),
+    TableMetric("global cost error (< 1e-9 = exact convergence)", [Single], data_extractors.global_cost_error),
     TableMetric("global gradient optimality", [Single], data_extractors.global_gradient_optimality),
     TableMetric("x error", [Min, Avg, Max], data_extractors.x_error),
     TableMetric("asymptotic convergence order", [Avg], data_extractors.asymptotic_convergence_order),
