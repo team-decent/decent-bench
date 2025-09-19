@@ -3,7 +3,7 @@ from numpy import float64
 from numpy import linalg as la
 from numpy.typing import NDArray
 
-from decent_bench.library.core.cost_functions import CostFunction
+from decent_bench.library.core.cost_functions import CostFunction, QuadraticCost
 
 
 def gradient_descent(
@@ -112,3 +112,23 @@ def accelerated_gradient_descent(
             f"Actual delta: {delta}."
         )
     return x
+
+
+def proximal_solver(cost_function: CostFunction, y: NDArray[float64], rho: float) -> NDArray[float64]:
+    """
+    Find the proximal at y using accelerated gradient descent.
+
+    This is the solution to the proximal operator defined as:
+
+    .. include:: snippets/proximal_operator.rst
+
+    Raises:
+        ValueError: if *cost_function*'s domain and *y* don't have the same shape, or if *rho* is not greater than 0
+
+    """
+    if cost_function.domain_shape != y.shape:
+        raise ValueError("Cost function domain and y need to have the same shape")
+    if rho <= 0:
+        raise ValueError("Penalty term `rho` must be greater than 0")
+    proximal_cost = cost_function + QuadraticCost(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho))
+    return accelerated_gradient_descent(proximal_cost, y, max_iter=100, stop_tol=1e-10, max_tol=None)
