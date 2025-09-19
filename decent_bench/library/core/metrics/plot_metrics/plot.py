@@ -54,8 +54,10 @@ def plot(
                 LOGGER.warning(msg)
                 continue
             mean_curve: Sequence[tuple[X, Y]] = _calculate_mean_curve(data_per_trial)
-            x, y = zip(*mean_curve, strict=True)
-            subplot.plot(x, y, label=alg.name, color=color, marker=marker, linewidth=3)
+            x, y_mean = zip(*mean_curve, strict=True)
+            subplot.plot(x, y_mean, label=alg.name, color=color, marker=marker, linewidth=3)
+            y_min, y_max = _calculate_envelope(data_per_trial)
+            subplot.fill_between(x, y_min, y_max, color=color, alpha=0.3)
     manager = plt.get_current_fig_manager()
     if not manager:
         raise RuntimeError("Something went wrong, did not receive a FigureManager...")
@@ -103,3 +105,12 @@ def _calculate_mean_curve(data_per_trial: list[Sequence[tuple[X, Y]]]) -> list[t
         for x, y in trial_data:
             all_y_per_x[x].append(y)
     return [(x, np.mean(y_li, dtype=float)) for x, y_li in all_y_per_x.items()]
+
+
+def _calculate_envelope(data_per_trial: list[Sequence[tuple[X, Y]]]) -> tuple[list[Y], list[Y]]:
+    y_span_per_x: dict[X, dict[str, Y]] = defaultdict(lambda: {"y_min": np.inf, "y_max": -np.inf})
+    for trial_data in data_per_trial:
+        for x, y in trial_data:
+            y_span_per_x[x]["y_min"] = min(y_span_per_x[x]["y_min"], y)
+            y_span_per_x[x]["y_max"] = max(y_span_per_x[x]["y_max"], y)
+    return [v["y_min"] for v in y_span_per_x.values()], [v["y_max"] for v in y_span_per_x.values()]
