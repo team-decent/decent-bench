@@ -154,9 +154,10 @@ class QuadraticCost(CostFunction):
         """
         eigs = np.linalg.eigvalsh(self.A_sym)
         l_min = float(np.min(eigs))
-        if l_min > 0:
+        tol = 1e-12
+        if l_min > tol:
             return l_min
-        if l_min == 0:
+        if abs(l_min) <= tol:
             return 0
         return np.nan
 
