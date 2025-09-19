@@ -33,7 +33,7 @@ def benchmark(
     n_trials: int = 30,
     confidence_level: float = 0.95,
     log_level: int = logging.INFO,
-    run_trials_async: bool = True,
+    max_processes: int | None = None,
 ) -> None:
     """
     Benchmark distributed algorithms.
@@ -51,8 +51,9 @@ def benchmark(
             statistical results, at least 30 trials are recommended for the central limit theorem to apply
         confidence_level: confidence level of the confidence intervals
         log_level: minimum level to log, e.g. :data:`logging.INFO`
-        run_trials_async: whether to use multiprocessing when running trials, multiprocessing improves performance
-            but can be inhibiting when debugging or using a profiler
+        max_processes: maximum number of processes to use when running trials, multiprocessing improves performance
+            but can be inhibiting when debugging or using a profiler, set to 1 to disable multiprocessing or ``None`` to
+            use :class:`~concurrent.futures.ProcessPoolExecutor`'s default
 
     """
     manager = Manager()
@@ -61,9 +62,8 @@ def benchmark(
     with Status("Generating initial network state"):
         nw_init_state = network.create_distributed_network(benchmark_problem)
     LOGGER.info(f"Nr of agents: {len(nw_init_state.get_all_agents())}")
-    progress_bar_ctrl = ProgressBarController(manager, algorithms, n_trials)
-    run_trials_func = _run_trials_async if run_trials_async else _run_trials_sync
-    resulting_nw_states = run_trials_func(algorithms, n_trials, nw_init_state, progress_bar_ctrl, log_listener)
+    pb_ctrl = ProgressBarController(manager, algorithms, n_trials)
+    resulting_nw_states = _run_trials(algorithms, n_trials, nw_init_state, pb_ctrl, log_listener, max_processes)
     LOGGER.info("All trials complete")
     with Status("Creating table"):
         tabulate.tabulate(resulting_nw_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
@@ -71,33 +71,26 @@ def benchmark(
         plot.plot(resulting_nw_states, benchmark_problem, plot_metrics)
 
 
-def _run_trials_async(
+def _run_trials(  # noqa: PLR0917
     algorithms: list[DstAlgorithm],
     n_trials: int,
     nw_init_state: Network,
     progress_bar_ctrl: ProgressBarController,
     log_listener: QueueListener,
+    max_processes: int | None,
 ) -> dict[DstAlgorithm, list[Network]]:
     def _start_logger() -> None:
         logger.start_queue_logger(log_listener.queue)
 
-    with ProcessPoolExecutor(initializer=_start_logger) as executor:
+    if max_processes == 1:
+        return {alg: [_run_trial(alg, nw_init_state, progress_bar_ctrl) for _ in range(n_trials)] for alg in algorithms}
+    with ProcessPoolExecutor(initializer=_start_logger, max_workers=max_processes) as executor:
         LOGGER.info(f"Concurrent processes: {executor._max_workers}")  # type: ignore[attr-defined] # noqa: SLF001
         all_futures = {
             alg: [executor.submit(_run_trial, alg, nw_init_state, progress_bar_ctrl) for _ in range(n_trials)]
             for alg in algorithms
         }
         return {alg: [f.result() for f in as_completed(futures)] for alg, futures in all_futures.items()}
-
-
-def _run_trials_sync(
-    algorithms: list[DstAlgorithm],
-    n_trials: int,
-    nw_init_state: Network,
-    progress_bar_ctrl: ProgressBarController,
-    _: QueueListener,
-) -> dict[DstAlgorithm, list[Network]]:
-    return {alg: [_run_trial(alg, nw_init_state, progress_bar_ctrl) for _ in range(n_trials)] for alg in algorithms}
 
 
 def _run_trial(
