@@ -71,16 +71,12 @@ class CostFunction(ABC):
         r"""
         Proximal at y.
 
-        The proximal operator is defined as
+        The proximal operator is defined as:
 
-        .. math::
-            \operatorname{prox}_{\rho f}(\mathbf{y})
-            = \arg\min_{\mathbf{x}}  \left\{ f(\mathbf{x}) + \frac{1}{2\rho} \| \mathbf{x} - \mathbf{y} \|^2 \right\}
-
-        where :math:`\rho > 0` is the penalty and :math:`f` the cost function.
+        .. include:: snippets/proximal_operator.rst
 
         If the cost function's proximal does not have a closed form solution, it can be solved iteratively using
-        ``ProximalCost(self, y, rho).minimize()``.
+        :meth:`~decent_bench.library.core.cent_algorithms.proximal_solver`.
         """
 
     @abstractmethod
@@ -212,8 +208,6 @@ class QuadraticCost(CostFunction):
             raise ValueError(f"Mismatching domain shapes: {self.domain_shape} vs {other.domain_shape}")
         if isinstance(other, QuadraticCost):
             return QuadraticCost(self.A + other.A, self.b + other.b, self.c + other.c)
-        if isinstance(other, (LinearRegressionCost, ProximalCost)):
-            return self + other.inner
         return SumCost([self, other])
 
 
@@ -410,7 +404,9 @@ class LogisticRegressionCost(CostFunction):
 
         See :meth:`CostFunction.proximal` for the general proximal definition.
         """
-        return ProximalCost(self, y, rho).minimize()
+        import decent_bench.library.core.cent_algorithms as ca  # noqa: PLC0415
+
+        return ca.proximal_solver(self, y, rho)
 
     def __add__(self, other: CostFunction) -> CostFunction:
         """
@@ -424,8 +420,6 @@ class LogisticRegressionCost(CostFunction):
             raise ValueError(f"Mismatching domain shapes: {self.domain_shape} vs {other.domain_shape}")
         if isinstance(other, LogisticRegressionCost):
             return LogisticRegressionCost(np.vstack([self.A, other.A]), np.concatenate([self.b, other.b]))
-        if isinstance(other, ProximalCost):
-            return self + other.inner
         return SumCost([self, other])
 
 
@@ -500,106 +494,10 @@ class SumCost(CostFunction):
 
         See :meth:`CostFunction.proximal` for the general proximal definition.
         """
-        return ProximalCost(self, y, rho).minimize()
+        import decent_bench.library.core.cent_algorithms as ca  # noqa: PLC0415
+
+        return ca.proximal_solver(self, y, rho)
 
     def __add__(self, other: CostFunction) -> SumCost:
         """Add another cost function."""
         return SumCost([self, other])
-
-
-class ProximalCost(CostFunction):
-    r"""
-    The function minimized by the proximal operator.
-
-    .. math::
-        f_{prox}(\mathbf{x}) = f(\mathbf{x}) + \frac{1}{2\rho} \| \mathbf{x} - \mathbf{y} \|^2
-
-    where :math:`f`, :math:`\mathbf{y}`, and :math:`\rho` are the cost function, input, and penalty respectively,
-    all fixed by the proximal operator.
-
-    See :meth:`CostFunction.proximal` for how the proximal operator is defined and relates to this function.
-    """
-
-    def __init__(self, f: CostFunction, y: NDArray[float64], rho: float):
-        if len(f.domain_shape) > 1 or len(y.shape) > 1:
-            raise ValueError("Shape of cost function domain and y must have exactly one axis")
-        if f.domain_shape != y.shape:
-            raise ValueError("Cost function domain and y need to have the same shape")
-        if rho <= 0:
-            raise ValueError("Penalty term `rho` must be greater than 0")
-        self.y = y
-        self.inner = f + QuadraticCost(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho))
-
-    @property
-    def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
-        return self.inner.domain_shape
-
-    @property
-    def m_smooth(self) -> float:
-        r"""
-        The cost function's smoothness constant.
-
-        .. math:: f_\text{m_smooth} + \frac{1}{\rho}
-
-        For the general definition, see :attr:`CostFunction.m_smooth`.
-        """
-        return self.inner.m_smooth
-
-    @property
-    def m_cvx(self) -> float:
-        r"""
-        The cost function's convexity constant.
-
-        .. math:: f_\text{m_cvx} + \frac{1}{\rho}
-
-        For the general definition, see :attr:`CostFunction.m_cvx`.
-        """
-        return self.inner.m_cvx
-
-    def evaluate(self, x: NDArray[float64]) -> float:
-        r"""
-        Evaluate function at x.
-
-        .. math:: f(\mathbf{x}) + \frac{1}{2\rho} \| \mathbf{x} - \mathbf{y} \|^2
-        """
-        return self.inner.evaluate(x)
-
-    def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
-        r"""
-        Gradient at x.
-
-        .. math:: \nabla f(\mathbf{x}) + \frac{1}{\rho} (\mathbf{x} - \mathbf{y})
-        """
-        return self.inner.gradient(x)
-
-    def hessian(self, x: NDArray[float64]) -> NDArray[float64]:
-        r"""
-        Hessian at x.
-
-        .. math:: \nabla^2 f(\mathbf{x}) + \frac{1}{\rho} \mathbf{I}
-        """
-        return self.inner.hessian(x)
-
-    def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
-        """
-        Proximal at y solved using an iterative method.
-
-        See :meth:`CostFunction.proximal` for the general proximal definition.
-        """
-        return ProximalCost(self, y, rho).minimize()
-
-    def minimize(self) -> NDArray[float64]:
-        """
-        Find x that minimizes the proximal cost function using accelerated gradient descent.
-
-        This is the solution to the proximal operator described in :meth:`CostFunction.proximal`. Therefore,
-        :meth:`ProximalCost.minimize` can be used to solve the proximal for cost functions lacking a closed
-        form solution.
-        """
-        from decent_bench.library.core import cent_algorithms as ca  # noqa: PLC0415
-
-        return ca.accelerated_gradient_descent(self, self.y, max_iter=100, stop_tol=1e-10, max_tol=None)
-
-    def __add__(self, other: CostFunction) -> CostFunction:
-        """Add another cost function."""
-        return self.inner + other
