@@ -15,6 +15,7 @@ from decent_bench.library.core.metrics.plot_metrics.plot_metrics_constructs impo
 from decent_bench.library.core.network import Network
 from decent_bench.library.utils.logger import LOGGER
 
+DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.library.core.metrics.plot_metrics.html"
 COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
 MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p"]
 
@@ -63,6 +64,7 @@ def plot(
         raise RuntimeError("Something went wrong, did not receive a FigureManager...")
     manager.full_screen_toggle()
     plt.tight_layout()
+    LOGGER.info(f"Metric definitions can be found here: {DOC_LINK}")
     plt.show()
 
 
