@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from functools import lru_cache
+from functools import cache
 
 import numpy as np
 from numpy import float64
@@ -24,7 +24,7 @@ def single(values: Sequence[float]) -> float:
     return values[0]
 
 
-@lru_cache
+@cache
 def mean_x(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> NDArray[float64]:
     """
     Calculate the mean x at *iteration* (or using the agents' final x if *iteration* is -1).
@@ -70,7 +70,7 @@ def global_gradient_optimality_at_iter(agents: list[AgentMetricsView], iteration
     return float(la.norm(grad_avg)) ** 2
 
 
-@lru_cache
+@cache
 def x_error_per_iteration(agent: AgentMetricsView, problem: BenchmarkProblem) -> NDArray[float64]:
     r"""
     Calculate the x error per iteration as defined below.
@@ -87,7 +87,7 @@ def x_error_per_iteration(agent: AgentMetricsView, problem: BenchmarkProblem) ->
     return errors
 
 
-@lru_cache
+@cache
 def asymptotic_convergence_rate_and_order(agent: AgentMetricsView, problem: BenchmarkProblem) -> tuple[float, float]:
     r"""
     Estimate the asymptotic convergence rate and order as defined below.
@@ -109,7 +109,7 @@ def asymptotic_convergence_rate_and_order(agent: AgentMetricsView, problem: Benc
     return rate, order
 
 
-@lru_cache
+@cache
 def iterative_convergence_rate_and_order(agent: AgentMetricsView, problem: BenchmarkProblem) -> tuple[float, float]:
     r"""
     Estimate the iterative convergence rate and order as defined below.
