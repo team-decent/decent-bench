@@ -23,7 +23,9 @@ from decent_bench.library.core.benchmark_problem.schemes.compression_schemes imp
 )
 from decent_bench.library.core.benchmark_problem.schemes.drop_schemes import DropScheme, NoDrops, UniformDropRate
 from decent_bench.library.core.benchmark_problem.schemes.noise_schemes import GaussianNoise, NoiseScheme, NoNoise
-from decent_bench.library.core.cost_functions import CostFunction, LinearRegressionCost, LogisticRegressionCost
+from decent_bench.library.core.cost_functions.cost_function import CostFunction
+from decent_bench.library.core.cost_functions.linear_regression_cost import LinearRegressionCost
+from decent_bench.library.core.cost_functions.logistic_regression_cost import LogisticRegressionCost
 
 if TYPE_CHECKING:
     AnyGraph = Graph[Any]

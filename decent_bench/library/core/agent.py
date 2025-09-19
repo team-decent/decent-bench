@@ -8,7 +8,7 @@ from numpy import float64
 from numpy.typing import NDArray
 
 from decent_bench.library.core.benchmark_problem.schemes.agent_activation_schemes import AgentActivationScheme
-from decent_bench.library.core.cost_functions import CostFunction
+from decent_bench.library.core.cost_functions.cost_function import CostFunction
 
 
 class Agent:

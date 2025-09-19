@@ -8,6 +8,7 @@ Subpackages
    :maxdepth: 4
 
    decent_bench.library.core.benchmark_problem
+   decent_bench.library.core.cost_functions
    decent_bench.library.core.metrics
 
 Submodules
@@ -25,14 +26,6 @@ decent\_bench.library.core.cent\_algorithms module
 --------------------------------------------------
 
 .. automodule:: decent_bench.library.core.cent_algorithms
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-decent\_bench.library.core.cost\_functions module
--------------------------------------------------
-
-.. automodule:: decent_bench.library.core.cost_functions
    :members:
    :show-inheritance:
    :undoc-members:
