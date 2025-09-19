@@ -21,11 +21,11 @@ class PlotMetric:
 
     """
 
+    get_data_from_trial: Callable[[list[AgentMetricsView], BenchmarkProblem], Sequence[tuple[X, Y]]]
     x_label: str
     y_label: str
-    x_log: bool
-    y_log: bool
-    get_data_from_trial: Callable[[list[AgentMetricsView], BenchmarkProblem], Sequence[tuple[X, Y]]]
+    x_log: bool = False
+    y_log: bool = True
 
 
 X = float
