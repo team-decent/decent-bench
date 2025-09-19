@@ -18,12 +18,10 @@ DEFAULT_PLOT_METRICS = [
     ),
 ]
 """
-- Global cost error (y-axis) per iteration (x-axis). Semi-log plot.
-  Details: :func:`~decent_bench.library.core.metrics.plot_metrics.plot_metrics_data_extractors.\
-global_cost_error_per_iteration`.
-- Global gradient optimality (y-axis) per iteration (x-axis). Semi-log plot.
-  Details: :func:`~decent_bench.library.core.metrics.plot_metrics.plot_metrics_data_extractors.\
-global_gradient_optimality_per_iteration`.
+- :func:`~decent_bench.library.core.metrics.plot_metrics.plot_metrics_data_extractors.global_cost_error_per_iteration` \
+(semi-log)
+- :func:`~decent_bench.library.core.metrics.plot_metrics.plot_metrics_data_extractors.\
+global_gradient_optimality_per_iteration` (semi-log)
 
 :meta hide-value:
 """

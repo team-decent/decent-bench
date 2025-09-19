@@ -9,7 +9,9 @@ def global_cost_error(agents: list[AgentMetricsView], problem: BenchmarkProblem)
     """
     Calculate the global cost error using the agents' final x.
 
-    For details, see :func:`~decent_bench.library.core.metrics.metric_utils.global_cost_error_at_iter`.
+    Global cost error is defined as:
+
+    .. include:: snippets/global_cost_error.rst
     """
     return (utils.global_cost_error_at_iter(agents, problem, iteration=-1),)
 
@@ -18,7 +20,9 @@ def global_gradient_optimality(agents: list[AgentMetricsView], _: BenchmarkProbl
     """
     Calculate the global gradient optimality using the agents' final x.
 
-    For details, see :func:`~decent_bench.library.core.metrics.metric_utils.global_gradient_optimality_at_iter`.
+    Global gradient optimality is defined as:
+
+    .. include:: snippets/global_gradient_optimality.rst
     """
     return (utils.global_gradient_optimality_at_iter(agents, iteration=-1),)
 
@@ -40,36 +44,36 @@ def x_error(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[f
 
 def asymptotic_convergence_rate(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:
     """
-    Calculate the asymptotic convergence rate per agent.
+    Estimate the asymptotic convergence rate per agent as defined below.
 
-    For details, see :func:`~decent_bench.library.core.metrics.metric_utils.asymptotic_convergence_rate_and_order`.
+    .. include:: snippets/asymptotic_convergence_rate_and_order.rst
     """
     return [utils.asymptotic_convergence_rate_and_order(a, problem)[0] for a in agents]
 
 
 def asymptotic_convergence_order(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:
     """
-    Calculate the asymptotic convergence order per agent.
+    Estimate the asymptotic convergence order per agent as defined below.
 
-    For details, see :func:`~decent_bench.library.core.metrics.metric_utils.asymptotic_convergence_rate_and_order`.
+    .. include:: snippets/asymptotic_convergence_rate_and_order.rst
     """
     return [utils.asymptotic_convergence_rate_and_order(a, problem)[1] for a in agents]
 
 
 def iterative_convergence_rate(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:
     """
-    Calculate the iterative convergence rate per agent.
+    Estimate the iterative convergence rate per agent as defined below.
 
-    For details, see :func:`~decent_bench.library.core.metrics.metric_utils.iterative_convergence_rate_and_order`.
+    .. include:: snippets/iterative_convergence_rate_and_order.rst
     """
     return [utils.iterative_convergence_rate_and_order(a, problem)[0] for a in agents]
 
 
 def iterative_convergence_order(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:
     """
-    Calculate the iterative convergence order per agent.
+    Estimate the iterative convergence order per agent as defined below.
 
-    For details, see :func:`~decent_bench.library.core.metrics.metric_utils.iterative_convergence_rate_and_order`.
+    .. include:: snippets/iterative_convergence_rate_and_order.rst
     """
     return [utils.iterative_convergence_rate_and_order(a, problem)[1] for a in agents]
 

@@ -26,36 +26,28 @@ DEFAULT_TABLE_METRICS = [
     TableMetric("nr sent messages dropped", [Avg, Sum], data_extractors.n_sent_messages_dropped),
 ]
 """
-- Global cost error (single) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.global_cost_error`.
-- Global gradient optimality (single) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.global_gradient_optimality`.
-- x error (min, avg, max) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.x_error`.
-- Asymptotic convergence order (avg) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.asymptotic_convergence_order`.
-- Asymptotic convergence rate (avg) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.asymptotic_convergence_rate`.
-- Iterative convergence order (avg) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.iterative_convergence_order`.
-- Iterative convergence rate (avg) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.iterative_convergence_rate`.
-- Nr of x updates (avg, sum) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.n_x_updates`.
-- Nr of evaluate calls (avg, sum) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.n_evaluate_calls`.
-- Nr of gradient calls (avg, sum) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.n_gradient_calls`.
-- Nr of hessian calls (avg, sum) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.n_hessian_calls`.
-- Nr of proximal calls (avg, sum) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.n_proximal_calls`.
-- Nr of sent messages (avg, sum) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.n_sent_messages`.
-- Nr of received messages (avg, sum) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.n_received_messages`.
-- Nr of sent messages dropped (avg, sum) defined at :func:`~decent_bench.library.core.metrics.table_metrics.\
-table_metrics_data_extractors.n_sent_messages_dropped`.
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.global_cost_error` (single)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.global_gradient_optimality` \
+(single)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.x_error` (min, avg, max)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.asymptotic_convergence_order` \
+(avg)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.asymptotic_convergence_rate` \
+(avg)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.iterative_convergence_order` \
+(avg)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.iterative_convergence_rate` \
+(avg)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_x_updates` (avg, sum)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_evaluate_calls` (avg, sum)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_gradient_calls` (avg, sum)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_hessian_calls` (avg, sum)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_proximal_calls` (avg, sum)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_sent_messages` (avg, sum)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_received_messages` (avg, sum)
+- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_sent_messages_dropped` \
+(avg, sum)
+
 
 :meta hide-value:
 """
