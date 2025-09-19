@@ -13,7 +13,7 @@ from decent_bench.library.core.benchmark_problem.benchmark_problems import Bench
 
 def single(values: Sequence[float]) -> float:
     """
-    Assert that *values* contain exactly one element and return this element.
+    Assert that *values* contain exactly one element and return it.
 
     Raises:
         ValueError: if there isn't exactly one element in *values*
@@ -27,7 +27,7 @@ def single(values: Sequence[float]) -> float:
 @lru_cache
 def mean_x(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> NDArray[float64]:
     """
-    Calculate the mean x across all *agents* at a specific iteration (or -1 for the last iteration).
+    Calculate the mean x at *iteration* (or using the agents' final x if *iteration* is -1).
 
     Agents that did not reach *iteration* are disregarded.
 
@@ -44,15 +44,11 @@ def mean_x(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> NDArray
 
 def global_cost_error_at_iter(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int = -1) -> float:
     r"""
-    Calculate the global cost error as defined below.
+    Calculate the global cost error at *iteration* (or using the agents' final x if *iteration* is -1).
 
-    .. math::
-        | \sum_i (f_i(\mathbf{\bar{x}}_k) - f_i(\mathbf{x}^\star)) |
+    Global cost error is defined as:
 
-    where i is an agent,
-    :math:`f_i` is agent i's local cost function,
-    :math:`\mathbf{\bar{x}}_k` is the mean x across all *agents* at iteration k,
-    and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
+    .. include:: snippets/global_cost_error.rst
     """
     x_opt = problem.optimal_x
     x_mean = mean_x(tuple(agents), iteration)
@@ -63,15 +59,11 @@ def global_cost_error_at_iter(agents: list[AgentMetricsView], problem: Benchmark
 
 def global_gradient_optimality_at_iter(agents: list[AgentMetricsView], iteration: int = -1) -> float:
     r"""
-    Calculate the global gradient optimality as defined below.
+    Calculate the global gradient optimality at *iteration* (or using the agents' final x if *iteration* is -1).
 
-    .. math::
-        \| \frac{1}{N} \sum_i \nabla f_i(\mathbf{\bar{x}}_k) \|^2
+    Global gradient optimality is defined as:
 
-    where N is the number of *agents*,
-    i is an agent,
-    :math:`f_i` is agent i's local cost function,
-    and :math:`\mathbf{\bar{x}}_k` is the mean x across all *agents* at iteration k.
+    .. include:: snippets/global_gradient_optimality.rst
     """
     x_mean = mean_x(tuple(agents), iteration=iteration)
     grad_avg = sum(a.cost_function.gradient(x_mean) for a in agents) / len(agents)
@@ -81,7 +73,7 @@ def global_gradient_optimality_at_iter(agents: list[AgentMetricsView], iteration
 @lru_cache
 def x_error_per_iteration(agent: AgentMetricsView, problem: BenchmarkProblem) -> NDArray[float64]:
     r"""
-    Calculate the agent's x error per iteration as defined below.
+    Calculate the x error per iteration as defined below.
 
     .. math::
         \{ \|\mathbf{x}_0 - \mathbf{x}^\star\|, \|\mathbf{x}_1 - \mathbf{x}^\star\|, ... \}
@@ -98,16 +90,9 @@ def x_error_per_iteration(agent: AgentMetricsView, problem: BenchmarkProblem) ->
 @lru_cache
 def asymptotic_convergence_rate_and_order(agent: AgentMetricsView, problem: BenchmarkProblem) -> tuple[float, float]:
     r"""
-    Estimate the asymptotic convergence rate :math:`\mu` and order :math:`q` as defined below.
+    Estimate the asymptotic convergence rate and order as defined below.
 
-    .. math::
-        \lim_{k \to \infty}
-        \frac{\| \mathbf{x}_{k+1} - \mathbf{x}^\star \|}{\| \mathbf{x}_{k} - \mathbf{x}^\star\|^q} = \mu
-
-    where :math:`\mathbf{x}_k` is the agent's local x at iteration k,
-    :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*,
-    :math:`q` is the asymptotic convergence order,
-    and :math:`\mu` is the asymptotic convergence rate.
+    .. include:: snippets/asymptotic_convergence_rate_and_order.rst
     """
     errors = x_error_per_iteration(agent, problem)
     errors = errors[errors > 0]
@@ -127,16 +112,9 @@ def asymptotic_convergence_rate_and_order(agent: AgentMetricsView, problem: Benc
 @lru_cache
 def iterative_convergence_rate_and_order(agent: AgentMetricsView, problem: BenchmarkProblem) -> tuple[float, float]:
     r"""
-    Estimate the iterative convergence rate :math:`\mu` and order :math:`q` as defined below.
+    Estimate the iterative convergence rate and order as defined below.
 
-    .. math::
-        k = \frac{\mu}{\|\mathbf{x}_k - \mathbf{x}^\star\|^q}
-
-    where k is the iteration,
-    :math:`\mu` is the iterative convergence rate,
-    :math:`\mathbf{x}_k` is the agent's local x at iteration k,
-    :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*,
-    and :math:`q` is the iterative convergence order.
+    .. include:: snippets/iterative_convergence_rate_and_order.rst
     """
     errors = x_error_per_iteration(agent, problem)
     if any(np.isinf(e) or np.isnan(e) for e in errors):

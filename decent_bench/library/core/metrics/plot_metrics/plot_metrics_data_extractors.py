@@ -6,9 +6,11 @@ from decent_bench.library.core.metrics.plot_metrics.plot_metrics_constructs impo
 
 def global_cost_error_per_iteration(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:
     r"""
-    Calculate the global cost error (y-axis) for each iteration (x-axis).
+    Calculate the global cost error (y-axis) per iteration (x-axis).
 
-    Global cost error is defined at :func:`~decent_bench.library.core.metrics.metric_utils.global_cost_error_at_iter`.
+    Global cost error is defined as:
+
+    .. include:: snippets/global_cost_error.rst
 
     All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
     iterations are disregarded. This is done to not miscalculate the global cost error which relies on all agents for
@@ -20,10 +22,11 @@ def global_cost_error_per_iteration(agents: list[AgentMetricsView], problem: Ben
 
 def global_gradient_optimality_per_iteration(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[tuple[X, Y]]:
     r"""
-    Calculate the global gradient optimality (y-axis) for each iteration (x-axis).
+    Calculate the global gradient optimality (y-axis) per iteration (x-axis).
 
-    Global gradient optimality is defined at
-    :func:`~decent_bench.library.core.metrics.metric_utils.global_gradient_optimality_at_iter`.
+    Global gradient optimality is defined as:
+
+    .. include:: snippets/global_gradient_optimality.rst
 
     All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
     iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are included in
