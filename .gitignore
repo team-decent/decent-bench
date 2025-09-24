@@ -1,7 +1,8 @@
-pyrightconfig.json
+**/__pycache__
+**/build
+*.egg-info
 .mypy_cache
 .tox
 .vscode
-*.egg-info
-**/__pycache__
-**/build
+kladd.py
+pyrightconfig.json
