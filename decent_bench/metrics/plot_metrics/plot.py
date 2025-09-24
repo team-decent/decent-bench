@@ -8,12 +8,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes as SubPlot
 
-from decent_bench.library.core.agent import AgentMetricsView
-from decent_bench.library.core.benchmark_problem.benchmark_problems import BenchmarkProblem
-from decent_bench.library.core.dst_algorithms import DstAlgorithm
-from decent_bench.library.core.metrics.plot_metrics.plot_metrics_constructs import PlotMetric, X, Y
-from decent_bench.library.core.network import Network
-from decent_bench.library.utils.logger import LOGGER
+from decent_bench.agent import AgentMetricsView
+from decent_bench.algorithms.dst_algorithms import DstAlgorithm
+from decent_bench.benchmark_problem import BenchmarkProblem
+from decent_bench.logger import LOGGER
+from decent_bench.metrics.plot_metrics.plot_metrics_constructs import PlotMetric, X, Y
+from decent_bench.network import Network
 
 DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.library.core.metrics.plot_metrics.html"
 COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
@@ -33,7 +33,7 @@ def plot(
     Args:
         resulting_nw_states_per_alg: resulting network states from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties, e.g.
-            :attr:`~decent_bench.library.core.benchmark_problem.benchmark_problems.BenchmarkProblem.optimal_x`,
+            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.optimal_x`,
             are used for metric calculations
         metrics: metrics to calculate and plot
 

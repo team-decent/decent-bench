@@ -5,9 +5,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-import decent_bench.library.core.metrics.metric_utils as utils
-from decent_bench.library.core.agent import AgentMetricsView
-from decent_bench.library.core.benchmark_problem.benchmark_problems import BenchmarkProblem
+import decent_bench.metrics.metric_utils as utils
+from decent_bench.agent import AgentMetricsView
+from decent_bench.benchmark_problem import BenchmarkProblem
 
 
 @dataclass(eq=False)
@@ -62,5 +62,5 @@ Sum = Statistic("sum", sum)
 
 Single = Statistic("single", utils.single)
 """
-Assert that only one value exists and return it using :func:`~decent_bench.library.core.metrics.metric_utils.single`.
+Assert that only one value exists and return it using :func:`~decent_bench.metrics.metric_utils.single`.
 """

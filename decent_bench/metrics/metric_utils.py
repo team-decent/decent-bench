@@ -7,8 +7,8 @@ from numpy import linalg as la
 from numpy.linalg import LinAlgError
 from numpy.typing import NDArray
 
-from decent_bench.library.core.agent import AgentMetricsView
-from decent_bench.library.core.benchmark_problem.benchmark_problems import BenchmarkProblem
+from decent_bench.agent import AgentMetricsView
+from decent_bench.benchmark_problem import BenchmarkProblem
 
 
 def single(values: Sequence[float]) -> float:

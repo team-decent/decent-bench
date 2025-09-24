@@ -4,8 +4,8 @@ import numpy as np
 from numpy import float64
 from numpy.typing import NDArray
 
-import decent_bench.library.core.cent_algorithms as ca
-from decent_bench.library.core.cost_functions.cost_function import CostFunction
+import decent_bench.algorithms.cent_algorithms as ca
+from decent_bench.cost_functions.cost_function import CostFunction
 
 
 class SumCost(CostFunction):
@@ -38,7 +38,7 @@ class SumCost(CostFunction):
         the result is :math:`\text{NaN}`.
 
         For the general definition, see
-        :attr:`CostFunction.m_smooth <decent_bench.library.core.cost_functions.cost_function.CostFunction.m_smooth>`.
+        :attr:`CostFunction.m_smooth <decent_bench.cost_functions.cost_function.CostFunction.m_smooth>`.
         """
         m_smooth_vals = [cf.m_smooth for cf in self.cost_functions]
         return np.nan if any(np.isnan(v) for v in m_smooth_vals) else sum(m_smooth_vals)
@@ -56,7 +56,7 @@ class SumCost(CostFunction):
         the result is :math:`\text{NaN}`.
 
         For the general definition, see
-        :attr:`CostFunction.m_cvx <decent_bench.library.core.cost_functions.cost_function.CostFunction.m_cvx>`.
+        :attr:`CostFunction.m_cvx <decent_bench.cost_functions.cost_function.CostFunction.m_cvx>`.
         """
         m_cvx_vals = [cf.m_cvx for cf in self.cost_functions]
         return np.nan if any(np.isnan(v) for v in m_cvx_vals) else sum(m_cvx_vals)
@@ -80,7 +80,7 @@ class SumCost(CostFunction):
         Proximal at y solved using an iterative method.
 
         See
-        :meth:`CostFunction.proximal() <decent_bench.library.core.cost_functions.cost_function.CostFunction.proximal>`
+        :meth:`CostFunction.proximal() <decent_bench.cost_functions.cost_function.CostFunction.proximal>`
         for the general proximal definition.
         """
         return ca.proximal_solver(self, y, rho)

@@ -5,7 +5,7 @@ from threading import Thread
 
 from rich.progress import BarColumn, Progress, TaskID, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
-from decent_bench.library.core.dst_algorithms import DstAlgorithm
+from decent_bench.algorithms.dst_algorithms import DstAlgorithm
 
 
 @dataclass(eq=False)

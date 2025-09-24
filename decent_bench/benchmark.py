@@ -8,19 +8,18 @@ from typing import Literal
 
 from rich.status import Status
 
-from decent_bench.library.core import network
-from decent_bench.library.core.benchmark_problem.benchmark_problems import BenchmarkProblem
-from decent_bench.library.core.dst_algorithms import DstAlgorithm
-from decent_bench.library.core.metrics.plot_metrics import plot
-from decent_bench.library.core.metrics.plot_metrics.default_plot_metrics import DEFAULT_PLOT_METRICS
-from decent_bench.library.core.metrics.plot_metrics.plot_metrics_constructs import PlotMetric
-from decent_bench.library.core.metrics.table_metrics import tabulate
-from decent_bench.library.core.metrics.table_metrics.default_table_metrics import DEFAULT_TABLE_METRICS
-from decent_bench.library.core.metrics.table_metrics.table_metrics_constructs import TableMetric
-from decent_bench.library.core.network import Network
-from decent_bench.library.utils import logger
-from decent_bench.library.utils.logger import LOGGER
-from decent_bench.library.utils.progress_bar import ProgressBarController
+from decent_bench import logger, network
+from decent_bench.algorithms.dst_algorithms import DstAlgorithm
+from decent_bench.benchmark_problem import BenchmarkProblem
+from decent_bench.logger import LOGGER
+from decent_bench.metrics.plot_metrics import plot
+from decent_bench.metrics.plot_metrics.default_plot_metrics import DEFAULT_PLOT_METRICS
+from decent_bench.metrics.plot_metrics.plot_metrics_constructs import PlotMetric
+from decent_bench.metrics.table_metrics import tabulate
+from decent_bench.metrics.table_metrics.default_table_metrics import DEFAULT_TABLE_METRICS
+from decent_bench.metrics.table_metrics.table_metrics_constructs import TableMetric
+from decent_bench.network import Network
+from decent_bench.progress_bar import ProgressBarController
 
 
 def benchmark(
@@ -43,9 +42,9 @@ def benchmark(
         benchmark_problem: problem to benchmark on, defines the network topology, cost functions, and communication
             constraints
         plot_metrics: metrics to plot after the execution, defaults to
-            :const:`~decent_bench.library.core.metrics.plot_metrics.default_plot_metrics.DEFAULT_PLOT_METRICS`
+            :const:`~decent_bench.metrics.plot_metrics.default_plot_metrics.DEFAULT_PLOT_METRICS`
         table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
-            :const:`~decent_bench.library.core.metrics.table_metrics.default_table_metrics.DEFAULT_TABLE_METRICS`
+            :const:`~decent_bench.metrics.table_metrics.default_table_metrics.DEFAULT_TABLE_METRICS`
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         n_trials: number of times to run each algorithm on the benchmark problem, running more trials improves the
             statistical results, at least 30 trials are recommended for the central limit theorem to apply

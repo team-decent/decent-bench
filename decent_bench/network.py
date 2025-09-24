@@ -7,11 +7,11 @@ from networkx import Graph
 from numpy import float64
 from numpy.typing import NDArray
 
-from decent_bench.library.core.agent import Agent
-from decent_bench.library.core.benchmark_problem.benchmark_problems import BenchmarkProblem
-from decent_bench.library.core.benchmark_problem.schemes.compression_schemes import CompressionScheme
-from decent_bench.library.core.benchmark_problem.schemes.drop_schemes import DropScheme
-from decent_bench.library.core.benchmark_problem.schemes.noise_schemes import NoiseScheme
+from decent_bench.agent import Agent
+from decent_bench.benchmark_problem import BenchmarkProblem
+from decent_bench.schemes.compression_schemes import CompressionScheme
+from decent_bench.schemes.drop_schemes import DropScheme
+from decent_bench.schemes.noise_schemes import NoiseScheme
 
 if TYPE_CHECKING:
     AgentGraph = Graph[Agent]
@@ -75,8 +75,8 @@ class Network:
         """
         Get all active agents.
 
-        Whether an :class:`~decent_bench.library.core.agent.Agent` is active or not at a given time is defined by its
-        :class:`~decent_bench.library.core.benchmark_problem.schemes.agent_activation_schemes.AgentActivationScheme`.
+        Whether an :class:`~decent_bench.agent.Agent` is active or not at a given time is defined by its
+        :class:`~decent_bench.schemes.agent_activation_schemes.AgentActivationScheme`.
         """
         return [a for a in self.get_all_agents() if a._activation_scheme.is_active(iteration)]  # noqa: SLF001
 
@@ -85,9 +85,9 @@ class Network:
         Send message to a neighbor.
 
         The message may be compressed, distorted by noise, and/or dropped depending on the network's
-        :class:`~decent_bench.library.core.benchmark_problem.schemes.compression_schemes.CompressionScheme`,
-        :class:`~decent_bench.library.core.benchmark_problem.schemes.noise_schemes.NoiseScheme`,
-        and :class:`~decent_bench.library.core.benchmark_problem.schemes.drop_schemes.DropScheme`.
+        :class:`~decent_bench.schemes.compression_schemes.CompressionScheme`,
+        :class:`~decent_bench.schemes.noise_schemes.NoiseScheme`,
+        and :class:`~decent_bench.schemes.drop_schemes.DropScheme`.
 
         The message will stay in-flight until it is received or replaced by a newer message from the same sender to the
         same receiver. After being received or replaced, the message is destroyed.
@@ -105,9 +105,9 @@ class Network:
         Send message to all neighbors.
 
         The message may be compressed, distorted by noise, and/or dropped depending on the network's
-        :class:`~decent_bench.library.core.benchmark_problem.schemes.compression_schemes.CompressionScheme`,
-        :class:`~decent_bench.library.core.benchmark_problem.schemes.noise_schemes.NoiseScheme`,
-        and :class:`~decent_bench.library.core.benchmark_problem.schemes.drop_schemes.DropScheme`.
+        :class:`~decent_bench.schemes.compression_schemes.CompressionScheme`,
+        :class:`~decent_bench.schemes.noise_schemes.NoiseScheme`,
+        and :class:`~decent_bench.schemes.drop_schemes.DropScheme`.
 
         The message will stay in-flight until it is received or replaced by a newer message from the same sender to the
         same receiver. After being received or replaced, the message is destroyed.
@@ -120,7 +120,7 @@ class Network:
         Receive message from a neighbor.
 
         Received messages are stored in
-        :attr:`Agent.received_messages <decent_bench.library.core.agent.Agent.received_messages>`.
+        :attr:`Agent.received_messages <decent_bench.agent.Agent.received_messages>`.
         """
         msg = self._graph.edges[sender, receiver].get(str(receiver.id))
         if msg is not None:
@@ -133,7 +133,7 @@ class Network:
         Receive messages from all neighbors.
 
         Received messages are stored in
-        :attr:`Agent.received_messages <decent_bench.library.core.agent.Agent.received_messages>`.
+        :attr:`Agent.received_messages <decent_bench.agent.Agent.received_messages>`.
         """
         for neighbor in self._graph.neighbors(receiver):
             self.receive(receiver, neighbor)

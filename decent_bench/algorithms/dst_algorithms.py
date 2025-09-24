@@ -5,7 +5,7 @@ import numpy as np
 from numpy import float64
 from numpy.typing import NDArray
 
-from decent_bench.library.core.network import Network
+from decent_bench.network import Network
 
 
 class DstAlgorithm(ABC):
@@ -192,7 +192,7 @@ class ADMM(DstAlgorithm):
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
     :math:`\operatorname{prox}` is the proximal operator described in :meth:`CostFunction.proximal()
-    <decent_bench.library.core.cost_functions.cost_function.CostFunction.proximal>`,
+    <decent_bench.cost_functions.cost_function.CostFunction.proximal>`,
     :math:`\rho > 0` is the Lagrangian penalty parameter,
     :math:`N_i` is the number of neighbors of i,
     :math:`f_i` is i's local cost function,

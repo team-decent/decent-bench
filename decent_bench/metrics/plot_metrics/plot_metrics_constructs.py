@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from decent_bench.library.core.agent import AgentMetricsView
-from decent_bench.library.core.benchmark_problem.benchmark_problems import BenchmarkProblem
+from decent_bench.agent import AgentMetricsView
+from decent_bench.benchmark_problem import BenchmarkProblem
 
 
 @dataclass(eq=False)

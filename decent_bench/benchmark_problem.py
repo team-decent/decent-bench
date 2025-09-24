@@ -9,23 +9,23 @@ from networkx import Graph
 from numpy import float64
 from numpy.typing import NDArray
 
-import decent_bench.library.core.cent_algorithms as ca
-from decent_bench.library.core.benchmark_problem.datasets import SyntheticClassificationData
-from decent_bench.library.core.benchmark_problem.schemes.agent_activation_schemes import (
+import decent_bench.algorithms.cent_algorithms as ca
+from decent_bench.cost_functions.cost_function import CostFunction
+from decent_bench.cost_functions.linear_regression_cost import LinearRegressionCost
+from decent_bench.cost_functions.logistic_regression_cost import LogisticRegressionCost
+from decent_bench.datasets.synthetic_classification_data import SyntheticClassificationData
+from decent_bench.schemes.agent_activation_schemes import (
     AgentActivationScheme,
     AlwaysActive,
     UniformActivationRate,
 )
-from decent_bench.library.core.benchmark_problem.schemes.compression_schemes import (
+from decent_bench.schemes.compression_schemes import (
     CompressionScheme,
     NoCompression,
     Quantization,
 )
-from decent_bench.library.core.benchmark_problem.schemes.drop_schemes import DropScheme, NoDrops, UniformDropRate
-from decent_bench.library.core.benchmark_problem.schemes.noise_schemes import GaussianNoise, NoiseScheme, NoNoise
-from decent_bench.library.core.cost_functions.cost_function import CostFunction
-from decent_bench.library.core.cost_functions.linear_regression_cost import LinearRegressionCost
-from decent_bench.library.core.cost_functions.logistic_regression_cost import LogisticRegressionCost
+from decent_bench.schemes.drop_schemes import DropScheme, NoDrops, UniformDropRate
+from decent_bench.schemes.noise_schemes import GaussianNoise, NoiseScheme, NoNoise
 
 if TYPE_CHECKING:
     AnyGraph = Graph[Any]

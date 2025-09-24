@@ -1,7 +1,7 @@
-import decent_bench.library.core.metrics.metric_utils as utils
-from decent_bench.library.core.agent import AgentMetricsView
-from decent_bench.library.core.benchmark_problem.benchmark_problems import BenchmarkProblem
-from decent_bench.library.core.metrics.plot_metrics.plot_metrics_constructs import X, Y
+import decent_bench.metrics.metric_utils as utils
+from decent_bench.agent import AgentMetricsView
+from decent_bench.benchmark_problem import BenchmarkProblem
+from decent_bench.metrics.plot_metrics.plot_metrics_constructs import X, Y
 
 
 def global_cost_error_per_iteration(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:

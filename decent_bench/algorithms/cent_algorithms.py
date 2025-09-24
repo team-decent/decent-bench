@@ -3,8 +3,8 @@ from numpy import float64
 from numpy import linalg as la
 from numpy.typing import NDArray
 
-from decent_bench.library.core.cost_functions.cost_function import CostFunction
-from decent_bench.library.core.cost_functions.quadratic_cost import QuadraticCost
+from decent_bench.cost_functions.cost_function import CostFunction
+from decent_bench.cost_functions.quadratic_cost import QuadraticCost
 
 
 def gradient_descent(

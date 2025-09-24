@@ -5,9 +5,9 @@ from numpy import float64
 from numpy.typing import NDArray
 from scipy import special
 
-import decent_bench.library.core.cent_algorithms as ca
-from decent_bench.library.core.cost_functions.cost_function import CostFunction
-from decent_bench.library.core.cost_functions.sum_cost import SumCost
+import decent_bench.algorithms.cent_algorithms as ca
+from decent_bench.cost_functions.cost_function import CostFunction
+from decent_bench.cost_functions.sum_cost import SumCost
 
 
 class LogisticRegressionCost(CostFunction):
@@ -47,7 +47,7 @@ class LogisticRegressionCost(CostFunction):
         .. math:: \frac{1}{4} \max_i \sum_{j} (\mathbf{A}_{ij})^2
 
         For the general definition, see
-        :attr:`CostFunction.m_smooth <decent_bench.library.core.cost_functions.cost_function.CostFunction.m_smooth>`.
+        :attr:`CostFunction.m_smooth <decent_bench.cost_functions.cost_function.CostFunction.m_smooth>`.
         """
         return np.max(np.sum(self.A**2, axis=1, dtype=float64)) / 4
 
@@ -57,7 +57,7 @@ class LogisticRegressionCost(CostFunction):
         The cost function's convexity constant, 0.
 
         For the general definition, see
-        :attr:`CostFunction.m_cvx <decent_bench.library.core.cost_functions.cost_function.CostFunction.m_cvx>`.
+        :attr:`CostFunction.m_cvx <decent_bench.cost_functions.cost_function.CostFunction.m_cvx>`.
         """
         return 0
 
@@ -104,7 +104,7 @@ class LogisticRegressionCost(CostFunction):
         Proximal at y solved using an iterative method.
 
         See
-        :meth:`CostFunction.proximal() <decent_bench.library.core.cost_functions.cost_function.CostFunction.proximal>`
+        :meth:`CostFunction.proximal() <decent_bench.cost_functions.cost_function.CostFunction.proximal>`
         for the general proximal definition.
         """
         return ca.proximal_solver(self, y, rho)

@@ -4,7 +4,6 @@ from typing import NewType
 
 from numpy import float64
 from numpy.typing import NDArray
-from sklearn import datasets as sk_datasets
 
 A = NewType("A", NDArray[float64])
 """Feature matrix type."""

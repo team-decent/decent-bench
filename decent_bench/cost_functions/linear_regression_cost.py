@@ -1,8 +1,8 @@
 from numpy import float64
 from numpy.typing import NDArray
 
-from decent_bench.library.core.cost_functions.cost_function import CostFunction
-from decent_bench.library.core.cost_functions.quadratic_cost import QuadraticCost
+from decent_bench.cost_functions.cost_function import CostFunction
+from decent_bench.cost_functions.quadratic_cost import QuadraticCost
 
 
 class LinearRegressionCost(CostFunction):
@@ -42,7 +42,7 @@ class LinearRegressionCost(CostFunction):
         where :math:`\lambda_i` are the eigenvalues of :math:`\mathbf{A}^T \mathbf{A}`.
 
         For the general definition, see
-        :attr:`CostFunction.m_smooth <decent_bench.library.core.cost_functions.cost_function.CostFunction.m_smooth>`.
+        :attr:`CostFunction.m_smooth <decent_bench.cost_functions.cost_function.CostFunction.m_smooth>`.
         """
         return self.inner.m_smooth
 
@@ -61,7 +61,7 @@ class LinearRegressionCost(CostFunction):
         where :math:`\lambda_i` are the eigenvalues of :math:`\mathbf{A}^T \mathbf{A}`.
 
         For the general definition, see
-        :attr:`CostFunction.m_cvx <decent_bench.library.core.cost_functions.cost_function.CostFunction.m_cvx>`.
+        :attr:`CostFunction.m_cvx <decent_bench.cost_functions.cost_function.CostFunction.m_cvx>`.
         """
         return self.inner.m_cvx
 
@@ -99,7 +99,7 @@ class LinearRegressionCost(CostFunction):
         where :math:`\rho > 0` is the penalty.
 
         This is a closed form solution, see
-        :meth:`CostFunction.proximal() <decent_bench.library.core.cost_functions.cost_function.CostFunction.proximal>`
+        :meth:`CostFunction.proximal() <decent_bench.cost_functions.cost_function.CostFunction.proximal>`
         for the general proximal definition.
         """
         return self.inner.proximal(y, rho)

@@ -73,7 +73,7 @@ class CostFunction(ABC):
         .. include:: snippets/proximal_operator.rst
 
         If the cost function's proximal does not have a closed form solution, it can be solved iteratively using
-        :meth:`~decent_bench.library.core.cent_algorithms.proximal_solver`.
+        :meth:`~decent_bench.algorithms.cent_algorithms.proximal_solver`.
         """
 
     @abstractmethod

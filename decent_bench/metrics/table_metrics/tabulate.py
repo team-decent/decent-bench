@@ -5,12 +5,12 @@ import numpy as np
 import tabulate as tb
 from scipy import stats
 
-from decent_bench.library.core.agent import AgentMetricsView
-from decent_bench.library.core.benchmark_problem.benchmark_problems import BenchmarkProblem
-from decent_bench.library.core.dst_algorithms import DstAlgorithm
-from decent_bench.library.core.metrics.table_metrics.table_metrics_constructs import Statistic, TableMetric
-from decent_bench.library.core.network import Network
-from decent_bench.library.utils.logger import LOGGER
+from decent_bench.agent import AgentMetricsView
+from decent_bench.algorithms.dst_algorithms import DstAlgorithm
+from decent_bench.benchmark_problem import BenchmarkProblem
+from decent_bench.logger import LOGGER
+from decent_bench.metrics.table_metrics.table_metrics_constructs import Statistic, TableMetric
+from decent_bench.network import Network
 
 DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.library.core.metrics.table_metrics.html"
 
@@ -28,7 +28,7 @@ def tabulate(
     Args:
         resulting_nw_states_per_alg: resulting network states from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties, e.g.
-            :attr:`~decent_bench.library.core.benchmark_problem.benchmark_problems.BenchmarkProblem.optimal_x`,
+            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.optimal_x`,
             are used for metric calculations
         metrics: metrics to calculate
         confidence_level: confidence level of the confidence intervals

@@ -1,10 +1,8 @@
-from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import NewType
 
-from numpy import float64
-from numpy.typing import NDArray
 from sklearn import datasets as sk_datasets
+
+from decent_bench.datasets.dataset import A, Dataset, DatasetPartition, b
 
 
 class SyntheticClassificationData(Dataset):

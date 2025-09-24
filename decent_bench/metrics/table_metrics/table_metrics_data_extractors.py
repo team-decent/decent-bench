@@ -1,8 +1,8 @@
 from numpy import linalg as la
 
-import decent_bench.library.core.metrics.metric_utils as utils
-from decent_bench.library.core.agent import AgentMetricsView
-from decent_bench.library.core.benchmark_problem.benchmark_problems import BenchmarkProblem
+import decent_bench.metrics.metric_utils as utils
+from decent_bench.agent import AgentMetricsView
+from decent_bench.benchmark_problem import BenchmarkProblem
 
 
 def global_cost_error(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> tuple[float]:

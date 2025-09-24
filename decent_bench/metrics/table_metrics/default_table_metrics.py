@@ -1,5 +1,5 @@
-from decent_bench.library.core.metrics.table_metrics import table_metrics_data_extractors as data_extractors
-from decent_bench.library.core.metrics.table_metrics.table_metrics_constructs import (
+from decent_bench.metrics.table_metrics import table_metrics_data_extractors as data_extractors
+from decent_bench.metrics.table_metrics.table_metrics_constructs import (
     Avg,
     Max,
     Min,
@@ -26,26 +26,26 @@ DEFAULT_TABLE_METRICS = [
     TableMetric("nr sent messages dropped", [Avg, Sum], data_extractors.n_sent_messages_dropped),
 ]
 """
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.global_cost_error` (single)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.global_gradient_optimality` \
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.global_cost_error` (single)
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.global_gradient_optimality` \
 (single)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.x_error` (min, avg, max)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.asymptotic_convergence_order` \
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.x_error` (min, avg, max)
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.asymptotic_convergence_order` \
 (avg)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.asymptotic_convergence_rate` \
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.asymptotic_convergence_rate` \
 (avg)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.iterative_convergence_order` \
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.iterative_convergence_order` \
 (avg)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.iterative_convergence_rate` \
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.iterative_convergence_rate` \
 (avg)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_x_updates` (avg, sum)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_evaluate_calls` (avg, sum)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_gradient_calls` (avg, sum)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_hessian_calls` (avg, sum)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_proximal_calls` (avg, sum)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_sent_messages` (avg, sum)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_received_messages` (avg, sum)
-- :func:`~decent_bench.library.core.metrics.table_metrics.table_metrics_data_extractors.n_sent_messages_dropped` \
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.n_x_updates` (avg, sum)
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.n_evaluate_calls` (avg, sum)
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.n_gradient_calls` (avg, sum)
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.n_hessian_calls` (avg, sum)
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.n_proximal_calls` (avg, sum)
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.n_sent_messages` (avg, sum)
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.n_received_messages` (avg, sum)
+- :func:`~decent_bench.metrics.table_metrics.table_metrics_data_extractors.n_sent_messages_dropped` \
 (avg, sum)
 
 

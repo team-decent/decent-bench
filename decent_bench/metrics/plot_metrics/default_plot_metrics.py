@@ -1,5 +1,5 @@
-from decent_bench.library.core.metrics.plot_metrics import plot_metrics_data_extractors as data_extractors
-from decent_bench.library.core.metrics.plot_metrics.plot_metrics_constructs import PlotMetric
+from decent_bench.metrics.plot_metrics import plot_metrics_data_extractors as data_extractors
+from decent_bench.metrics.plot_metrics.plot_metrics_constructs import PlotMetric
 
 DEFAULT_PLOT_METRICS = [
     PlotMetric(
@@ -18,9 +18,9 @@ DEFAULT_PLOT_METRICS = [
     ),
 ]
 """
-- :func:`~decent_bench.library.core.metrics.plot_metrics.plot_metrics_data_extractors.global_cost_error_per_iteration` \
+- :func:`~decent_bench.metrics.plot_metrics.plot_metrics_data_extractors.global_cost_error_per_iteration` \
 (semi-log)
-- :func:`~decent_bench.library.core.metrics.plot_metrics.plot_metrics_data_extractors.\
+- :func:`~decent_bench.metrics.plot_metrics.plot_metrics_data_extractors.\
 global_gradient_optimality_per_iteration` (semi-log)
 
 :meta hide-value:
