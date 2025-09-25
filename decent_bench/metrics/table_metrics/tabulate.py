@@ -12,7 +12,7 @@ from decent_bench.logger import LOGGER
 from decent_bench.metrics.table_metrics.table_metrics_constructs import Statistic, TableMetric
 from decent_bench.network import Network
 
-DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.library.core.metrics.table_metrics.html"
+DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.metrics.table_metrics.html"
 
 
 def tabulate(
