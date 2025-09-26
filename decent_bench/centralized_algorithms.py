@@ -135,5 +135,5 @@ def proximal_solver(cost_function: "CostFunction", y: NDArray[float64], rho: flo
         raise ValueError("Penalty term `rho` must be greater than 0")
     from decent_bench.cost_functions import QuadraticCost  # noqa: PLC0415
 
-    proximal_cost = cost_function + QuadraticCost(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho))
+    proximal_cost = QuadraticCost(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho)) + cost_function
     return accelerated_gradient_descent(proximal_cost, y, max_iter=100, stop_tol=1e-10, max_tol=None)

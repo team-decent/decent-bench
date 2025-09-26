@@ -215,6 +215,8 @@ class QuadraticCost(CostFunction):
             raise ValueError(f"Mismatching domain shapes: {self.domain_shape} vs {other.domain_shape}")
         if isinstance(other, QuadraticCost):
             return QuadraticCost(self.A + other.A, self.b + other.b, self.c + other.c)
+        if isinstance(other, LinearRegressionCost):
+            return self + other.inner
         return SumCost([self, other])
 
 
