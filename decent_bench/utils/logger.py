@@ -33,7 +33,7 @@ def start_log_listener(manager: SyncManager, log_level: int) -> QueueListener:
         log_level: minimum level to log, e.g. :data:`logging.INFO`
 
     Returns:
-        :class:`~logging.handlers.QueueListener` which can be used to access the log queue and to stop the listener
+        `QueueListener` which can be used to access the log queue and to stop the listener
         thread
 
     """

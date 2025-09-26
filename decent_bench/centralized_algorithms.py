@@ -1,14 +1,16 @@
+from typing import TYPE_CHECKING
+
 import numpy as np
 from numpy import float64
 from numpy import linalg as la
 from numpy.typing import NDArray
 
-from decent_bench.cost_functions.cost_function import CostFunction
-from decent_bench.cost_functions.quadratic_cost import QuadraticCost
+if TYPE_CHECKING:
+    from decent_bench.cost_functions import CostFunction
 
 
 def gradient_descent(
-    cost_function: CostFunction,
+    cost_function: "CostFunction",
     x0: NDArray[float64],
     *,
     step_size: float,
@@ -52,7 +54,7 @@ def gradient_descent(
 
 
 def accelerated_gradient_descent(
-    cost_function: CostFunction,
+    cost_function: "CostFunction",
     x0: NDArray[float64] | None,
     *,
     max_iter: int,
@@ -115,7 +117,7 @@ def accelerated_gradient_descent(
     return x
 
 
-def proximal_solver(cost_function: CostFunction, y: NDArray[float64], rho: float) -> NDArray[float64]:
+def proximal_solver(cost_function: "CostFunction", y: NDArray[float64], rho: float) -> NDArray[float64]:
     """
     Find the proximal at y using accelerated gradient descent.
 
@@ -131,5 +133,7 @@ def proximal_solver(cost_function: CostFunction, y: NDArray[float64], rho: float
         raise ValueError("Cost function domain and y need to have the same shape")
     if rho <= 0:
         raise ValueError("Penalty term `rho` must be greater than 0")
+    from decent_bench.cost_functions import QuadraticCost  # noqa: PLC0415
+
     proximal_cost = cost_function + QuadraticCost(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho))
     return accelerated_gradient_descent(proximal_cost, y, max_iter=100, stop_tol=1e-10, max_tol=None)

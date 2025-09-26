@@ -2,18 +2,99 @@ import math
 import random
 import warnings
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes as SubPlot
 
+import decent_bench.metrics.metric_utils as utils
 from decent_bench.agent import AgentMetricsView
-from decent_bench.algorithms.dst_algorithms import DstAlgorithm
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.logger import LOGGER
-from decent_bench.metrics.plot_metrics.plot_metrics_constructs import PlotMetric, X, Y
+from decent_bench.distributed_algorithms import DstAlgorithm
 from decent_bench.network import Network
+from decent_bench.utils.logger import LOGGER
+
+X = float
+Y = float
+
+
+@dataclass(eq=False)
+class PlotMetric:
+    """
+    Metric for plotting.
+
+    Args:
+        x_label: label for the x-axis
+        y_label: label for the y-axis
+        x_log: log scale applied to the x-axis if true
+        y_log: log scale applied to the y-axis if true
+        get_data_from_trial: function that takes trial data as input and extracts data to be plotted
+
+    """
+
+    get_data_from_trial: Callable[[list[AgentMetricsView], BenchmarkProblem], Sequence[tuple[X, Y]]]
+    x_label: str
+    y_label: str
+    x_log: bool = False
+    y_log: bool = True
+
+
+def global_cost_error_per_iteration(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:
+    r"""
+    Calculate the global cost error (y-axis) per iteration (x-axis).
+
+    Global cost error is defined as:
+
+    .. include:: snippets/global_cost_error.rst
+
+    All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
+    iterations are disregarded. This is done to not miscalculate the global cost error which relies on all agents for
+    its calculation.
+    """
+    iter_reached_by_all = min(len(a.x_per_iteration) for a in agents)
+    return [(i, utils.global_cost_error_at_iter(agents, problem, i)) for i in range(iter_reached_by_all)]
+
+
+def global_gradient_optimality_per_iteration(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[tuple[X, Y]]:
+    r"""
+    Calculate the global gradient optimality (y-axis) per iteration (x-axis).
+
+    Global gradient optimality is defined as:
+
+    .. include:: snippets/global_gradient_optimality.rst
+
+    All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
+    iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are included in
+    the calculation.
+    """
+    iter_reached_by_all = min(len(a.x_per_iteration) for a in agents)
+    return [(i, utils.global_gradient_optimality_at_iter(agents, i)) for i in range(iter_reached_by_all)]
+
+
+DEFAULT_PLOT_METRICS = [
+    PlotMetric(
+        x_label="iteration",
+        y_label="global cost error",
+        x_log=False,
+        y_log=True,
+        get_data_from_trial=global_cost_error_per_iteration,
+    ),
+    PlotMetric(
+        x_label="iteration",
+        y_label="global gradient optimality",
+        x_log=False,
+        y_log=True,
+        get_data_from_trial=global_gradient_optimality_per_iteration,
+    ),
+]
+"""
+- :func:`~global_cost_error_per_iteration` (semi-log)
+- :func:`~global_gradient_optimality_per_iteration` (semi-log)
+
+:meta hide-value:
+"""
 
 DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.metrics.plot_metrics.html"
 COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]

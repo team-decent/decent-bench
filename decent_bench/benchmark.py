@@ -8,18 +8,16 @@ from typing import Literal
 
 from rich.status import Status
 
-from decent_bench import logger, network
-from decent_bench.algorithms.dst_algorithms import DstAlgorithm
+from decent_bench import network
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.logger import LOGGER
-from decent_bench.metrics.plot_metrics import plot
-from decent_bench.metrics.plot_metrics.default_plot_metrics import DEFAULT_PLOT_METRICS
-from decent_bench.metrics.plot_metrics.plot_metrics_constructs import PlotMetric
-from decent_bench.metrics.table_metrics import tabulate
-from decent_bench.metrics.table_metrics.default_table_metrics import DEFAULT_TABLE_METRICS
-from decent_bench.metrics.table_metrics.table_metrics_constructs import TableMetric
+from decent_bench.distributed_algorithms import DstAlgorithm
+from decent_bench.metrics import table_metrics as tm
+from decent_bench.metrics.plot_metrics import DEFAULT_PLOT_METRICS, PlotMetric, plot
+from decent_bench.metrics.table_metrics import DEFAULT_TABLE_METRICS, TableMetric
 from decent_bench.network import Network
-from decent_bench.progress_bar import ProgressBarController
+from decent_bench.utils import logger
+from decent_bench.utils.logger import LOGGER
+from decent_bench.utils.progress_bar import ProgressBarController
 
 
 def benchmark(
@@ -42,9 +40,9 @@ def benchmark(
         benchmark_problem: problem to benchmark on, defines the network topology, cost functions, and communication
             constraints
         plot_metrics: metrics to plot after the execution, defaults to
-            :const:`~decent_bench.metrics.plot_metrics.default_plot_metrics.DEFAULT_PLOT_METRICS`
+            :const:`~decent_bench.metrics.plot_metrics.DEFAULT_PLOT_METRICS`
         table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
-            :const:`~decent_bench.metrics.table_metrics.default_table_metrics.DEFAULT_TABLE_METRICS`
+            :const:`~decent_bench.metrics.table_metrics.DEFAULT_TABLE_METRICS`
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         n_trials: number of times to run each algorithm on the benchmark problem, running more trials improves the
             statistical results, at least 30 trials are recommended for the central limit theorem to apply
@@ -65,9 +63,9 @@ def benchmark(
     resulting_nw_states = _run_trials(algorithms, n_trials, nw_init_state, pb_ctrl, log_listener, max_processes)
     LOGGER.info("All trials complete")
     with Status("Creating table"):
-        tabulate.tabulate(resulting_nw_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
+        tm.tabulate(resulting_nw_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
     with Status("Creating plot"):
-        plot.plot(resulting_nw_states, benchmark_problem, plot_metrics)
+        plot(resulting_nw_states, benchmark_problem, plot_metrics)
 
 
 def _run_trials(  # noqa: PLR0917
