@@ -10,6 +10,11 @@ from typing import Protocol
 from rich.logging import RichHandler
 
 LOGGER = logging.getLogger()
+"""
+Logger to be used across the codebase.
+
+:meta hide-value:
+"""
 
 
 class LogQueue(Protocol):
