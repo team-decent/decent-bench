@@ -1,35 +1,13 @@
-decent\_bench.metrics package
-=============================
+decent\_bench.metrics
+=====================
 
-Submodules
-----------
 
-decent\_bench.metrics.metric\_utils module
-------------------------------------------
+.. toctree::
+   :maxdepth: 2
 
-.. automodule:: decent_bench.metrics.metric_utils
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-decent\_bench.metrics.plot\_metrics module
-------------------------------------------
-
-.. automodule:: decent_bench.metrics.plot_metrics
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-decent\_bench.metrics.table\_metrics module
--------------------------------------------
-
-.. automodule:: decent_bench.metrics.table_metrics
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-Module contents
----------------
+   decent_bench.metrics.metric_utils
+   decent_bench.metrics.plot_metrics
+   decent_bench.metrics.table_metrics
 
 .. automodule:: decent_bench.metrics
    :members:

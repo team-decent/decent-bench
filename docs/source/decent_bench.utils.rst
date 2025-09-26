@@ -1,27 +1,12 @@
-decent\_bench.utils package
-===========================
+decent\_bench.utils
+===================
 
-Submodules
-----------
 
-decent\_bench.utils.logger module
----------------------------------
+.. toctree::
+   :maxdepth: 2
 
-.. automodule:: decent_bench.utils.logger
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-decent\_bench.utils.progress\_bar module
-----------------------------------------
-
-.. automodule:: decent_bench.utils.progress_bar
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-Module contents
----------------
+   decent_bench.utils.logger
+   decent_bench.utils.progress_bar
 
 .. automodule:: decent_bench.utils
    :members:

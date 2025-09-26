@@ -41,7 +41,6 @@ intersphinx_mapping = {
 }
 
 
-templates_path = ["_templates"]
 exclude_patterns = []
 
 

@@ -38,7 +38,7 @@ deps = ["sphinx", "pydata-sphinx-theme @ git+https://github.com/pydata/pydata-sp
 allowlist_externals = ["find", "make"]
 commands = [
   ["find", "docs/source", "-name", "*.rst", "!", "-name", "index.rst", "!", "-path", "*/snippets/*", "-delete"],
-  ["sphinx-apidoc", "-o", "docs/source", "decent_bench", "--no-toc"],
+  ["sphinx-apidoc", "-o", "docs/source", "decent_bench", "--separate", "--no-toc", "--templatedir=docs/source/_templates"],
   ["make", "-C", "docs", "clean"],
   ["make", "-C", "docs", "html", "SPHINXOPTS=-W"],
 ]
