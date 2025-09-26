@@ -7,8 +7,8 @@ from types import MappingProxyType
 from numpy import float64
 from numpy.typing import NDArray
 
-from decent_bench.cost_functions.cost_function import CostFunction
-from decent_bench.schemes.agent_activation_schemes import AgentActivationScheme
+from decent_bench.cost_functions import CostFunction
+from decent_bench.schemes import AgentActivationScheme
 
 
 class Agent:

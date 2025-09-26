@@ -9,9 +9,7 @@ from numpy.typing import NDArray
 
 from decent_bench.agent import Agent
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.schemes.compression_schemes import CompressionScheme
-from decent_bench.schemes.drop_schemes import DropScheme
-from decent_bench.schemes.noise_schemes import NoiseScheme
+from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme
 
 if TYPE_CHECKING:
     AgentGraph = Graph[Agent]
@@ -76,7 +74,7 @@ class Network:
         Get all active agents.
 
         Whether an :class:`~decent_bench.agent.Agent` is active or not at a given time is defined by its
-        :class:`~decent_bench.schemes.agent_activation_schemes.AgentActivationScheme`.
+        :class:`~decent_bench.schemes.AgentActivationScheme`.
         """
         return [a for a in self.get_all_agents() if a._activation_scheme.is_active(iteration)]  # noqa: SLF001
 
@@ -85,9 +83,9 @@ class Network:
         Send message to a neighbor.
 
         The message may be compressed, distorted by noise, and/or dropped depending on the network's
-        :class:`~decent_bench.schemes.compression_schemes.CompressionScheme`,
-        :class:`~decent_bench.schemes.noise_schemes.NoiseScheme`,
-        and :class:`~decent_bench.schemes.drop_schemes.DropScheme`.
+        :class:`~decent_bench.schemes.CompressionScheme`,
+        :class:`~decent_bench.schemes.NoiseScheme`,
+        and :class:`~decent_bench.schemes.DropScheme`.
 
         The message will stay in-flight until it is received or replaced by a newer message from the same sender to the
         same receiver. After being received or replaced, the message is destroyed.
@@ -105,9 +103,9 @@ class Network:
         Send message to all neighbors.
 
         The message may be compressed, distorted by noise, and/or dropped depending on the network's
-        :class:`~decent_bench.schemes.compression_schemes.CompressionScheme`,
-        :class:`~decent_bench.schemes.noise_schemes.NoiseScheme`,
-        and :class:`~decent_bench.schemes.drop_schemes.DropScheme`.
+        :class:`~decent_bench.schemes.CompressionScheme`,
+        :class:`~decent_bench.schemes.NoiseScheme`,
+        and :class:`~decent_bench.schemes.DropScheme`.
 
         The message will stay in-flight until it is received or replaced by a newer message from the same sender to the
         same receiver. After being received or replaced, the message is destroyed.

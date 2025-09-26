@@ -7,11 +7,8 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
-   decent_bench.algorithms
-   decent_bench.cost_functions
-   decent_bench.datasets
    decent_bench.metrics
-   decent_bench.schemes
+   decent_bench.utils
 
 Submodules
 ----------
@@ -40,10 +37,34 @@ decent\_bench.benchmark\_problem module
    :show-inheritance:
    :undoc-members:
 
-decent\_bench.logger module
----------------------------
+decent\_bench.centralized\_algorithms module
+--------------------------------------------
 
-.. automodule:: decent_bench.logger
+.. automodule:: decent_bench.centralized_algorithms
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+decent\_bench.cost\_functions module
+------------------------------------
+
+.. automodule:: decent_bench.cost_functions
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+decent\_bench.datasets module
+-----------------------------
+
+.. automodule:: decent_bench.datasets
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+decent\_bench.distributed\_algorithms module
+--------------------------------------------
+
+.. automodule:: decent_bench.distributed_algorithms
    :members:
    :show-inheritance:
    :undoc-members:
@@ -56,10 +77,10 @@ decent\_bench.network module
    :show-inheritance:
    :undoc-members:
 
-decent\_bench.progress\_bar module
-----------------------------------
+decent\_bench.schemes module
+----------------------------
 
-.. automodule:: decent_bench.progress_bar
+.. automodule:: decent_bench.schemes
    :members:
    :show-inheritance:
    :undoc-members:
