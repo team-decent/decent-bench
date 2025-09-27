@@ -1,9 +1,9 @@
 import math
 import random
 import warnings
+from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from collections.abc import Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,30 +20,38 @@ X = float
 Y = float
 
 
-@dataclass(eq=False)
-class PlotMetric:
+class PlotMetric(ABC):
     """
-    Metric for plotting.
+    Metric to plot at the end of the benchmarking execution.
 
     Args:
-        x_label: label for the x-axis
-        y_label: label for the y-axis
-        x_log: log scale applied to the x-axis if true
-        y_log: log scale applied to the y-axis if true
-        get_data_from_trial: function that takes trial data as input and extracts data to be plotted
+        x_log: whether to apply log scaling to the x-axis.
+        y_log: whether to apply log scaling to the y-axis.
 
     """
 
-    get_data_from_trial: Callable[[list[AgentMetricsView], BenchmarkProblem], Sequence[tuple[X, Y]]]
-    x_label: str
-    y_label: str
-    x_log: bool = False
-    y_log: bool = True
+    def __init__(self, *, x_log: bool = False, y_log: bool = True):
+        self.x_log = x_log
+        self.y_log = y_log
+
+    @property
+    @abstractmethod
+    def x_label(self) -> str:
+        """Label for the x-axis."""
+
+    @property
+    @abstractmethod
+    def y_label(self) -> str:
+        """Label for the y-axis."""
+
+    @abstractmethod
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> Sequence[tuple[X, Y]]:
+        """Extract trial data in the form of (x, y) datapoints."""
 
 
-def global_cost_error_per_iteration(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:
+class GlobalCostErrorPerIteration(PlotMetric):
     r"""
-    Calculate the global cost error (y-axis) per iteration (x-axis).
+    Global cost error (y-axis) per iteration (x-axis).
 
     Global cost error is defined as:
 
@@ -53,45 +61,43 @@ def global_cost_error_per_iteration(agents: list[AgentMetricsView], problem: Ben
     iterations are disregarded. This is done to not miscalculate the global cost error which relies on all agents for
     its calculation.
     """
-    iter_reached_by_all = min(len(a.x_per_iteration) for a in agents)
-    return [(i, utils.global_cost_error_at_iter(agents, problem, i)) for i in range(iter_reached_by_all)]
+
+    x_label: str = "iteration"
+    y_label: str = "global cost error"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
+        iter_reached_by_all = min(len(a.x_per_iteration) for a in agents)
+        return [(i, utils.global_cost_error_at_iter(agents, problem, i)) for i in range(iter_reached_by_all)]
 
 
-def global_gradient_optimality_per_iteration(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[tuple[X, Y]]:
+class GlobalGradientOptimalityPerIteration(PlotMetric):
     r"""
-    Calculate the global gradient optimality (y-axis) per iteration (x-axis).
+    Global gradient optimality (y-axis) per iteration (x-axis).
 
     Global gradient optimality is defined as:
 
     .. include:: snippets/global_gradient_optimality.rst
 
     All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
-    iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are included in
-    the calculation.
+    iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are
+    included in the calculation.
     """
-    iter_reached_by_all = min(len(a.x_per_iteration) for a in agents)
-    return [(i, utils.global_gradient_optimality_at_iter(agents, i)) for i in range(iter_reached_by_all)]
+
+    x_label: str = "iteration"
+    y_label: str = "global gradient optimality"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
+        iter_reached_by_all = min(len(a.x_per_iteration) for a in agents)
+        return [(i, utils.global_gradient_optimality_at_iter(agents, i)) for i in range(iter_reached_by_all)]
 
 
 DEFAULT_PLOT_METRICS = [
-    PlotMetric(
-        x_label="iteration",
-        y_label="global cost error",
-        x_log=False,
-        y_log=True,
-        get_data_from_trial=global_cost_error_per_iteration,
-    ),
-    PlotMetric(
-        x_label="iteration",
-        y_label="global gradient optimality",
-        x_log=False,
-        y_log=True,
-        get_data_from_trial=global_gradient_optimality_per_iteration,
-    ),
+    GlobalCostErrorPerIteration(x_log=False, y_log=True),
+    GlobalGradientOptimalityPerIteration(x_log=False, y_log=True),
 ]
 """
-- :func:`~global_cost_error_per_iteration` (semi-log)
-- :func:`~global_gradient_optimality_per_iteration` (semi-log)
+- :class:`GlobalCostErrorPerIteration` (semi-log)
+- :class:`GlobalGradientOptimalityPerIteration` (semi-log)
 
 :meta hide-value:
 """

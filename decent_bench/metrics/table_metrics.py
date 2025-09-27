@@ -1,6 +1,6 @@
 import warnings
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
@@ -15,88 +15,66 @@ from decent_bench.distributed_algorithms import DstAlgorithm
 from decent_bench.network import Network
 from decent_bench.utils.logger import LOGGER
 
+Statistic = Callable[[Sequence[float]], float]
 
-@dataclass(eq=False)
-class Statistic:
+
+class TableMetric(ABC):
     """
-    Statistic used for aggregating multiple data points into a single value.
+    Metric to display in the statistical results table at the end of the benchmarking execution.
 
     Args:
-        name: statistic name to display in the table
-        agg_func: function that aggregates a sequence of data points into a single value
+        statistics: sequence of statistics such as :func:`min`, :func:`sum`, and :func:`~numpy.average` used for
+            aggregating the data retrieved with :func:`get_data_from_trial` into a single value, each statistic gets its
+            own row in the table
 
     """
 
-    name: str
-    agg_func: Callable[[Sequence[float]], float]
+    def __init__(self, statistics: list[Statistic]):
+        self.statistics = statistics
+
+    @property
+    @abstractmethod
+    def description(self) -> str:
+        """Metric description to display in the table."""
+
+    @abstractmethod
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> Sequence[float]:
+        """Extract trial data to be aggregated into a single value by each of the *statistics*."""
 
 
-Min = Statistic("min", min)
-"""Take the minimum using :func:`min`."""
-
-Avg = Statistic("avg", np.average)
-"""Take the average using :func:`numpy.average`."""
-
-Mdn = Statistic("mdn", np.median)
-"""Take the median using :func:`numpy.median`."""
-
-Max = Statistic("max", max)
-"""Take the maximum using :func:`max`."""
-
-Sum = Statistic("sum", sum)
-"""Take the sum using :func:`sum`."""
-
-Single = Statistic("single", utils.single)
-"""
-Assert that only one value exists and return it using :func:`~decent_bench.metrics.metric_utils.single`.
-"""
-
-
-@dataclass(eq=False)
-class TableMetric:
+class GlobalCostError(TableMetric):
     """
-    Metric for the statistical results table displayed at the end of the benchmarking execution.
-
-    Args:
-        name: metric name to display in the table
-        statistics: sequence of statistics such as :data:`Min`, :data:`Sum`, or :data:`Avg` used for aggregating the
-            data retrieved with *get_data_from_trial* into a single value, each statistic gets its own row in
-            the table
-        get_data_from_trial: function that takes trial data as input and extracts data to be aggregated and displayed in
-            the table
-
-    """
-
-    name: str
-    statistics: Sequence[Statistic]
-    get_data_from_trial: Callable[[list[AgentMetricsView], BenchmarkProblem], Sequence[float]]
-
-
-def global_cost_error(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> tuple[float]:
-    """
-    Calculate the global cost error using the agents' final x.
+    Global cost error using the agents' final x.
 
     Global cost error is defined as:
 
     .. include:: snippets/global_cost_error.rst
     """
-    return (utils.global_cost_error_at_iter(agents, problem, iteration=-1),)
+
+    description: str = "global cost error (< 1e-9 = exact convergence)"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> tuple[float]:  # noqa: D102
+        return (utils.global_cost_error_at_iter(agents, problem, iteration=-1),)
 
 
-def global_gradient_optimality(agents: list[AgentMetricsView], _: BenchmarkProblem) -> tuple[float]:
+class GlobalGradientOptimality(TableMetric):
     """
-    Calculate the global gradient optimality using the agents' final x.
+    Global gradient optimality using the agents' final x.
 
     Global gradient optimality is defined as:
 
     .. include:: snippets/global_gradient_optimality.rst
     """
-    return (utils.global_gradient_optimality_at_iter(agents, iteration=-1),)
+
+    description: str = "global gradient optimality"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> tuple[float]:  # noqa: D102
+        return (utils.global_gradient_optimality_at_iter(agents, iteration=-1),)
 
 
-def x_error(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:
+class XError(TableMetric):
     r"""
-    Calculate the x error per agent as defined below.
+    X error per agent as defined below.
 
     .. math::
         \{ \|\mathbf{x}_i - \mathbf{x}^\star\|, \|\mathbf{x}_j - \mathbf{x}^\star\|, ... \}
@@ -106,119 +84,170 @@ def x_error(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[f
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
 
     """
-    return [float(la.norm(problem.optimal_x - a.x_per_iteration[-1])) for a in agents]
+
+    description: str = "x error"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [float(la.norm(problem.optimal_x - a.x_per_iteration[-1])) for a in agents]
 
 
-def asymptotic_convergence_rate(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:
+class AsymptoticConvergenceOrder(TableMetric):
     """
-    Estimate the asymptotic convergence rate per agent as defined below.
+    Asymptotic convergence order per agent as defined below.
 
     .. include:: snippets/asymptotic_convergence_rate_and_order.rst
     """
-    return [utils.asymptotic_convergence_rate_and_order(a, problem)[0] for a in agents]
+
+    description: str = "asymptotic convergence order"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [utils.asymptotic_convergence_rate_and_order(a, problem)[1] for a in agents]
 
 
-def asymptotic_convergence_order(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:
+class AsymptoticConvergenceRate(TableMetric):
     """
-    Estimate the asymptotic convergence order per agent as defined below.
+    Asymptotic convergence rate per agent as defined below.
 
     .. include:: snippets/asymptotic_convergence_rate_and_order.rst
     """
-    return [utils.asymptotic_convergence_rate_and_order(a, problem)[1] for a in agents]
+
+    description: str = "asymptotic convergence rate"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [utils.asymptotic_convergence_rate_and_order(a, problem)[0] for a in agents]
 
 
-def iterative_convergence_rate(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:
+class IterativeConvergenceOrder(TableMetric):
     """
-    Estimate the iterative convergence rate per agent as defined below.
+    Iterative convergence order per agent as defined below.
 
     .. include:: snippets/iterative_convergence_rate_and_order.rst
     """
-    return [utils.iterative_convergence_rate_and_order(a, problem)[0] for a in agents]
+
+    description: str = "iterative convergence order"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [utils.iterative_convergence_rate_and_order(a, problem)[1] for a in agents]
 
 
-def iterative_convergence_order(agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:
+class IterativeConvergenceRate(TableMetric):
     """
-    Estimate the iterative convergence order per agent as defined below.
+    Iterative convergence rate per agent as defined below.
 
     .. include:: snippets/iterative_convergence_rate_and_order.rst
     """
-    return [utils.iterative_convergence_rate_and_order(a, problem)[1] for a in agents]
+
+    description: str = "iterative convergence rate"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [utils.iterative_convergence_rate_and_order(a, problem)[0] for a in agents]
 
 
-def n_x_updates(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:
-    """Get the number of iterations/updates of x per agent."""
-    return [len(a.x_per_iteration) - 1 for a in agents]
+class NrXUpdates(TableMetric):
+    """Number of iterations/updates of x per agent."""
+
+    description: str = "nr x updates"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [len(a.x_per_iteration) - 1 for a in agents]
 
 
-def n_evaluate_calls(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:
-    """Get the number of cost function evaluate calls per agent."""
-    return [a.n_evaluate_calls for a in agents]
+class NrEvaluateCalls(TableMetric):
+    """Number of cost function evaluate calls per agent."""
+
+    description: str = "nr evaluate calls"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [a.n_evaluate_calls for a in agents]
 
 
-def n_gradient_calls(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:
-    """Get the number of cost function gradient calls per agent."""
-    return [a.n_gradient_calls for a in agents]
+class NrGradientCalls(TableMetric):
+    """Number of cost function gradient calls per agent."""
+
+    description: str = "nr gradient calls"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [a.n_gradient_calls for a in agents]
 
 
-def n_hessian_calls(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:
-    """Get the number of cost function hessian calls per agent."""
-    return [a.n_hessian_calls for a in agents]
+class NrHessianCalls(TableMetric):
+    """Number of cost function hessian calls per agent."""
+
+    description: str = "nr hessian calls"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [a.n_hessian_calls for a in agents]
 
 
-def n_proximal_calls(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:
-    """Get the number of cost function proximal calls per agent."""
-    return [a.n_proximal_calls for a in agents]
+class NrProximalCalls(TableMetric):
+    """Number of cost function proximal calls per agent."""
+
+    description: str = "nr proximal calls"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [a.n_proximal_calls for a in agents]
 
 
-def n_sent_messages(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:
-    """Get the number of sent messages per agent."""
-    return [a.n_sent_messages for a in agents]
+class NrSentMessages(TableMetric):
+    """Number of sent messages per agent."""
+
+    description: str = "nr sent messages"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [a.n_sent_messages for a in agents]
 
 
-def n_received_messages(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:
-    """Get the number of received messages per agent."""
-    return [a.n_received_messages for a in agents]
+class NrReceivedMessages(TableMetric):
+    """Number of received messages per agent."""
+
+    description: str = "nr received messages"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [a.n_received_messages for a in agents]
 
 
-def n_sent_messages_dropped(agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:
-    """Get the number of sent messages that were dropped per agent."""
-    return [a.n_sent_messages_dropped for a in agents]
+class NrSentMessagesDropped(TableMetric):
+    """Number of sent messages that were dropped per agent."""
+
+    description: str = "nr sent messages dropped"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return [a.n_sent_messages_dropped for a in agents]
 
 
 DEFAULT_TABLE_METRICS = [
-    TableMetric("global cost error (< 1e-9 = exact convergence)", [Single], global_cost_error),
-    TableMetric("global gradient optimality", [Single], global_gradient_optimality),
-    TableMetric("x error", [Min, Avg, Max], x_error),
-    TableMetric("asymptotic convergence order", [Avg], asymptotic_convergence_order),
-    TableMetric("asymptotic convergence rate", [Avg], asymptotic_convergence_rate),
-    TableMetric("iterative convergence order", [Avg], iterative_convergence_order),
-    TableMetric("iterative convergence rate", [Avg], iterative_convergence_rate),
-    TableMetric("nr x updates", [Avg, Sum], n_x_updates),
-    TableMetric("nr evaluate calls", [Avg, Sum], n_evaluate_calls),
-    TableMetric("nr gradient calls", [Avg, Sum], n_gradient_calls),
-    TableMetric("nr hessian calls", [Avg, Sum], n_hessian_calls),
-    TableMetric("nr proximal calls", [Avg, Sum], n_proximal_calls),
-    TableMetric("nr sent messages", [Avg, Sum], n_sent_messages),
-    TableMetric("nr received messages", [Avg, Sum], n_received_messages),
-    TableMetric("nr sent messages dropped", [Avg, Sum], n_sent_messages_dropped),
+    GlobalCostError([utils.single]),
+    GlobalGradientOptimality([utils.single]),
+    XError([min, np.average, max]),
+    AsymptoticConvergenceOrder([np.average]),
+    AsymptoticConvergenceRate([np.average]),
+    IterativeConvergenceOrder([np.average]),
+    IterativeConvergenceRate([np.average]),
+    NrXUpdates([np.average, sum]),
+    NrEvaluateCalls([np.average, sum]),
+    NrGradientCalls([np.average, sum]),
+    NrHessianCalls([np.average, sum]),
+    NrProximalCalls([np.average, sum]),
+    NrSentMessages([np.average, sum]),
+    NrReceivedMessages([np.average, sum]),
+    NrSentMessagesDropped([np.average, sum]),
 ]
 """
-- :func:`global_cost_error` (single)
-- :func:`global_gradient_optimality` (single)
-- :func:`x_error` (min, avg, max)
-- :func:`asymptotic_convergence_order` (avg)
-- :func:`asymptotic_convergence_rate` (avg)
-- :func:`iterative_convergence_order` (avg)
-- :func:`iterative_convergence_rate` (avg)
-- :func:`n_x_updates` (avg, sum)
-- :func:`n_evaluate_calls` (avg, sum)
-- :func:`n_gradient_calls` (avg, sum)
-- :func:`n_hessian_calls` (avg, sum)
-- :func:`n_proximal_calls` (avg, sum)
-- :func:`n_sent_messages` (avg, sum)
-- :func:`n_received_messages` (avg, sum)
-- :func:`n_sent_messages_dropped` (avg, sum)
-
+- :class:`GlobalCostError` - :func:`~.metric_utils.single`
+- :class:`GlobalGradientOptimality` - :func:`~.metric_utils.single`
+- :class:`XError` - :func:`min`, :func:`~numpy.average`, :func:`max`
+- :class:`AsymptoticConvergenceOrder` - :func:`~numpy.average`
+- :class:`AsymptoticConvergenceRate` - :func:`~numpy.average`
+- :class:`IterativeConvergenceOrder` - :func:`~numpy.average`
+- :class:`IterativeConvergenceRate` - :func:`~numpy.average`
+- :class:`NrXUpdates` - :func:`~numpy.average`, :func:`sum`
+- :class:`NrEvaluateCalls` - :func:`~numpy.average`, :func:`sum`
+- :class:`NrGradientCalls` - :func:`~numpy.average`, :func:`sum`
+- :class:`NrHessianCalls` - :func:`~numpy.average`, :func:`sum`
+- :class:`NrProximalCalls` - :func:`~numpy.average`, :func:`sum`
+- :class:`NrSentMessages` - :func:`~numpy.average`, :func:`sum`
+- :class:`NrReceivedMessages` - :func:`~numpy.average`, :func:`sum`
+- :class:`NrSentMessagesDropped` - :func:`~numpy.average`, :func:`sum`
 
 :meta hide-value:
 """
@@ -251,7 +280,7 @@ def tabulate(
     rows: list[list[str]] = []
     for metric in metrics:
         for statistic in metric.statistics:
-            row = [f"{metric.name} ({statistic.name})"]
+            row = [f"{metric.description} ({statistic.__name__})"]
             for nw_states in resulting_nw_states_per_alg.values():
                 aggregated_data_per_trial = _get_aggregated_data_per_trial(nw_states, problem, metric, statistic)
                 mean, margin_of_error = _get_mean_and_margin_of_error(aggregated_data_per_trial, confidence_level)
@@ -271,7 +300,7 @@ def _get_aggregated_data_per_trial(
         agent_metrics_views = [AgentMetricsView.from_agent(a) for a in nw.get_all_agents()]
         with warnings.catch_warnings(action="ignore"):
             trial_data = metric.get_data_from_trial(agent_metrics_views, problem)
-            aggregated_trial_data = statistic.agg_func(trial_data)
+            aggregated_trial_data = statistic(trial_data)
         aggregated_data_per_trial.append(aggregated_trial_data)
     return aggregated_data_per_trial
 
