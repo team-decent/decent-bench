@@ -49,7 +49,7 @@ def benchmark(
         confidence_level: confidence level of the confidence intervals
         log_level: minimum level to log, e.g. :data:`logging.INFO`
         max_processes: maximum number of processes to use when running trials, multiprocessing improves performance
-            but can be inhibiting when debugging or using a profiler, set to 1 to disable multiprocessing or ``None`` to
+            but can beee inhibiting when debugging or using a profiler, set to 1 to disable multiprocessing or ``None`` to
             use :class:`~concurrent.futures.ProcessPoolExecutor`'s default
 
     """
