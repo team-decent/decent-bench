@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from abc import ABC, abstractmethod
+from functools import cached_property
 
 import numpy as np
 from numpy import float64
@@ -120,7 +121,7 @@ class QuadraticCost(CostFunction):
     def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
         return self.b.shape
 
-    @property
+    @cached_property
     def m_smooth(self) -> float:
         r"""
         The cost function's smoothness constant.
@@ -136,7 +137,7 @@ class QuadraticCost(CostFunction):
         eigs = np.linalg.eigvalsh(self.A_sym)
         return float(np.max(np.abs(eigs)))
 
-    @property
+    @cached_property
     def m_cvx(self) -> float:
         r"""
         The cost function's convexity constant.
@@ -353,7 +354,7 @@ class LogisticRegressionCost(CostFunction):
     def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
         return (self.A.shape[1],)
 
-    @property
+    @cached_property
     def m_smooth(self) -> float:
         r"""
         The cost function's smoothness constant.
@@ -455,7 +456,7 @@ class SumCost(CostFunction):
     def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
         return self.cost_functions[0].domain_shape
 
-    @property
+    @cached_property
     def m_smooth(self) -> float:
         r"""
         The cost function's smoothness constant.
@@ -473,7 +474,7 @@ class SumCost(CostFunction):
         m_smooth_vals = [cf.m_smooth for cf in self.cost_functions]
         return np.nan if any(np.isnan(v) for v in m_smooth_vals) else sum(m_smooth_vals)
 
-    @property
+    @cached_property
     def m_cvx(self) -> float:
         r"""
         The cost function's convexity constant.
