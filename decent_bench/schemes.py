@@ -1,5 +1,6 @@
 import random
 from abc import ABC, abstractmethod
+from functools import cached_property
 
 import numpy as np
 from numpy import float64
@@ -114,7 +115,10 @@ class GaussianNoise(NoiseScheme):
             raise ValueError("Standard deviation (sd) must be non-negative for Gaussian noise.")
         self.mean = mean
         self.sd = sd
-        self.generator = Generator(MT19937())
+
+    @cached_property
+    def _generator(self) -> Generator:
+        return Generator(MT19937())
 
     def make_noise(self, msg: NDArray[float64]) -> NDArray[float64]:  # noqa: D102
-        return msg + self.generator.normal(self.mean, self.sd, msg.shape)
+        return msg + self._generator.normal(self.mean, self.sd, msg.shape)
