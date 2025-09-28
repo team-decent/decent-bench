@@ -51,4 +51,6 @@ def start_log_listener(manager: SyncManager, log_level: int) -> QueueListener:
 
 def start_queue_logger(queue: LogQueue) -> None:
     """Configure the default logger for the current process to put log messages in the *queue*."""
-    logging.basicConfig(level=logging.NOTSET, format="%(message)s", handlers=[QueueHandler(queue)])
+    LOGGER.handlers.clear()
+    LOGGER.addHandler(QueueHandler(queue))
+    LOGGER.setLevel(logging.NOTSET)

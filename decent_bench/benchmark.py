@@ -66,6 +66,7 @@ def benchmark(
         tm.tabulate(resulting_nw_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
     with Status("Creating plot"):
         plot(resulting_nw_states, benchmark_problem, plot_metrics)
+    log_listener.stop()
 
 
 def _run_trials(  # noqa: PLR0917
