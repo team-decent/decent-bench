@@ -157,7 +157,7 @@ class GT2(DstAlgorithm):
             x0 = np.zeros(i.cost_function.domain_shape)
             y0 = np.zeros(i.cost_function.domain_shape)
             y1 = x0 - self.step_size * i.cost_function.gradient(x0)
-            # note: the message's y1 is an approximation of the neighbor's y1
+            # note: msg0's y1 is an approximation of the neighbors' y1 (x0 and y0 are exact: all agents start with same)
             msg0 = x0 + y1 - y0
             i.initialize(
                 x=x0,
@@ -219,7 +219,7 @@ class ADMM(DstAlgorithm):
         for agent in all_agents:
             z0 = np.zeros((len(all_agents), *(agent.cost_function.domain_shape)))
             x1 = agent.cost_function.proximal(y=np.sum(z0, axis=0) / pN[agent], rho=1 / pN[agent])
-            # note: the message's x1 is an approximation of the neighbor's x1
+            # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
             msg0: NDArray[float64] = z0[agent] - 2 * self.rho * x1
             agent.initialize(
                 x=x1,
