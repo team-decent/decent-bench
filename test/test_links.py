@@ -1,6 +1,6 @@
 from urllib.request import Request, urlopen
-from decent_bench.metrics.table_metrics import DOC_LINK as TABLE_METRICS_DOC_LINK
-from decent_bench.metrics.plot_metrics import DOC_LINK as PLOT_METRICS_DOC_LINK
+from decent_bench.metrics.table_metrics import TABLE_METRICS_DOC_LINK
+from decent_bench.metrics.plot_metrics import PLOT_METRICS_DOC_LINK
 
 
 def open_url(url: str):

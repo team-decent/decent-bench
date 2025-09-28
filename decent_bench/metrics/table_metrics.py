@@ -252,7 +252,7 @@ DEFAULT_TABLE_METRICS = [
 """
 
 
-DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.metrics.table_metrics.html"
+TABLE_METRICS_DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.metrics.table_metrics.html"
 
 
 def tabulate(
@@ -275,6 +275,9 @@ def tabulate(
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
 
     """
+    if not metrics:
+        return
+    LOGGER.info(f"Table metric definitions can be found here: {TABLE_METRICS_DOC_LINK}")
     algs = list(resulting_agent_states)
     headers = ["Metric (statistic)"] + [alg.name for alg in algs]
     rows: list[list[str]] = []
@@ -291,7 +294,6 @@ def tabulate(
             rows.append(row)
     formatted_table = tb.tabulate(rows, headers, tablefmt=table_fmt)
     LOGGER.info("\n" + formatted_table)
-    LOGGER.info(f"Metric definitions can be found here: {DOC_LINK}")
 
 
 def _aggregate_data_per_trial(
