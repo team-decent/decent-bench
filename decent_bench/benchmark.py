@@ -77,12 +77,11 @@ def _run_trials(  # noqa: PLR0917
     log_listener: QueueListener,
     max_processes: int | None,
 ) -> dict[DstAlgorithm, list[Network]]:
-    def _start_logger() -> None:
-        logger.start_queue_logger(log_listener.queue)
-
     if max_processes == 1:
         return {alg: [_run_trial(alg, nw_init_state, progress_bar_ctrl) for _ in range(n_trials)] for alg in algorithms}
-    with ProcessPoolExecutor(initializer=_start_logger, max_workers=max_processes) as executor:
+    with ProcessPoolExecutor(
+        initializer=logger.start_queue_logger, initargs=(log_listener.queue,), max_workers=max_processes
+    ) as executor:
         LOGGER.info(f"Concurrent processes: {executor._max_workers}")  # type: ignore[attr-defined] # noqa: SLF001
         all_futures = {
             alg: [executor.submit(_run_trial, alg, nw_init_state, progress_bar_ctrl) for _ in range(n_trials)]
