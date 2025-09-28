@@ -146,6 +146,7 @@ def plot(
             subplot.plot(x, y_mean, label=alg.name, color=color, marker=marker, linewidth=3, markevery=100)
             y_min, y_max = _calculate_envelope(data_per_trial)
             subplot.fill_between(x, y_min, y_max, color=color, alpha=0.3)
+        subplot.legend()
     manager = plt.get_current_fig_manager()
     if not manager:
         raise RuntimeError("Something went wrong, did not receive a FigureManager...")
@@ -162,9 +163,7 @@ def _create_metric_subplots(metrics: list[PlotMetric]) -> list[tuple[PlotMetric,
     subplots = subplots.flatten()
     for sp in subplots[n_metrics:]:
         fig.delaxes(sp)
-    for sp in subplots:
-        sp.legend()
-    metric_subplots = list(zip(metrics, subplots, strict=True))
+    metric_subplots = list(zip(metrics, subplots[:n_metrics], strict=True))
     for metric, sp in metric_subplots:
         sp.set_xlabel(metric.x_label)
         sp.set_ylabel(metric.y_label)
