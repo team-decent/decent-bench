@@ -64,9 +64,9 @@ def create_regression_problem(
     n_agents: int = 100,
     n_neighbors_per_agent: int = 3,
     asynchrony: bool = False,
-    compressed: bool = False,
-    noisy: bool = False,
-    droppy: bool = False,
+    compression: bool = False,
+    noise: bool = False,
+    drops: bool = False,
 ) -> BenchmarkProblem:
     """
     Create out-of-the-box regression problems.
@@ -76,9 +76,9 @@ def create_regression_problem(
         n_agents: number of agents
         n_neighbors_per_agent: number of neighbors per agent
         asynchrony: if true, agents only have a 50% probability of being active/participating at any given time
-        compressed: if true, messages are rounded to 4 significant digits
-        noisy: if true, messages are distorted by Gaussian noise
-        droppy: if true, messages have a 50% probability of being dropped
+        compression: if true, messages are rounded to 4 significant digits
+        noise: if true, messages are distorted by Gaussian noise
+        drops: if true, messages have a 50% probability of being dropped
 
     """
     topology_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
@@ -89,9 +89,9 @@ def create_regression_problem(
     sum_cost = reduce(add, costs)
     optimal_x = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
     agent_activation_schemes = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
-    compression_scheme = Quantization(n_significant_digits=4) if compressed else NoCompression()
-    noise_scheme = GaussianNoise(mean=0, sd=0.001) if noisy else NoNoise()
-    drop_scheme = UniformDropRate(drop_rate=0.5) if droppy else NoDrops()
+    compression_scheme = Quantization(n_significant_digits=4) if compression else NoCompression()
+    noise_scheme = GaussianNoise(mean=0, sd=0.001) if noise else NoNoise()
+    drop_scheme = UniformDropRate(drop_rate=0.5) if drops else NoDrops()
     return BenchmarkProblem(
         topology_structure=topology_structure,
         cost_functions=costs,
