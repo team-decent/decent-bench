@@ -115,7 +115,7 @@ def plot(
     """
     Plot the execution results with one subplot per metric.
 
-    Each algorithm's curve is its mean across the trials.
+    Each algorithm's curve is its mean across the trials. The surrounding envelope is the min and max across the trials.
 
     Args:
         resulting_nw_states_per_alg: resulting network states from the trial executions, grouped by algorithm
