@@ -13,7 +13,6 @@ import decent_bench.metrics.metric_utils as utils
 from decent_bench.agent import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import DstAlgorithm
-from decent_bench.network import Network
 from decent_bench.utils.logger import LOGGER
 
 X = float
@@ -108,7 +107,7 @@ MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p"]
 
 
 def plot(
-    resulting_nw_states_per_alg: dict[DstAlgorithm, list[Network]],
+    resulting_agent_states: dict[DstAlgorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[PlotMetric],
 ) -> None:
@@ -118,7 +117,7 @@ def plot(
     Each algorithm's curve is its mean across the trials. The surrounding envelope is the min and max across the trials.
 
     Args:
-        resulting_nw_states_per_alg: resulting network states from the trial executions, grouped by algorithm
+        resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties, e.g.
             :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.optimal_x`,
             are used for metric calculations
@@ -132,10 +131,10 @@ def plot(
         return
     metric_subplots: list[tuple[PlotMetric, SubPlot]] = _create_metric_subplots(metrics)
     for metric, subplot in metric_subplots:
-        for i, (alg, nw_states) in enumerate(resulting_nw_states_per_alg.items()):
+        for i, (alg, agent_states) in enumerate(resulting_agent_states.items()):
             color = COLORS[i] if i < len(COLORS) else [random.random() for _ in range(3)]
             marker = MARKERS[i] if i < len(MARKERS) else random.choice(MARKERS)
-            data_per_trial: list[Sequence[tuple[X, Y]]] = _get_data_per_trial(nw_states, problem, metric)
+            data_per_trial: list[Sequence[tuple[X, Y]]] = _get_data_per_trial(agent_states, problem, metric)
             flattened_data: list[tuple[X, Y]] = [d for trial in data_per_trial for d in trial]
             if not np.isfinite(flattened_data).all():
                 msg = f"Skipping plot {metric.y_label}/{metric.x_label} for {alg.name}: found nan or inf in datapoints."
@@ -177,13 +176,12 @@ def _create_metric_subplots(metrics: list[PlotMetric]) -> list[tuple[PlotMetric,
 
 
 def _get_data_per_trial(
-    resulting_nw_states: list[Network], problem: BenchmarkProblem, metric: PlotMetric
+    agents_per_trial: list[list[AgentMetricsView]], problem: BenchmarkProblem, metric: PlotMetric
 ) -> list[Sequence[tuple[X, Y]]]:
     data_per_trial: list[Sequence[tuple[X, Y]]] = []
-    for nw in resulting_nw_states:
-        agent_metrics_views = [AgentMetricsView.from_agent(a) for a in nw.get_all_agents()]
+    for agents in agents_per_trial:
         with warnings.catch_warnings(action="ignore"):
-            trial_data = metric.get_data_from_trial(agent_metrics_views, problem)
+            trial_data = metric.get_data_from_trial(agents, problem)
         data_per_trial.append(trial_data)
     return data_per_trial
 

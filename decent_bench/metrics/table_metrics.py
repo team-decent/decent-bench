@@ -12,7 +12,6 @@ import decent_bench.metrics.metric_utils as utils
 from decent_bench.agent import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import DstAlgorithm
-from decent_bench.network import Network
 from decent_bench.utils.logger import LOGGER
 
 Statistic = Callable[[Sequence[float]], float]
@@ -257,7 +256,7 @@ DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.metrics.t
 
 
 def tabulate(
-    resulting_nw_states_per_alg: dict[DstAlgorithm, list[Network]],
+    resulting_agent_states: dict[DstAlgorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[TableMetric],
     confidence_level: float,
@@ -267,7 +266,7 @@ def tabulate(
     Print table with confidence intervals, one row per metric and statistic, and one column per algorithm.
 
     Args:
-        resulting_nw_states_per_alg: resulting network states from the trial executions, grouped by algorithm
+        resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties, e.g.
             :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.optimal_x`,
             are used for metric calculations
@@ -276,14 +275,17 @@ def tabulate(
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
 
     """
-    headers = ["Metric (statistic)"] + [alg.name for alg in resulting_nw_states_per_alg]
+    algs = list(resulting_agent_states)
+    headers = ["Metric (statistic)"] + [alg.name for alg in algs]
     rows: list[list[str]] = []
     for metric in metrics:
         for statistic in metric.statistics:
             row = [f"{metric.description} ({statistic.__name__})"]
-            for nw_states in resulting_nw_states_per_alg.values():
-                aggregated_data_per_trial = _get_aggregated_data_per_trial(nw_states, problem, metric, statistic)
-                mean, margin_of_error = _get_mean_and_margin_of_error(aggregated_data_per_trial, confidence_level)
+            for alg in algs:
+                agent_states_per_trial = resulting_agent_states[alg]
+                with warnings.catch_warnings(action="ignore"):
+                    agg_data_per_trial = _aggregate_data_per_trial(agent_states_per_trial, problem, metric, statistic)
+                    mean, margin_of_error = _calculate_mean_and_margin_of_error(agg_data_per_trial, confidence_level)
                 formatted_confidence_interval = _format_confidence_interval(mean, margin_of_error)
                 row.append(formatted_confidence_interval)
             rows.append(row)
@@ -292,20 +294,18 @@ def tabulate(
     LOGGER.info(f"Metric definitions can be found here: {DOC_LINK}")
 
 
-def _get_aggregated_data_per_trial(
-    resulting_nw_states: list[Network], problem: BenchmarkProblem, metric: TableMetric, statistic: Statistic
+def _aggregate_data_per_trial(
+    agents_per_trial: list[list[AgentMetricsView]], problem: BenchmarkProblem, metric: TableMetric, statistic: Statistic
 ) -> list[float]:
     aggregated_data_per_trial: list[float] = []
-    for nw in resulting_nw_states:
-        agent_metrics_views = [AgentMetricsView.from_agent(a) for a in nw.get_all_agents()]
-        with warnings.catch_warnings(action="ignore"):
-            trial_data = metric.get_data_from_trial(agent_metrics_views, problem)
-            aggregated_trial_data = statistic(trial_data)
+    for agents in agents_per_trial:
+        trial_data = metric.get_data_from_trial(agents, problem)
+        aggregated_trial_data = statistic(trial_data)
         aggregated_data_per_trial.append(aggregated_trial_data)
     return aggregated_data_per_trial
 
 
-def _get_mean_and_margin_of_error(data: list[float], confidence_level: float) -> tuple[float, float]:
+def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: float) -> tuple[float, float]:
     mean = np.mean(data)
     sem = stats.sem(data) if len(set(data)) > 1 else None
     raw_interval = (
