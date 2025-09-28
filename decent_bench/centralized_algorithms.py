@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 def gradient_descent(
     cost_function: "CostFunction",
-    x0: NDArray[float64],
+    x0: NDArray[float64] | None,
     *,
     step_size: float,
     max_iter: int,
@@ -23,7 +23,7 @@ def gradient_descent(
 
     Args:
         cost_function: cost function to minimize
-        x0: initial guess
+        x0: initial guess, defaults to ``np.zeros()`` if ``None`` is provided
         step_size: scaling factor for each update
         max_iter: maximum number of iterations to run
         stop_tol: early stopping criteria - stop if ``norm(x_new - x) <= stop_tol``
@@ -37,7 +37,7 @@ def gradient_descent(
 
     """
     delta = np.inf
-    x = x0
+    x = x0 if x0 is not None else np.zeros(cost_function.domain_shape)
     for _ in range(max_iter):
         x_new = x - step_size * cost_function.gradient(x)
         delta = float(la.norm(x_new - x))
