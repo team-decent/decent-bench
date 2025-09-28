@@ -143,9 +143,9 @@ def plot(
                 continue
             mean_curve: Sequence[tuple[X, Y]] = _calculate_mean_curve(data_per_trial)
             x, y_mean = zip(*mean_curve, strict=True)
-            subplot.plot(x, y_mean, label=alg.name, color=color, marker=marker, linewidth=3, markevery=100)
+            subplot.plot(x, y_mean, label=alg.name, color=color, marker=marker, markevery=max(1, int(len(x) / 20)))
             y_min, y_max = _calculate_envelope(data_per_trial)
-            subplot.fill_between(x, y_min, y_max, color=color, alpha=0.3)
+            subplot.fill_between(x, y_min, y_max, color=color, alpha=0.1)
         subplot.legend()
     manager = plt.get_current_fig_manager()
     if not manager:
