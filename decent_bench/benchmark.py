@@ -9,10 +9,12 @@ from typing import Literal
 from rich.status import Status
 
 from decent_bench import network
+from decent_bench.agent import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import DstAlgorithm
+from decent_bench.metrics import plot_metrics as pm
 from decent_bench.metrics import table_metrics as tm
-from decent_bench.metrics.plot_metrics import DEFAULT_PLOT_METRICS, PlotMetric, plot
+from decent_bench.metrics.plot_metrics import DEFAULT_PLOT_METRICS, PlotMetric
 from decent_bench.metrics.table_metrics import DEFAULT_TABLE_METRICS, TableMetric
 from decent_bench.network import Network
 from decent_bench.utils import logger
@@ -62,10 +64,13 @@ def benchmark(
     pb_ctrl = ProgressBarController(manager, algorithms, n_trials)
     resulting_nw_states = _run_trials(algorithms, n_trials, nw_init_state, pb_ctrl, log_listener, max_processes)
     LOGGER.info("All trials complete")
+    resulting_agent_states: dict[DstAlgorithm, list[list[AgentMetricsView]]] = {}
+    for alg, networks in resulting_nw_states.items():
+        resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.get_all_agents()] for nw in networks]
     with Status("Creating table"):
-        tm.tabulate(resulting_nw_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
+        tm.tabulate(resulting_agent_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
     with Status("Creating plot"):
-        plot(resulting_nw_states, benchmark_problem, plot_metrics)
+        pm.plot(resulting_agent_states, benchmark_problem, plot_metrics)
     log_listener.stop()
 
 
