@@ -313,10 +313,9 @@ def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: flo
     raw_interval = (
         stats.t.interval(confidence=confidence_level, df=len(data) - 1, loc=mean, scale=sem) if sem else (mean, mean)
     )
-    res = (float(mean), float(mean - raw_interval[0]))
-    if any(np.isinf(res)):
-        return np.nan, np.nan
-    return res
+    if np.isfinite(mean) and np.isfinite(raw_interval).all():
+        return (float(mean), float(mean - raw_interval[0]))
+    return np.nan, np.nan
 
 
 def _format_confidence_interval(mean: float, margin_of_error: float) -> str:
