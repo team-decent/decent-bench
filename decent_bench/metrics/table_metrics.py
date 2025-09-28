@@ -50,7 +50,7 @@ class GlobalCostError(TableMetric):
     .. include:: snippets/global_cost_error.rst
     """
 
-    description: str = "global cost error (< 1e-9 = exact convergence)"
+    description: str = "global cost error \n[<1e-9 = exact conv.]"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> tuple[float]:  # noqa: D102
         return (utils.global_cost_error_at_iter(agents, problem, iteration=-1),)
@@ -281,9 +281,10 @@ def tabulate(
     algs = list(resulting_agent_states)
     headers = ["Metric (statistic)"] + [alg.name for alg in algs]
     rows: list[list[str]] = []
+    statistics_abbr = {"average": "avg", "median": "mdn"}
     for metric in metrics:
         for statistic in metric.statistics:
-            row = [f"{metric.description} ({statistic.__name__})"]
+            row = [f"{metric.description} ({statistics_abbr.get(statistic.__name__) or statistic.__name__})"]
             for alg in algs:
                 agent_states_per_trial = resulting_agent_states[alg]
                 with warnings.catch_warnings(action="ignore"):
@@ -319,7 +320,7 @@ def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: flo
 
 
 def _format_confidence_interval(mean: float, margin_of_error: float) -> str:
-    formatted_confidence_interval = f"{mean:.3e} \u00b1 {margin_of_error:.3e}"
+    formatted_confidence_interval = f"{mean:.2e} \u00b1 {margin_of_error:.2e}"
     if any(np.isnan([mean, margin_of_error])):
         formatted_confidence_interval += " (diverged?)"
     return formatted_confidence_interval
