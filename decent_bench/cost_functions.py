@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 
 import numpy as np
+import numpy.linalg as la
 from numpy import float64
 from numpy.typing import NDArray
 from scipy import special
@@ -359,12 +360,15 @@ class LogisticRegressionCost(CostFunction):
         r"""
         The cost function's smoothness constant.
 
-        .. math:: \frac{1}{4} \max_i \sum_{j} (\mathbf{A}_{ij})^2
+        .. math:: \frac{m}{4} \max_i \|\mathbf{A}_i\|^2
+
+        where m is the number of rows in :math:`\mathbf{A}`.
 
         For the general definition, see
         :attr:`CostFunction.m_smooth <decent_bench.cost_functions.CostFunction.m_smooth>`.
         """
-        return np.max(np.sum(self.A**2, axis=1, dtype=float64)) / 4
+        res: float = max(pow(la.norm(row), 2) for row in self.A) * self.A.shape[0] / 4
+        return res
 
     @property
     def m_cvx(self) -> float:
