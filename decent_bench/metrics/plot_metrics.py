@@ -101,7 +101,7 @@ DEFAULT_PLOT_METRICS = [
 :meta hide-value:
 """
 
-DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.metrics.plot_metrics.html"
+PLOT_METRICS_DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.metrics.plot_metrics.html"
 COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
 MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p"]
 
@@ -129,6 +129,7 @@ def plot(
     """
     if not metrics:
         return
+    LOGGER.info(f"Plot metric definitions can be found here: {PLOT_METRICS_DOC_LINK}")
     metric_subplots: list[tuple[PlotMetric, SubPlot]] = _create_metric_subplots(metrics)
     for metric, subplot in metric_subplots:
         for i, (alg, agent_states) in enumerate(resulting_agent_states.items()):
@@ -150,7 +151,6 @@ def plot(
         raise RuntimeError("Something went wrong, did not receive a FigureManager...")
     manager.full_screen_toggle()
     plt.tight_layout()
-    LOGGER.info(f"Metric definitions can be found here: {DOC_LINK}")
     plt.show()
 
 

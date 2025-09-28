@@ -57,12 +57,12 @@ def benchmark(
     """
     manager = Manager()
     log_listener = logger.start_log_listener(manager, log_level)
-    LOGGER.info("Starting benchmark execution")
+    LOGGER.info("Starting benchmark execution, progress bar increments with each completed trial ")
     with Status("Generating initial network state"):
         nw_init_state = network.create_distributed_network(benchmark_problem)
     LOGGER.info(f"Nr of agents: {len(nw_init_state.get_all_agents())}")
-    pb_ctrl = ProgressBarController(manager, algorithms, n_trials)
-    resulting_nw_states = _run_trials(algorithms, n_trials, nw_init_state, pb_ctrl, log_listener, max_processes)
+    prog_ctrl = ProgressBarController(manager, algorithms, n_trials)
+    resulting_nw_states = _run_trials(algorithms, n_trials, nw_init_state, prog_ctrl, log_listener, max_processes)
     LOGGER.info("All trials complete")
     resulting_agent_states: dict[DstAlgorithm, list[list[AgentMetricsView]]] = {}
     for alg, networks in resulting_nw_states.items():
@@ -71,6 +71,7 @@ def benchmark(
         tm.tabulate(resulting_agent_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
     with Status("Creating plot"):
         pm.plot(resulting_agent_states, benchmark_problem, plot_metrics)
+    LOGGER.info("Benchmark execution complete, thanks for using decent-bench")
     log_listener.stop()
 
 
