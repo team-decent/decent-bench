@@ -65,7 +65,7 @@ def global_gradient_optimality_at_iter(agents: list[AgentMetricsView], iteration
 
     .. include:: snippets/global_gradient_optimality.rst
     """
-    x_mean = mean_x(tuple(agents), iteration=iteration)
+    x_mean = mean_x(tuple(agents), iteration)
     grad_avg = sum(a.cost_function.gradient(x_mean) for a in agents) / len(agents)
     return float(la.norm(grad_avg)) ** 2
 
@@ -96,7 +96,7 @@ def asymptotic_convergence_rate_and_order(agent: AgentMetricsView, problem: Benc
     """
     errors = x_error_per_iteration(agent, problem)
     errors = errors[errors > 0]
-    if any(np.isinf(e) or np.isnan(e) for e in errors):
+    if not np.isfinite(errors).all():
         return np.nan, np.nan
     log_errors = np.log(errors)
     x = log_errors[:-1]
@@ -117,12 +117,12 @@ def iterative_convergence_rate_and_order(agent: AgentMetricsView, problem: Bench
     .. include:: snippets/iterative_convergence_rate_and_order.rst
     """
     errors = x_error_per_iteration(agent, problem)
-    if any(np.isinf(e) or np.isnan(e) for e in errors):
+    if not np.isfinite(errors).all():
         return np.nan, np.nan
     iterations_and_errors = [(i + 1, e) for i, e in enumerate(errors)]
     iterations_and_errors = [ie for ie in iterations_and_errors if ie[1] > 0]
-    log_errors = np.log([e[1] for e in iterations_and_errors])
-    log_iterations = np.log([e[0] for e in iterations_and_errors])
+    log_errors = np.log([ie[1] for ie in iterations_and_errors])
+    log_iterations = np.log([ie[0] for ie in iterations_and_errors])
     try:
         slope, intercept = np.polyfit(log_errors, log_iterations, 1)
         rate, order = np.exp(intercept), -slope
