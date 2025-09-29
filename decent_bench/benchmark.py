@@ -60,7 +60,7 @@ def benchmark(
     LOGGER.info("Starting benchmark execution, progress bar increments with each completed trial ")
     with Status("Generating initial network state"):
         nw_init_state = network.create_distributed_network(benchmark_problem)
-    LOGGER.info(f"Nr of agents: {len(nw_init_state.get_all_agents())}")
+    LOGGER.debug(f"Nr of agents: {len(nw_init_state.get_all_agents())}")
     prog_ctrl = ProgressBarController(manager, algorithms, n_trials)
     resulting_nw_states = _run_trials(algorithms, n_trials, nw_init_state, prog_ctrl, log_listener, max_processes)
     LOGGER.info("All trials complete")
@@ -88,7 +88,7 @@ def _run_trials(  # noqa: PLR0917
     with ProcessPoolExecutor(
         initializer=logger.start_queue_logger, initargs=(log_listener.queue,), max_workers=max_processes
     ) as executor:
-        LOGGER.info(f"Concurrent processes: {executor._max_workers}")  # type: ignore[attr-defined] # noqa: SLF001
+        LOGGER.debug(f"Concurrent processes: {executor._max_workers}")  # type: ignore[attr-defined] # noqa: SLF001
         all_futures = {
             alg: [executor.submit(_run_trial, alg, nw_init_state, progress_bar_ctrl) for _ in range(n_trials)]
             for alg in algorithms
