@@ -1,4 +1,4 @@
-<img src="https://github.com/team-decent/decent-bench/blob/main/docs/source/_static/logo.png" alt="decent-bench logo" align="right" width="70" />
+<img src="https://raw.githubusercontent.com/team-decent/decent-bench/refs/heads/main/docs/source/_static/logo.png" alt="decent-bench logo" align="right" width="70" />
 
 # Welcome to decent-bench
 [**Docs**](https://decent-bench.readthedocs.io/en/latest/)
