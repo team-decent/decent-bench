@@ -11,4 +11,5 @@ Welcome to decent-bench's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-   decent_bench
+   API Reference <api/decent_bench>
+   Developer Guide <developer>
