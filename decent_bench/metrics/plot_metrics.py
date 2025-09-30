@@ -119,12 +119,11 @@ def plot(
     Args:
         resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties, e.g.
-            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.optimal_x`,
-            are used for metric calculations
+            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.optimal_x`, are used for metric calculations
         metrics: metrics to calculate and plot
 
     Raises:
-        RuntimeError: if the current figure's manager can't be retrieved
+        RuntimeError: if the figure manager can't be retrieved
 
     """
     if not metrics:

@@ -37,8 +37,8 @@ description = "Clean up and regenerate rst and html files using sphinx"
 deps = ["sphinx", "pydata-sphinx-theme @ git+https://github.com/pydata/pydata-sphinx-theme.git@main"]
 allowlist_externals = ["find", "make"]
 commands = [
-  ["find", "docs/source", "-name", "*.rst", "!", "-name", "index.rst", "!", "-path", "*/snippets/*", "-delete"],
-  ["sphinx-apidoc", "-o", "docs/source", "decent_bench", "--separate", "--no-toc", "--templatedir=docs/source/_templates"],
+  ["find", "docs/source/api", "-name", "*.rst", "!", "-path", "*/snippets/*", "-delete"],
+  ["sphinx-apidoc", "-o", "docs/source/api", "decent_bench", "--separate", "--no-toc", "--templatedir=docs/source/_templates"],
   ["make", "-C", "docs", "clean"],
   ["make", "-C", "docs", "html", "SPHINXOPTS=-W"],
 ]
