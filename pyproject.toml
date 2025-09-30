@@ -1,7 +1,16 @@
 [project]
 name = "decent-bench"
-version = "0.0.0"
+version = "0.1.1"
+authors = [{name = "Elias Ram"}, {name = "Nicola Bastianello"}]
+maintainers = [{name = "Team Decent"}]
+description = "A benchmarking framework for decentralized optimization"
+readme = "README.md"
 requires-python = ">=3.13"
+classifiers = [
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: OS Independent",
+]
+license = "AGPL-3.0-only"
 dependencies = [
   "matplotlib",
   "networkx",
@@ -12,11 +21,15 @@ dependencies = [
   "tabulate",
 ]
 
+[project.urls]
+Documentation = "https://decent-bench.readthedocs.io/en/latest/"
+Source = "https://github.com/team-decent/decent-bench"
+Issues = "https://github.com/team-decent/decent-bench/issues"
+
 [project.optional-dependencies]
 dev = [
-  "microsoft-python-type-stubs @ git+https://github.com/microsoft/python-type-stubs.git@main",
+  "hatch",
   "mypy",
-  "pydata-sphinx-theme @ git+https://github.com/pydata/pydata-sphinx-theme.git@main",
   "pytest",
   "ruff",
   "scipy-stubs",
@@ -25,16 +38,24 @@ dev = [
   "types-tabulate",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [tool.tox]
 envlist = ["dev", "mypy", "pytest", "ruff", "sphinx"]
 
 [tool.tox.env.dev]
 description = "Generate dev venv with all dependencies, active with `source .tox/dev/bin/activate`"
-deps = [".[dev]"]
+deps = [
+  ".[dev]",
+  "git+https://github.com/microsoft/python-type-stubs.git@main",
+  "git+https://github.com/pydata/pydata-sphinx-theme.git@main"
+]
 
 [tool.tox.env.sphinx]
 description = "Clean up and regenerate rst and html files using sphinx"
-deps = ["sphinx", "pydata-sphinx-theme @ git+https://github.com/pydata/pydata-sphinx-theme.git@main"]
+deps = ["sphinx", "git+https://github.com/pydata/pydata-sphinx-theme.git@main"]
 allowlist_externals = ["find", "make"]
 commands = [
   ["find", "docs/source/api", "-name", "*.rst", "!", "-path", "*/snippets/*", "-delete"],
@@ -45,7 +66,7 @@ commands = [
 
 [tool.tox.env.mypy]
 description = "Run mypy (static type checker)"
-deps = [".[dev]"]
+deps = [".[dev]", "git+https://github.com/microsoft/python-type-stubs.git@main"]
 commands = [["mypy", "decent_bench"]]
 
 [tool.tox.env.pytest]
