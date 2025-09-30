@@ -1,11 +1,12 @@
-![banner](https://github.com/team-decent/decent-bench/blob/main/docs/source/_static/logo.png)
+<img src="https://github.com/team-decent/decent-bench/blob/main/docs/source/_static/logo.png" alt="decent-bench logo" align="right" width="70" />
 
 # Welcome to decent-bench
 [**Docs**](https://decent-bench.readthedocs.io/en/latest/)
 | [**Installation**](#Installation)
 | [**Background**](#Background)
 
-A benchmarking framework for decentralized optimization
+decent-bench allows you to benchmark decentralized optimization algorithms under various communication constraints,
+providing realistic algorithm comparisons in a user-friendly and highly configurable manner.
 
 
 ## Installation
@@ -15,10 +16,6 @@ pip install decent-bench
 ```
 
 ## Background
-**TL;DR decent-bench enables you to benchmark decentralized optimization algorithms under various settings and
-communication constraints, providing realistic algorithm comparisons in a user-friendly and highly configurable
-manner.**
-
 Multiple paradigms exist in the field of mathematical optimization. One such paradigm is decentralized optimization. It
 addresses several of the challenges posed by traditional, centralized optimization. In centralized
 optimization, all training data is transferred to a central server that employs an optimization algorithm.
