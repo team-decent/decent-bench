@@ -252,7 +252,7 @@ DEFAULT_TABLE_METRICS = [
 """
 
 
-TABLE_METRICS_DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/decent_bench.metrics.table_metrics.html"
+TABLE_METRICS_DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/api/decent_bench.metrics.table_metrics.html"
 
 
 def tabulate(
