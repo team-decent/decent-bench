@@ -1,0 +1,6 @@
+/* Make the logo bigger */
+.navbar-brand img {
+  max-height: 65px;
+  height: auto;
+  width: auto;
+}
