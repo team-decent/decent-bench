@@ -12,6 +12,7 @@ providing realistic algorithm comparisons in a user-friendly and highly configur
 .. toctree::
    :maxdepth: 1
 
+   background
    API Reference <api/decent_bench>
    developer
    author
