@@ -54,3 +54,7 @@ html_theme_options = {"search_as_you_type": True}
 html_context = {"default_mode": "auto"}
 html_show_sourcelink = False
 html_logo = "_static/logo.png"
+html_sidebars = {
+    "developer": [],
+    "author": []
+}
