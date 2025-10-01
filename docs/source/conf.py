@@ -50,10 +50,33 @@ exclude_patterns = []
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = "pydata_sphinx_theme"
-html_theme_options = {"search_as_you_type": True}
+html_theme_options = {
+    "search_as_you_type": True,
+    "logo": {
+        "text": project,
+    },
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/team-decent/decent-bench",
+            "icon": "fa-brands fa-github",
+            "type": "fontawesome",
+        },
+        {
+            "name": "PyPI",
+            "url": "https://pypi.org/project/decent-bench/",
+            "icon": "fa-solid fa-box-open",
+            "type": "fontawesome",
+        },
+    ],
+    "icon_links_label": "Quick Links",
+}
 html_context = {"default_mode": "auto"}
 html_show_sourcelink = False
 html_logo = "_static/logo.png"
+html_favicon = "_static/logo.png"
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 html_sidebars = {
     "author": [],
     "background": [],
