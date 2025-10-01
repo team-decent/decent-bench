@@ -16,12 +16,12 @@ pip install decent-bench
 ```
 
 ## Background
-Multiple paradigms exist in the field of mathematical optimization. One such paradigm is decentralized optimization. It
-addresses several of the challenges posed by traditional, centralized optimization. In centralized
-optimization, all training data is transferred to a central server that employs an optimization algorithm.
-In addition to increased network and power consumption, transferring data may raise privacy concerns, especially in the
-context of sensitive information such as medical data. There are also regulatory restrictions such as GDPR and the EU
-AI Act that may impact the feasibility of centralized optimization.
+Decentralized optimization is a paradigm in the field of mathematical optimization. It addresses several of the
+challenges posed by traditional, centralized optimization. In centralized optimization, all training data is transferred
+to a central server that employs an optimization algorithm. In addition to increased network and power consumption,
+transferring data may raise privacy concerns, especially in the context of sensitive information such as medical data.
+There are also regulatory restrictions such as GDPR and the EU AI Act that may impact the feasibility of centralized
+optimization.
 
 The decentralized paradigm addresses these issues. A network of agents participate in the optimization
 process by sending local variable updates to their neighbors, no training data is transmitted. There are two main
