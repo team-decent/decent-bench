@@ -3,13 +3,15 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to decent-bench's documentation!
+Welcome to decent-bench!
 ========================================
 
+decent-bench allows you to benchmark decentralized optimization algorithms under various communication constraints,
+providing realistic algorithm comparisons in a user-friendly and highly configurable setting.
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
 
    API Reference <api/decent_bench>
-   Developer Guide <developer>
+   developer
+   author
