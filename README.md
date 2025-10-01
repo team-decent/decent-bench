@@ -6,7 +6,7 @@
 | [**Background**](#Background)
 
 decent-bench allows you to benchmark decentralized optimization algorithms under various communication constraints,
-providing realistic algorithm comparisons in a user-friendly and highly configurable manner.
+providing realistic algorithm comparisons in a user-friendly and highly configurable setting.
 
 
 ## Installation
@@ -36,7 +36,7 @@ However, as decentralized optimization relies on network communication, factors 
 network sparsity, and agent heterogeneity may all impact the optimization process. Therefore, these constraints must be
 considered when evaluating an algorithm's performance. This is where decent-bench comes in. By
 benchmarking algorithms in different settings with different communication constraints, decent-bench provides you with
-realistic algorithm comparisons in a user-friendly and highly configurable manner.
+realistic algorithm comparisons in a user-friendly and highly configurable setting.
 
 
 ## Author
