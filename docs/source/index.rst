@@ -13,6 +13,7 @@ providing realistic algorithm comparisons in a user-friendly and highly configur
    :maxdepth: 1
 
    background
+   user
    API Reference <api/decent_bench>
    developer
    author
