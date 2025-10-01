@@ -7,7 +7,7 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "decent-bench"
-copyright = "2025, team-decent"
+copyright = "2025, Team Decent"
 author = "team-decent"
 release = "0.0.0"
 
