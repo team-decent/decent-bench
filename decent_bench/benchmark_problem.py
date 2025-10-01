@@ -85,7 +85,7 @@ def create_regression_problem(
     dataset = SyntheticClassificationData(
         n_classes=2, n_partitions=n_agents, n_samples_per_partition=10, n_features=3, seed=0
     )
-    costs = [cost_function_cls(*p) for p in dataset.training_partitions]
+    costs = [cost_function_cls(*p) for p in dataset.get_training_partitions()]
     sum_cost = reduce(add, costs)
     optimal_x = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
     agent_activation_schemes = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
