@@ -118,7 +118,7 @@ Create a custom benchmark problem using existing resources.
     dataset = SyntheticClassificationData(
         n_classes=2, n_partitions=n_agents, n_samples_per_partition=10, n_features=3
     )
-    costs = [LogisticRegressionCost(*p) for p in dataset.training_partitions]
+    costs = [LogisticRegressionCost(*p) for p in dataset.get_training_partitions()]
     sum_cost = sum(costs[1:], start=costs[0])
     optimal_x = ca.accelerated_gradient_descent(
         sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16
@@ -182,7 +182,7 @@ schemes) by implementing the corresponding abstracts.
     class MyDropScheme(DropScheme): ...
 
     n_agents = 100
-    costs = [MyCostFunction(*p) for p in MyDataset().training_partitions]
+    costs = [MyCostFunction(*p) for p in MyDataset().get_training_partitions()]
     sum_cost = sum(costs[1:], start=costs[0])
     optimal_x = ca.accelerated_gradient_descent(
         sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16
