@@ -64,8 +64,8 @@ Configure communication constraints and other benchmark problem settings.
         )
 
 
-Configure runtime settings
---------------------------
+Configure execution settings
+----------------------------
 Configure settings for metrics, table format, trials, statistical confidence level, logging, and multiprocessing.
 
 .. code-block:: python
