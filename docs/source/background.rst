@@ -8,6 +8,7 @@ transferring data may raise privacy concerns, especially in the context of sensi
 There are also regulatory restrictions such as GDPR and the EU AI Act that may impact the feasibility of centralized
 optimization.
 
+
 The decentralized paradigm addresses these issues. A network of agents participate in the optimization
 process by sending local variable updates to their neighbors, no training data is transmitted. There are two main
 approaches in decentralized optimization, federated and distributed. In the federated approach, agents only communicate

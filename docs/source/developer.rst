@@ -73,7 +73,7 @@ Pull Requests
 
 Commit Messages
 ---------------
-To keep the git history easy to follow and to encourage well-scoped PRs, we follow certain rules for commit messages
+To keep the git history easy to follow  and to encourage well-scoped PRs, we follow certain rules for commit messages
 when merging into main. Each message uses this template:
 
 .. code-block:: bash
