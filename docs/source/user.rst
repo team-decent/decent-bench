@@ -150,7 +150,7 @@ Create a custom benchmark problem using existing resources.
     from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
 
     n_agents = 100
-    
+
     dataset = SyntheticClassificationData(
         n_classes=2, n_partitions=n_agents, n_samples_per_partition=10, n_features=3
     )
