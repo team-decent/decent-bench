@@ -61,6 +61,9 @@ important:
 
 Pull Requests
 -------------
+To give other contributors an opportunity to review and to run GitHub status checks, we use pull requests instead of
+merging directly to main. The process is detailed below:
+
 1. Fork the repository.
 2. Create a feature branch.
 3. Make your changes.
@@ -100,6 +103,7 @@ Notes:
     - Scope can be a subpackage, module or build tool, e.g. metrics, costs, or sphinx.
     - Max 72 characters per line.
     - Capitalize but do not punctuate subject.
+    - Start subject and description with a verb.
     - Use imperative mood in subject and description.
     - Description explains what changes and why it changes.
     - If the PR has a related issue but doesn't close it, skip the "closes"-keyword and simply reference the issue.
