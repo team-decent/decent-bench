@@ -170,7 +170,7 @@ class QuadraticCost(CostFunction):
 
         .. math:: \frac{1}{2} \mathbf{x}^T \mathbf{Ax} + \mathbf{b}^T \mathbf{x} + c
         """
-        return float(0.5 * x.dot(self.A.dot(x)) + self.b.dot(x) + self.c)
+        return float(0.5 * x.T @ self.A @ x + x.T @ self.b + self.c)
 
     def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
         r"""
@@ -240,7 +240,7 @@ class LinearRegressionCost(CostFunction):
     def __init__(self, A: NDArray[float64], b: NDArray[float64]):  # noqa: N803
         if A.shape[0] != b.shape[0]:
             raise ValueError(f"Dimension mismatch: A has {A.shape[0]} rows but b has {b.shape[0]} elements")
-        self.inner = QuadraticCost(A.T.dot(A), -A.T.dot(b), 0.5 * b.dot(b))
+        self.inner = QuadraticCost(A.T @ A, -A.T @ b, 0.5 * b.T @ b)
         self.A = A
         self.b = b
 
