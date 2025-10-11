@@ -70,6 +70,57 @@ class DGD(DstAlgorithm):
             for i in network.get_active_agents(k):
                 network.receive_all(i)
 
+@dataclass(eq=False)
+class ATC(DstAlgorithm):
+    r"""
+    Distributed gradient descent characterized by the update step below, called Adapt-Then-Combine (ATC) [1]. Alias `AdaptThenCombine`.
+
+    .. math::
+        \mathbf{x}_{i, k+1} = (\sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k} - \rho \nabla f_j(\mathbf{x}_{j,k}))
+
+    where
+    :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
+    j is a neighbor of i or i itself,
+    :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j,
+    :math:`\rho` is the step size,
+    and :math:`f_i` is agent i's local cost function.
+
+    .. [1] J. Chen and A. H. Sayed, "Diffusion Adaptation Strategies for Distributed Optimization and Learning Over Networks," IEEE Trans. Signal Process., vol. 60, no. 8, pp. 4289-4305, Aug. 2012, doi: 10.1109/TSP.2012.2198470.
+
+    """
+
+    iterations: int
+    step_size: float
+    name: str = "ATC"
+
+    def run(self, network: Network) -> None:
+        r"""
+        Run the algorithm with all :math:`\mathbf{x}` initialized using :func:`numpy.zeros`.
+
+        Args:
+            network: provides agents, neighbors etc.
+
+        """
+        for agent in network.get_all_agents():
+            x0 = np.zeros(agent.cost_function.domain_shape)
+            agent.initialize(x=x0, received_msgs=dict.fromkeys(network.get_neighbors(agent), x0), aux_vars={"y": x0})
+        W = network.metropolis_weights  # noqa: N806
+
+        for k in range(self.iterations):
+            # gradient step (adapt)
+            for i in network.get_active_agents(k):
+                i.aux_vars["y"] = i.x - self.step_size * i.cost_function.gradient(i.x)
+            # transmit and receive
+            for i in network.get_active_agents(k):
+                network.broadcast(i, i.aux_vars["y"])
+            # consensus (combine)
+            for i in network.get_active_agents(k):
+                network.receive_all(i)
+                neighborhood_avg = np.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], axis=0)
+                neighborhood_avg += W[i, i] * i.x
+                i.x = neighborhood_avg
+
+AdaptThenCombine = ATC # alias
 
 @dataclass(eq=False)
 class GT1(DstAlgorithm):
@@ -177,6 +228,77 @@ class GT2(DstAlgorithm):
             for i in network.get_active_agents(k):
                 network.receive_all(i)
 
+@dataclass(eq=False)
+class AugDGM(DstAlgorithm):
+    r"""
+    Gradient tracking algorithm characterized by the update step below, called Aug-DGM [1] or ATC-DIGing [2]. Alias `ATCDIGing`.
+
+    .. math::
+        \mathbf{x}_{i, k+1} = \sum_j \mathbf{W}_{ij} (\mathbf{x}_{j, k} - \rho \mathbf{y}_{j, k})
+    .. math::
+        \mathbf{y}_{i, k+1} = \sum_j \mathbf{W}_{ij} (\mathbf{y}_{j, k} + \nabla f_j(\mathbf{x}_{j,k+1}) - \nabla f_j(\mathbf{x}_{j,k}))
+
+    where
+    :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
+    :math:`\rho` is the step size,
+    :math:`f_i` is agent i's local cost function,
+    j is a neighbor of i or i itself,
+    and :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j.
+
+    .. [1] J. Xu, S. Zhu, Y. C. Soh, and L. Xie, "Augmented distributed gradient methods for multi-agent optimization under uncoordinated constant stepsizes," in 2015 54th IEEE Conference on Decision and Control (CDC), Osaka, Japan: IEEE, Dec. 2015, pp. 2055-2060. doi: 10.1109/CDC.2015.7402509.
+    .. [2] A. Nedic, A. Olshevsky, W. Shi, and C. A. Uribe, "Geometrically convergent distributed optimization with uncoordinated step-sizes," in 2017 American Control Conference (ACC), Seattle, WA, USA: IEEE, May 2017, pp. 3950–3955. doi: 10.23919/ACC.2017.7963560.
+
+    """
+
+    iterations: int
+    step_size: float
+    name: str = "Aug-DGM"
+
+    def run(self, network: Network) -> None:
+        r"""
+        Run the algorithm with all :math:`\mathbf{x}` and :math:`\mathbf{y}` initialized using :func:`numpy.zeros`.
+
+        Args:
+            network: provides agents, neighbors etc.
+
+        """
+        for i in network.get_all_agents():
+            x0 = np.zeros(i.cost_function.domain_shape)
+            y0 = i.cost_function.gradient(x0)
+            neighbors = network.get_neighbors(i)
+            i.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0})
+
+        W = network.metropolis_weights  # noqa: N806
+
+        for k in range(self.iterations):
+            # 1st communication round
+            #     step 1: perform local gradient step and communicate
+            for i in network.get_active_agents(k):
+                i.aux_vars["s"] = i.x - self.step_size * i.aux_vars["y"]
+                network.broadcast(i, i.aux_vars["s"])
+            
+            #     step 2: update state and compute new local gradient
+            for i in network.get_active_agents(k):
+                network.receive_all(i)
+                neighborhood_avg = np.sum([W[i, j] * s_j for j, s_j in i.received_messages.items()], axis=0)
+                neighborhood_avg += W[i, i] * i.aux_vars["s"]
+                i.x = neighborhood_avg    
+                i.aux_vars["g_new"] = i.cost_function.gradient(i.x)
+            
+            # 2nd communication round
+            #     step 1: transmit local gradient tracker
+            for i in network.get_active_agents(k):
+                network.broadcast(i, i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
+            
+            #     step 2: update y (global gradient estimator)
+            for i in network.get_active_agents(k):
+                network.receive_all(i)
+                neighborhood_avg = np.sum([W[i, j] * q_j for j, q_j in i.received_messages.items()], axis=0)
+                neighborhood_avg += W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
+                i.aux_vars["y"] = neighborhood_avg
+                i.aux_vars["g"] = i.aux_vars["g_new"]
+
+ATCDIGing = AugDGM # alias
 
 @dataclass(eq=False)
 class ADMM(DstAlgorithm):
