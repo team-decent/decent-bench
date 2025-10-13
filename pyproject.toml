@@ -54,14 +54,11 @@ deps = [
 ]
 
 [tool.tox.env.sphinx]
-description = "Clean up and regenerate rst and html files using sphinx"
+description = "Generate rst and html files using sphinx"
 deps = ["sphinx", "git+https://github.com/pydata/pydata-sphinx-theme.git@main"]
-allowlist_externals = ["find", "make"]
 commands = [
-  ["find", "docs/source/api", "-name", "*.rst", "!", "-path", "*/snippets/*", "-delete"],
   ["sphinx-apidoc", "-o", "docs/source/api", "decent_bench", "--separate", "--no-toc", "--templatedir=docs/source/_templates"],
-  ["make", "-C", "docs", "clean"],
-  ["make", "-C", "docs", "html", "SPHINXOPTS=-W"],
+  ["sphinx-build", "-W", "-E", "-b", "html", "docs/source", "docs/build/html"]
 ]
 
 [tool.tox.env.mypy]
