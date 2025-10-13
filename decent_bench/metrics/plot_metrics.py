@@ -149,7 +149,6 @@ def plot(
     manager = plt.get_current_fig_manager()
     if not manager:
         raise RuntimeError("Something went wrong, did not receive a FigureManager...")
-    manager.full_screen_toggle()
     plt.tight_layout()
     plt.show()
 
