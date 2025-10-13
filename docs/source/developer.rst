@@ -11,7 +11,7 @@ Getting Started
 Prerequisites
 ~~~~~~~~~~~~~
 * `Python 3.13+ <https://www.python.org/downloads/>`_
-* `tox <https://pypi.org/project/tox/>`_
+* `tox <https://tox.wiki/en/stable/installation.html>`_
 
 Installation for Development
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -19,8 +19,9 @@ Installation for Development
 
    git clone https://github.com/team-decent/decent-bench.git
    cd decent-bench
-   tox -e dev                     # create dev env
-   source .tox/dev/bin/activate   # activate dev env
+   tox -e dev                           # create dev env (admin privileges may be needed)
+   source .tox/dev/bin/activate         # activate dev env on Mac/Linux
+   source .\.tox\dev\Scripts\activate   # activate dev env on Windows
 
 
 
