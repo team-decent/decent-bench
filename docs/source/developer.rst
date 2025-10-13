@@ -15,7 +15,7 @@ Prerequisites
 
 Installation for Development
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.. code-block:: bash
+.. code-block::
 
    git clone https://github.com/team-decent/decent-bench.git
    cd decent-bench
@@ -27,18 +27,26 @@ Installation for Development
 
 Tooling
 -------
-The dev environment created with :code:`tox -e dev` has all dependencies and dev-dependencies installed. After
-activating the dev environment, various tools can be run. Examples include:
+To make sure all GitHub status checks pass, simply run :code:`tox`. You can also run individual checks:
 
-.. code-block:: bash
+.. code-block::
 
-    mypy decent_bench --strict      # find typing issues
-    pytest test                     # run tests
-    ruff check decent_bench --fix   # find and fix style issues
-    ruff format decent_bench        # format code
-    make -C docs html               # rebuild html doc files
-    tox -e sphinx                   # rebuild rst and html doc files
-    tox                             # run all GitHub status checks
+    tox -e mypy       # find typing issues
+    tox -e pytest     # run tests
+    tox -e ruff       # find formatting and style issues
+    tox -e sphinx     # rebuild documentation
+
+Note: Running :code:`tox` commands can take several minutes and may require admin privileges.
+
+Tools can also be used directly (instead of via tox) after activating the dev environment. Useful examples include:
+
+.. code-block::
+
+    ruff check decent_bench --fix                           # find and fix style issues
+    ruff format decent_bench                                # format code
+    mypy decent_bench --strict                              # find typing issues
+    pytest test                                             # run tests
+    sphinx-build -W -E -b html docs/source docs/build/html  # rebuild html doc files
 
 To verify that doc changes look good, use an html previewer such as
 `Live Preview <https://marketplace.visualstudio.com/items?itemName=ms-vscode.live-server>`_.
