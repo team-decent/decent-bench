@@ -21,7 +21,7 @@ Installation for Development
    cd decent-bench
    tox -e dev                           # create dev env (admin privileges may be needed)
    source .tox/dev/bin/activate         # activate dev env on Mac/Linux
-   source .\.tox\dev\Scripts\activate   # activate dev env on Windows
+   .\.tox\dev\Scripts\activate          # activate dev env on Windows
 
 
 
