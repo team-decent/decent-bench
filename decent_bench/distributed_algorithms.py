@@ -74,7 +74,7 @@ class DGD(DstAlgorithm):
 @dataclass(eq=False)
 class ATC(DstAlgorithm):
     r"""
-    Distributed gradient descent characterized by the update step below, called Adapt-Then-Combine (ATC) [r1]_. Alias `AdaptThenCombine`.
+    Adapt-Then-Combine (ATC) distributed gradient descent characterized by the update below [r1]_.
 
     .. math::
         \mathbf{x}_{i, k+1} = (\sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k} - \rho \nabla f_j(\mathbf{x}_{j,k}))
@@ -86,9 +86,13 @@ class ATC(DstAlgorithm):
     :math:`\rho` is the step size,
     and :math:`f_i` is agent i's local cost function.
 
-    .. [r1] J. Chen and A. H. Sayed, "Diffusion Adaptation Strategies for Distributed Optimization and Learning Over Networks," IEEE Trans. Signal Process., vol. 60, no. 8, pp. 4289-4305, Aug. 2012, doi: 10.1109/TSP.2012.2198470.
+    Alias: :class:`AdaptThenCombine`
 
-    """  # noqa: E501
+    .. [r1] J. Chen and A. H. Sayed, "Diffusion Adaptation Strategies for Distributed Optimization and
+            Learning Over Networks," IEEE Trans. Signal Process., vol. 60, no. 8, pp. 4289-4305,
+            Aug. 2012, doi: 10.1109/TSP.2012.2198470.
+
+    """
 
     iterations: int
     step_size: float
@@ -235,12 +239,13 @@ class GT2(DstAlgorithm):
 @dataclass(eq=False)
 class AugDGM(DstAlgorithm):
     r"""
-    Gradient tracking algorithm characterized by the update step below, called Aug-DGM [r2]_ or ATC-DIGing [r3]_. Alias `ATCDIGing`.
+    Aug-DGM [r2]_ or ATC-DIGing [r3]_ gradient tracking algorithm, characterized by the updates below.
 
     .. math::
         \mathbf{x}_{i, k+1} = \sum_j \mathbf{W}_{ij} (\mathbf{x}_{j, k} - \rho \mathbf{y}_{j, k})
     .. math::
-        \mathbf{y}_{i, k+1} = \sum_j \mathbf{W}_{ij} (\mathbf{y}_{j, k} + \nabla f_j(\mathbf{x}_{j,k+1}) - \nabla f_j(\mathbf{x}_{j,k}))
+        \mathbf{y}_{i, k+1} = \sum_j \mathbf{W}_{ij} (\mathbf{y}_{j, k}
+                            + \nabla f_j(\mathbf{x}_{j,k+1}) - \nabla f_j(\mathbf{x}_{j,k}))
 
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
@@ -249,10 +254,16 @@ class AugDGM(DstAlgorithm):
     j is a neighbor of i or i itself,
     and :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j.
 
-    .. [r2] J. Xu, S. Zhu, Y. C. Soh, and L. Xie, "Augmented distributed gradient methods for multi-agent optimization under uncoordinated constant stepsizes," in 2015 54th IEEE Conference on Decision and Control (CDC), Osaka, Japan: IEEE, Dec. 2015, pp. 2055-2060. doi: 10.1109/CDC.2015.7402509.
-    .. [r3] A. Nedic, A. Olshevsky, W. Shi, and C. A. Uribe, "Geometrically convergent distributed optimization with uncoordinated step-sizes," in 2017 American Control Conference (ACC), Seattle, WA, USA: IEEE, May 2017, pp. 3950-3955. doi: 10.23919/ACC.2017.7963560.
+    Alias: :class:`ATCDIGing`
 
-    """  # noqa: E501
+    .. [r2] J. Xu, S. Zhu, Y. C. Soh, and L. Xie, "Augmented distributed gradient methods for multi-agent
+            optimization under uncoordinated constant stepsizes," in 2015 54th IEEE Conference on Decision
+            and Control (CDC), Osaka, Japan: IEEE, Dec. 2015, pp. 2055-2060. doi: 10.1109/CDC.2015.7402509.
+    .. [r3] A. Nedic, A. Olshevsky, W. Shi, and C. A. Uribe, "Geometrically convergent distributed
+            optimization with uncoordinated step-sizes," in 2017 American Control Conference (ACC), Seattle,
+            WA, USA: IEEE, May 2017, pp. 3950-3955. doi: 10.23919/ACC.2017.7963560.
+
+    """
 
     iterations: int
     step_size: float
@@ -311,10 +322,11 @@ ATCDIGing = AugDGM  # alias
 @dataclass(eq=False)
 class WangElia(DstAlgorithm):
     r"""
-    Wang-Elia gradient tracking algorithm characterized by the update step below, see [r4]_ and [r5]_.
+    Wang-Elia gradient tracking algorithm characterized by the updates below, see [r4]_ and [r5]_.
 
     .. math::
-        \mathbf{x}_{i, k+1} = \mathbf{x}_{i, k} - \sum_j \mathbf{K}_{ij} (\mathbf{x}_{j, k} + mathbf{z}_{j, k}) - \rho \nabla f_i(\mathbf{x}_{i,k})
+        \mathbf{x}_{i, k+1} = \mathbf{x}_{i, k} - \sum_j \mathbf{K}_{ij} (\mathbf{x}_{j, k} + \mathbf{z}_{j, k})
+                            - \rho \nabla f_i(\mathbf{x}_{i,k})
     .. math::
         \mathbf{z}_{i, k+1} = \mathbf{z}_{i, k} + \sum_j \mathbf{K}_{ij} \mathbf{x}_{j, k}
 
@@ -323,12 +335,19 @@ class WangElia(DstAlgorithm):
     :math:`\rho` is the step size,
     :math:`f_i` is agent i's local cost function,
     j is a neighbor of i or i itself,
-    and :math:`\mathbf{K}_{ij}` is the weight between agent i and j. The matrix :math:`\mathbf{K}` can be chosen as :math:`0.5 (\mathbf{I} - \mathbf{W})`, where :math:`\mathbf{W}` is the Metropolis weight matrix.
+    and :math:`\mathbf{K}_{ij}` is the weight between agent i and j.
+    The matrix :math:`\mathbf{K}` is chosen as :math:`0.5 (\mathbf{I} - \mathbf{W})`,
+    where :math:`\mathbf{W}` is the Metropolis weight matrix.
 
-    .. [r4] J. Wang and N. Elia, "Control approach to distributed optimization," in 2010 48th Annual Allerton Conference on Communication, Control, and Computing (Allerton), Monticello, IL, USA: IEEE, Sep. 2010, pp. 557-561. doi: 10.1109/ALLERTON.2010.5706956.
-    .. [r5] M. Bin, I. Notarnicola, and T. Parisini, "Stability, Linear Convergence, and Robustness of the Wang-Elia Algorithm for Distributed Consensus Optimization," in 2022 IEEE 61st Conference on Decision and Control (CDC), Cancun, Mexico: IEEE, Dec. 2022, pp. 1610-1615. doi: 10.1109/CDC51059.2022.9993284.
+    .. [r4] J. Wang and N. Elia, "Control approach to distributed optimization," in 2010 48th Annual Allerton
+            Conference on Communication, Control, and Computing (Allerton), Monticello, IL, USA: IEEE, Sep. 2010,
+            pp. 557-561. doi: 10.1109/ALLERTON.2010.5706956.
+    .. [r5] M. Bin, I. Notarnicola, and T. Parisini, "Stability, Linear Convergence, and Robustness of the
+            Wang-Elia Algorithm for Distributed Consensus Optimization," in 2022 IEEE 61st Conference on
+            Decision and Control (CDC), Cancun, Mexico: IEEE, Dec. 2022, pp. 1610-1615.
+            doi: 10.1109/CDC51059.2022.9993284.
 
-    """  # noqa: E501
+    """
 
     iterations: int
     step_size: float
