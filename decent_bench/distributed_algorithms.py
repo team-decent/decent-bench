@@ -16,6 +16,11 @@ class DstAlgorithm(ABC):
     def name(self) -> str:
         """Name of the algorithm."""
 
+    @property
+    @abstractmethod
+    def iterations(self) -> int:
+        """Number of iterations to run."""
+
     @abstractmethod
     def _initialize(self, network: Network) -> None:
         """
@@ -47,10 +52,10 @@ class DstAlgorithm(ABC):
             network: provides agents, neighbors etc.
 
         """
-
         self._initialize(network)
         for k in range(self.iterations):
-                self._step(network, k)
+            self._step(network, k)
+
 
 @dataclass(eq=False)
 class DGD(DstAlgorithm):
@@ -69,8 +74,8 @@ class DGD(DstAlgorithm):
 
     """
 
-    iterations: int
     step_size: float
+    iterations: int
     name: str = "DGD"
 
     def _initialize(self, network: Network) -> None:
@@ -84,8 +89,8 @@ class DGD(DstAlgorithm):
         for agent in network.get_all_agents():
             x0 = np.zeros(agent.cost_function.domain_shape)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(network.get_neighbors(agent), x0))
-        self.W = network.metropolis_weights  # noqa: N806
-    
+        self.W = network.metropolis_weights
+
     def _step(self, network: Network, k: int) -> None:
         """
         Run one step of the algorithm.
@@ -128,8 +133,8 @@ class ATC(DstAlgorithm):
 
     """
 
-    iterations: int
     step_size: float
+    iterations: int
     name: str = "ATC"
 
     def _initialize(self, network: Network) -> None:
@@ -143,8 +148,8 @@ class ATC(DstAlgorithm):
         for agent in network.get_all_agents():
             x0 = np.zeros(agent.cost_function.domain_shape)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(network.get_neighbors(agent), x0), aux_vars={"y": x0})
-        self.W = network.metropolis_weights  # noqa: N806
-    
+        self.W = network.metropolis_weights
+
     def _step(self, network: Network, k: int) -> None:
         """
         Run one step of the algorithm.
@@ -192,8 +197,8 @@ class GT1(DstAlgorithm):
 
     """
 
-    iterations: int
     step_size: float
+    iterations: int
     name: str = "GT1"
 
     def _initialize(self, network: Network) -> None:
@@ -209,7 +214,7 @@ class GT1(DstAlgorithm):
             y0 = np.zeros(agent.cost_function.domain_shape)
             neighbors = network.get_neighbors(agent)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
-        self.W = network.metropolis_weights  # noqa: N806
+        self.W = network.metropolis_weights
 
     def _step(self, network: Network, k: int) -> None:
         """
@@ -255,8 +260,8 @@ class GT2(DstAlgorithm):
 
     """
 
-    iterations: int
     step_size: float
+    iterations: int
     name: str = "GT2"
 
     def _initialize(self, network: Network) -> None:
@@ -278,7 +283,7 @@ class GT2(DstAlgorithm):
                 aux_vars={"y": y0, "y_new": y1},
                 received_msgs=dict.fromkeys(network.get_neighbors(i), msg0),
             )
-        self.W = 0.5 * (np.eye(*(network.metropolis_weights.shape)) + network.metropolis_weights)  # noqa: N806
+        self.W = 0.5 * (np.eye(*(network.metropolis_weights.shape)) + network.metropolis_weights)
 
     def _step(self, network: Network, k: int) -> None:
         """
@@ -333,8 +338,8 @@ class AugDGM(DstAlgorithm):
 
     """
 
-    iterations: int
     step_size: float
+    iterations: int
     name: str = "Aug-DGM"
 
     def _initialize(self, network: Network) -> None:
@@ -353,7 +358,7 @@ class AugDGM(DstAlgorithm):
                 x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0}
             )
 
-        self.W = network.metropolis_weights  # noqa: N806
+        self.W = network.metropolis_weights
 
     def _step(self, network: Network, k: int) -> None:
         """
@@ -425,8 +430,8 @@ class WangElia(DstAlgorithm):
 
     """
 
-    iterations: int
     step_size: float
+    iterations: int
     name: str = "Wang-Elia"
 
     def _initialize(self, network: Network) -> None:
@@ -443,7 +448,7 @@ class WangElia(DstAlgorithm):
             i.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"z": x0, "x_old": x0})
 
         W = network.metropolis_weights  # noqa: N806
-        self.K = 0.5 * (np.eye(W.shape[0]) - W)  # noqa: N806
+        self.K = 0.5 * (np.eye(W.shape[0]) - W)
 
     def _step(self, network: Network, k: int) -> None:
         """
@@ -502,9 +507,9 @@ class ADMM(DstAlgorithm):
 
     """
 
-    iterations: int
     rho: float
     alpha: float
+    iterations: int
     name: str = "ADMM"
 
     def _initialize(self, network: Network) -> None:
@@ -515,7 +520,7 @@ class ADMM(DstAlgorithm):
             network: provides agents, neighbors etc.
 
         """
-        self.pN = {i: self.rho * len(network.get_neighbors(i)) for i in network.get_all_agents()}  # noqa: N806
+        self.pN = {i: self.rho * len(network.get_neighbors(i)) for i in network.get_all_agents()}
         all_agents = network.get_all_agents()
         for agent in all_agents:
             z0 = np.zeros((len(all_agents), *(agent.cost_function.domain_shape)))
