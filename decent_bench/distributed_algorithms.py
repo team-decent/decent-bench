@@ -351,8 +351,8 @@ class WangElia(DstAlgorithm):
 
     """
 
-    step_size: float
     iterations: int
+    step_size: float
     name: str = "Wang-Elia"
 
     def run(self, network: Network) -> None:
