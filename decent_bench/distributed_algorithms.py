@@ -17,15 +17,40 @@ class DstAlgorithm(ABC):
         """Name of the algorithm."""
 
     @abstractmethod
-    def run(self, network: Network) -> None:
+    def _initialize(self, network: Network) -> None:
         """
-        Run the algorithm.
+        Initialize the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
 
         """
 
+    @abstractmethod
+    def _step(self, network: Network, k: int) -> None:
+        """
+        Run one step of the algorithm.
+
+        Args:
+            network: provides agents, neighbors etc.
+            k: number of the step to run (0 to self.iterations - 1)
+
+        """
+
+    def run(self, network: Network) -> None:
+        """
+        Run the algorithm.
+
+        Performs `initialize` and then `step` for `iterations` times.
+
+        Args:
+            network: provides agents, neighbors etc.
+
+        """
+
+        self._initialize(network)
+        for k in range(self.iterations):
+                self._step(network, k)
 
 @dataclass(eq=False)
 class DGD(DstAlgorithm):
@@ -48,9 +73,9 @@ class DGD(DstAlgorithm):
     step_size: float
     name: str = "DGD"
 
-    def run(self, network: Network) -> None:
-        r"""
-        Run the algorithm with all :math:`\mathbf{x}` initialized using :func:`numpy.zeros`.
+    def _initialize(self, network: Network) -> None:
+        """
+        Initialize the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
@@ -59,16 +84,25 @@ class DGD(DstAlgorithm):
         for agent in network.get_all_agents():
             x0 = np.zeros(agent.cost_function.domain_shape)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(network.get_neighbors(agent), x0))
-        W = network.metropolis_weights  # noqa: N806
-        for k in range(self.iterations):
-            for i in network.get_active_agents(k):
-                neighborhood_avg = np.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], axis=0)
-                neighborhood_avg += W[i, i] * i.x
-                i.x = neighborhood_avg - self.step_size * i.cost_function.gradient(i.x)
-            for i in network.get_active_agents(k):
-                network.broadcast(i, i.x)
-            for i in network.get_active_agents(k):
-                network.receive_all(i)
+        self.W = network.metropolis_weights  # noqa: N806
+    
+    def _step(self, network: Network, k: int) -> None:
+        """
+        Run one step of the algorithm.
+
+        Args:
+            network: provides agents, neighbors etc.
+            k: number of the step to run (0 to self.iterations - 1)
+
+        """
+        for i in network.get_active_agents(k):
+            neighborhood_avg = np.sum([self.W[i, j] * x_j for j, x_j in i.received_messages.items()], axis=0)
+            neighborhood_avg += self.W[i, i] * i.x
+            i.x = neighborhood_avg - self.step_size * i.cost_function.gradient(i.x)
+        for i in network.get_active_agents(k):
+            network.broadcast(i, i.x)
+        for i in network.get_active_agents(k):
+            network.receive_all(i)
 
 
 @dataclass(eq=False)
@@ -98,9 +132,9 @@ class ATC(DstAlgorithm):
     step_size: float
     name: str = "ATC"
 
-    def run(self, network: Network) -> None:
-        r"""
-        Run the algorithm with all :math:`\mathbf{x}` initialized using :func:`numpy.zeros`.
+    def _initialize(self, network: Network) -> None:
+        """
+        Initialize the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
@@ -109,21 +143,31 @@ class ATC(DstAlgorithm):
         for agent in network.get_all_agents():
             x0 = np.zeros(agent.cost_function.domain_shape)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(network.get_neighbors(agent), x0), aux_vars={"y": x0})
-        W = network.metropolis_weights  # noqa: N806
+        self.W = network.metropolis_weights  # noqa: N806
+    
+    def _step(self, network: Network, k: int) -> None:
+        """
+        Run one step of the algorithm.
 
-        for k in range(self.iterations):
-            # gradient step (a.k.a. adapt step)
-            for i in network.get_active_agents(k):
-                i.aux_vars["y"] = i.x - self.step_size * i.cost_function.gradient(i.x)
-            # transmit and receive
-            for i in network.get_active_agents(k):
-                network.broadcast(i, i.aux_vars["y"])
-            # consensus (a.k.a. combine step)
-            for i in network.get_active_agents(k):
-                network.receive_all(i)
-                neighborhood_avg = np.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], axis=0)
-                neighborhood_avg += W[i, i] * i.x
-                i.x = neighborhood_avg
+        Args:
+            network: provides agents, neighbors etc.
+            k: number of the step to run (0 to self.iterations - 1)
+
+        """
+        # gradient step (a.k.a. adapt step)
+        for i in network.get_active_agents(k):
+            i.aux_vars["y"] = i.x - self.step_size * i.cost_function.gradient(i.x)
+
+        # transmit and receive
+        for i in network.get_active_agents(k):
+            network.broadcast(i, i.aux_vars["y"])
+
+        # consensus (a.k.a. combine step)
+        for i in network.get_active_agents(k):
+            network.receive_all(i)
+            neighborhood_avg = np.sum([self.W[i, j] * x_j for j, x_j in i.received_messages.items()], axis=0)
+            neighborhood_avg += self.W[i, i] * i.x
+            i.x = neighborhood_avg
 
 
 AdaptThenCombine = ATC  # alias
@@ -152,9 +196,9 @@ class GT1(DstAlgorithm):
     step_size: float
     name: str = "GT1"
 
-    def run(self, network: Network) -> None:
-        r"""
-        Run the algorithm with all :math:`\mathbf{x}` and :math:`\mathbf{y}` initialized using :func:`numpy.zeros`.
+    def _initialize(self, network: Network) -> None:
+        """
+        Initialize the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
@@ -165,18 +209,30 @@ class GT1(DstAlgorithm):
             y0 = np.zeros(agent.cost_function.domain_shape)
             neighbors = network.get_neighbors(agent)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
-        W = network.metropolis_weights  # noqa: N806
-        for k in range(self.iterations):
-            for i in network.get_active_agents(k):
-                i.aux_vars["y_new"] = i.x - self.step_size * i.cost_function.gradient(i.x)
-                neighborhood_avg = np.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], axis=0)
-                neighborhood_avg += W[i, i] * i.x
-                i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
-                i.aux_vars["y"] = i.aux_vars["y_new"]
-            for i in network.get_active_agents(k):
-                network.broadcast(i, i.x)
-            for i in network.get_active_agents(k):
-                network.receive_all(i)
+        self.W = network.metropolis_weights  # noqa: N806
+
+    def _step(self, network: Network, k: int) -> None:
+        """
+        Run one step of the algorithm.
+
+        Args:
+            network: provides agents, neighbors etc.
+            k: number of the step to run (0 to self.iterations - 1)
+
+        """
+        # local gradient step and consensus
+        for i in network.get_active_agents(k):
+            i.aux_vars["y_new"] = i.x - self.step_size * i.cost_function.gradient(i.x)
+            neighborhood_avg = np.sum([self.W[i, j] * x_j for j, x_j in i.received_messages.items()], axis=0)
+            neighborhood_avg += self.W[i, i] * i.x
+            i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
+            i.aux_vars["y"] = i.aux_vars["y_new"]
+
+        # communication round
+        for i in network.get_active_agents(k):
+            network.broadcast(i, i.x)
+        for i in network.get_active_agents(k):
+            network.receive_all(i)
 
 
 @dataclass(eq=False)
@@ -203,9 +259,9 @@ class GT2(DstAlgorithm):
     step_size: float
     name: str = "GT2"
 
-    def run(self, network: Network) -> None:
-        r"""
-        Run the algorithm with all :math:`\mathbf{x}` and :math:`\mathbf{y}` initialized using :func:`numpy.zeros`.
+    def _initialize(self, network: Network) -> None:
+        """
+        Initialize the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
@@ -222,18 +278,30 @@ class GT2(DstAlgorithm):
                 aux_vars={"y": y0, "y_new": y1},
                 received_msgs=dict.fromkeys(network.get_neighbors(i), msg0),
             )
-        W = 0.5 * (np.eye(*(network.metropolis_weights.shape)) + network.metropolis_weights)  # noqa: N806
-        for k in range(self.iterations):
-            for i in network.get_active_agents(k):
-                i.x = np.sum([W[i, j] * msg for j, msg in i.received_messages.items()], axis=0) + W[i, i] * (
-                    i.x + i.aux_vars["y_new"] - i.aux_vars["y"]
-                )
-                i.aux_vars["y"] = i.aux_vars["y_new"]
-                i.aux_vars["y_new"] = i.x - self.step_size * i.cost_function.gradient(i.x)
-            for i in network.get_active_agents(k):
-                network.broadcast(i, i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
-            for i in network.get_active_agents(k):
-                network.receive_all(i)
+        self.W = 0.5 * (np.eye(*(network.metropolis_weights.shape)) + network.metropolis_weights)  # noqa: N806
+
+    def _step(self, network: Network, k: int) -> None:
+        """
+        Run one step of the algorithm.
+
+        Args:
+            network: provides agents, neighbors etc.
+            k: number of the step to run (0 to self.iterations - 1)
+
+        """
+        # local gradient step and consensus
+        for i in network.get_active_agents(k):
+            i.x = np.sum([self.W[i, j] * msg for j, msg in i.received_messages.items()], axis=0) + self.W[i, i] * (
+                i.x + i.aux_vars["y_new"] - i.aux_vars["y"]
+            )
+            i.aux_vars["y"] = i.aux_vars["y_new"]
+            i.aux_vars["y_new"] = i.x - self.step_size * i.cost_function.gradient(i.x)
+
+        # communication round
+        for i in network.get_active_agents(k):
+            network.broadcast(i, i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
+        for i in network.get_active_agents(k):
+            network.receive_all(i)
 
 
 @dataclass(eq=False)
@@ -269,9 +337,9 @@ class AugDGM(DstAlgorithm):
     step_size: float
     name: str = "Aug-DGM"
 
-    def run(self, network: Network) -> None:
-        r"""
-        Run the algorithm with all :math:`\mathbf{x}` and :math:`\mathbf{y}` initialized using :func:`numpy.zeros`.
+    def _initialize(self, network: Network) -> None:
+        """
+        Initialize the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
@@ -285,35 +353,43 @@ class AugDGM(DstAlgorithm):
                 x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0}
             )
 
-        W = network.metropolis_weights  # noqa: N806
+        self.W = network.metropolis_weights  # noqa: N806
 
-        for k in range(self.iterations):
-            # 1st communication round
-            #     step 1: perform local gradient step and communicate
-            for i in network.get_active_agents(k):
-                i.aux_vars["s"] = i.x - self.step_size * i.aux_vars["y"]
-                network.broadcast(i, i.aux_vars["s"])
+    def _step(self, network: Network, k: int) -> None:
+        """
+        Run one step of the algorithm.
 
-            #     step 2: update state and compute new local gradient
-            for i in network.get_active_agents(k):
-                network.receive_all(i)
-                neighborhood_avg = np.sum([W[i, j] * s_j for j, s_j in i.received_messages.items()], axis=0)
-                neighborhood_avg += W[i, i] * i.aux_vars["s"]
-                i.x = neighborhood_avg
-                i.aux_vars["g_new"] = i.cost_function.gradient(i.x)
+        Args:
+            network: provides agents, neighbors etc.
+            k: number of the step to run (0 to self.iterations - 1)
 
-            # 2nd communication round
-            #     step 1: transmit local gradient tracker
-            for i in network.get_active_agents(k):
-                network.broadcast(i, i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
+        """
+        # 1st communication round
+        #     step 1: perform local gradient step and communicate
+        for i in network.get_active_agents(k):
+            i.aux_vars["s"] = i.x - self.step_size * i.aux_vars["y"]
+            network.broadcast(i, i.aux_vars["s"])
 
-            #     step 2: update y (global gradient estimator)
-            for i in network.get_active_agents(k):
-                network.receive_all(i)
-                neighborhood_avg = np.sum([W[i, j] * q_j for j, q_j in i.received_messages.items()], axis=0)
-                neighborhood_avg += W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
-                i.aux_vars["y"] = neighborhood_avg
-                i.aux_vars["g"] = i.aux_vars["g_new"]
+        #     step 2: update state and compute new local gradient
+        for i in network.get_active_agents(k):
+            network.receive_all(i)
+            neighborhood_avg = np.sum([self.W[i, j] * s_j for j, s_j in i.received_messages.items()], axis=0)
+            neighborhood_avg += self.W[i, i] * i.aux_vars["s"]
+            i.x = neighborhood_avg
+            i.aux_vars["g_new"] = i.cost_function.gradient(i.x)
+
+        # 2nd communication round
+        #     step 1: transmit local gradient tracker
+        for i in network.get_active_agents(k):
+            network.broadcast(i, i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
+
+        #     step 2: update y (global gradient estimator)
+        for i in network.get_active_agents(k):
+            network.receive_all(i)
+            neighborhood_avg = np.sum([self.W[i, j] * q_j for j, q_j in i.received_messages.items()], axis=0)
+            neighborhood_avg += self.W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
+            i.aux_vars["y"] = neighborhood_avg
+            i.aux_vars["g"] = i.aux_vars["g_new"]
 
 
 ATCDIGing = AugDGM  # alias
@@ -353,9 +429,9 @@ class WangElia(DstAlgorithm):
     step_size: float
     name: str = "Wang-Elia"
 
-    def run(self, network: Network) -> None:
-        r"""
-        Run the algorithm with all :math:`\mathbf{x}` and :math:`\mathbf{y}` initialized using :func:`numpy.zeros`.
+    def _initialize(self, network: Network) -> None:
+        """
+        Initialize the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
@@ -367,32 +443,40 @@ class WangElia(DstAlgorithm):
             i.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"z": x0, "x_old": x0})
 
         W = network.metropolis_weights  # noqa: N806
-        K = 0.5 * (np.eye(W.shape[0]) - W)  # noqa: N806
+        self.K = 0.5 * (np.eye(W.shape[0]) - W)  # noqa: N806
 
-        for k in range(self.iterations):
-            # 1st communication round
-            for i in network.get_active_agents(k):
-                network.broadcast(i, i.x + i.aux_vars["z"])
+    def _step(self, network: Network, k: int) -> None:
+        """
+        Run one step of the algorithm.
 
-            # do consensus and local gradient step
-            for i in network.get_active_agents(k):
-                network.receive_all(i)
-                neighborhood_avg = np.sum([K[i, j] * m_j for j, m_j in i.received_messages.items()], axis=0)
-                neighborhood_avg += K[i, i] * (i.x + i.aux_vars["z"])
+        Args:
+            network: provides agents, neighbors etc.
+            k: number of the step to run (0 to self.iterations - 1)
 
-                i.aux_vars["x_old"] = i.x
-                i.x = i.x - neighborhood_avg - self.step_size * i.cost_function.gradient(i.x)
+        """
+        # 1st communication round
+        for i in network.get_active_agents(k):
+            network.broadcast(i, i.x + i.aux_vars["z"])
 
-            # 2nd communication round
-            for i in network.get_active_agents(k):
-                network.broadcast(i, i.aux_vars["x_old"])
+        # do consensus and local gradient step
+        for i in network.get_active_agents(k):
+            network.receive_all(i)
+            neighborhood_avg = np.sum([self.K[i, j] * m_j for j, m_j in i.received_messages.items()], axis=0)
+            neighborhood_avg += self.K[i, i] * (i.x + i.aux_vars["z"])
 
-            # update auxiliary variable
-            for i in network.get_active_agents(k):
-                network.receive_all(i)
-                neighborhood_avg = np.sum([K[i, j] * m_j for j, m_j in i.received_messages.items()], axis=0)
-                neighborhood_avg += K[i, i] * i.aux_vars["x_old"]
-                i.aux_vars["z"] += neighborhood_avg
+            i.aux_vars["x_old"] = i.x
+            i.x = i.x - neighborhood_avg - self.step_size * i.cost_function.gradient(i.x)
+
+        # 2nd communication round
+        for i in network.get_active_agents(k):
+            network.broadcast(i, i.aux_vars["x_old"])
+
+        # update auxiliary variable
+        for i in network.get_active_agents(k):
+            network.receive_all(i)
+            neighborhood_avg = np.sum([self.K[i, j] * m_j for j, m_j in i.received_messages.items()], axis=0)
+            neighborhood_avg += self.K[i, i] * i.aux_vars["x_old"]
+            i.aux_vars["z"] += neighborhood_avg
 
 
 @dataclass(eq=False)
@@ -423,19 +507,19 @@ class ADMM(DstAlgorithm):
     alpha: float
     name: str = "ADMM"
 
-    def run(self, network: Network) -> None:
-        r"""
-        Run the algorithm with :math:`\mathbf{Z}` initialized using :func:`numpy.zeros`.
+    def _initialize(self, network: Network) -> None:
+        """
+        Initialize the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
 
         """
-        pN = {i: self.rho * len(network.get_neighbors(i)) for i in network.get_all_agents()}  # noqa: N806
+        self.pN = {i: self.rho * len(network.get_neighbors(i)) for i in network.get_all_agents()}  # noqa: N806
         all_agents = network.get_all_agents()
         for agent in all_agents:
             z0 = np.zeros((len(all_agents), *(agent.cost_function.domain_shape)))
-            x1 = agent.cost_function.proximal(y=np.sum(z0, axis=0) / pN[agent], rho=1 / pN[agent])
+            x1 = agent.cost_function.proximal(y=np.sum(z0, axis=0) / self.pN[agent], rho=1 / self.pN[agent])
             # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
             msg0: NDArray[float64] = z0[agent] - 2 * self.rho * x1
             agent.initialize(
@@ -443,14 +527,23 @@ class ADMM(DstAlgorithm):
                 aux_vars={"z": z0},
                 received_msgs=dict.fromkeys(network.get_neighbors(agent), msg0),
             )
-        for k in range(self.iterations):
-            for i in network.get_active_agents(k):
-                i.x = i.cost_function.proximal(y=np.sum(i.aux_vars["z"], axis=0) / pN[i], rho=1 / pN[i])
-            for i in network.get_active_agents(k):
-                for j in network.get_neighbors(i):
-                    network.send(i, j, i.aux_vars["z"][j] - 2 * self.rho * i.x)
-            for i in network.get_active_agents(k):
-                network.receive_all(i)
-            for i in network.get_active_agents(k):
-                for j in network.get_neighbors(i):
-                    i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (i.received_messages[j])
+
+    def _step(self, network: Network, k: int) -> None:
+        """
+        Run one step of the algorithm.
+
+        Args:
+            network: provides agents, neighbors etc.
+            k: number of the step to run (0 to self.iterations - 1)
+
+        """
+        for i in network.get_active_agents(k):
+            i.x = i.cost_function.proximal(y=np.sum(i.aux_vars["z"], axis=0) / self.pN[i], rho=1 / self.pN[i])
+        for i in network.get_active_agents(k):
+            for j in network.get_neighbors(i):
+                network.send(i, j, i.aux_vars["z"][j] - 2 * self.rho * i.x)
+        for i in network.get_active_agents(k):
+            network.receive_all(i)
+        for i in network.get_active_agents(k):
+            for j in network.get_neighbors(i):
+                i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (i.received_messages[j])
