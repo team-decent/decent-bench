@@ -50,7 +50,7 @@ class DGD(DstAlgorithm):
 
     def run(self, network: Network) -> None:
         r"""
-        Run the algorithm with all :math:`\mathbf{x}` initialized using :func:`numpy.zeros`.
+        Run the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
@@ -100,7 +100,7 @@ class ATC(DstAlgorithm):
 
     def run(self, network: Network) -> None:
         r"""
-        Run the algorithm with all :math:`\mathbf{x}` and :math:`\mathbf{y}` initialized using :func:`numpy.zeros`.
+        Run the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
@@ -158,7 +158,7 @@ class GT1(DstAlgorithm):
 
     def run(self, network: Network) -> None:
         r"""
-        Run the algorithm with all :math:`\mathbf{x}` and :math:`\mathbf{y}` initialized using :func:`numpy.zeros`.
+        Run the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
@@ -209,7 +209,7 @@ class GT2(DstAlgorithm):
 
     def run(self, network: Network) -> None:
         r"""
-        Run the algorithm with all :math:`\mathbf{x}` and :math:`\mathbf{y}` initialized using :func:`numpy.zeros`.
+        Run the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
@@ -275,7 +275,7 @@ class AugDGM(DstAlgorithm):
 
     def run(self, network: Network) -> None:
         r"""
-        Run the algorithm with all :math:`\mathbf{x}` and :math:`\mathbf{y}` initialized using :func:`numpy.zeros`.
+        Run the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
@@ -363,7 +363,7 @@ class WangElia(DstAlgorithm):
 
     def run(self, network: Network) -> None:
         r"""
-        Run the algorithm with all :math:`\mathbf{x}` and :math:`\mathbf{y}` initialized using :func:`numpy.zeros`.
+        Run the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
@@ -437,7 +437,7 @@ class ADMM(DstAlgorithm):
 
     def run(self, network: Network) -> None:
         r"""
-        Run the algorithm with :math:`\mathbf{Z}` initialized using :func:`numpy.zeros`.
+        Run the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
