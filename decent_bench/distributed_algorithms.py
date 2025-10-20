@@ -123,6 +123,8 @@ class ATC(DstAlgorithm):
             # consensus (a.k.a. combine step)
             for i in network.get_active_agents(k):
                 network.receive_all(i)
+
+            for i in network.get_active_agents(k):
                 neighborhood_avg = np.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], axis=0)
                 neighborhood_avg += W[i, i] * i.x
                 i.x = neighborhood_avg
@@ -299,6 +301,8 @@ class AugDGM(DstAlgorithm):
             #     step 2: update state and compute new local gradient
             for i in network.get_active_agents(k):
                 network.receive_all(i)
+
+            for i in network.get_active_agents(k):
                 neighborhood_avg = np.sum([W[i, j] * s_j for j, s_j in i.received_messages.items()], axis=0)
                 neighborhood_avg += W[i, i] * i.aux_vars["s"]
                 i.x = neighborhood_avg
@@ -312,6 +316,8 @@ class AugDGM(DstAlgorithm):
             #     step 2: update y (global gradient estimator)
             for i in network.get_active_agents(k):
                 network.receive_all(i)
+
+            for i in network.get_active_agents(k):
                 neighborhood_avg = np.sum([W[i, j] * q_j for j, q_j in i.received_messages.items()], axis=0)
                 neighborhood_avg += W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
                 i.aux_vars["y"] = neighborhood_avg
@@ -379,6 +385,8 @@ class WangElia(DstAlgorithm):
             # do consensus and local gradient step
             for i in network.get_active_agents(k):
                 network.receive_all(i)
+
+            for i in network.get_active_agents(k):
                 neighborhood_avg = np.sum([K[i, j] * m_j for j, m_j in i.received_messages.items()], axis=0)
                 neighborhood_avg += K[i, i] * (i.x + i.aux_vars["z"])
 
@@ -392,6 +400,8 @@ class WangElia(DstAlgorithm):
             # update auxiliary variable
             for i in network.get_active_agents(k):
                 network.receive_all(i)
+
+            for i in network.get_active_agents(k):
                 neighborhood_avg = np.sum([K[i, j] * m_j for j, m_j in i.received_messages.items()], axis=0)
                 neighborhood_avg += K[i, i] * i.aux_vars["x_old"]
                 i.aux_vars["z"] += neighborhood_avg
