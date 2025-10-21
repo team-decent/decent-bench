@@ -1,6 +1,6 @@
 <img src="https://raw.githubusercontent.com/team-decent/decent-bench/refs/heads/main/docs/source/_static/logo.png" alt="decent-bench logo" align="right" width="70" />
 
-# Welcome to decent-bench
+# Welcome to decent-bench 
 [![Docs](https://img.shields.io/readthedocs/decent-bench)](
 https://decent-bench.readthedocs.io/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/decent-bench?label=PyPI%20downloads)](
