@@ -296,6 +296,8 @@ class AugDGM(DstAlgorithm):
             #     step 1: perform local gradient step and communicate
             for i in network.get_active_agents(k):
                 i.aux_vars["s"] = i.x - self.step_size * i.aux_vars["y"]
+
+            for i in network.get_active_agents(k):
                 network.broadcast(i, i.aux_vars["s"])
 
             #     step 2: update state and compute new local gradient
