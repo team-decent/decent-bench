@@ -410,6 +410,261 @@ class WangElia(DstAlgorithm):
 
 
 @dataclass(eq=False)
+class EXTRA(DstAlgorithm):
+    r"""
+    EXTRA [r6]_ gradient tracking algorithm characterized by the update steps below.
+
+    .. math::
+        \mathbf{x}_{i, k+1}
+        = \mathbf{x}_{i, k} + \sum_j \mathbf{W}_{ij} \mathbf{x}_{j,k}
+        - \sum_j \tilde{\mathbf{W}}_{ij} \mathbf{x}_{j,k-1}
+        - \rho (\nabla f_i(\mathbf{x}_{i,k}) - \nabla f_i(\mathbf{x}_{i,k-1}))
+
+    where
+    :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
+    :math:`\rho` is the step size,
+    :math:`f_i` is agent i's local cost function,
+    j is a neighbor of i or i itself,
+    :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j,
+    and :math:`\tilde{\mathbf{W}} = (\mathbf{I} + \mathbf{W}) / 2`.
+
+    .. [r6] W. Shi, Q. Ling, G. Wu, and W. Yin, "EXTRA: An Exact First-Order Algorithm for Decentralized
+            Consensus Optimization," SIAM J. Optim., vol. 25, no. 2, pp. 944-966, Jan. 2015,
+            doi: 10.1137/14096668X.
+
+    """
+
+    iterations: int
+    step_size: float
+    name: str = "EXTRA"
+
+    def run(self, network: Network) -> None:
+        r"""
+        Run the algorithm.
+
+        Args:
+            network: provides agents, neighbors etc.
+
+        """
+        # initialization (iteration k=0)
+        for i in network.get_all_agents():
+            x0 = np.zeros(i.cost_function.domain_shape)
+            i.initialize(
+                x=x0,
+                received_msgs=dict.fromkeys(network.get_neighbors(i), x0),
+                aux_vars={"x_old": x0, "x_old_old": x0, "x_cons": x0},
+            )
+
+        W = network.metropolis_weights  # noqa: N806
+
+        # first iteration (iteration k=1)
+        for i in network.get_active_agents(0):
+            network.broadcast(i, i.x)
+        for i in network.get_active_agents(0):
+            network.receive_all(i)
+        for i in network.get_active_agents(0):
+            neighborhood_avg = np.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], axis=0)
+            neighborhood_avg += W[i, i] * i.x
+            i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
+            i.aux_vars["x_old"] = i.x  # store x_0
+            i.x = neighborhood_avg - self.step_size * i.cost_function.gradient(i.x)
+
+        # subsequent iterations (k >= 2)
+        for k in range(1, self.iterations):
+            for i in network.get_active_agents(k):
+                network.broadcast(i, i.x)
+            for i in network.get_active_agents(k):
+                network.receive_all(i)
+            for i in network.get_active_agents(k):
+                neighborhood_avg = np.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], axis=0)
+                neighborhood_avg += W[i, i] * i.x
+                i.aux_vars["x_old_old"] = i.aux_vars["x_old"]  # store x_{k-1}
+                i.aux_vars["x_old"] = i.x  # store x_k
+                # update x_{k+1}
+                i.x = (
+                    i.x
+                    + neighborhood_avg
+                    - 0.5 * i.aux_vars["x_old_old"]
+                    - 0.5 * i.aux_vars["x_cons"]
+                    - self.step_size
+                    * (i.cost_function.gradient(i.x) - i.cost_function.gradient(i.aux_vars["x_old_old"]))
+                )
+                i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
+
+
+@dataclass(eq=False)
+class ATCTracking(DstAlgorithm):
+    r"""
+    ATC-Tracking [r7]_, [r8]_, [r9]_ gradient tracking algorithm, characterized by the updates below.
+
+    .. math::
+        \mathbf{x}_{i, k+1} = \sum_j \mathbf{W}_{ij} (\mathbf{x}_{j, k} - \rho \mathbf{y}_{j, k})
+    .. math::
+        \mathbf{y}_{i, k+1} = \sum_j \mathbf{W}_{ij} \mathbf{y}_{j, k}
+                            + \nabla f_i(\mathbf{x}_{i,k+1}) - \nabla f_i(\mathbf{x}_{i,k})
+
+    where
+    :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
+    :math:`\rho` is the step size,
+    :math:`f_i` is agent i's local cost function,
+    j is a neighbor of i or i itself,
+    and :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j.
+
+    Aliases: :class:`SONATA`, :class:`NEXT`, :class:`ATCT`
+
+    .. [r7] P. Di Lorenzo and G. Scutari, "NEXT: In-Network Nonconvex Optimization," IEEE Transactions
+            on Signal and Information Processing over Networks, vol. 2, no. 2, pp. 120-136, Jun. 2016,
+            doi: 10.1109/TSIPN.2016.2524588.
+
+    .. [r8] G. Scutari and Y. Sun, "Distributed nonconvex constrained optimization over time-varying
+            digraphs," Math. Program., vol. 176, no. 1-2, pp. 497-544, Jul. 2019, doi: 10.1007/s10107-018-01357-w.
+
+    .. [r9] S. A. Alghunaim, E. K. Ryu, K. Yuan, and A. H. Sayed, "Decentralized Proximal Gradient Algorithms
+            With Linear Convergence Rates," IEEE Transactions on Automatic Control, vol. 66, no. 6, pp. 2787-2794,
+            Jun. 2021, doi: 10.1109/TAC.2020.3009363.
+
+    """
+
+    iterations: int
+    step_size: float
+    name: str = "ATC-Tracking"
+
+    def run(self, network: Network) -> None:
+        r"""
+        Run the algorithm.
+
+        Args:
+            network: provides agents, neighbors etc.
+
+        """
+        for i in network.get_all_agents():
+            x0 = np.zeros(i.cost_function.domain_shape)
+            y0 = i.cost_function.gradient(x0)
+            neighbors = network.get_neighbors(i)
+            i.initialize(
+                x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0}
+            )
+
+        W = network.metropolis_weights  # noqa: N806
+
+        for k in range(self.iterations):
+            # 1st communication round
+            #     step 1: perform local gradient step and communicate
+            for i in network.get_active_agents(k):
+                i.aux_vars["s"] = i.x - self.step_size * i.aux_vars["y"]
+
+            for i in network.get_active_agents(k):
+                network.broadcast(i, i.aux_vars["s"])
+
+            #     step 2: update state and compute new local gradient
+            for i in network.get_active_agents(k):
+                network.receive_all(i)
+
+            for i in network.get_active_agents(k):
+                neighborhood_avg = np.sum([W[i, j] * s_j for j, s_j in i.received_messages.items()], axis=0)
+                neighborhood_avg += W[i, i] * i.aux_vars["s"]
+                i.x = neighborhood_avg
+                i.aux_vars["g_new"] = i.cost_function.gradient(i.x)
+
+            # 2nd communication round
+            #     step 1: transmit local gradient tracker
+            for i in network.get_active_agents(k):
+                network.broadcast(i, i.aux_vars["y"])
+
+            #     step 2: update y (global gradient estimator)
+            for i in network.get_active_agents(k):
+                network.receive_all(i)
+
+            for i in network.get_active_agents(k):
+                neighborhood_avg = np.sum([W[i, j] * q_j for j, q_j in i.received_messages.items()], axis=0)
+                neighborhood_avg += W[i, i] * i.aux_vars["y"]
+                i.aux_vars["y"] = neighborhood_avg + i.aux_vars["g_new"] - i.aux_vars["g"]
+                i.aux_vars["g"] = i.aux_vars["g_new"]
+
+
+SONATA = ATCTracking  # alias
+NEXT = ATCTracking  # alias
+ATCT = ATCTracking  # alias
+
+
+@dataclass(eq=False)
+class NIDS(DstAlgorithm):
+    r"""
+    NIDS [r10]_ gradient tracking algorithm characterized by the update steps below.
+
+    .. math::
+        \mathbf{x}_{i, k+1}
+        = \sum_j \tilde{\mathbf{W}}_{ij} (2 x_{j,k} - x_{j, k-1}
+        - \rho \nabla f_j(\mathbf{x}_{j,k}) + \rho \nabla f_j(\mathbf{x}_{j,k-1}))
+
+    where
+    :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
+    :math:`\rho` is the step size,
+    :math:`f_i` is agent i's local cost function,
+    j is a neighbor of i or i itself,
+    and :math:`\tilde{\mathbf{W}} = (\mathbf{I} + \mathbf{W}) / 2`
+    with :math:`\mathbf{W}` are the Metropolis weights.
+
+    This is a simplified version of the algorithm proposed in [r10]_ (see eq. (9) therein).
+
+    .. [r10] Z. Li, W. Shi, and M. Yan, "A Decentralized Proximal-Gradient Method With Network
+            Independent Step-Sizes and Separated Convergence Rates," IEEE Trans. Signal Process.,
+            vol. 67, no. 17, pp. 4494-4506, Sep. 2019, doi: 10.1109/TSP.2019.2926022.
+
+    """
+
+    iterations: int
+    step_size: float
+    name: str = "NIDS"
+
+    def run(self, network: Network) -> None:
+        r"""
+        Run the algorithm.
+
+        Args:
+            network: provides agents, neighbors etc.
+
+        """
+        # initialization (iteration k=0)
+        for i in network.get_all_agents():
+            x0 = np.zeros(i.cost_function.domain_shape)
+            i.initialize(
+                x=x0,
+                received_msgs=dict.fromkeys(network.get_neighbors(i), x0),
+                aux_vars={"x_old": x0, "g": x0, "g_old": x0, "y": x0},
+            )
+
+        W = network.metropolis_weights  # noqa: N806
+        W_tilde = 0.5 * (np.eye(W.shape[0]) + W)  # noqa: N806
+
+        # first iteration (iteration k=1)
+        for i in network.get_active_agents(0):
+            i.aux_vars["g"] = i.cost_function.gradient(i.x)  # store grad f_i(x_0)
+            i.x = i.aux_vars["x_old"] - self.step_size * i.aux_vars["g"]
+
+        # subsequent iterations (k >= 2)
+        for k in range(1, self.iterations):
+            for i in network.get_active_agents(k):
+                i.aux_vars["g_old"] = i.aux_vars["g"]  # store grad f_i(x_{k-1})
+                i.aux_vars["g"] = i.cost_function.gradient(i.x)  # store grad f_i(x_k)
+                i.aux_vars["y"] = (
+                    2 * i.x
+                    - i.aux_vars["x_old"]
+                    - self.step_size * i.aux_vars["g"]
+                    + self.step_size * i.aux_vars["g_old"]
+                )
+            for i in network.get_active_agents(k):
+                network.broadcast(i, i.aux_vars["y"])
+            for i in network.get_active_agents(k):
+                network.receive_all(i)
+            for i in network.get_active_agents(k):
+                neighborhood_avg = np.sum([W_tilde[i, j] * y_j for j, y_j in i.received_messages.items()], axis=0)
+                neighborhood_avg += W_tilde[i, i] * i.aux_vars["y"]
+                i.aux_vars["x_old"] = i.x  # store x_k
+                i.x = neighborhood_avg  # update x_{k+1}
+
+
+@dataclass(eq=False)
 class ADMM(DstAlgorithm):
     r"""
     Distributed Alternating Direction Method of Multipliers characterized by the update step below.
@@ -468,3 +723,102 @@ class ADMM(DstAlgorithm):
             for i in network.get_active_agents(k):
                 for j in network.get_neighbors(i):
                     i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (i.received_messages[j])
+
+
+@dataclass(eq=False)
+class ATG(DstAlgorithm):
+    r"""
+    ADMM-Tracking Gradient (ATG) [r11]_ characterized by the update steps below.
+
+    .. math::
+        \begin{bmatrix} \mathbf{y}_{i,k} \\ \mathbf{s}_{i,k} \end{bmatrix} = \frac{1}{1 + \rho N_i}
+        \left( \begin{bmatrix} \mathbf{x}_{i,k} \\ \nabla f_i(\mathbf{x}_{i,k}) \end{bmatrix}
+        + \sum_j \mathbf{z}_{ij, k} \right)
+
+    .. math::
+        \mathbf{x}_{i,k+1} = (1 - \gamma) \mathbf{x}_{i,k}
+        + \gamma \left( \mathbf{y}_{i,k} - \delta \mathbf{s}_{i,k} \right)
+
+    .. math::
+        \mathbf{z}_{ij, k+1} = (1-\alpha) \mathbf{z}_{ij, k} - \alpha \left( \mathbf{z}_{ji, k}
+        - 2 \rho \begin{bmatrix} \mathbf{y}_{i,k} \\ \mathbf{s}_{i,k} \end{bmatrix} \right)
+
+    where
+    :math:`\mathbf{x}_{i, k} \in \mathbb{R}^n` is agent i's local optimization variable at iteration k,
+    :math:`\mathbf{y}_{i,k}, \ \mathbf{s}_{i,k} \in \mathbb{R}^n`
+    and :math:`\mathbf{z}_{ij,k} \in \mathbb{R}^{2n}` are auxiliary variables,
+    :math:`N_i` is the number of neighbors of i,
+    :math:`f_i` is i's local cost function,
+    j is a neighbor of i. The parameters are: the penalty :math:`\rho > 0`, the relaxation :math:`\alpha \in (0, 1)`,
+    the step-size :math:`\delta > 0`, and the mixing parameter :math:`\gamma > 0`. Notice that the convergence of
+    the algorithm is guaranteed provided that :math:`\delta, \ \gamma` are below certain thresholds.
+
+    The idea of the algorithm is to apply distributed ADMM to perform gradient tracking,
+    instead of the usual average consensus.
+
+    Aliases: :class:`ADMMTracking`, :class:`ADMMTrackingGradient`
+
+    .. [r11] G. Carnevale, N. Bastianello, G. Notarstefano, and R. Carli, "ADMM-Tracking Gradient for Distributed
+             Optimization Over Asynchronous and Unreliable Networks," IEEE Trans. Automat. Contr., vol. 70, no. 8,
+             pp. 5160-5175, Aug. 2025, doi: 10.1109/TAC.2025.3539454.
+
+    """
+
+    iterations: int
+    rho: float
+    alpha: float
+    gamma: float = 0.1
+    delta: float = 0.1
+    name: str = "ATG"
+
+    def run(self, network: Network) -> None:
+        r"""
+        Run the algorithm.
+
+        Args:
+            network: provides agents, neighbors etc.
+
+        """
+        pN = {i: self.rho * len(network.get_neighbors(i)) for i in network.get_all_agents()}  # noqa: N806
+        all_agents = network.get_all_agents()
+        for i in all_agents:
+            z_y0 = np.zeros((len(all_agents), *(i.cost_function.domain_shape)))
+            z_s0 = np.zeros((len(all_agents), *(i.cost_function.domain_shape)))
+            x0 = np.ones(i.cost_function.domain_shape)
+            i.initialize(
+                x=x0,
+                aux_vars={"y": x0, "s": x0, "z_y": z_y0, "z_s": z_s0},
+                received_msgs=dict.fromkeys(network.get_neighbors(i), x0),
+            )
+        for k in range(self.iterations):
+            # step 1: update consensus-ADMM variables
+            for i in network.get_active_agents(k):
+                # update auxiliary variables
+                i.aux_vars["y"] = (i.x + np.sum(i.aux_vars["z_y"], axis=0)) / (1 + pN[i])
+                i.aux_vars["s"] = (i.cost_function.gradient(i.x) + np.sum(i.aux_vars["z_s"], axis=0)) / (1 + pN[i])
+                # update local state
+                i.x = (1 - self.gamma) * i.x + self.gamma * (i.aux_vars["y"] - self.delta * i.aux_vars["s"])
+
+            # step 2: communicate and update z_{ij} variables
+            for i in network.get_active_agents(k):
+                for j in network.get_neighbors(i):
+                    # transmit the messages as a single message, stacking along the first axis
+                    network.send(i, j,
+                        np.stack(
+                            (
+                                -i.aux_vars["z_y"][j] + 2 * self.rho * i.aux_vars["y"],
+                                -i.aux_vars["z_s"][j] + 2 * self.rho * i.aux_vars["s"],
+                            ), axis=0),
+                    )  # fmt: skip
+            for i in network.get_active_agents(k):
+                network.receive_all(i)
+            for i in network.get_active_agents(k):
+                for j in network.get_neighbors(i):
+                    i.aux_vars["z_y"][j] = (1 - self.alpha) * i.aux_vars["z_y"][j] \
+                                         + self.alpha * i.received_messages[j][0]  # fmt: skip
+                    i.aux_vars["z_s"][j] = (1 - self.alpha) * i.aux_vars["z_s"][j] \
+                                         + self.alpha * i.received_messages[j][1]  # fmt: skip
+
+
+ADMMTracking = ATG  # alias
+ADMMTrackingGradient = ATG  # alias
