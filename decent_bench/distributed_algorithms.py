@@ -784,7 +784,7 @@ class ATG(DstAlgorithm):
         for i in all_agents:
             z_y0 = np.zeros((len(all_agents), *(i.cost_function.domain_shape)))
             z_s0 = np.zeros((len(all_agents), *(i.cost_function.domain_shape)))
-            x0 = np.ones(i.cost_function.domain_shape)
+            x0 = np.zeros(i.cost_function.domain_shape)
             i.initialize(
                 x=x0,
                 aux_vars={"y": x0, "s": x0, "z_y": z_y0, "z_s": z_s0},
@@ -822,3 +822,88 @@ class ATG(DstAlgorithm):
 
 ADMMTracking = ATG  # alias
 ADMMTrackingGradient = ATG  # alias
+
+
+@dataclass(eq=False)
+class DLM(DstAlgorithm):
+    r"""
+    Decentralized Linearized ADMM (DLM) [r12]_ characterized by the update steps below (see also [r13]_).
+
+    .. math::
+        \mathbf{x}_{i,k+1} = \mathbf{x}_{i,k} - \mu \left( \nabla f_i(\mathbf{x}_{i,k})
+        + \rho \sum_j (\mathbf{x}_{i,k} - \mathbf{x}_{j,k}) + \mathbf{z}_{i,k} \right)
+
+    .. math::
+        \mathbf{z}_{i, k+1} = \mathbf{z}_{i, k} + \rho \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
+
+    where
+    :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
+    :math:`\mathbf{z}_{i,k}` is the local dual variable,
+    :math:`f_i` is i's local cost function,
+    j is a neighbor of i. The parameters are: the penalty :math:`\rho > 0` and the step-size :math:`\mu > 0`.
+
+    Alias: :class:`DecentralizedLinearizedADMM`
+
+    .. [r12] Q. Ling, W. Shi, G. Wu, and A. Ribeiro, "DLM: Decentralized Linearized Alternating Direction
+             Method of Multipliers," IEEE Transactions on Signal Processing, vol. 63, no. 15, pp. 4051-4064,
+             Aug. 2015, doi: 10.1109/TSP.2015.2436358.
+
+    .. [r13] S. A. Alghunaim, E. K. Ryu, K. Yuan, and A. H. Sayed, "Decentralized Proximal Gradient Algorithms
+            With Linear Convergence Rates," IEEE Transactions on Automatic Control, vol. 66, no. 6, pp. 2787-2794,
+            Jun. 2021, doi: 10.1109/TAC.2020.3009363.
+
+    """
+
+    iterations: int
+    step_size: float
+    penalty: float
+    name: str = "DLM"
+
+    def run(self, network: Network) -> None:
+        r"""
+        Run the algorithm.
+
+        Args:
+            network: provides agents, neighbors etc.
+
+        """
+        all_agents = network.get_all_agents()
+        for i in all_agents:
+            x0 = np.zeros(i.cost_function.domain_shape)
+            i.initialize(
+                x=x0,
+                aux_vars={"y": np.zeros(i.cost_function.domain_shape)},  # y must be initialized to zero
+            )
+
+        # step 0: first communication round
+        for i in network.get_all_agents():
+            network.broadcast(i, i.x)
+        for i in network.get_all_agents():
+            network.receive_all(i)
+        # compute and store \sum_j (\mathbf{x}_{i,0} - \mathbf{x}_{j,0})
+        for i in network.get_all_agents():
+            i.aux_vars["s"] = np.sum([i.x - x_j for _, x_j in i.received_messages.items()], axis=0)
+
+        # main iteration
+        for k in range(self.iterations):
+            # step 1: update primal variable
+            for i in network.get_active_agents(k):
+                i.x = i.x - self.step_size * (  # noqa: PLR6104
+                    i.cost_function.gradient(i.x) + self.penalty * i.aux_vars["s"] + i.aux_vars["y"]
+                )
+
+            # step 2: communication round
+            for i in network.get_all_agents():
+                network.broadcast(i, i.x)
+            for i in network.get_all_agents():
+                network.receive_all(i)
+            # compute and store \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
+            for i in network.get_all_agents():
+                i.aux_vars["s"] = np.sum([i.x - x_j for _, x_j in i.received_messages.items()], axis=0)
+
+            # step 3: update dual variable
+            for i in network.get_active_agents(k):
+                i.aux_vars["y"] += self.penalty * i.aux_vars["s"]
+
+
+DecentralizedLinearizedADMM = DLM  # alias
