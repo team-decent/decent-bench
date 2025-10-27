@@ -876,12 +876,12 @@ class DLM(DstAlgorithm):
             )
 
         # step 0: first communication round
-        for i in network.get_all_agents():
+        for i in network.get_active_agents(0):
             network.broadcast(i, i.x)
-        for i in network.get_all_agents():
+        for i in network.get_active_agents(0):
             network.receive_all(i)
         # compute and store \sum_j (\mathbf{x}_{i,0} - \mathbf{x}_{j,0})
-        for i in network.get_all_agents():
+        for i in network.get_active_agents(0):
             i.aux_vars["s"] = np.sum([i.x - x_j for _, x_j in i.received_messages.items()], axis=0)
 
         # main iteration
@@ -893,12 +893,12 @@ class DLM(DstAlgorithm):
                 )
 
             # step 2: communication round
-            for i in network.get_all_agents():
+            for i in network.get_active_agents():
                 network.broadcast(i, i.x)
-            for i in network.get_all_agents():
+            for i in network.get_active_agents():
                 network.receive_all(i)
             # compute and store \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
-            for i in network.get_all_agents():
+            for i in network.get_active_agents():
                 i.aux_vars["s"] = np.sum([i.x - x_j for _, x_j in i.received_messages.items()], axis=0)
 
             # step 3: update dual variable
