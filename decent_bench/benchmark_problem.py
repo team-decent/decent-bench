@@ -91,7 +91,7 @@ def create_regression_problem(
     agent_activation_schemes = [UniformActivationRate(activation_probability=0.5) if asynchrony else AlwaysActive()] * n_agents
     compression_scheme = Quantization(n_significant_digits=4) if compression else NoCompression()
     noise_scheme = GaussianNoise(mean=0, sd=0.001) if noise else NoNoise()
-    drop_scheme = UniformDropRate(drop_rate=0.5) if drops else NoDrops()
+    drop_scheme = UniformDropRate(drop_rate= 0.5) if drops else NoDrops()
     return BenchmarkProblem(
         topology_structure=topology_structure,
         cost_functions=costs,
