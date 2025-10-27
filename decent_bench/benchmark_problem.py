@@ -88,7 +88,7 @@ def create_regression_problem(
     costs = [cost_function_cls(*p) for p in dataset.get_training_partitions()]
     sum_cost = reduce(add, costs)
     optimal_x = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
-    agent_activation_schemes = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
+    agent_activation_schemes = [UniformActivationRate(activation_probability=0.5) if asynchrony else AlwaysActive()] * n_agents
     compression_scheme = Quantization(n_significant_digits=4) if compression else NoCompression()
     noise_scheme = GaussianNoise(mean=0, sd=0.001) if noise else NoNoise()
     drop_scheme = UniformDropRate(drop_rate=0.5) if drops else NoDrops()
