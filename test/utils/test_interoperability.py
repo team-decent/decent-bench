@@ -295,7 +295,7 @@ def test_from_numpy_frameworks(framework, device: str):
 
     data = [1, 2, 3]
     np_arr = np.array(data, dtype=np.float32)
-    out = Interoperability.from_numpy_like(np_arr, like, device)
+    out = Interoperability.from_numpy_like(np_arr, like)
 
     assert isinstance(out, type(like))
 

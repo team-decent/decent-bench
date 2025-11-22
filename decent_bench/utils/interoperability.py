@@ -74,37 +74,34 @@ class Interoperability:
         return np.array(array)
 
     @staticmethod
-    def from_numpy_like(array: NDArray[Any], like: _T, device: str = "cpu") -> _T:
+    def from_numpy_like(array: NDArray[Any], like: _T) -> _T:
         """
         Convert a NumPy array to the specified framework type.
 
         Args:
             array (NDArray): Input NumPy array.
             like (_T): Example array of the target framework type (e.g., torch.Tensor, tf.Tensor).
-            device (str): Device for the output array (if applicable). Can be 'cpu' or 'gpu'.
 
         Returns:
             ArrayLike: Converted array in the specified framework type.
 
         Raises:
-            ValueError: if device is not 'cpu' or 'gpu'.
             TypeError: if the framework type of `like` is unsupported.
 
         """
-        if device.lower() not in {"cpu", "gpu"}:
-            raise ValueError("device must be either 'cpu' or 'gpu'")
+        device = None
+        if hasattr(like, "device"):
+            device = like.device
 
         if isinstance(like, np.ndarray):
             return cast("_T", array)
         if torch and isinstance(like, torch.Tensor):
-            device = "cpu" if device.lower() == "cpu" else "cuda"
             return cast("_T", torch.from_numpy(array).to(device))
         if tf and isinstance(like, tf.Tensor):
-            device_str = "/CPU:0" if device.lower() == "cpu" else "/GPU:0"
-            with tf.device(device_str):
+            with tf.device(device):
                 return cast("_T", tf.convert_to_tensor(array))
         if jnp and isinstance(like, jnp.ndarray):
-            return cast("_T", jnp.array(array))
+            return cast("_T", jnp.array(array, device=device))
         if isinstance(like, (list, tuple)):
             return cast("_T", type(like)(array.tolist()))
         raise TypeError(f"Unsupported framework type: {type(like)}")
