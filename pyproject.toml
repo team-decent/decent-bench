@@ -34,8 +34,14 @@ dev = [
   "ruff",
   "scipy-stubs",
   "sphinx",
+  "sphinx-toolbox",
   "types-networkx",
   "types-tabulate",
+  "torch",
+  "torchvision",
+  "tensorflow[and-cuda]",
+  "types-tensorflow",
+  "jax[cuda12]",
 ]
 
 [build-system]
@@ -55,7 +61,7 @@ deps = [
 
 [tool.tox.env.sphinx]
 description = "Generate rst and html files using sphinx"
-deps = ["sphinx", "git+https://github.com/pydata/pydata-sphinx-theme.git@main"]
+deps = ["sphinx", "git+https://github.com/pydata/pydata-sphinx-theme.git@main", "sphinx-toolbox"]
 commands = [
   ["sphinx-apidoc", "-o", "docs/source/api", "decent_bench", "--separate", "--no-toc", "--templatedir=docs/source/_templates"],
   ["sphinx-build", "-W", "-E", "-b", "html", "docs/source", "docs/build/html"]
@@ -112,6 +118,9 @@ lint.ignore = [
   "TC002",    # typing-only-third-party-import, reduced rt overhead but slower development and messy imports
   "TC003",    # typing-only-standard-library-import, reduced rt overhead but slower development and messy imports
   "TRY003",   # raise-vanilla-args, complains about simple error messages like `ValueError('Matrix A must be 2D')`
+  "FBT001",   # boolean-type-hint-positional-argument, complains about bool args with default values in functions
+  "FBT002",   # boolean-default-value-positional-argument, complains about bool args with default values in functions
+  "ICN001",   # unconventional-import-alias, complains about common import aliases like `import numpy as np` but it doesnt work for most libraries
 ]
 preview = true
 line-length = 120

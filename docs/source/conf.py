@@ -24,16 +24,28 @@ extensions = [
     "sphinx.ext.intersphinx",  # Link to types from external packages
     "sphinx.ext.napoleon",  # Parse Google style docstrings
     "sphinx.ext.viewcode",  # View source code
+    "sphinx_toolbox.more_autodoc.typevars",  # Better TypeVar rendering in autodoc
 ]
+
+all_typevars = True
 
 autodoc_default_options = {
     "special-members": "__add__",
 }
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True
+autodoc_type_aliases = {
+    "ArrayLike": "ArrayLike",
+}
 
 nitpicky = True
-nitpick_ignore = [("py:class", "numpy.float64")]
+nitpick_ignore = [
+    ("py:class", "numpy.float64"),
+    ("py:class", "NDArray"),
+    ("py:class", "ArrayLike"),
+    ("py:class", "numpy._typing._array_like._SupportsArray"),
+    ("py:class", "numpy._typing._nested_sequence._NestedSequence"),
+]
 
 intersphinx_mapping = {
     "networkx": ("https://networkx.org/documentation/stable/", None),
