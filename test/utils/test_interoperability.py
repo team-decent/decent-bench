@@ -94,7 +94,7 @@ def assert_arrays_equal(result, expected, framework: str):
         np_assert_equal(result_np, expected_np)
 
 
-def assert_shapes_equal(result, expected, framework: str):
+def assert_shapes_equal(result, expected, framework):
     if framework in ["list", "tuple"]:
         assert np.shape(result) == np.shape(expected)
     else:
@@ -130,7 +130,7 @@ def assert_same_type(result: Any, framework: str):
 
 
 # ============================================================================
-# Tests for Interoperability.to_numpy
+# Tests for Interoperability.to_numpy and from_numpy
 # ============================================================================
 
 
@@ -239,6 +239,65 @@ def test_to_numpy_frameworks(framework: str, device: str):
 
     assert isinstance(out, np.ndarray)
     np_assert_equal(out, np.array(data, dtype=np.float32))
+
+
+@pytest.mark.parametrize(
+    "framework,device",
+    [
+        pytest.param(
+            "torch",
+            "cpu",
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
+        ),
+        pytest.param(
+            "torch",
+            "gpu",
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
+        ),
+        pytest.param(
+            "tensorflow",
+            "cpu",
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
+        ),
+        pytest.param(
+            "tensorflow",
+            "gpu",
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
+        ),
+        pytest.param(
+            "jax",
+            "cpu",
+            marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
+        ),
+        pytest.param(
+            "jax",
+            "gpu",
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
+        ),
+        ("list", "cpu"),
+        ("tuple", "cpu"),
+    ],
+)
+def test_from_numpy_frameworks(framework, device: str):
+    """Test from_numpy conversion for all frameworks and devices."""
+
+    like = create_array([1, 2], framework, device)
+
+    data = [1, 2, 3]
+    np_arr = np.array(data, dtype=np.float32)
+    out = Interoperability.from_numpy_like(np_arr, like, device)
+
+    assert isinstance(out, type(like))
 
 
 # ============================================================================
