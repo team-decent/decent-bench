@@ -3,7 +3,7 @@ import pytest
 from numpy.testing import assert_array_equal as np_assert_equal
 from typing import Any
 
-from decent_bench.utils.interoperability import Interoperability
+import decent_bench.utils.interoperability as Interoperability
 
 try:
     import torch
@@ -338,7 +338,7 @@ def test_sum_all_combinations(framework: str, device: str, dim, keepdims):
     np_arr = create_array(data, "numpy")
     expected = np.sum(np_arr, axis=dim, keepdims=keepdims)
 
-    result = Interoperability.sum(arr, dims=dim, keepdims=keepdims)
+    result = Interoperability.sum(arr, dim=dim, keepdims=keepdims)
     assert_arrays_equal(result, expected, framework)
     assert_same_type(result, framework)
 
@@ -403,7 +403,7 @@ def test_mean_all_combinations(framework: str, device: str, dim, keepdims):
     np_arr = create_array(data, "numpy")
     expected = np.mean(np_arr, axis=dim, keepdims=keepdims)
 
-    result = Interoperability.mean(arr, dims=dim, keepdims=keepdims)
+    result = Interoperability.mean(arr, dim=dim, keepdims=keepdims)
     assert_arrays_equal(result, expected, framework)
     assert_same_type(result, framework)
 
@@ -468,7 +468,7 @@ def test_min_all_combinations(framework: str, device: str, dim, keepdims):
     np_arr = create_array(data, "numpy")
     expected = np.min(np_arr, axis=dim, keepdims=keepdims)
 
-    result = Interoperability.min(arr, dims=dim, keepdims=keepdims)
+    result = Interoperability.min(arr, dim=dim, keepdims=keepdims)
     assert_arrays_equal(result, expected, framework)
     assert_same_type(result, framework)
 
@@ -533,7 +533,7 @@ def test_max_all_combinations(framework: str, device: str, dim, keepdims):
     np_arr = create_array(data, "numpy")
     expected = np.max(np_arr, axis=dim, keepdims=keepdims)
 
-    result = Interoperability.max(arr, dims=dim, keepdims=keepdims)
+    result = Interoperability.max(arr, dim=dim, keepdims=keepdims)
     assert_arrays_equal(result, expected, framework)
     assert_same_type(result, framework)
 

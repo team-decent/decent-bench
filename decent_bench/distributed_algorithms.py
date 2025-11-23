@@ -5,8 +5,8 @@ import numpy as np
 from numpy import float64
 from numpy.typing import NDArray
 
+import decent_bench.utils.interoperability as iop
 from decent_bench.network import Network
-from decent_bench.utils.interoperability import Interoperability as Iop
 
 
 class DstAlgorithm(ABC):
@@ -60,10 +60,10 @@ class DGD(DstAlgorithm):
         for agent in network.get_all_agents():
             x0 = np.zeros(agent.cost_function.domain_shape)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(network.get_neighbors(agent), x0))
-        W = Iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
         for k in range(self.iterations):
             for i in network.get_active_agents(k):
-                neighborhood_avg = Iop.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], dims=0)
+                neighborhood_avg = iop.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
                 neighborhood_avg += W[i, i] * i.x
                 i.x = neighborhood_avg - self.step_size * i.cost_function.gradient(i.x)
             for i in network.get_active_agents(k):
@@ -114,7 +114,7 @@ class ATC(DstAlgorithm):
                 received_msgs=dict.fromkeys(network.get_neighbors(agent), x0),
                 aux_vars={"y": x0},
             )
-        W = Iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
 
         for k in range(self.iterations):
             # gradient step (a.k.a. adapt step)
@@ -130,8 +130,8 @@ class ATC(DstAlgorithm):
                 network.receive_all(i)
 
             for i in network.get_active_agents(k):
-                s = Iop.stack([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
-                neighborhood_avg = Iop.sum(s, dims=0)
+                s = iop.stack([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
+                neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.x
                 i.x = neighborhood_avg
 
@@ -175,11 +175,11 @@ class GT1(DstAlgorithm):
             y0 = np.zeros(agent.cost_function.domain_shape)
             neighbors = network.get_neighbors(agent)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
-        W = Iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
         for k in range(self.iterations):
             for i in network.get_active_agents(k):
                 i.aux_vars["y_new"] = i.x - self.step_size * i.cost_function.gradient(i.x)
-                neighborhood_avg = Iop.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], dims=0)
+                neighborhood_avg = iop.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
                 neighborhood_avg += W[i, i] * i.x
                 i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
                 i.aux_vars["y"] = i.aux_vars["y_new"]
@@ -232,13 +232,13 @@ class GT2(DstAlgorithm):
                 aux_vars={"y": y0, "y_new": y1},
                 received_msgs=dict.fromkeys(network.get_neighbors(i), msg0),
             )
-        W = Iop.from_numpy_like(  # noqa: N806
+        W = iop.from_numpy_like(  # noqa: N806
             0.5 * (np.eye(*(network.metropolis_weights.shape)) + network.metropolis_weights),
             network.get_all_agents()[0].x,
         )
         for k in range(self.iterations):
             for i in network.get_active_agents(k):
-                i.x = Iop.sum([W[i, j] * msg for j, msg in i.received_messages.items()], dims=0) + W[i, i] * (
+                i.x = iop.sum([W[i, j] * msg for j, msg in i.received_messages.items()], dim=0) + W[i, i] * (
                     i.x + i.aux_vars["y_new"] - i.aux_vars["y"]
                 )
                 i.aux_vars["y"] = i.aux_vars["y_new"]
@@ -300,7 +300,7 @@ class AugDGM(DstAlgorithm):
                 aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0},
             )
 
-        W = Iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
 
         for k in range(self.iterations):
             # 1st communication round
@@ -316,8 +316,8 @@ class AugDGM(DstAlgorithm):
                 network.receive_all(i)
 
             for i in network.get_active_agents(k):
-                s = Iop.stack([W[i, j] * s_j for j, s_j in i.received_messages.items()], dim=0)
-                neighborhood_avg = Iop.sum(s, dims=0)
+                s = iop.stack([W[i, j] * s_j for j, s_j in i.received_messages.items()], dim=0)
+                neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.aux_vars["s"]
                 i.x = neighborhood_avg
                 i.aux_vars["g_new"] = i.cost_function.gradient(i.x)
@@ -332,8 +332,8 @@ class AugDGM(DstAlgorithm):
                 network.receive_all(i)
 
             for i in network.get_active_agents(k):
-                s = Iop.stack([W[i, j] * q_j for j, q_j in i.received_messages.items()], dim=0)
-                neighborhood_avg = Iop.sum(s, dims=0)
+                s = iop.stack([W[i, j] * q_j for j, q_j in i.received_messages.items()], dim=0)
+                neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
                 i.aux_vars["y"] = neighborhood_avg
                 i.aux_vars["g"] = i.aux_vars["g_new"]
@@ -393,8 +393,8 @@ class WangElia(DstAlgorithm):
                 aux_vars={"z": x0, "x_old": x0},
             )
 
-        W = Iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
-        K = 0.5 * (Iop.eye_like(W) - W)  # noqa: N806
+        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        K = 0.5 * (iop.eye_like(W) - W)  # noqa: N806
 
         for k in range(self.iterations):
             # 1st communication round
@@ -406,7 +406,7 @@ class WangElia(DstAlgorithm):
                 network.receive_all(i)
 
             for i in network.get_active_agents(k):
-                neighborhood_avg = Iop.sum([K[i, j] * m_j for j, m_j in i.received_messages.items()], dims=0)
+                neighborhood_avg = iop.sum([K[i, j] * m_j for j, m_j in i.received_messages.items()], dim=0)
                 neighborhood_avg += K[i, i] * (i.x + i.aux_vars["z"])
 
                 i.aux_vars["x_old"] = i.x
@@ -421,7 +421,7 @@ class WangElia(DstAlgorithm):
                 network.receive_all(i)
 
             for i in network.get_active_agents(k):
-                neighborhood_avg = Iop.sum([K[i, j] * m_j for j, m_j in i.received_messages.items()], dims=0)
+                neighborhood_avg = iop.sum([K[i, j] * m_j for j, m_j in i.received_messages.items()], dim=0)
                 neighborhood_avg += K[i, i] * i.aux_vars["x_old"]
                 i.aux_vars["z"] += neighborhood_avg
 
@@ -472,7 +472,7 @@ class EXTRA(DstAlgorithm):
                 aux_vars={"x_old": x0, "x_old_old": x0, "x_cons": x0},
             )
 
-        W = Iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
 
         # first iteration (iteration k=1)
         for i in network.get_active_agents(0):
@@ -480,8 +480,8 @@ class EXTRA(DstAlgorithm):
         for i in network.get_active_agents(0):
             network.receive_all(i)
         for i in network.get_active_agents(0):
-            s = Iop.stack([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
-            neighborhood_avg = Iop.sum(s, dims=0)
+            s = iop.stack([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
+            neighborhood_avg = iop.sum(s, dim=0)
             neighborhood_avg += W[i, i] * i.x
             i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
             i.aux_vars["x_old"] = i.x  # store x_0
@@ -494,8 +494,8 @@ class EXTRA(DstAlgorithm):
             for i in network.get_active_agents(k):
                 network.receive_all(i)
             for i in network.get_active_agents(k):
-                s = Iop.stack([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
-                neighborhood_avg = Iop.sum(s, dims=0)
+                s = iop.stack([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
+                neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.x
                 i.aux_vars["x_old_old"] = i.aux_vars["x_old"]  # store x_{k-1}
                 i.aux_vars["x_old"] = i.x  # store x_k
@@ -566,7 +566,7 @@ class ATCTracking(DstAlgorithm):
                 aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0},
             )
 
-        W = Iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
 
         for k in range(self.iterations):
             # 1st communication round
@@ -582,8 +582,8 @@ class ATCTracking(DstAlgorithm):
                 network.receive_all(i)
 
             for i in network.get_active_agents(k):
-                s = Iop.stack([W[i, j] * s_j for j, s_j in i.received_messages.items()], dim=0)
-                neighborhood_avg = Iop.sum(s, dims=0)
+                s = iop.stack([W[i, j] * s_j for j, s_j in i.received_messages.items()], dim=0)
+                neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.aux_vars["s"]
                 i.x = neighborhood_avg
                 i.aux_vars["g_new"] = i.cost_function.gradient(i.x)
@@ -598,7 +598,7 @@ class ATCTracking(DstAlgorithm):
                 network.receive_all(i)
 
             for i in network.get_active_agents(k):
-                neighborhood_avg = Iop.sum([W[i, j] * q_j for j, q_j in i.received_messages.items()], dims=0)
+                neighborhood_avg = iop.sum([W[i, j] * q_j for j, q_j in i.received_messages.items()], dim=0)
                 neighborhood_avg += W[i, i] * i.aux_vars["y"]
                 i.aux_vars["y"] = neighborhood_avg + i.aux_vars["g_new"] - i.aux_vars["g"]
                 i.aux_vars["g"] = i.aux_vars["g_new"]
@@ -656,8 +656,8 @@ class NIDS(DstAlgorithm):
                 aux_vars={"x_old": x0, "g": x0, "g_old": x0, "y": x0},
             )
 
-        W = Iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
-        W_tilde = 0.5 * (Iop.eye_like(W) + W)  # noqa: N806
+        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W_tilde = 0.5 * (iop.eye_like(W) + W)  # noqa: N806
 
         # first iteration (iteration k=1)
         for i in network.get_active_agents(0):
@@ -680,13 +680,13 @@ class NIDS(DstAlgorithm):
             for i in network.get_active_agents(k):
                 network.receive_all(i)
             for i in network.get_active_agents(k):
-                s = Iop.stack(
+                s = iop.stack(
                     [W_tilde[i, j] * y_j for j, y_j in i.received_messages.items()],
                     dim=0,
                 )
-                neighborhood_avg = Iop.sum(
+                neighborhood_avg = iop.sum(
                     s,
-                    dims=0,
+                    dim=0,
                 )
                 neighborhood_avg += W_tilde[i, i] * i.aux_vars["y"]
                 i.aux_vars["x_old"] = i.x  # store x_k
@@ -743,7 +743,7 @@ class ADMM(DstAlgorithm):
             )
         for k in range(self.iterations):
             for i in network.get_active_agents(k):
-                i.x = i.cost_function.proximal(y=Iop.sum(i.aux_vars["z"], dims=0) / pN[i], rho=1 / pN[i])
+                i.x = i.cost_function.proximal(y=iop.sum(i.aux_vars["z"], dim=0) / pN[i], rho=1 / pN[i])
             for i in network.get_active_agents(k):
                 for j in network.get_neighbors(i):
                     network.send(i, j, i.aux_vars["z"][j] - 2 * self.rho * i.x)
@@ -823,8 +823,8 @@ class ATG(DstAlgorithm):
             # step 1: update consensus-ADMM variables
             for i in network.get_active_agents(k):
                 # update auxiliary variables
-                i.aux_vars["y"] = (i.x + Iop.sum(i.aux_vars["z_y"], dims=0)) / (1 + pN[i])
-                i.aux_vars["s"] = (i.cost_function.gradient(i.x) + Iop.sum(i.aux_vars["z_s"], dims=0)) / (1 + pN[i])
+                i.aux_vars["y"] = (i.x + iop.sum(i.aux_vars["z_y"], dim=0)) / (1 + pN[i])
+                i.aux_vars["s"] = (i.cost_function.gradient(i.x) + iop.sum(i.aux_vars["z_s"], dim=0)) / (1 + pN[i])
                 # update local state
                 i.x = (1 - self.gamma) * i.x + self.gamma * (i.aux_vars["y"] - self.delta * i.aux_vars["s"])
 
@@ -833,7 +833,7 @@ class ATG(DstAlgorithm):
                 for j in network.get_neighbors(i):
                     # transmit the messages as a single message, stacking along the first axis
                     network.send(i, j,
-                        Iop.stack(
+                        iop.stack(
                             (
                                 -i.aux_vars["z_y"][j] + 2 * self.rho * i.aux_vars["y"],
                                 -i.aux_vars["z_s"][j] + 2 * self.rho * i.aux_vars["s"],
@@ -911,8 +911,8 @@ class DLM(DstAlgorithm):
             network.receive_all(i)
         # compute and store \sum_j (\mathbf{x}_{i,0} - \mathbf{x}_{j,0})
         for i in network.get_active_agents(0):
-            s = Iop.stack([i.x - x_j for _, x_j in i.received_messages.items()], dim=0)
-            i.aux_vars["s"] = Iop.sum(s, dims=0)  # pyright: ignore[reportArgumentType]
+            s = iop.stack([i.x - x_j for _, x_j in i.received_messages.items()], dim=0)
+            i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
 
         # main iteration
         for k in range(self.iterations):
@@ -929,8 +929,8 @@ class DLM(DstAlgorithm):
                 network.receive_all(i)
             # compute and store \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
             for i in network.get_active_agents(k):
-                s = Iop.stack([i.x - x_j for _, x_j in i.received_messages.items()], dim=0)
-                i.aux_vars["s"] = Iop.sum(s, dims=0)  # pyright: ignore[reportArgumentType]
+                s = iop.stack([i.x - x_j for _, x_j in i.received_messages.items()], dim=0)
+                i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
 
             # step 3: update dual variable
             for i in network.get_active_agents(k):
