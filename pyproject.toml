@@ -120,7 +120,7 @@ lint.ignore = [
   "TRY003",   # raise-vanilla-args, complains about simple error messages like `ValueError('Matrix A must be 2D')`
   "FBT001",   # boolean-type-hint-positional-argument, complains about bool args with default values in functions
   "FBT002",   # boolean-default-value-positional-argument, complains about bool args with default values in functions
-  "ICN001",   # unconventional-import-alias, complains about common import aliases like `import numpy as np` but it doesnt work for most libraries
+  "ICN001",   # unconventional-import-alias, complains about common import aliases like `import numpy as np` but it doesn't work for most libraries
 ]
 preview = true
 line-length = 120
