@@ -39,9 +39,9 @@ dev = [
   "types-tabulate",
   "torch",
   "torchvision",
-  "tensorflow[and-cuda]",
+  "tensorflow",
   "types-tensorflow",
-  "jax[cuda12]",
+  "jax",
 ]
 
 [build-system]
