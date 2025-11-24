@@ -111,7 +111,7 @@ def sum[T: ArrayLike](  # noqa: A001
     Args:
         array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         dim (int | tuple[int, ...] | None): Dimension or dimensions along which to sum.
-            Same semantics as NumPy/TensorFlow/JAX.
+            If None, sums over flattened array.
         keepdims (bool): If True, retains reduced dimensions with length 1.
 
     Returns:
@@ -148,6 +148,7 @@ def mean[T: ArrayLike](
     Args:
         array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         dim (int | tuple[int, ...] | None): Dimension or dimensions along which to compute mean.
+            If None, computes mean over flattened array.
         keepdims (bool): If True, retains reduced dimensions with length 1.
 
     Returns:
@@ -184,6 +185,7 @@ def min[T: ArrayLike](  # noqa: A001
     Args:
         array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         dim (int | tuple[int, ...] | None): Dimension or dimensions along which to compute minimum.
+            If None, finds minimum over flattened array.
         keepdims (bool): If True, retains reduced dimensions with length 1.
 
     Returns:
@@ -220,6 +222,7 @@ def max[T: ArrayLike](  # noqa: A001
     Args:
         array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         dim (int | tuple[int, ...] | None): Dimension or dimensions along which to compute maximum.
+            If None, finds maximum over flattened array.
         keepdims (bool): If True, retains reduced dimensions with length 1.
 
     Returns:
@@ -247,7 +250,7 @@ def max[T: ArrayLike](  # noqa: A001
 
 def argmax[T: ArrayLike](array: T, dim: int | None = None, keepdims: bool = False) -> T:
     """
-    Compute index of maximum value along an axis.
+    Compute index of maximum value.
 
     Args:
         array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
@@ -298,7 +301,7 @@ def argmax[T: ArrayLike](array: T, dim: int | None = None, keepdims: bool = Fals
 
 def argmin[T: ArrayLike](array: T, dim: int | None = None, keepdims: bool = False) -> T:
     """
-    Compute index of minimum value along an axis.
+    Compute index of minimum value.
 
     Args:
         array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
@@ -371,12 +374,12 @@ def copy[T: ArrayLike](array: T) -> T:
 
 def stack[T: ArrayLike](arrays: Sequence[T], dim: int = 0) -> T:
     """
-    Stack a sequence of arrays along a new axis.
+    Stack a sequence of arrays along a new dimension.
 
     Args:
         arrays (Sequence[ArrayLike]): Sequence of input arrays (NumPy, PyTorch, TensorFlow, JAX)
             or nested containers (list, tuple).
-        dim (int): Axis along which to stack the arrays.
+        dim (int): Dimension along which to stack the arrays.
 
     Returns:
         ArrayLike: Stacked array in the same framework type as the inputs.
@@ -488,14 +491,16 @@ def ones_like[T: ArrayLike](array: T) -> T:
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def rand_like[T: ArrayLike](array: T) -> T:
+def rand_like[T: ArrayLike](array: T, low: float = 0.0, high: float = 1.0) -> T:
     """
     Create an array of random values with the same shape and type as the input.
 
-    Values are drawn uniformly from [0, 1).
+    Values are drawn uniformly from [low, high).
 
     Args:
         array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        low (float): Lower bound of the uniform distribution.
+        high (float): Upper bound of the uniform distribution.
 
     Returns:
         ArrayLike: Array of random values in the same framework type as the input.
@@ -505,11 +510,25 @@ def rand_like[T: ArrayLike](array: T) -> T:
 
     """
     if isinstance(array, np.ndarray):
-        return cast("T", np.random.default_rng().random(array.shape, dtype=array.dtype))
+        random_array = np.random.default_rng().uniform(
+            low=low,
+            high=high,
+            size=array.shape,
+        )
+        random_array = random_array.astype(array.dtype) if isinstance(random_array, np.ndarray) else random_array
+        return cast("T", random_array)
     if torch and isinstance(array, torch.Tensor):
-        return cast("T", torch.rand_like(array))
+        return cast("T", (high - low) * torch.rand_like(array) + low)
     if tf and isinstance(array, tf.Tensor):
-        return cast("T", tf.random.uniform(tf.shape(array), dtype=array.dtype))
+        return cast(
+            "T",
+            tf.random.uniform(
+                tf.shape(array),
+                dtype=array.dtype,
+                minval=low,
+                maxval=high,
+            ),
+        )
     if jnp and jax_random and isinstance(array, jnp.ndarray):
         return cast(
             "T",
@@ -517,27 +536,37 @@ def rand_like[T: ArrayLike](array: T) -> T:
                 jax_random.key(random.randint(0, 2**32 - 1)),
                 shape=array.shape,
                 dtype=array.dtype,
+                minval=low,
+                maxval=high,
             ),
         )
     if isinstance(array, (list, tuple)):
         np_array = to_numpy(array)
-        random_array = np.random.default_rng().random(
+        np_random_array = np.random.default_rng().uniform(
+            low=low,
+            high=high,
             size=np_array.shape,
-            dtype=np_array.dtype,
         )
-        return cast("T", type(array)(random_array.tolist()))
+        np_random_array = (
+            np_random_array.astype(np_array.dtype).tolist()
+            if isinstance(np_random_array, np.ndarray)
+            else np_random_array
+        )
+        return cast("T", type(array)(np_random_array))
 
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def randn_like[T: ArrayLike](array: T) -> T:
+def randn_like[T: ArrayLike](array: T, mean: float = 0.0, std: float = 1.0) -> T:
     """
     Create an array of random values with the same shape and type as the input.
 
-    Values are drawn from a normal distribution with mean 0 and variance 1.
+    Values are drawn from a normal distribution with mean `mean` and standard deviation `std`.
 
     Args:
         array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        mean (float): Mean of the normal distribution.
+        std (float): Standard deviation of the normal distribution.
 
     Returns:
         ArrayLike: Array of random values in the same framework type as the input.
@@ -547,25 +576,41 @@ def randn_like[T: ArrayLike](array: T) -> T:
 
     """
     if isinstance(array, np.ndarray):
-        random_array = np.random.default_rng().normal(loc=0, scale=1, size=array.shape)
+        random_array = np.random.default_rng().normal(
+            loc=mean,
+            scale=std,
+            size=array.shape,
+        )
         random_array = random_array.astype(array.dtype) if isinstance(random_array, np.ndarray) else random_array
+        return cast("T", random_array)
+    if torch and isinstance(array, torch.Tensor):
         return cast(
             "T",
-            random_array,
+            torch.normal(
+                mean=mean,
+                std=std,
+                size=array.shape,
+                dtype=array.dtype,
+                device=array.device,
+            ),
         )
-    if torch and isinstance(array, torch.Tensor):
-        return cast("T", torch.randn_like(array))
     if tf and isinstance(array, tf.Tensor):
         shape = tf.shape(array)
-        return cast("T", tf.random.normal(shape))
+        return cast("T", tf.random.normal(shape, mean=mean, stddev=std, dtype=array.dtype))
     if jnp and jax_random and isinstance(array, jnp.ndarray):
         return cast(
             "T",
-            jax_random.uniform(jax_random.key(random.randint(0, 2**32 - 1)), shape=array.shape),
+            mean
+            + std
+            * jax_random.normal(
+                jax_random.key(random.randint(0, 2**32 - 1)),
+                shape=array.shape,
+                dtype=array.dtype,
+            ),
         )
     if isinstance(array, (list, tuple)):
         np_array = to_numpy(array)
-        np_random_array = np.random.default_rng().normal(loc=0, scale=1, size=np_array.shape)
+        np_random_array = np.random.default_rng().normal(loc=mean, scale=std, size=np_array.shape)
         np_random_array = (
             np_random_array.astype(np_array.dtype).tolist()
             if isinstance(np_random_array, np.ndarray)

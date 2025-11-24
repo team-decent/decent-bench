@@ -33,7 +33,9 @@ try:
 except (ImportError, ModuleNotFoundError):
     JAX_AVAILABLE = False
     JAX_GPU_AVAILABLE = False
-
+except RuntimeError:
+    # JAX raises RuntimeError if no GPU is available when querying devices
+    JAX_GPU_AVAILABLE = False
 
 # ============================================================================
 # Helpers
