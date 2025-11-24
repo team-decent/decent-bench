@@ -103,21 +103,27 @@ def assert_shapes_equal(result, expected, framework):
 def assert_same_type(result: Any, framework: str):
     """Assert that the result is of the expected type based on the framework."""
     if framework == "numpy":
-        assert "numpy" in str(type(result)), f"Expected numpy.ndarray, got {type(result)}"
+        assert "numpy" in str(
+            type(result)
+        ), f"Expected numpy.ndarray, got {type(result)}"
     elif framework == "torch":
-        assert "torch" in str(type(result)), f"Expected torch.Tensor, got {type(result)}"
+        assert "torch" in str(
+            type(result)
+        ), f"Expected torch.Tensor, got {type(result)}"
     elif framework == "tensorflow":
-        assert "tensorflow" in str(type(result)), f"Expected tf.Tensor, got {type(result)}"
+        assert "tensorflow" in str(
+            type(result)
+        ), f"Expected tf.Tensor, got {type(result)}"
     elif framework == "jax":
         assert "jax" in str(type(result)), f"Expected jnp.ndarray, got {type(result)}"
     elif framework == "list":
-        assert isinstance(result, list) or isinstance(result, (int, float, complex)), (
-            f"Expected list, got {type(result)}"
-        )
+        assert isinstance(result, list) or isinstance(
+            result, (int, float, complex)
+        ), f"Expected list, got {type(result)}"
     elif framework == "tuple":
-        assert isinstance(result, tuple) or isinstance(result, (int, float, complex)), (
-            f"Expected tuple, got {type(result)}"
-        )
+        assert isinstance(result, tuple) or isinstance(
+            result, (int, float, complex)
+        ), f"Expected tuple, got {type(result)}"
     else:
         raise ValueError(f"Unknown framework: {framework}")
 
@@ -185,22 +191,30 @@ def test_dictionary_conversion():
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -210,7 +224,9 @@ def test_dictionary_conversion():
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
     ],
 )
@@ -230,22 +246,30 @@ def test_to_numpy_frameworks(framework: str, device: str):
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -255,7 +279,9 @@ def test_to_numpy_frameworks(framework: str, device: str):
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -285,22 +311,30 @@ def test_from_numpy_frameworks(framework, device: str):
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -310,7 +344,9 @@ def test_from_numpy_frameworks(framework, device: str):
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -350,22 +386,30 @@ def test_sum_all_combinations(framework: str, device: str, dim, keepdims):
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -375,7 +419,9 @@ def test_sum_all_combinations(framework: str, device: str, dim, keepdims):
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -415,22 +461,30 @@ def test_mean_all_combinations(framework: str, device: str, dim, keepdims):
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -440,7 +494,9 @@ def test_mean_all_combinations(framework: str, device: str, dim, keepdims):
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -480,22 +536,30 @@ def test_min_all_combinations(framework: str, device: str, dim, keepdims):
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -505,7 +569,9 @@ def test_min_all_combinations(framework: str, device: str, dim, keepdims):
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -550,22 +616,30 @@ def test_max_all_combinations(framework: str, device: str, dim, keepdims):
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -575,7 +649,9 @@ def test_max_all_combinations(framework: str, device: str, dim, keepdims):
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -613,22 +689,30 @@ def test_argmax_all_combinations(framework: str, device: str, dim, keepdims):
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -638,7 +722,9 @@ def test_argmax_all_combinations(framework: str, device: str, dim, keepdims):
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -681,22 +767,30 @@ def test_argmin_all_combinations(framework: str, device: str, dim, keepdims):
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -706,7 +800,9 @@ def test_argmin_all_combinations(framework: str, device: str, dim, keepdims):
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -756,22 +852,30 @@ def test_copy_frameworks(framework: str, device: str):
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -781,7 +885,9 @@ def test_copy_frameworks(framework: str, device: str):
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -820,22 +926,30 @@ def test_stack_frameworks(framework: str, device: str, dim: int):
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -845,7 +959,9 @@ def test_stack_frameworks(framework: str, device: str, dim: int):
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -855,7 +971,9 @@ def test_stack_frameworks(framework: str, device: str, dim: int):
     "new_shape",
     [(3, 2), (2, 3), (6,), (-1,), (2, 1, 3), (1, 6)],
 )
-def test_reshape_matrix_frameworks(framework: str, device: str, new_shape: tuple[int, ...]):
+def test_reshape_matrix_frameworks(
+    framework: str, device: str, new_shape: tuple[int, ...]
+):
     """Test reshape function for all frameworks and devices."""
     data = [[1, 2, 3], [4, 5, 6]]
     arr = create_array(data, framework, device)
@@ -877,22 +995,30 @@ def test_reshape_matrix_frameworks(framework: str, device: str, new_shape: tuple
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -902,7 +1028,9 @@ def test_reshape_matrix_frameworks(framework: str, device: str, new_shape: tuple
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -912,7 +1040,9 @@ def test_reshape_matrix_frameworks(framework: str, device: str, new_shape: tuple
     "new_shape",
     [(3, 2), (2, 3), (6,), (-1,), (2, 1, 3), (1, 6)],
 )
-def test_reshape_vector_frameworks(framework: str, device: str, new_shape: tuple[int, ...]):
+def test_reshape_vector_frameworks(
+    framework: str, device: str, new_shape: tuple[int, ...]
+):
     """Test reshape function for all frameworks and devices."""
     data = [1, 2, 3, 4, 5, 6]
     arr = create_array(data, framework, device)
@@ -939,22 +1069,30 @@ def test_reshape_vector_frameworks(framework: str, device: str, new_shape: tuple
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -964,7 +1102,9 @@ def test_reshape_vector_frameworks(framework: str, device: str, new_shape: tuple
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -998,22 +1138,30 @@ def test_zeros_like_frameworks(framework: str, device: str, shape: tuple[int, ..
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -1023,7 +1171,9 @@ def test_zeros_like_frameworks(framework: str, device: str, shape: tuple[int, ..
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -1057,22 +1207,30 @@ def test_ones_like_frameworks(framework: str, device: str, shape: tuple[int, ...
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -1082,7 +1240,9 @@ def test_ones_like_frameworks(framework: str, device: str, shape: tuple[int, ...
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),
@@ -1094,7 +1254,7 @@ def test_ones_like_frameworks(framework: str, device: str, shape: tuple[int, ...
 )
 def test_rand_like_frameworks(framework: str, device: str, shape: tuple[int, ...]):
     """Test rand_like function for all frameworks and devices."""
-    data = [1, 2, 3, 4, 5, 6]
+    data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
     arr = create_array(data, framework, device)
     arr = Interoperability.reshape(arr, shape)
     rand_arr = Interoperability.rand_like(arr)
@@ -1114,22 +1274,30 @@ def test_rand_like_frameworks(framework: str, device: str, shape: tuple[int, ...
         pytest.param(
             "torch",
             "cpu",
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
         ),
         pytest.param(
             "torch",
             "gpu",
-            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "cpu",
-            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
         ),
         pytest.param(
             "tensorflow",
             "gpu",
-            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
         ),
         pytest.param(
             "jax",
@@ -1139,7 +1307,76 @@ def test_rand_like_frameworks(framework: str, device: str, shape: tuple[int, ...
         pytest.param(
             "jax",
             "gpu",
-            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
+        ),
+        ("list", "cpu"),
+        ("tuple", "cpu"),
+    ],
+)
+@pytest.mark.parametrize(
+    "shape",
+    [(3, 2), (2, 3), (6,), (-1,), (2, 1, 3), (1, 6)],
+)
+def test_randn_like_frameworks(framework: str, device: str, shape: tuple[int, ...]):
+    """Test randn_like function for all frameworks and devices."""
+    data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    arr = create_array(data, framework, device)
+    arr = Interoperability.reshape(arr, shape)
+    rand_arr = Interoperability.randn_like(arr)
+
+    # Compute expected shape using numpy
+    np_arr = create_array(data, "numpy")
+    np_arr = np.reshape(np_arr, shape)
+
+    assert_shapes_equal(rand_arr, np_arr, framework)
+    assert_same_type(rand_arr, framework)
+
+
+@pytest.mark.parametrize(
+    "framework,device",
+    [
+        ("numpy", "cpu"),
+        pytest.param(
+            "torch",
+            "cpu",
+            marks=pytest.mark.skipif(
+                not TORCH_AVAILABLE, reason="PyTorch not available"
+            ),
+        ),
+        pytest.param(
+            "torch",
+            "gpu",
+            marks=pytest.mark.skipif(
+                not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"
+            ),
+        ),
+        pytest.param(
+            "tensorflow",
+            "cpu",
+            marks=pytest.mark.skipif(
+                not TF_AVAILABLE, reason="TensorFlow not available"
+            ),
+        ),
+        pytest.param(
+            "tensorflow",
+            "gpu",
+            marks=pytest.mark.skipif(
+                not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"
+            ),
+        ),
+        pytest.param(
+            "jax",
+            "cpu",
+            marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
+        ),
+        pytest.param(
+            "jax",
+            "gpu",
+            marks=pytest.mark.skipif(
+                not JAX_GPU_AVAILABLE, reason="JAX GPU not available"
+            ),
         ),
         ("list", "cpu"),
         ("tuple", "cpu"),

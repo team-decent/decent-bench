@@ -1,4 +1,4 @@
-"""Utility for operating on arrays from different deep learning and linear algebra frameworks."""
+"""Utilities for operating on arrays from different deep learning and linear algebra frameworks."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ T = TypeVar("T", bound=ArrayLike)
 TypeVar for ArrayLike types such as NumPy arrays, PyTorch tensors or
 nested containers (lists/tuples).
 
-This TypeVar is used throughout the Interoperability class to ensure that
+This TypeVar is used throughout the interoperability utilities to ensure that
 operations preserve the input framework type.
 """
 
@@ -432,7 +432,7 @@ def reshape[T: ArrayLike](array: T, shape: tuple[int, ...]) -> T:
 
 def zeros_like[T: ArrayLike](array: T) -> T:
     """
-    Create an array of zeros with the same shape as the input.
+    Create an array of zeros with the same shape and type as the input.
 
     Args:
         array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
@@ -461,7 +461,7 @@ def zeros_like[T: ArrayLike](array: T) -> T:
 
 def ones_like[T: ArrayLike](array: T) -> T:
     """
-    Create an array of ones with the same shape as the input.
+    Create an array of ones with the same shape and type as the input.
 
     Args:
         array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
@@ -490,7 +490,9 @@ def ones_like[T: ArrayLike](array: T) -> T:
 
 def rand_like[T: ArrayLike](array: T) -> T:
     """
-    Create an array of random values with the same shape as the input.
+    Create an array of random values with the same shape and type as the input.
+
+    Values are drawn uniformly from [0, 1).
 
     Args:
         array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
@@ -503,12 +505,59 @@ def rand_like[T: ArrayLike](array: T) -> T:
 
     """
     if isinstance(array, np.ndarray):
-        return cast("T", np.random.default_rng().random(array.shape))
+        return cast("T", np.random.default_rng().random(array.shape, dtype=array.dtype))
     if torch and isinstance(array, torch.Tensor):
         return cast("T", torch.rand_like(array))
     if tf and isinstance(array, tf.Tensor):
+        return cast("T", tf.random.uniform(tf.shape(array), dtype=array.dtype))
+    if jnp and jax_random and isinstance(array, jnp.ndarray):
+        return cast(
+            "T",
+            jax_random.uniform(
+                jax_random.key(random.randint(0, 2**32 - 1)),
+                shape=array.shape,
+                dtype=array.dtype,
+            ),
+        )
+    if isinstance(array, (list, tuple)):
+        np_array = to_numpy(array)
+        random_array = np.random.default_rng().random(
+            size=np_array.shape,
+            dtype=np_array.dtype,
+        )
+        return cast("T", type(array)(random_array.tolist()))
+
+    raise TypeError(f"Unsupported framework type: {type(array)}")
+
+
+def randn_like[T: ArrayLike](array: T) -> T:
+    """
+    Create an array of random values with the same shape and type as the input.
+
+    Values are drawn from a normal distribution with mean 0 and variance 1.
+
+    Args:
+        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+
+    Returns:
+        ArrayLike: Array of random values in the same framework type as the input.
+
+    Raises:
+        TypeError: if the framework type of `array` is unsupported.
+
+    """
+    if isinstance(array, np.ndarray):
+        random_array = np.random.default_rng().normal(loc=0, scale=1, size=array.shape)
+        random_array = random_array.astype(array.dtype) if isinstance(random_array, np.ndarray) else random_array
+        return cast(
+            "T",
+            random_array,
+        )
+    if torch and isinstance(array, torch.Tensor):
+        return cast("T", torch.randn_like(array))
+    if tf and isinstance(array, tf.Tensor):
         shape = tf.shape(array)
-        return cast("T", tf.random.uniform(shape))
+        return cast("T", tf.random.normal(shape))
     if jnp and jax_random and isinstance(array, jnp.ndarray):
         return cast(
             "T",
@@ -516,8 +565,13 @@ def rand_like[T: ArrayLike](array: T) -> T:
         )
     if isinstance(array, (list, tuple)):
         np_array = to_numpy(array)
-        random_array = np.random.default_rng().random(np_array.shape)
-        return cast("T", type(array)(random_array.tolist()))
+        np_random_array = np.random.default_rng().normal(loc=0, scale=1, size=np_array.shape)
+        np_random_array = (
+            np_random_array.astype(np_array.dtype).tolist()
+            if isinstance(np_random_array, np.ndarray)
+            else np_random_array
+        )
+        return cast("T", type(array)(np_random_array))
 
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
