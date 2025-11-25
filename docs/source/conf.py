@@ -16,6 +16,8 @@ author = "team-decent"
 import os
 import sys
 
+from docutils import nodes
+
 sys.path.insert(0, os.path.abspath("../.."))
 
 
@@ -31,9 +33,16 @@ autodoc_default_options = {
 }
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True
+autodoc_type_aliases = {
+    "ArrayLike": "numpy.typing.ArrayLike",
+}
 
 nitpicky = True
-nitpick_ignore = [("py:class", "numpy.float64")]
+nitpick_ignore = [
+    ("py:class", "numpy.float64"),
+    ("py:class", "numpy._typing._array_like._SupportsArray"),
+    ("py:class", "numpy._typing._nested_sequence._NestedSequence"),
+]
 
 intersphinx_mapping = {
     "networkx": ("https://networkx.org/documentation/stable/", None),
@@ -43,6 +52,29 @@ intersphinx_mapping = {
 
 
 exclude_patterns = []
+
+
+# A way to link numpy.typing.ArrayLike and NDArray correctly
+# Seems to be an open issue, see https://github.com/sphinx-doc/sphinx/issues/10794
+# https://github.com/sphinx-doc/sphinx/issues/10785#issuecomment-1321100925
+def _numpy_typing_missing_ref(app, env, node, contnode):
+    if node.get("refdomain") == "py" and node.get("reftype") in {"class", "data"}:
+        target = node.get("reftarget")
+        if target in {"ArrayLike", "numpy.typing.ArrayLike"}:
+            return nodes.reference(
+                "", "ArrayLike", refuri="https://numpy.org/doc/stable/reference/typing.html#numpy.typing.ArrayLike"
+            )
+        if target in {"NDArray", "numpy.typing.NDArray"}:
+            return nodes.reference(
+                "",
+                "NDArray",
+                refuri="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray",
+            )
+    return None
+
+
+def setup(app):
+    app.connect("missing-reference", _numpy_typing_missing_ref)
 
 
 # -- Options for HTML output -------------------------------------------------
