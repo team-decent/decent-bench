@@ -10,7 +10,7 @@ from numpy import float64
 from numpy.typing import NDArray
 
 import decent_bench.centralized_algorithms as ca
-from decent_bench.cost_functions import CostFunction, LinearRegressionCost, LogisticRegressionCost
+from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCost
 from decent_bench.datasets import SyntheticClassificationData
 from decent_bench.schemes import (
     AgentActivationScheme,
@@ -39,23 +39,23 @@ class BenchmarkProblem:
     Benchmark problem to run algorithms on, defining settings such as communication constraints and topology.
 
     Args:
-        topology_structure: graph defining how agents are connected
-        cost_functions: local cost functions, each one is given to one agent
-        optimal_x: solution that minimizes the sum of the cost functions, used for calculating metrics
-        agent_activation_schemes: setting for agent activation/participation, each scheme is applied to one agent
-        compression_scheme: message compression setting
-        noise_scheme: message noise setting
-        drop_scheme: message drops setting
+        network_structure: graph defining how agents are connected
+        x_optimal: solution that minimizes the sum of the cost functions, used for calculating metrics
+        costs: local cost functions, each one is given to one agent
+        agent_activations: setting for agent activation/participation, each scheme is applied to one agent
+        message_compression: message compression setting
+        message_noise: message noise setting
+        message_drop: message drops setting
 
     """
 
-    topology_structure: AnyGraph
-    optimal_x: NDArray[float64]
-    cost_functions: Sequence[CostFunction]
-    agent_activation_schemes: Sequence[AgentActivationScheme]
-    compression_scheme: CompressionScheme
-    noise_scheme: NoiseScheme
-    drop_scheme: DropScheme
+    network_structure: AnyGraph
+    x_optimal: NDArray[float64]
+    costs: Sequence[Cost]
+    agent_activations: Sequence[AgentActivationScheme]
+    message_compression: CompressionScheme
+    message_noise: NoiseScheme
+    message_drop: DropScheme
 
 
 def create_regression_problem(
@@ -85,19 +85,19 @@ def create_regression_problem(
     dataset = SyntheticClassificationData(
         n_classes=2, n_partitions=n_agents, n_samples_per_partition=10, n_features=3, seed=0
     )
-    costs = [cost_function_cls(*p) for p in dataset.get_training_partitions()]
+    costs = [cost_function_cls(*p) for p in dataset.training_partitions()]
     sum_cost = reduce(add, costs)
-    optimal_x = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
-    agent_activation_schemes = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
-    compression_scheme = Quantization(n_significant_digits=4) if compression else NoCompression()
-    noise_scheme = GaussianNoise(mean=0, sd=0.001) if noise else NoNoise()
-    drop_scheme = UniformDropRate(drop_rate=0.5) if drops else NoDrops()
+    x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
+    agent_activations = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
+    message_compression = Quantization(n_significant_digits=4) if compression else NoCompression()
+    message_noise = GaussianNoise(mean=0, sd=0.001) if noise else NoNoise()
+    message_drop = UniformDropRate(drop_rate=0.5) if drops else NoDrops()
     return BenchmarkProblem(
-        topology_structure=topology_structure,
-        cost_functions=costs,
-        optimal_x=optimal_x,
-        agent_activation_schemes=agent_activation_schemes,
-        compression_scheme=compression_scheme,
-        noise_scheme=noise_scheme,
-        drop_scheme=drop_scheme,
+        network_structure=topology_structure,
+        costs=costs,
+        x_optimal=x_optimal,
+        agent_activations=agent_activations,
+        message_compression=message_compression,
+        message_noise=message_noise,
+        message_drop=message_drop,
     )

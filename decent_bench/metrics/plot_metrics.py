@@ -10,9 +10,9 @@ import numpy as np
 from matplotlib.axes import Axes as SubPlot
 
 import decent_bench.metrics.metric_utils as utils
-from decent_bench.agent import AgentMetricsView
+from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import DstAlgorithm
+from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.utils.logger import LOGGER
 
 X = float
@@ -48,11 +48,11 @@ class PlotMetric(ABC):
         """Extract trial data in the form of (x, y) datapoints."""
 
 
-class GlobalCostErrorPerIteration(PlotMetric):
+class RegretPerIteration(PlotMetric):
     r"""
-    Global cost error (y-axis) per iteration (x-axis).
+    Global regret (y-axis) per iteration (x-axis).
 
-    Global cost error is defined as:
+    Global regret is defined as:
 
     .. include:: snippets/global_cost_error.rst
 
@@ -62,18 +62,18 @@ class GlobalCostErrorPerIteration(PlotMetric):
     """
 
     x_label: str = "iteration"
-    y_label: str = "global cost error"
+    y_label: str = "regret"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
-        iter_reached_by_all = min(len(a.x_per_iteration) for a in agents)
-        return [(i, utils.global_cost_error_at_iter(agents, problem, i)) for i in range(iter_reached_by_all)]
+        iter_reached_by_all = min(len(a.x_history) for a in agents)
+        return [(i, utils.regret(agents, problem, i)) for i in range(iter_reached_by_all)]
 
 
-class GlobalGradientOptimalityPerIteration(PlotMetric):
+class GradientNormPerIteration(PlotMetric):
     r"""
-    Global gradient optimality (y-axis) per iteration (x-axis).
+    Global gradient norm (y-axis) per iteration (x-axis).
 
-    Global gradient optimality is defined as:
+    Global gradient norm is defined as:
 
     .. include:: snippets/global_gradient_optimality.rst
 
@@ -83,20 +83,20 @@ class GlobalGradientOptimalityPerIteration(PlotMetric):
     """
 
     x_label: str = "iteration"
-    y_label: str = "global gradient optimality"
+    y_label: str = "gradient norm"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
-        iter_reached_by_all = min(len(a.x_per_iteration) for a in agents)
-        return [(i, utils.global_gradient_optimality_at_iter(agents, i)) for i in range(iter_reached_by_all)]
+        iter_reached_by_all = min(len(a.x_history) for a in agents)
+        return [(i, utils.gradient_norm(agents, i)) for i in range(iter_reached_by_all)]
 
 
 DEFAULT_PLOT_METRICS = [
-    GlobalCostErrorPerIteration(x_log=False, y_log=True),
-    GlobalGradientOptimalityPerIteration(x_log=False, y_log=True),
+    RegretPerIteration(x_log=False, y_log=True),
+    GradientNormPerIteration(x_log=False, y_log=True),
 ]
 """
-- :class:`GlobalCostErrorPerIteration` (semi-log)
-- :class:`GlobalGradientOptimalityPerIteration` (semi-log)
+- :class:`RegretPerIteration` (semi-log)
+- :class:`GradientNormPerIteration` (semi-log)
 
 :meta hide-value:
 """
@@ -107,7 +107,7 @@ MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p"]
 
 
 def plot(
-    resulting_agent_states: dict[DstAlgorithm, list[list[AgentMetricsView]]],
+    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[PlotMetric],
 ) -> None:
@@ -119,7 +119,7 @@ def plot(
     Args:
         resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties, e.g.
-            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.optimal_x`, are used for metric calculations
+            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.x_optimal`, are used for metric calculations
         metrics: metrics to calculate and plot
 
     Raises:

@@ -7,7 +7,7 @@ from numpy import linalg as la
 from numpy.linalg import LinAlgError
 from numpy.typing import NDArray
 
-from decent_bench.agent import AgentMetricsView
+from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
 
 
@@ -25,7 +25,7 @@ def single(values: Sequence[float]) -> float:
 
 
 @cache
-def mean_x(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> NDArray[float64]:
+def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> NDArray[float64]:
     """
     Calculate the mean x at *iteration* (or using the agents' final x if *iteration* is -1).
 
@@ -35,43 +35,43 @@ def mean_x(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> NDArray
         ValueError: if no agent reached *iteration*
 
     """
-    all_x_at_iter = [a.x_per_iteration[iteration] for a in agents if len(a.x_per_iteration) > iteration]
+    all_x_at_iter = [a.x_history[iteration] for a in agents if len(a.x_history) > iteration]
     if len(all_x_at_iter) == 0:
         raise ValueError(f"No agent reached iteration {iteration}")
     res: NDArray[float64] = np.mean(all_x_at_iter, axis=0)
     return res
 
 
-def global_cost_error_at_iter(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int = -1) -> float:
+def regret(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int = -1) -> float:
     r"""
-    Calculate the global cost error at *iteration* (or using the agents' final x if *iteration* is -1).
+    Calculate the global regret at *iteration* (or using the agents' final x if *iteration* is -1).
 
-    Global cost error is defined as:
+    Global regret is defined as:
 
     .. include:: snippets/global_cost_error.rst
     """
-    x_opt = problem.optimal_x
-    x_mean = mean_x(tuple(agents), iteration)
-    optimal_cost = sum(a.cost_function.evaluate(x_opt) for a in agents)
-    actual_cost = sum(a.cost_function.evaluate(x_mean) for a in agents)
+    x_opt = problem.x_optimal
+    mean_x = x_mean(tuple(agents), iteration)
+    optimal_cost = sum(a.cost_function.function(x_opt) for a in agents)
+    actual_cost = sum(a.cost_function.function(mean_x) for a in agents)
     return abs(optimal_cost - actual_cost)
 
 
-def global_gradient_optimality_at_iter(agents: list[AgentMetricsView], iteration: int = -1) -> float:
+def gradient_norm(agents: list[AgentMetricsView], iteration: int = -1) -> float:
     r"""
-    Calculate the global gradient optimality at *iteration* (or using the agents' final x if *iteration* is -1).
+    Calculate the global gradient norm at *iteration* (or using the agents' final x if *iteration* is -1).
 
-    Global gradient optimality is defined as:
+    Global gradient norm is defined as:
 
     .. include:: snippets/global_gradient_optimality.rst
     """
-    x_mean = mean_x(tuple(agents), iteration)
-    grad_avg = sum(a.cost_function.gradient(x_mean) for a in agents) / len(agents)
+    mean_x = x_mean(tuple(agents), iteration)
+    grad_avg = sum(a.cost_function.gradient(mean_x) for a in agents) / len(agents)
     return float(la.norm(grad_avg)) ** 2
 
 
 @cache
-def x_error_per_iteration(agent: AgentMetricsView, problem: BenchmarkProblem) -> NDArray[float64]:
+def x_error(agent: AgentMetricsView, problem: BenchmarkProblem) -> NDArray[float64]:
     r"""
     Calculate the x error per iteration as defined below.
 
@@ -81,8 +81,8 @@ def x_error_per_iteration(agent: AgentMetricsView, problem: BenchmarkProblem) ->
     where :math:`\mathbf{x}_k` is the agent's local x at iteration k,
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
     """
-    x_per_iteration = np.asarray(agent.x_per_iteration)
-    opt_x = problem.optimal_x
+    x_per_iteration = np.asarray(agent.x_history)
+    opt_x = problem.x_optimal
     errors: NDArray[float64] = la.norm(x_per_iteration - opt_x, axis=tuple(range(1, x_per_iteration.ndim)))
     return errors
 
@@ -94,7 +94,7 @@ def asymptotic_convergence_rate_and_order(agent: AgentMetricsView, problem: Benc
 
     .. include:: snippets/asymptotic_convergence_rate_and_order.rst
     """
-    errors = x_error_per_iteration(agent, problem)
+    errors = x_error(agent, problem)
     errors = errors[errors > 0]
     if not np.isfinite(errors).all():
         return np.nan, np.nan
@@ -116,7 +116,7 @@ def iterative_convergence_rate_and_order(agent: AgentMetricsView, problem: Bench
 
     .. include:: snippets/iterative_convergence_rate_and_order.rst
     """
-    errors = x_error_per_iteration(agent, problem)
+    errors = x_error(agent, problem)
     if not np.isfinite(errors).all():
         return np.nan, np.nan
     iterations_and_errors = [(i + 1, e) for i, e in enumerate(errors)]

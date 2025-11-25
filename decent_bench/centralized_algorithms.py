@@ -6,11 +6,11 @@ from numpy import linalg as la
 from numpy.typing import NDArray
 
 if TYPE_CHECKING:
-    from decent_bench.cost_functions import CostFunction
+    from decent_bench.costs import Cost
 
 
 def gradient_descent(
-    cost_function: "CostFunction",
+    cost: "Cost",
     x0: NDArray[float64] | None,
     *,
     step_size: float,
@@ -22,7 +22,7 @@ def gradient_descent(
     Find the x that minimizes the cost function using gradient descent.
 
     Args:
-        cost_function: cost function to minimize
+        cost: cost function to minimize
         x0: initial guess, defaults to ``np.zeros()`` if ``None`` is provided
         step_size: scaling factor for each update
         max_iter: maximum number of iterations to run
@@ -37,9 +37,9 @@ def gradient_descent(
 
     """
     delta = np.inf
-    x = x0 if x0 is not None else np.zeros(cost_function.domain_shape)
+    x = x0 if x0 is not None else np.zeros(cost.shape)
     for _ in range(max_iter):
-        x_new = x - step_size * cost_function.gradient(x)
+        x_new = x - step_size * cost.gradient(x)
         delta = float(la.norm(x_new - x))
         x = x_new
         if stop_tol is not None and delta <= stop_tol:
@@ -54,7 +54,7 @@ def gradient_descent(
 
 
 def accelerated_gradient_descent(
-    cost_function: "CostFunction",
+    cost: "Cost",
     x0: NDArray[float64] | None,
     *,
     max_iter: int,
@@ -65,7 +65,7 @@ def accelerated_gradient_descent(
     Find the x that minimizes the cost function using accelerated gradient descent.
 
     Args:
-        cost_function: cost function to minimize
+        cost: cost function to minimize
         x0: initial guess, defaults to ``np.zeros()`` if ``None`` is provided
         max_iter: maximum number of iterations to run
         stop_tol: early stopping criteria - stop if ``norm(x_new - x) <= stop_tol``
@@ -79,31 +79,29 @@ def accelerated_gradient_descent(
         x that minimizes the cost function.
 
     """
-    if x0 is not None and x0.shape != cost_function.domain_shape:
+    if x0 is not None and x0.shape != cost.shape:
         raise ValueError("x0 and cost function domain must have same shape")
-    if cost_function.m_smooth == 0:
+    if cost.m_smooth == 0:
         raise ValueError("Function must not be affine")
-    if cost_function.m_smooth < 0:
+    if cost.m_smooth < 0:
         raise ValueError("m_smooth must not be negative")
-    if cost_function.m_cvx < 0:
+    if cost.m_cvx < 0:
         raise ValueError("m_cvx must not be negative")
-    if cost_function.m_smooth == np.inf:
+    if cost.m_smooth == np.inf:
         raise NotImplementedError("Support for non-L-smoothness is not implemented yet")
-    if np.isnan(cost_function.m_smooth):
+    if np.isnan(cost.m_smooth):
         raise NotImplementedError("Support for non-global differentiability is not implemented yet")
-    if np.isnan(cost_function.m_cvx):
+    if np.isnan(cost.m_cvx):
         raise NotImplementedError("Support for non-convexity is not implemented yet")
-    x0 = x0 if x0 is not None else np.zeros(cost_function.domain_shape)
+    x0 = x0 if x0 is not None else np.zeros(cost.shape)
     x = x0
     y = x0
-    c = (np.sqrt(cost_function.m_smooth) - np.sqrt(cost_function.m_cvx)) / (
-        np.sqrt(cost_function.m_smooth) + np.sqrt(cost_function.m_cvx)
-    )
+    c = (np.sqrt(cost.m_smooth) - np.sqrt(cost.m_cvx)) / (np.sqrt(cost.m_smooth) + np.sqrt(cost.m_cvx))
     delta = np.inf
     for k in range(1, max_iter + 1):
-        x_new = y - cost_function.gradient(y) / cost_function.m_smooth
+        x_new = y - cost.gradient(y) / cost.m_smooth
         delta = float(la.norm(x_new - x))
-        beta = c if cost_function.m_cvx > 0 else (k - 1) / (k + 2)
+        beta = c if cost.m_cvx > 0 else (k - 1) / (k + 2)
         y_new = x_new + beta * (x_new - x)
         x, y = x_new, y_new
         if stop_tol is not None and delta <= stop_tol:
@@ -117,7 +115,7 @@ def accelerated_gradient_descent(
     return x
 
 
-def proximal_solver(cost_function: "CostFunction", y: NDArray[float64], rho: float) -> NDArray[float64]:
+def proximal_solver(cost: "Cost", y: NDArray[float64], rho: float) -> NDArray[float64]:
     """
     Find the proximal at y using accelerated gradient descent.
 
@@ -126,14 +124,14 @@ def proximal_solver(cost_function: "CostFunction", y: NDArray[float64], rho: flo
     .. include:: snippets/proximal_operator.rst
 
     Raises:
-        ValueError: if *cost_function*'s domain and *y* don't have the same shape, or if *rho* is not greater than 0
+        ValueError: if *cost*'s domain and *y* don't have the same shape, or if *rho* is not greater than 0
 
     """
-    if cost_function.domain_shape != y.shape:
+    if cost.shape != y.shape:
         raise ValueError("Cost function domain and y need to have the same shape")
     if rho <= 0:
         raise ValueError("Penalty term `rho` must be greater than 0")
-    from decent_bench.cost_functions import QuadraticCost  # noqa: PLC0415
+    from decent_bench.costs import QuadraticCost  # noqa: PLC0415
 
-    proximal_cost = QuadraticCost(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho)) + cost_function
+    proximal_cost = QuadraticCost(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho)) + cost
     return accelerated_gradient_descent(proximal_cost, y, max_iter=100, stop_tol=1e-10, max_tol=None)

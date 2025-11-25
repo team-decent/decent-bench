@@ -13,13 +13,18 @@ from scipy import special
 import decent_bench.centralized_algorithms as ca
 
 
-class CostFunction(ABC):
+class Cost(ABC):
     """Used by agents to evaluate the cost and its derivatives at a certain x."""
 
     @property
     @abstractmethod
-    def domain_shape(self) -> tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         """Required shape of x."""
+
+    @property
+    def domain_shape(self) -> tuple[int, ...]:
+        """Alias for :attr:`shape`."""
+        return self.shape
 
     @property
     @abstractmethod
@@ -59,8 +64,20 @@ class CostFunction(ABC):
         """
 
     @abstractmethod
-    def evaluate(self, x: NDArray[float64]) -> float:
+    def function(self, x: NDArray[float64]) -> float:
         """Evaluate function at x."""
+
+    def evaluate(self, x: NDArray[float64]) -> float:
+        """Alias for :meth:`function`."""
+        return self.function(x)
+
+    def loss(self, x: NDArray[float64]) -> float:
+        """Alias for :meth:`function`."""
+        return self.function(x)
+
+    def f(self, x: NDArray[float64]) -> float:
+        """Alias for :meth:`function`."""
+        return self.function(x)
 
     @abstractmethod
     def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
@@ -84,7 +101,7 @@ class CostFunction(ABC):
         """
 
     @abstractmethod
-    def __add__(self, other: CostFunction) -> CostFunction:
+    def __add__(self, other: Cost) -> Cost:
         """
         Add another cost function to create a new one.
 
@@ -97,7 +114,7 @@ class CostFunction(ABC):
         """
 
 
-class QuadraticCost(CostFunction):
+class QuadraticCost(Cost):
     r"""
     Quadratic cost function.
 
@@ -119,7 +136,7 @@ class QuadraticCost(CostFunction):
         self.c = c
 
     @property
-    def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
+    def shape(self) -> tuple[int, ...]:  # noqa: D102
         return self.b.shape
 
     @cached_property
@@ -133,7 +150,7 @@ class QuadraticCost(CostFunction):
         where :math:`\lambda_i` are the eigenvalues of :math:`\frac{1}{2} (\mathbf{A}+\mathbf{A}^T)`.
 
         For the general definition, see
-        :attr:`CostFunction.m_smooth <decent_bench.cost_functions.CostFunction.m_smooth>`.
+        :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
         """
         eigs = np.linalg.eigvalsh(self.A_sym)
         return float(np.max(np.abs(eigs)))
@@ -153,7 +170,7 @@ class QuadraticCost(CostFunction):
         where :math:`\lambda_i` are the eigenvalues of :math:`\frac{1}{2} (\mathbf{A}+\mathbf{A}^T)`.
 
         For the general definition, see
-        :attr:`CostFunction.m_cvx <decent_bench.cost_functions.CostFunction.m_cvx>`.
+        :attr:`Cost.m_cvx <decent_bench.costs.Cost.m_cvx>`.
         """
         eigs = np.linalg.eigvalsh(self.A_sym)
         l_min = float(np.min(eigs))
@@ -164,7 +181,7 @@ class QuadraticCost(CostFunction):
             return 0
         return np.nan
 
-    def evaluate(self, x: NDArray[float64]) -> float:
+    def function(self, x: NDArray[float64]) -> float:
         r"""
         Evaluate function at x.
 
@@ -198,14 +215,14 @@ class QuadraticCost(CostFunction):
         where :math:`\rho > 0` is the penalty.
 
         This is a closed form solution, see
-        :meth:`CostFunction.proximal() <decent_bench.cost_functions.CostFunction.proximal>`
+        :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>`
         for the general proximal definition.
         """
         lhs = rho * self.A_sym + np.eye(self.A.shape[1])
         rhs = y - self.b * rho
         return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
 
-    def __add__(self, other: CostFunction) -> CostFunction:
+    def __add__(self, other: Cost) -> Cost:
         """
         Add another cost function.
 
@@ -213,8 +230,8 @@ class QuadraticCost(CostFunction):
             ValueError: if the domain shapes don't match
 
         """
-        if self.domain_shape != other.domain_shape:
-            raise ValueError(f"Mismatching domain shapes: {self.domain_shape} vs {other.domain_shape}")
+        if self.shape != other.shape:
+            raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
         if isinstance(other, QuadraticCost):
             return QuadraticCost(self.A + other.A, self.b + other.b, self.c + other.c)
         if isinstance(other, LinearRegressionCost):
@@ -222,7 +239,7 @@ class QuadraticCost(CostFunction):
         return SumCost([self, other])
 
 
-class LinearRegressionCost(CostFunction):
+class LinearRegressionCost(Cost):
     r"""
     Linear regression cost function.
 
@@ -245,8 +262,8 @@ class LinearRegressionCost(CostFunction):
         self.b = b
 
     @property
-    def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
-        return self.inner.domain_shape
+    def shape(self) -> tuple[int, ...]:  # noqa: D102
+        return self.inner.shape
 
     @property
     def m_smooth(self) -> float:
@@ -259,7 +276,7 @@ class LinearRegressionCost(CostFunction):
         where :math:`\lambda_i` are the eigenvalues of :math:`\mathbf{A}^T \mathbf{A}`.
 
         For the general definition, see
-        :attr:`CostFunction.m_smooth <decent_bench.cost_functions.CostFunction.m_smooth>`.
+        :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
         """
         return self.inner.m_smooth
 
@@ -278,17 +295,17 @@ class LinearRegressionCost(CostFunction):
         where :math:`\lambda_i` are the eigenvalues of :math:`\mathbf{A}^T \mathbf{A}`.
 
         For the general definition, see
-        :attr:`CostFunction.m_cvx <decent_bench.cost_functions.CostFunction.m_cvx>`.
+        :attr:`Cost.m_cvx <decent_bench.costs.Cost.m_cvx>`.
         """
         return self.inner.m_cvx
 
-    def evaluate(self, x: NDArray[float64]) -> float:
+    def function(self, x: NDArray[float64]) -> float:
         r"""
         Evaluate function at x.
 
         .. math:: \frac{1}{2} \| \mathbf{Ax} - \mathbf{b} \|^2
         """
-        return self.inner.evaluate(x)
+        return self.inner.function(x)
 
     def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
         r"""
@@ -316,17 +333,17 @@ class LinearRegressionCost(CostFunction):
         where :math:`\rho > 0` is the penalty.
 
         This is a closed form solution, see
-        :meth:`CostFunction.proximal() <decent_bench.cost_functions.CostFunction.proximal>`
+        :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>`
         for the general proximal definition.
         """
         return self.inner.proximal(y, rho)
 
-    def __add__(self, other: CostFunction) -> CostFunction:
+    def __add__(self, other: Cost) -> Cost:
         """Add another cost function."""
         return self.inner + other
 
 
-class LogisticRegressionCost(CostFunction):
+class LogisticRegressionCost(Cost):
     r"""
     Logistic regression cost function.
 
@@ -352,7 +369,7 @@ class LogisticRegressionCost(CostFunction):
         self.b = b
 
     @property
-    def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
+    def shape(self) -> tuple[int, ...]:  # noqa: D102
         return (self.A.shape[1],)
 
     @cached_property
@@ -365,7 +382,7 @@ class LogisticRegressionCost(CostFunction):
         where m is the number of rows in :math:`\mathbf{A}`.
 
         For the general definition, see
-        :attr:`CostFunction.m_smooth <decent_bench.cost_functions.CostFunction.m_smooth>`.
+        :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
         """
         res: float = max(pow(la.norm(row), 2) for row in self.A) * self.A.shape[0] / 4
         return res
@@ -376,11 +393,11 @@ class LogisticRegressionCost(CostFunction):
         The cost function's convexity constant, 0.
 
         For the general definition, see
-        :attr:`CostFunction.m_cvx <decent_bench.cost_functions.CostFunction.m_cvx>`.
+        :attr:`Cost.m_cvx <decent_bench.costs.Cost.m_cvx>`.
         """
         return 0
 
-    def evaluate(self, x: NDArray[float64]) -> float:
+    def function(self, x: NDArray[float64]) -> float:
         r"""
         Evaluate function at x.
 
@@ -423,12 +440,12 @@ class LogisticRegressionCost(CostFunction):
         Proximal at y solved using an iterative method.
 
         See
-        :meth:`CostFunction.proximal() <decent_bench.cost_functions.CostFunction.proximal>`
+        :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>`
         for the general proximal definition.
         """
         return ca.proximal_solver(self, y, rho)
 
-    def __add__(self, other: CostFunction) -> CostFunction:
+    def __add__(self, other: Cost) -> Cost:
         """
         Add another cost function.
 
@@ -436,20 +453,20 @@ class LogisticRegressionCost(CostFunction):
             ValueError: if the domain shapes don't match
 
         """
-        if self.domain_shape != other.domain_shape:
-            raise ValueError(f"Mismatching domain shapes: {self.domain_shape} vs {other.domain_shape}")
+        if self.shape != other.shape:
+            raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
         if isinstance(other, LogisticRegressionCost):
             return LogisticRegressionCost(np.vstack([self.A, other.A]), np.concatenate([self.b, other.b]))
         return SumCost([self, other])
 
 
-class SumCost(CostFunction):
+class SumCost(Cost):
     """The sum of multiple cost functions."""
 
-    def __init__(self, cost_functions: list[CostFunction]):
-        if not all(cost_functions[0].domain_shape == cf.domain_shape for cf in cost_functions):
+    def __init__(self, cost_functions: list[Cost]):
+        if not all(cost_functions[0].shape == cf.shape for cf in cost_functions):
             raise ValueError("All cost functions must have the same domain shape")
-        self.cost_functions: list[CostFunction] = []
+        self.cost_functions: list[Cost] = []
         for cf in cost_functions:
             if isinstance(cf, SumCost):
                 self.cost_functions.extend(cf.cost_functions)
@@ -457,8 +474,8 @@ class SumCost(CostFunction):
                 self.cost_functions.append(cf)
 
     @property
-    def domain_shape(self) -> tuple[int, ...]:  # noqa: D102
-        return self.cost_functions[0].domain_shape
+    def shape(self) -> tuple[int, ...]:  # noqa: D102
+        return self.cost_functions[0].shape
 
     @cached_property
     def m_smooth(self) -> float:
@@ -473,7 +490,7 @@ class SumCost(CostFunction):
         the result is :math:`\text{NaN}`.
 
         For the general definition, see
-        :attr:`CostFunction.m_smooth <decent_bench.cost_functions.CostFunction.m_smooth>`.
+        :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
         """
         m_smooth_vals = [cf.m_smooth for cf in self.cost_functions]
         return np.nan if any(np.isnan(v) for v in m_smooth_vals) else sum(m_smooth_vals)
@@ -491,14 +508,14 @@ class SumCost(CostFunction):
         the result is :math:`\text{NaN}`.
 
         For the general definition, see
-        :attr:`CostFunction.m_cvx <decent_bench.cost_functions.CostFunction.m_cvx>`.
+        :attr:`Cost.m_cvx <decent_bench.costs.Cost.m_cvx>`.
         """
         m_cvx_vals = [cf.m_cvx for cf in self.cost_functions]
         return np.nan if any(np.isnan(v) for v in m_cvx_vals) else sum(m_cvx_vals)
 
-    def evaluate(self, x: NDArray[float64]) -> float:
-        """Sum the :meth:`evaluate` of each cost function."""
-        return sum(cf.evaluate(x) for cf in self.cost_functions)
+    def function(self, x: NDArray[float64]) -> float:
+        """Sum the :meth:`function` of each cost function."""
+        return sum(cf.function(x) for cf in self.cost_functions)
 
     def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
         """Sum the :meth:`gradient` of each cost function."""
@@ -515,11 +532,11 @@ class SumCost(CostFunction):
         Proximal at y solved using an iterative method.
 
         See
-        :meth:`CostFunction.proximal() <decent_bench.cost_functions.CostFunction.proximal>`
+        :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>`
         for the general proximal definition.
         """
         return ca.proximal_solver(self, y, rho)
 
-    def __add__(self, other: CostFunction) -> SumCost:
+    def __add__(self, other: Cost) -> SumCost:
         """Add another cost function."""
         return SumCost([self, other])
