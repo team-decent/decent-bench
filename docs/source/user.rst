@@ -223,7 +223,7 @@ corresponding abstracts.
 
     problem = BenchmarkProblem(
         network_structure=nx.random_regular_graph(3, n_agents, seed=0),
-        cost_functions=costs,
+        costs=costs,
         x_optimal=x_optimal,
         agent_activations=[MyAgentActivationScheme()] * n_agents,
         message_compression=MyCompressionScheme(),
