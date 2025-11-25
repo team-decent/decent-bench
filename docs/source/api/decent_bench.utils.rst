@@ -7,6 +7,7 @@ decent\_bench.utils
 
    decent_bench.utils.logger
    decent_bench.utils.progress_bar
+   decent_bench.utils.interoperability
 
 .. automodule:: decent_bench.utils
    :members:
