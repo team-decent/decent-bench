@@ -202,7 +202,7 @@ corresponding abstracts.
 
     class MyDataset(Dataset): ...
 
-    class MyCostFunction(CostFunction): ...
+    class MyCost(Cost): ...
 
     class MyAgentActivationScheme(AgentActivationScheme): ...
 
@@ -214,7 +214,7 @@ corresponding abstracts.
 
     n_agents = 100
 
-    costs = [MyCostFunction(*p) for p in MyDataset().training_partitions()]
+    costs = [MyCost(*p) for p in MyDataset().training_partitions()]
 
     sum_cost = sum(costs[1:], start=costs[0])
     x_optimal = ca.accelerated_gradient_descent(
