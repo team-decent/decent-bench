@@ -267,7 +267,7 @@ variable. Similarly, in order for the benchmark problem's communication schemes 
             for agent in network.agents():
                 x0 = np.zeros(agent.cost.shape)
                 y0 = np.zeros(agent.cost.shape)
-                neighbors = network.get_neighbors(agent)
+                neighbors = network.neighbors(agent)
                 agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
 
             # Run iterations
