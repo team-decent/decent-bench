@@ -73,7 +73,7 @@ def accelerated_gradient_descent(
 
     Raises:
         RuntimeError: if ``norm(x_new - x) > max_tol`` at the end
-        ValueError: if ``cost_function.m_smooth < 0``, ``cost_function.m_cvx < 0``, or cost function is affine
+        ValueError: if ``cost.m_smooth < 0``, ``cost.m_cvx < 0``, or cost function is affine
 
     Returns:
         x that minimizes the cost function.

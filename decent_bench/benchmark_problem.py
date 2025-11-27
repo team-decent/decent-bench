@@ -59,7 +59,7 @@ class BenchmarkProblem:
 
 
 def create_regression_problem(
-    cost_function_cls: type[LinearRegressionCost | LogisticRegressionCost],
+    cost_cls: type[LinearRegressionCost | LogisticRegressionCost],
     *,
     n_agents: int = 100,
     n_neighbors_per_agent: int = 3,
@@ -72,7 +72,7 @@ def create_regression_problem(
     Create out-of-the-box regression problems.
 
     Args:
-        cost_function_cls: type of cost function
+        cost_cls: type of cost function
         n_agents: number of agents
         n_neighbors_per_agent: number of neighbors per agent
         asynchrony: if true, agents only have a 50% probability of being active/participating at any given time
@@ -81,11 +81,11 @@ def create_regression_problem(
         drops: if true, messages have a 50% probability of being dropped
 
     """
-    topology_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
+    network_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
     dataset = SyntheticClassificationData(
         n_classes=2, n_partitions=n_agents, n_samples_per_partition=10, n_features=3, seed=0
     )
-    costs = [cost_function_cls(*p) for p in dataset.training_partitions()]
+    costs = [cost_cls(*p) for p in dataset.training_partitions()]
     sum_cost = reduce(add, costs)
     x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
     agent_activations = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
@@ -93,7 +93,7 @@ def create_regression_problem(
     message_noise = GaussianNoise(mean=0, sd=0.001) if noise else NoNoise()
     message_drop = UniformDropRate(drop_rate=0.5) if drops else NoDrops()
     return BenchmarkProblem(
-        network_structure=topology_structure,
+        network_structure=network_structure,
         costs=costs,
         x_optimal=x_optimal,
         agent_activations=agent_activations,

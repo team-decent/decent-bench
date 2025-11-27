@@ -164,7 +164,7 @@ Create a custom benchmark problem using existing resources.
 
     problem = BenchmarkProblem(
         network_structure=nx.random_regular_graph(3, n_agents, seed=0),
-        cost_functions=costs,
+        costs=costs,
         x_optimal=x_optimal,
         agent_activations=[UniformActivationRate(0.5)] * n_agents,
         message_compression=Quantization(n_significant_digits=4),
@@ -271,7 +271,7 @@ variable. Similarly, in order for the benchmark problem's communication schemes 
                 agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
 
             # Run iterations
-            W = network.metropolis_weights
+            W = network.weights
             for k in range(self.iterations):
                 for i in network.active_agents(k):
                     i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
@@ -306,9 +306,9 @@ Create your own metrics to tabulate and/or plot.
     import numpy.linalg as la
 
     from decent_bench import benchmark, benchmark_problem
-    from decent_bench.agent import AgentMetricsView
+    from decent_bench.agents import AgentMetricsView
     from decent_bench.benchmark_problem import BenchmarkProblem
-    from decent_bench.cost_functions import LinearRegressionCost
+    from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
     from decent_bench.metrics.plot_metrics import DEFAULT_PLOT_METRICS, PlotMetric, X, Y
     from decent_bench.metrics.table_metrics import DEFAULT_TABLE_METRICS, TableMetric
