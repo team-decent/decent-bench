@@ -28,7 +28,7 @@ class Agent:
         self._n_gradient_calls = 0
         self._n_hessian_calls = 0
         self._n_proximal_calls = 0
-        cost.function = self._call_counting_evaluate  # type: ignore[method-assign]
+        cost.function = self._call_counting_function  # type: ignore[method-assign]
         cost.gradient = self._call_counting_gradient  # type: ignore[method-assign]
         cost.hessian = self._call_counting_hessian  # type: ignore[method-assign]
         cost.proximal = self._call_counting_proximal  # type: ignore[method-assign]
@@ -101,7 +101,7 @@ class Agent:
         if received_msgs:
             self._received_messages = received_msgs
 
-    def _call_counting_evaluate(self, x: NDArray[float64]) -> float:
+    def _call_counting_function(self, x: NDArray[float64]) -> float:
         self._n_function_calls += 1
         return self._cost.__class__.function(self.cost, x)
 
@@ -126,7 +126,7 @@ class Agent:
 class AgentMetricsView:
     """Immutable view of agent that exposes useful properties for calculating metrics."""
 
-    cost_function: Cost
+    cost: Cost
     x_history: list[NDArray[float64]]
     n_function_calls: int
     n_gradient_calls: int
@@ -140,7 +140,7 @@ class AgentMetricsView:
     def from_agent(agent: Agent) -> AgentMetricsView:
         """Create from agent."""
         return AgentMetricsView(
-            cost_function=agent.cost,
+            cost=agent.cost,
             x_history=agent._x_history,  # noqa: SLF001
             n_function_calls=agent._n_function_calls,  # noqa: SLF001
             n_gradient_calls=agent._n_gradient_calls,  # noqa: SLF001

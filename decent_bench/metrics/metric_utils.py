@@ -52,8 +52,8 @@ def regret(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration:
     """
     x_opt = problem.x_optimal
     mean_x = x_mean(tuple(agents), iteration)
-    optimal_cost = sum(a.cost_function.function(x_opt) for a in agents)
-    actual_cost = sum(a.cost_function.function(mean_x) for a in agents)
+    optimal_cost = sum(a.cost.function(x_opt) for a in agents)
+    actual_cost = sum(a.cost.function(mean_x) for a in agents)
     return abs(optimal_cost - actual_cost)
 
 
@@ -66,7 +66,7 @@ def gradient_norm(agents: list[AgentMetricsView], iteration: int = -1) -> float:
     .. include:: snippets/global_gradient_optimality.rst
     """
     mean_x = x_mean(tuple(agents), iteration)
-    grad_avg = sum(a.cost_function.gradient(mean_x) for a in agents) / len(agents)
+    grad_avg = sum(a.cost.gradient(mean_x) for a in agents) / len(agents)
     return float(la.norm(grad_avg)) ** 2
 
 

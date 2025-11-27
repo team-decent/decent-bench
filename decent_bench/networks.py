@@ -47,8 +47,6 @@ class P2PNetwork:
         Symmetric, doubly stochastic matrix for consensus weights. Initialized using the Metropolis-Hastings method.
 
         Use ``weights[i, j]`` or ``weights[i.id, j.id]`` to get the weight between agent i and j.
-
-        Alias: :attr:`metropolis_weights`
         """
         agents = self.agents()
         n = len(agents)
@@ -62,11 +60,6 @@ class P2PNetwork:
         for i in agents:
             W[i, i] = 1 - sum(W[i])
         return W
-
-    @cached_property
-    def metropolis_weights(self) -> NDArray[float64]:
-        """Alias for :attr:`weights`."""
-        return self.weights
 
     def agents(self) -> list[Agent]:
         """Get all agents in the network."""

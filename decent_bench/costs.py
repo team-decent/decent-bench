@@ -463,19 +463,19 @@ class LogisticRegressionCost(Cost):
 class SumCost(Cost):
     """The sum of multiple cost functions."""
 
-    def __init__(self, cost_functions: list[Cost]):
-        if not all(cost_functions[0].shape == cf.shape for cf in cost_functions):
+    def __init__(self, costs: list[Cost]):
+        if not all(costs[0].shape == cf.shape for cf in costs):
             raise ValueError("All cost functions must have the same domain shape")
-        self.cost_functions: list[Cost] = []
-        for cf in cost_functions:
+        self.costs: list[Cost] = []
+        for cf in costs:
             if isinstance(cf, SumCost):
-                self.cost_functions.extend(cf.cost_functions)
+                self.costs.extend(cf.costs)
             else:
-                self.cost_functions.append(cf)
+                self.costs.append(cf)
 
     @property
     def shape(self) -> tuple[int, ...]:  # noqa: D102
-        return self.cost_functions[0].shape
+        return self.costs[0].shape
 
     @cached_property
     def m_smooth(self) -> float:
@@ -492,7 +492,7 @@ class SumCost(Cost):
         For the general definition, see
         :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
         """
-        m_smooth_vals = [cf.m_smooth for cf in self.cost_functions]
+        m_smooth_vals = [cf.m_smooth for cf in self.costs]
         return np.nan if any(np.isnan(v) for v in m_smooth_vals) else sum(m_smooth_vals)
 
     @cached_property
@@ -510,21 +510,21 @@ class SumCost(Cost):
         For the general definition, see
         :attr:`Cost.m_cvx <decent_bench.costs.Cost.m_cvx>`.
         """
-        m_cvx_vals = [cf.m_cvx for cf in self.cost_functions]
+        m_cvx_vals = [cf.m_cvx for cf in self.costs]
         return np.nan if any(np.isnan(v) for v in m_cvx_vals) else sum(m_cvx_vals)
 
     def function(self, x: NDArray[float64]) -> float:
         """Sum the :meth:`function` of each cost function."""
-        return sum(cf.function(x) for cf in self.cost_functions)
+        return sum(cf.function(x) for cf in self.costs)
 
     def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
         """Sum the :meth:`gradient` of each cost function."""
-        res: NDArray[float64] = np.sum([cf.gradient(x) for cf in self.cost_functions], axis=0)
+        res: NDArray[float64] = np.sum([cf.gradient(x) for cf in self.costs], axis=0)
         return res
 
     def hessian(self, x: NDArray[float64]) -> NDArray[float64]:
         """Sum the :meth:`hessian` of each cost function."""
-        res: NDArray[float64] = np.sum([cf.hessian(x) for cf in self.cost_functions], axis=0)
+        res: NDArray[float64] = np.sum([cf.hessian(x) for cf in self.costs], axis=0)
         return res
 
     def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
