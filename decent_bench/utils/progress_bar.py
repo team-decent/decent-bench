@@ -5,7 +5,7 @@ from threading import Thread
 
 from rich.progress import BarColumn, Progress, TaskID, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
-from decent_bench.distributed_algorithms import DstAlgorithm
+from decent_bench.distributed_algorithms import Algorithm
 
 
 @dataclass(eq=False)
@@ -25,7 +25,7 @@ class ProgressBarController:
 
     """
 
-    def __init__(self, manager: SyncManager, algorithms: list[DstAlgorithm], n_trials: int):
+    def __init__(self, manager: SyncManager, algorithms: list[Algorithm], n_trials: int):
         self._progress_increment_queue: Queue[_ProgressRecord] = manager.Queue()
         orchestrator = Progress(
             TextColumn("{task.description}"),
@@ -39,7 +39,7 @@ class ProgressBarController:
         listener_thread = Thread(target=self._progress_listener, args=(orchestrator, self._progress_increment_queue))
         listener_thread.start()
 
-    def start_progress_bar(self, algorithm: DstAlgorithm) -> None:
+    def start_progress_bar(self, algorithm: Algorithm) -> None:
         """
         Start the clock of *algorithm*'s progress bar without incrementing it.
 
@@ -50,7 +50,7 @@ class ProgressBarController:
         progress_bar_id = self._progress_bar_ids[algorithm]
         self._progress_increment_queue.put(_ProgressRecord(progress_bar_id, 0))
 
-    def advance_progress_bar(self, algorithm: DstAlgorithm) -> None:
+    def advance_progress_bar(self, algorithm: Algorithm) -> None:
         """Advance *algorithm*'s progress bar by one trial."""
         progress_bar_id = self._progress_bar_ids[algorithm]
         self._progress_increment_queue.put(_ProgressRecord(progress_bar_id, 1))

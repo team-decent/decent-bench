@@ -20,7 +20,7 @@ class Dataset(ABC):
     """Dataset containing partitions in the form of feature matrix A and target vector b."""
 
     @abstractmethod
-    def get_training_partitions(self) -> Sequence[DatasetPartition]:
+    def training_partitions(self) -> Sequence[DatasetPartition]:
         """Partitions used for finding the optimal optimization variable x."""
 
 
@@ -30,7 +30,7 @@ class SyntheticClassificationData(Dataset):
 
     Args:
         n_partitions: number of training partitions to generate, i.e. the length of the sequence returned by
-            :meth:`get_training_partitions`
+            :meth:`training_partitions`
         n_classes: number of classes, i.e. unique values in target vector b
         n_samples_per_partition: number of rows in A and b per partition
         n_features: columns in A
@@ -47,7 +47,7 @@ class SyntheticClassificationData(Dataset):
         self.n_features = n_features
         self.seed = seed
 
-    def get_training_partitions(self) -> list[DatasetPartition]:  # noqa: D102
+    def training_partitions(self) -> list[DatasetPartition]:  # noqa: D102
         res = []
         for i in range(self.n_partitions):
             seed = self.seed + i if self.seed is not None else None
