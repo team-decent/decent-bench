@@ -63,9 +63,11 @@ class DGD(Algorithm):
         W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
         for k in range(self.iterations):
             for i in network.active_agents(k):
-                neighborhood_avg = iop.sum([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
-                neighborhood_avg += W[i, i] * i.x
-                i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
+                neighborhood_avg = iop.sum(
+                    iop.stack([iop.mul(W[i.id, j.id], x_j) for j, x_j in i.messages.items()]), dim=0
+                )
+                neighborhood_avg = iop.add(neighborhood_avg, iop.mul(W[i.id, i.id], i.x))
+                i.x = iop.sub(neighborhood_avg, iop.mul(self.step_size, i.cost.gradient(i.x)))
             for i in network.active_agents(k):
                 network.broadcast(i, i.x)
             for i in network.active_agents(k):
@@ -119,7 +121,7 @@ class ATC(Algorithm):
         for k in range(self.iterations):
             # gradient step (a.k.a. adapt step)
             for i in network.active_agents(k):
-                i.aux_vars["y"] = i.x - self.step_size * i.cost.gradient(i.x)
+                i.aux_vars["y"] = iop.sub(i.x, iop.mul(self.step_size, i.cost.gradient(i.x)))
 
             # transmit and receive
             for i in network.active_agents(k):
@@ -130,9 +132,9 @@ class ATC(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
+                s = iop.stack([iop.mul(W[i.id, j.id], x_j) for j, x_j in i.messages.items()], dim=0)
                 neighborhood_avg = iop.sum(s, dim=0)
-                neighborhood_avg += W[i, i] * i.x
+                neighborhood_avg = iop.add(neighborhood_avg, iop.mul(W[i.id, i.id], i.x))
                 i.x = neighborhood_avg
 
 
@@ -180,10 +182,12 @@ class SimpleGT(Algorithm):
         W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
         for k in range(self.iterations):
             for i in network.active_agents(k):
-                i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
-                neighborhood_avg = iop.sum([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
-                neighborhood_avg += W[i, i] * i.x
-                i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
+                i.aux_vars["y_new"] = iop.sub(i.x, iop.mul(self.step_size, i.cost.gradient(i.x)))
+                neighborhood_avg = iop.sum(
+                    iop.stack([iop.mul(W[i.id, j.id], x_j) for j, x_j in i.messages.items()]), dim=0
+                )
+                neighborhood_avg = iop.add(neighborhood_avg, iop.mul(W[i.id, i.id], i.x))
+                i.x = iop.add(iop.sub(i.aux_vars["y_new"], i.aux_vars["y"]), neighborhood_avg)
                 i.aux_vars["y"] = i.aux_vars["y_new"]
             for i in network.active_agents(k):
                 network.broadcast(i, i.x)
@@ -245,13 +249,14 @@ class ED(Algorithm):
         )
         for k in range(self.iterations):
             for i in network.active_agents(k):
-                i.x = iop.sum([W[i, j] * msg for j, msg in i.messages.items()], dim=0) + W[i, i] * (
-                    i.x + i.aux_vars["y_new"] - i.aux_vars["y"]
+                i.x = iop.add(
+                    iop.sum(iop.stack([iop.mul(W[i.id, j.id], msg) for j, msg in i.messages.items()]), dim=0),
+                    iop.mul(W[i.id, i.id], iop.add(i.x, iop.sub(i.aux_vars["y_new"], i.aux_vars["y"]))),
                 )
                 i.aux_vars["y"] = i.aux_vars["y_new"]
-                i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
+                i.aux_vars["y_new"] = iop.sub(i.x, iop.mul(self.step_size, i.cost.gradient(i.x)))
             for i in network.active_agents(k):
-                network.broadcast(i, i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
+                network.broadcast(i, iop.add(i.x, iop.sub(i.aux_vars["y_new"], i.aux_vars["y"])))
             for i in network.active_agents(k):
                 network.receive_all(i)
 
@@ -316,7 +321,7 @@ class AugDGM(Algorithm):
             # 1st communication round
             #     step 1: perform local gradient step and communicate
             for i in network.active_agents(k):
-                i.aux_vars["s"] = i.x - self.step_size * i.aux_vars["y"]
+                i.aux_vars["s"] = iop.sub(i.x, iop.mul(self.step_size, i.aux_vars["y"]))
 
             for i in network.active_agents(k):
                 network.broadcast(i, i.aux_vars["s"])
@@ -326,25 +331,26 @@ class AugDGM(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                s = iop.stack([W[i, j] * s_j for j, s_j in i.messages.items()], dim=0)
-                neighborhood_avg = iop.sum(s, dim=0)
-                neighborhood_avg += W[i, i] * i.aux_vars["s"]
+                s = iop.stack([iop.mul(W[i.id, j.id], s_j) for j, s_j in i.messages.items()], dim=0)
+                neighborhood_avg = iop.add(iop.sum(s, dim=0), iop.mul(W[i.id, i.id], i.aux_vars["s"]))
                 i.x = neighborhood_avg
                 i.aux_vars["g_new"] = i.cost.gradient(i.x)
 
             # 2nd communication round
             #     step 1: transmit local gradient tracker
             for i in network.active_agents(k):
-                network.broadcast(i, i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
+                network.broadcast(i, iop.add(i.aux_vars["y"], iop.sub(i.aux_vars["g_new"], i.aux_vars["g"])))
 
             #     step 2: update y (global gradient estimator)
             for i in network.active_agents(k):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                s = iop.stack([W[i, j] * q_j for j, q_j in i.messages.items()], dim=0)
-                neighborhood_avg = iop.sum(s, dim=0)
-                neighborhood_avg += W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
+                s = iop.stack([iop.mul(W[i.id, j.id], q_j) for j, q_j in i.messages.items()], dim=0)
+                neighborhood_avg = iop.add(
+                    iop.sum(s, dim=0),
+                    iop.mul(W[i.id, i.id], iop.add(i.aux_vars["y"], iop.sub(i.aux_vars["g_new"], i.aux_vars["g"]))),
+                )
                 i.aux_vars["y"] = neighborhood_avg
                 i.aux_vars["g"] = i.aux_vars["g_new"]
 
@@ -404,23 +410,25 @@ class WangElia(Algorithm):
             )
 
         W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
-        K = 0.5 * (iop.eye_like(W) - W)  # noqa: N806
+        K = iop.mul(0.5, iop.sub(iop.eye_like(W), W))  # noqa: N806
 
         for k in range(self.iterations):
             # 1st communication round
             for i in network.active_agents(k):
-                network.broadcast(i, i.x + i.aux_vars["z"])
+                network.broadcast(i, iop.add(i.x, i.aux_vars["z"]))
 
             # do consensus and local gradient step
             for i in network.active_agents(k):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                neighborhood_avg = iop.sum([K[i, j] * m_j for j, m_j in i.messages.items()], dim=0)
-                neighborhood_avg += K[i, i] * (i.x + i.aux_vars["z"])
+                neighborhood_avg = iop.sum(
+                    iop.stack([iop.mul(K[i.id, j.id], m_j) for j, m_j in i.messages.items()]), dim=0
+                )
+                neighborhood_avg = iop.add(neighborhood_avg, iop.mul(K[i.id, i.id], iop.add(i.x, i.aux_vars["z"])))
 
                 i.aux_vars["x_old"] = i.x
-                i.x = i.x - neighborhood_avg - self.step_size * i.cost.gradient(i.x)
+                i.x = iop.sub(iop.sub(i.x, neighborhood_avg), self.step_size * i.cost.gradient(i.x))
 
             # 2nd communication round
             for i in network.active_agents(k):
@@ -431,9 +439,11 @@ class WangElia(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                neighborhood_avg = iop.sum([K[i, j] * m_j for j, m_j in i.messages.items()], dim=0)
-                neighborhood_avg += K[i, i] * i.aux_vars["x_old"]
-                i.aux_vars["z"] += neighborhood_avg
+                neighborhood_avg = iop.sum(
+                    iop.stack([iop.mul(K[i.id, j.id], m_j) for j, m_j in i.messages.items()]), dim=0
+                )
+                neighborhood_avg = iop.add(neighborhood_avg, iop.mul(K[i.id, i.id], i.aux_vars["x_old"]))
+                i.aux_vars["z"] = iop.add(i.aux_vars["z"], neighborhood_avg)
 
 
 @dataclass(eq=False)
@@ -490,12 +500,11 @@ class EXTRA(Algorithm):
         for i in network.active_agents(0):
             network.receive_all(i)
         for i in network.active_agents(0):
-            s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
-            neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += W[i, i] * i.x
+            s = iop.stack([iop.mul(W[i.id, j.id], x_j) for j, x_j in i.messages.items()], dim=0)
+            neighborhood_avg = iop.add(iop.sum(s, dim=0), iop.mul(W[i.id, i.id], i.x))
             i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
             i.aux_vars["x_old"] = i.x  # store x_0
-            i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
+            i.x = iop.sub(neighborhood_avg, iop.mul(self.step_size, i.cost.gradient(i.x)))
 
         # subsequent iterations (k >= 2)
         for k in range(1, self.iterations):
@@ -504,18 +513,18 @@ class EXTRA(Algorithm):
             for i in network.active_agents(k):
                 network.receive_all(i)
             for i in network.active_agents(k):
-                s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
-                neighborhood_avg = iop.sum(s, dim=0)
-                neighborhood_avg += W[i, i] * i.x
+                s = iop.stack([iop.mul(W[i.id, j.id], x_j) for j, x_j in i.messages.items()], dim=0)
+                neighborhood_avg = iop.add(iop.sum(s, dim=0), iop.mul(W[i.id, i.id], i.x))
                 i.aux_vars["x_old_old"] = i.aux_vars["x_old"]  # store x_{k-1}
                 i.aux_vars["x_old"] = i.x  # store x_k
                 # update x_{k+1}
-                i.x = (
-                    i.x
-                    + neighborhood_avg
-                    - 0.5 * i.aux_vars["x_old_old"]
-                    - 0.5 * i.aux_vars["x_cons"]
-                    - self.step_size * (i.cost.gradient(i.x) - i.cost.gradient(i.aux_vars["x_old_old"]))
+                x_old_old = iop.mul(0.5, i.aux_vars["x_old_old"])
+                x_cons = iop.mul(0.5, i.aux_vars["x_cons"])
+                grad_diff = iop.sub(i.cost.gradient(i.x), i.cost.gradient(i.aux_vars["x_old_old"]))
+                grad_diff = iop.mul(self.step_size, grad_diff)
+                i.x = iop.add(
+                    i.x,
+                    iop.sub(iop.sub(iop.sub(neighborhood_avg, x_old_old), x_cons), grad_diff),
                 )
                 i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
 
@@ -581,7 +590,7 @@ class ATCTracking(Algorithm):
             # 1st communication round
             #     step 1: perform local gradient step and communicate
             for i in network.active_agents(k):
-                i.aux_vars["s"] = i.x - self.step_size * i.aux_vars["y"]
+                i.aux_vars["s"] = iop.sub(i.x, iop.mul(self.step_size, i.aux_vars["y"]))
 
             for i in network.active_agents(k):
                 network.broadcast(i, i.aux_vars["s"])
@@ -591,9 +600,8 @@ class ATCTracking(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                s = iop.stack([W[i, j] * s_j for j, s_j in i.messages.items()], dim=0)
-                neighborhood_avg = iop.sum(s, dim=0)
-                neighborhood_avg += W[i, i] * i.aux_vars["s"]
+                s = iop.stack([iop.mul(W[i.id, j.id], s_j) for j, s_j in i.messages.items()], dim=0)
+                neighborhood_avg = iop.add(iop.sum(s, dim=0), iop.mul(W[i.id, i.id], i.aux_vars["s"]))
                 i.x = neighborhood_avg
                 i.aux_vars["g_new"] = i.cost.gradient(i.x)
 
@@ -607,9 +615,11 @@ class ATCTracking(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                neighborhood_avg = iop.sum([W[i, j] * q_j for j, q_j in i.messages.items()], dim=0)
-                neighborhood_avg += W[i, i] * i.aux_vars["y"]
-                i.aux_vars["y"] = neighborhood_avg + i.aux_vars["g_new"] - i.aux_vars["g"]
+                neighborhood_avg = iop.sum(
+                    iop.stack([iop.mul(W[i.id, j.id], q_j) for j, q_j in i.messages.items()]), dim=0
+                )
+                neighborhood_avg = iop.add(neighborhood_avg, iop.mul(W[i.id, i.id], i.aux_vars["y"]))
+                i.aux_vars["y"] = iop.add(neighborhood_avg, iop.sub(i.aux_vars["g_new"], i.aux_vars["g"]))
                 i.aux_vars["g"] = i.aux_vars["g_new"]
 
 
@@ -666,38 +676,31 @@ class NIDS(Algorithm):
             )
 
         W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
-        W_tilde = 0.5 * (iop.eye_like(W) + W)  # noqa: N806
+        W_tilde = iop.mul(0.5, iop.add(iop.eye_like(W), W))  # noqa: N806
 
         # first iteration (iteration k=1)
         for i in network.active_agents(0):
             i.aux_vars["g"] = i.cost.gradient(i.x)  # store grad f_i(x_0)
-            i.x = i.aux_vars["x_old"] - self.step_size * i.aux_vars["g"]
+            i.x = iop.sub(i.aux_vars["x_old"], iop.mul(self.step_size, i.aux_vars["g"]))
 
         # subsequent iterations (k >= 2)
         for k in range(1, self.iterations):
             for i in network.active_agents(k):
                 i.aux_vars["g_old"] = i.aux_vars["g"]  # store grad f_i(x_{k-1})
                 i.aux_vars["g"] = i.cost.gradient(i.x)  # store grad f_i(x_k)
-                i.aux_vars["y"] = (
-                    2 * i.x
-                    - i.aux_vars["x_old"]
-                    - self.step_size * i.aux_vars["g"]
-                    + self.step_size * i.aux_vars["g_old"]
-                )
+                x_diff = iop.sub(iop.mul(2.0, i.x), i.aux_vars["x_old"])
+                i.aux_vars["y"] = iop.sub(x_diff, iop.mul(self.step_size, i.aux_vars["g"]))
+                i.aux_vars["y"] = iop.add(i.aux_vars["y"], iop.mul(self.step_size, i.aux_vars["g_old"]))
             for i in network.active_agents(k):
                 network.broadcast(i, i.aux_vars["y"])
             for i in network.active_agents(k):
                 network.receive_all(i)
             for i in network.active_agents(k):
                 s = iop.stack(
-                    [W_tilde[i, j] * y_j for j, y_j in i.messages.items()],
+                    [iop.mul(W_tilde[i.id, j.id], y_j) for j, y_j in i.messages.items()],
                     dim=0,
                 )
-                neighborhood_avg = iop.sum(
-                    s,
-                    dim=0,
-                )
-                neighborhood_avg += W_tilde[i, i] * i.aux_vars["y"]
+                neighborhood_avg = iop.add(iop.sum(s, dim=0), iop.mul(W_tilde[i.id, i.id], i.aux_vars["y"]))
                 i.aux_vars["x_old"] = i.x  # store x_k
                 i.x = neighborhood_avg  # update x_{k+1}
 
@@ -755,12 +758,14 @@ class ADMM(Algorithm):
                 i.x = i.cost.proximal(y=iop.sum(i.aux_vars["z"], dim=0) / pN[i], rho=1 / pN[i])
             for i in network.active_agents(k):
                 for j in network.neighbors(i):
-                    network.send(i, j, i.aux_vars["z"][j] - 2 * self.rho * i.x)
+                    network.send(i, j, iop.sub(i.aux_vars["z"][j.id], iop.mul(2, iop.mul(self.rho, i.x))))
             for i in network.active_agents(k):
                 network.receive_all(i)
             for i in network.active_agents(k):
                 for j in network.neighbors(i):
-                    i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (i.messages[j])
+                    i.aux_vars["z"][j.id] = iop.sub(
+                        iop.mul((1 - self.alpha), i.aux_vars["z"][j.id]), iop.mul(self.alpha, i.messages[j])
+                    )
 
 
 @dataclass(eq=False)
@@ -832,10 +837,12 @@ class ATG(Algorithm):
             # step 1: update consensus-ADMM variables
             for i in network.active_agents(k):
                 # update auxiliary variables
-                i.aux_vars["y"] = (i.x + iop.sum(i.aux_vars["z_y"], dim=0)) / (1 + pN[i])
-                i.aux_vars["s"] = (i.cost.gradient(i.x) + iop.sum(i.aux_vars["z_s"], dim=0)) / (1 + pN[i])
+                i.aux_vars["y"] = iop.add(i.x, iop.sum(i.aux_vars["z_y"], dim=0)) / (1 + pN[i])
+                i.aux_vars["s"] = iop.add(i.cost.gradient(i.x), iop.sum(i.aux_vars["z_s"], dim=0)) / (1 + pN[i])
                 # update local state
-                i.x = (1 - self.gamma) * i.x + self.gamma * (i.aux_vars["y"] - self.delta * i.aux_vars["s"])
+                i.x = iop.add(
+                    (1 - self.gamma) * i.x, self.gamma * iop.sub(i.aux_vars["y"], self.delta * i.aux_vars["s"])
+                )
 
             # step 2: communicate and update z_{ij} variables
             for i in network.active_agents(k):
@@ -844,18 +851,20 @@ class ATG(Algorithm):
                     network.send(i, j,
                         iop.stack(
                             (
-                                -i.aux_vars["z_y"][j] + 2 * self.rho * i.aux_vars["y"],
-                                -i.aux_vars["z_s"][j] + 2 * self.rho * i.aux_vars["s"],
+                                iop.add(-i.aux_vars["z_y"][j.id], 2 * self.rho * i.aux_vars["y"]),
+                                iop.add(-i.aux_vars["z_s"][j.id], 2 * self.rho * i.aux_vars["s"]),
                             ), dim=0),
                     )  # fmt: skip
             for i in network.active_agents(k):
                 network.receive_all(i)
             for i in network.active_agents(k):
                 for j in network.neighbors(i):
-                    i.aux_vars["z_y"][j] = (1 - self.alpha) * i.aux_vars["z_y"][j] \
-                                         + self.alpha * i.messages[j][0]  # fmt: skip
-                    i.aux_vars["z_s"][j] = (1 - self.alpha) * i.aux_vars["z_s"][j] \
-                                         + self.alpha * i.messages[j][1]  # fmt: skip
+                    i.aux_vars["z_y"][j.id] = iop.add(
+                        iop.mul((1 - self.alpha), i.aux_vars["z_y"][j.id]), iop.mul(self.alpha, i.messages[j][0])
+                    )
+                    i.aux_vars["z_s"][j.id] = iop.add(
+                        iop.mul((1 - self.alpha), i.aux_vars["z_s"][j.id]), iop.mul(self.alpha, i.messages[j][1])
+                    )
 
 
 ADMMTracking = ATG  # alias
@@ -920,15 +929,20 @@ class DLM(Algorithm):
             network.receive_all(i)
         # compute and store \sum_j (\mathbf{x}_{i,0} - \mathbf{x}_{j,0})
         for i in network.active_agents(0):
-            s = iop.stack([i.x - x_j for _, x_j in i.messages.items()], dim=0)
+            s = iop.stack([iop.sub(i.x, x_j) for _, x_j in i.messages.items()], dim=0)
             i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
 
         # main iteration
         for k in range(self.iterations):
             # step 1: update primal variable
             for i in network.active_agents(k):
-                i.x = i.x - self.step_size * (  # noqa: PLR6104
-                    i.cost.gradient(i.x) + self.penalty * i.aux_vars["s"] + i.aux_vars["y"]
+                penalty_term = iop.mul(self.penalty, i.aux_vars["s"])
+                i.x = iop.sub(
+                    i.x,
+                    iop.mul(
+                        self.step_size,
+                        iop.add(i.cost.gradient(i.x), iop.add(penalty_term, i.aux_vars["y"])),
+                    ),
                 )
 
             # step 2: communication round
@@ -938,12 +952,12 @@ class DLM(Algorithm):
                 network.receive_all(i)
             # compute and store \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
             for i in network.active_agents(k):
-                s = iop.stack([i.x - x_j for _, x_j in i.messages.items()], dim=0)
+                s = iop.stack([iop.sub(i.x, x_j) for _, x_j in i.messages.items()], dim=0)
                 i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
 
             # step 3: update dual variable
             for i in network.active_agents(k):
-                i.aux_vars["y"] += self.penalty * i.aux_vars["s"]
+                i.aux_vars["y"] = iop.add(i.aux_vars["y"], iop.mul(self.penalty, i.aux_vars["s"]))
 
 
 DecentralizedLinearizedADMM = DLM  # alias

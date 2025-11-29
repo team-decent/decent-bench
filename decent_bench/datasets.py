@@ -1,30 +1,32 @@
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import NewType
+from typing import Generic, NewType, TypeAlias
 
 from numpy import float64
 from numpy.typing import NDArray
 from sklearn import datasets
 
-A = NewType("A", NDArray[float64])
+from decent_bench.utils.types import T
+
+A_numpy = NewType("A_numpy", NDArray[float64])
 """Feature matrix type."""
 
-b = NewType("b", NDArray[float64])
+b_numpy = NewType("b_numpy", NDArray[float64])
 """Target vector type."""
 
-DatasetPartition = NewType("DatasetPartition", tuple[A, b])
+DatasetPartition: TypeAlias = tuple[T, T]  # noqa: UP040
 """Tuple of (A, b) representing one dataset partition."""
 
 
-class Dataset(ABC):
+class Dataset(ABC, Generic[T]):  # noqa: UP046
     """Dataset containing partitions in the form of feature matrix A and target vector b."""
 
     @abstractmethod
-    def training_partitions(self) -> Sequence[DatasetPartition]:
+    def training_partitions(self) -> Sequence[DatasetPartition[T]]:
         """Partitions used for finding the optimal optimization variable x."""
 
 
-class SyntheticClassificationData(Dataset):
+class SyntheticClassificationData(Dataset[NDArray[float64]]):
     """
     Dataset with synthetic classification data.
 
@@ -47,7 +49,7 @@ class SyntheticClassificationData(Dataset):
         self.n_features = n_features
         self.seed = seed
 
-    def training_partitions(self) -> list[DatasetPartition]:  # noqa: D102
+    def training_partitions(self) -> list[DatasetPartition[NDArray[float64]]]:  # noqa: D102
         res = []
         for i in range(self.n_partitions):
             seed = self.seed + i if self.seed is not None else None
@@ -58,5 +60,5 @@ class SyntheticClassificationData(Dataset):
                 n_classes=self.n_classes,
                 random_state=seed,
             )
-            res.append(DatasetPartition((A(partition[0]), b(partition[1]))))
+            res.append(partition)
         return res

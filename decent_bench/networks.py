@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 from decent_bench.agents import Agent
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme
+from decent_bench.utils.types import TensorLike
 
 if TYPE_CHECKING:
     AgentGraph = Graph[Agent]
@@ -78,7 +79,7 @@ class P2PNetwork:
         """
         return [a for a in self.agents() if a._activation.is_active(iteration)]  # noqa: SLF001
 
-    def send(self, sender: Agent, receiver: Agent, msg: NDArray[float64]) -> None:
+    def send(self, sender: Agent, receiver: Agent, msg: TensorLike) -> None:
         """
         Send message to a neighbor.
 
@@ -98,7 +99,7 @@ class P2PNetwork:
         msg = self._message_noise.make_noise(msg)
         self._graph.edges[sender, receiver][str(receiver.id)] = msg
 
-    def broadcast(self, sender: Agent, msg: NDArray[float64]) -> None:
+    def broadcast(self, sender: Agent, msg: TensorLike) -> None:
         """
         Send message to all neighbors.
 

@@ -6,10 +6,12 @@ import contextlib
 import random
 from collections.abc import Sequence
 from copy import deepcopy
-from typing import Any, TypeVar, cast
+from typing import Any, cast
 
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import NDArray
+
+from decent_bench.utils.types import T, TensorLike
 
 torch = None
 with contextlib.suppress(ImportError, ModuleNotFoundError):
@@ -35,22 +37,13 @@ with contextlib.suppress(ImportError, ModuleNotFoundError):
 
     jax_random = _jax_random
 
-T = TypeVar("T", bound=ArrayLike)
-"""
-TypeVar for ArrayLike types such as NumPy arrays, PyTorch tensors or
-nested containers (lists/tuples).
 
-This TypeVar is used throughout the interoperability utilities to ensure that
-operations preserve the input framework type.
-"""
-
-
-def to_numpy(array: ArrayLike) -> NDArray[Any]:
+def to_numpy(array: TensorLike | complex) -> NDArray[Any]:
     """
     Convert input array to a NumPy array.
 
     Args:
-        array (ArrayLike): Input array (NumPy, torch, tf, jax) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, torch, tf, jax) or nested container (list, tuple).
 
     Returns:
         NDArray: Converted NumPy array.
@@ -67,16 +60,16 @@ def to_numpy(array: ArrayLike) -> NDArray[Any]:
     return np.array(array)
 
 
-def from_numpy_like[T: ArrayLike](array: NDArray[Any], like: T) -> T:
+def from_numpy_like(array: NDArray[Any], like: T) -> T:
     """
     Convert a NumPy array to the specified framework type.
 
     Args:
         array (NDArray): Input NumPy array.
-        like (ArrayLike): Example array of the target framework type (e.g., torch.Tensor, tf.Tensor).
+        like (TensorLike): Example array of the target framework type (e.g., torch.Tensor, tf.Tensor).
 
     Returns:
-        ArrayLike: Converted array in the specified framework type.
+        TensorLike: Converted array in the specified framework type.
 
     Raises:
         TypeError: if the framework type of `like` is unsupported.
@@ -100,7 +93,7 @@ def from_numpy_like[T: ArrayLike](array: NDArray[Any], like: T) -> T:
     raise TypeError(f"Unsupported framework type: {type(like)}")
 
 
-def sum[T: ArrayLike](  # noqa: A001
+def sum(  # noqa: A001
     array: T,
     dim: int | tuple[int, ...] | None = None,
     keepdims: bool = False,
@@ -109,13 +102,13 @@ def sum[T: ArrayLike](  # noqa: A001
     Sum elements of an array.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         dim (int | tuple[int, ...] | None): Dimension or dimensions along which to sum.
             If None, sums over flattened array.
         keepdims (bool): If True, retains reduced dimensions with length 1.
 
     Returns:
-        ArrayLike: Summed value in the same framework type as the input.
+        TensorLike: Summed value in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -137,7 +130,7 @@ def sum[T: ArrayLike](  # noqa: A001
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def mean[T: ArrayLike](
+def mean(
     array: T,
     dim: int | tuple[int, ...] | None = None,
     keepdims: bool = False,
@@ -146,13 +139,13 @@ def mean[T: ArrayLike](
     Compute mean of array elements.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         dim (int | tuple[int, ...] | None): Dimension or dimensions along which to compute mean.
             If None, computes mean over flattened array.
         keepdims (bool): If True, retains reduced dimensions with length 1.
 
     Returns:
-        ArrayLike: Mean value in the same framework type as the input.
+        TensorLike: Mean value in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -174,7 +167,7 @@ def mean[T: ArrayLike](
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def min[T: ArrayLike](  # noqa: A001
+def min(  # noqa: A001
     array: T,
     dim: int | tuple[int, ...] | None = None,
     keepdims: bool = False,
@@ -183,13 +176,13 @@ def min[T: ArrayLike](  # noqa: A001
     Compute minimum of array elements.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         dim (int | tuple[int, ...] | None): Dimension or dimensions along which to compute minimum.
             If None, finds minimum over flattened array.
         keepdims (bool): If True, retains reduced dimensions with length 1.
 
     Returns:
-        ArrayLike: Minimum value in the same framework type as the input.
+        TensorLike: Minimum value in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -211,7 +204,7 @@ def min[T: ArrayLike](  # noqa: A001
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def max[T: ArrayLike](  # noqa: A001
+def max(  # noqa: A001
     array: T,
     dim: int | tuple[int, ...] | None = None,
     keepdims: bool = False,
@@ -220,13 +213,13 @@ def max[T: ArrayLike](  # noqa: A001
     Compute maximum of array elements.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         dim (int | tuple[int, ...] | None): Dimension or dimensions along which to compute maximum.
             If None, finds maximum over flattened array.
         keepdims (bool): If True, retains reduced dimensions with length 1.
 
     Returns:
-        ArrayLike: Maximum value in the same framework type as the input.
+        TensorLike: Maximum value in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -248,17 +241,17 @@ def max[T: ArrayLike](  # noqa: A001
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def argmax[T: ArrayLike](array: T, dim: int | None = None, keepdims: bool = False) -> T:
+def argmax(array: T, dim: int | None = None, keepdims: bool = False) -> T:
     """
     Compute index of maximum value.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         dim (int | None): Dimension along which to find maximum. If None, finds maximum over flattened array.
         keepdims (bool): If True, retains reduced dimensions with length 1.
 
     Returns:
-        ArrayLike: Indices of maximum values in the same framework type as the input.
+        TensorLike: Indices of maximum values in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -299,17 +292,17 @@ def argmax[T: ArrayLike](array: T, dim: int | None = None, keepdims: bool = Fals
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def argmin[T: ArrayLike](array: T, dim: int | None = None, keepdims: bool = False) -> T:
+def argmin(array: T, dim: int | None = None, keepdims: bool = False) -> T:
     """
     Compute index of minimum value.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         dim (int | None): Dimension along which to find minimum. If None, finds minimum over flattened array.
         keepdims (bool): If True, retains reduced dimensions with length 1.
 
     Returns:
-        ArrayLike: Indices of minimum values in the same framework type as the input.
+        TensorLike: Indices of minimum values in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -350,15 +343,15 @@ def argmin[T: ArrayLike](array: T, dim: int | None = None, keepdims: bool = Fals
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def copy[T: ArrayLike](array: T) -> T:
+def copy(array: T) -> T:
     """
     Create a copy of the input array.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
 
     Returns:
-        ArrayLike: A copy of the input array in the same framework type.
+        TensorLike: A copy of the input array in the same framework type.
 
     """
     if isinstance(array, np.ndarray):
@@ -372,17 +365,17 @@ def copy[T: ArrayLike](array: T) -> T:
     return deepcopy(array)
 
 
-def stack[T: ArrayLike](arrays: Sequence[T], dim: int = 0) -> T:
+def stack(arrays: Sequence[T], dim: int = 0) -> T:
     """
     Stack a sequence of arrays along a new dimension.
 
     Args:
-        arrays (Sequence[ArrayLike]): Sequence of input arrays (NumPy, PyTorch, TensorFlow, JAX)
+        arrays (Sequence[TensorLike]): Sequence of input arrays (NumPy, PyTorch, TensorFlow, JAX)
             or nested containers (list, tuple).
         dim (int): Dimension along which to stack the arrays.
 
     Returns:
-        ArrayLike: Stacked array in the same framework type as the inputs.
+        TensorLike: Stacked array in the same framework type as the inputs.
 
     Raises:
         TypeError: if the framework type of the input arrays is unsupported.
@@ -402,16 +395,16 @@ def stack[T: ArrayLike](arrays: Sequence[T], dim: int = 0) -> T:
     raise TypeError(f"Unsupported framework type: {type(arrays[0])}")
 
 
-def reshape[T: ArrayLike](array: T, shape: tuple[int, ...]) -> T:
+def reshape(array: T, shape: tuple[int, ...]) -> T:
     """
     Reshape an array to the specified shape.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         shape (tuple[int, ...]): Desired shape for the output array.
 
     Returns:
-        ArrayLike: Reshaped array in the same framework type as the input.
+        TensorLike: Reshaped array in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -433,15 +426,15 @@ def reshape[T: ArrayLike](array: T, shape: tuple[int, ...]) -> T:
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def zeros_like[T: ArrayLike](array: T) -> T:
+def zeros_like(array: T) -> T:
     """
     Create an array of zeros with the same shape and type as the input.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
 
     Returns:
-        ArrayLike: Array of zeros in the same framework type as the input.
+        TensorLike: Array of zeros in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -462,15 +455,15 @@ def zeros_like[T: ArrayLike](array: T) -> T:
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def ones_like[T: ArrayLike](array: T) -> T:
+def ones_like(array: T) -> T:
     """
     Create an array of ones with the same shape and type as the input.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
 
     Returns:
-        ArrayLike: Array of ones in the same framework type as the input.
+        TensorLike: Array of ones in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -491,19 +484,19 @@ def ones_like[T: ArrayLike](array: T) -> T:
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def rand_like[T: ArrayLike](array: T, low: float = 0.0, high: float = 1.0) -> T:
+def rand_like(array: T, low: float = 0.0, high: float = 1.0) -> T:
     """
     Create an array of random values with the same shape and type as the input.
 
     Values are drawn uniformly from [low, high).
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         low (float): Lower bound of the uniform distribution.
         high (float): Upper bound of the uniform distribution.
 
     Returns:
-        ArrayLike: Array of random values in the same framework type as the input.
+        TensorLike: Array of random values in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -557,19 +550,19 @@ def rand_like[T: ArrayLike](array: T, low: float = 0.0, high: float = 1.0) -> T:
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def randn_like[T: ArrayLike](array: T, mean: float = 0.0, std: float = 1.0) -> T:
+def randn_like(array: T, mean: float = 0.0, std: float = 1.0) -> T:
     """
     Create an array of random values with the same shape and type as the input.
 
     Values are drawn from a normal distribution with mean `mean` and standard deviation `std`.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         mean (float): Mean of the normal distribution.
         std (float): Standard deviation of the normal distribution.
 
     Returns:
-        ArrayLike: Array of random values in the same framework type as the input.
+        TensorLike: Array of random values in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -621,15 +614,15 @@ def randn_like[T: ArrayLike](array: T, mean: float = 0.0, std: float = 1.0) -> T
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def eye_like[T: ArrayLike](array: T) -> T:
+def eye_like(array: T) -> T:
     """
     Create an identity matrix with the same shape as the input.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
 
     Returns:
-        ArrayLike: Identity matrix in the same framework type as the input.
+        TensorLike: Identity matrix in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -654,16 +647,16 @@ def eye_like[T: ArrayLike](array: T) -> T:
     raise TypeError(f"Unsupported framework type: {type(array)}")
 
 
-def transpose[T: ArrayLike](array: T, dim: tuple[int, ...] | None = None) -> T:
+def transpose(array: T, dim: tuple[int, ...] | None = None) -> T:
     """
     Transpose an array.
 
     Args:
-        array (ArrayLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
         dim (tuple[int, ...] | None): Desired dim order. If None, reverses the dimensions.
 
     Returns:
-        ArrayLike: Transposed array in the same framework type as the input.
+        TensorLike: Transposed array in the same framework type as the input.
 
     Raises:
         TypeError: if the framework type of `array` is unsupported.
@@ -688,3 +681,222 @@ def transpose[T: ArrayLike](array: T, dim: tuple[int, ...] | None = None) -> T:
         return cast("T", type(array)(transposed.tolist()))
 
     raise TypeError(f"Unsupported framework type: {type(array)}")
+
+
+def shape(array: TensorLike) -> tuple[int, ...]:
+    """
+    Get the shape of an array.
+
+    Args:
+        array (TensorLike): Input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+
+    Returns:
+        tuple[int, ...]: Shape of the input array.
+
+    Raises:
+        TypeError: if the framework type of `array` is unsupported.
+
+    """
+    if isinstance(array, np.ndarray):
+        return cast("tuple[int, ...]", array.shape)
+    if torch and isinstance(array, torch.Tensor):
+        return tuple(array.shape)
+    if tf and isinstance(array, tf.Tensor):
+        tf_shape = array.shape.as_list()
+        return cast("tuple[int, ...]", tuple(tf_shape))
+    if jnp and isinstance(array, jnp.ndarray):
+        return cast("tuple[int, ...]", array.shape)
+    if isinstance(array, (list, tuple)):
+        np_array = to_numpy(array)
+        return tuple(np_array.shape)
+
+    raise TypeError(f"Unsupported framework type: {type(array)}")
+
+
+def add(array1: T, array2: T) -> T:
+    """
+    Element-wise addition of two arrays.
+
+    Args:
+        array1 (TensorLike): First input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array2 (TensorLike): Second input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+
+    Returns:
+        TensorLike: Result of element-wise addition in the same framework type as the inputs.
+
+    Raises:
+        TypeError: if the framework type of the input arrays is unsupported
+            or if the input arrays are not of the same framework type.
+
+    """
+    np_types = (np.ndarray, float, int, complex)
+    torch_types = (torch.Tensor, float, int, complex) if torch else ()
+    tf_types = (tf.Tensor, float, int, complex) if tf else ()
+    jnp_types = (jnp.ndarray, float, int, complex) if jnp else ()
+    list_types = (list, tuple, float, int, complex)
+
+    if isinstance(array1, np_types) and isinstance(array2, np_types):
+        return cast("T", array1 + array2)
+    if torch and isinstance(array1, torch_types) and isinstance(array2, torch_types):
+        return cast("T", torch.add(array1, array2))
+    if tf and isinstance(array1, tf_types) and isinstance(array2, tf_types):
+        return cast("T", tf.add(array1, array2))
+    if jnp and isinstance(array1, jnp_types) and isinstance(array2, jnp_types):
+        return cast("T", jnp.add(array1, array2))
+    if isinstance(array1, list_types) and isinstance(array2, list_types):
+        np_array1 = to_numpy(array1)
+        np_array2 = to_numpy(array2)
+        added = (np_array1 + np_array2).tolist()
+        return cast("T", type(array1)(added if isinstance(added, list) else [added]))
+
+    raise TypeError(f"Unsupported framework type: {type(array1)} and {type(array2)}")
+
+
+def sub(array1: T, array2: T) -> T:
+    """
+    Element-wise subtraction of two arrays.
+
+    Args:
+        array1 (TensorLike): First input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array2 (TensorLike): Second input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+
+    Returns:
+        TensorLike: Result of element-wise subtraction in the same framework type as the inputs.
+
+    Raises:
+        TypeError: if the framework type of the input arrays is unsupported
+            or if the input arrays are not of the same framework type.
+
+    """
+    np_types = (np.ndarray, float, int, complex)
+    torch_types = (torch.Tensor, float, int, complex) if torch else ()
+    tf_types = (tf.Tensor, float, int, complex) if tf else ()
+    jnp_types = (jnp.ndarray, float, int, complex) if jnp else ()
+    list_types = (list, tuple, float, int, complex)
+
+    if isinstance(array1, np_types) and isinstance(array2, np_types):
+        return cast("T", array1 - array2)
+    if torch and isinstance(array1, torch_types) and isinstance(array2, torch_types):
+        return cast("T", torch.sub(array1, array2))
+    if tf and isinstance(array1, tf_types) and isinstance(array2, tf_types):
+        return cast("T", tf.subtract(array1, array2))
+    if jnp and isinstance(array1, jnp_types) and isinstance(array2, jnp_types):
+        return cast("T", jnp.subtract(array1, array2))
+    if isinstance(array1, list_types) and isinstance(array2, list_types):
+        np_array1 = to_numpy(array1)
+        np_array2 = to_numpy(array2)
+        subbed = (np_array1 - np_array2).tolist()
+        return cast("T", type(array1)(subbed if isinstance(subbed, list) else [subbed]))
+
+    raise TypeError(f"Unsupported framework type: {type(array1)} and {type(array2)}")
+
+
+def mul(array1: T | complex, array2: T | complex) -> T:
+    """
+    Element-wise multiplication of two arrays.
+
+    Args:
+        array1 (TensorLike): First input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array2 (TensorLike): Second input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+
+    Returns:
+        TensorLike: Result of element-wise multiplication in the same framework type as the inputs.
+
+    Raises:
+        TypeError: if the framework type of the input arrays is unsupported
+            or if the input arrays are not of the same framework type.
+
+    """
+    np_types = (np.ndarray, float, int, complex)
+    torch_types = (torch.Tensor, float, int, complex) if torch else ()
+    tf_types = (tf.Tensor, float, int, complex) if tf else ()
+    jnp_types = (jnp.ndarray, float, int, complex) if jnp else ()
+    list_types = (list, tuple)
+
+    if isinstance(array1, np_types) and isinstance(array2, np_types):
+        return cast("T", array1 * array2)
+    if torch and isinstance(array1, torch_types) and isinstance(array2, torch_types):
+        return cast("T", torch.mul(array1, array2))
+    if tf and isinstance(array1, tf_types) and isinstance(array2, tf_types):
+        return cast("T", tf.multiply(array1, array2))
+    if jnp and isinstance(array1, jnp_types) and isinstance(array2, jnp_types):
+        return cast("T", jnp.multiply(array1, array2))
+    if isinstance(array1, list_types) and isinstance(array2, list_types):
+        np_array1 = to_numpy(array1)
+        np_array2 = to_numpy(array2)
+        mulled = (np_array1 * np_array2).tolist()
+        return cast("T", type(array1)(mulled if isinstance(mulled, list) else [mulled]))
+
+    raise TypeError(f"Unsupported framework type: {type(array1)} and {type(array2)}")
+
+
+def div(array1: T, array2: T) -> T:
+    """
+    Element-wise division of two arrays.
+
+    Args:
+        array1 (TensorLike): First input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array2 (TensorLike): Second input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+
+    Returns:
+        TensorLike: Result of element-wise division in the same framework type as the inputs.
+
+    Raises:
+        TypeError: if the framework type of the input arrays is unsupported
+            or if the input arrays are not of the same framework type.
+
+    """
+    np_types = (np.ndarray, float, int, complex)
+    torch_types = (torch.Tensor, float, int, complex) if torch else ()
+    tf_types = (tf.Tensor, float, int, complex) if tf else ()
+    jnp_types = (jnp.ndarray, float, int, complex) if jnp else ()
+    list_types = (list, tuple, float, int, complex)
+
+    if isinstance(array1, np_types) and isinstance(array2, np_types):
+        return cast("T", array1 / array2)
+    if torch and isinstance(array1, torch_types) and isinstance(array2, torch_types):
+        return cast("T", torch.div(array1, array2))
+    if tf and isinstance(array1, tf_types) and isinstance(array2, tf_types):
+        return cast("T", tf.divide(array1, array2))
+    if jnp and isinstance(array1, jnp_types) and isinstance(array2, jnp_types):
+        return cast("T", jnp.divide(array1, array2))
+    if isinstance(array1, list_types) and isinstance(array2, list_types):
+        np_array1 = to_numpy(array1)
+        np_array2 = to_numpy(array2)
+        dived = (np_array1 / np_array2).tolist()
+        return cast("T", type(array1)(dived if isinstance(dived, list) else [dived]))
+
+    raise TypeError(f"Unsupported framework type: {type(array1)} and {type(array2)}")
+
+
+def matmul(array1: T, array2: T) -> T:
+    """
+    Matrix multiplication of two arrays.
+
+    Args:
+        array1 (TensorLike): First input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+        array2 (TensorLike): Second input array (NumPy, PyTorch, TensorFlow, JAX) or nested container (list, tuple).
+
+    Returns:
+        TensorLike: Result of matrix multiplication in the same framework type as the inputs.
+
+    Raises:
+        TypeError: if the framework type of the input arrays is unsupported
+            or if the input arrays are not of the same framework type.
+
+    """
+    if isinstance(array1, np.ndarray) and isinstance(array2, np.ndarray):
+        return cast("T", array1 @ array2)
+    if torch and isinstance(array1, torch.Tensor) and isinstance(array2, torch.Tensor):
+        return cast("T", array1 @ array2)
+    if tf and isinstance(array1, tf.Tensor) and isinstance(array2, tf.Tensor):
+        return cast("T", array1 @ array2)
+    if jnp and isinstance(array1, jnp.ndarray) and isinstance(array2, jnp.ndarray):
+        return cast("T", array1 @ array2)
+    if isinstance(array1, (list, tuple)) and isinstance(array2, (list, tuple)):
+        np_array1 = to_numpy(array1)
+        np_array2 = to_numpy(array2)
+        matmuled = (np_array1 @ np_array2).tolist()
+        return cast("T", type(array1)(matmuled if isinstance(matmuled, list) else [matmuled]))
+
+    raise TypeError(f"Unsupported framework type: {type(array1)} and {type(array2)}")

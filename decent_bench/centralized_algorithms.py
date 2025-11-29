@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 def gradient_descent(
-    cost: "Cost",
+    cost: "Cost[NDArray[float64]]",
     x0: NDArray[float64] | None,
     *,
     step_size: float,
@@ -54,7 +54,7 @@ def gradient_descent(
 
 
 def accelerated_gradient_descent(
-    cost: "Cost",
+    cost: "Cost[NDArray[float64]]",
     x0: NDArray[float64] | None,
     *,
     max_iter: int,
@@ -115,7 +115,7 @@ def accelerated_gradient_descent(
     return x
 
 
-def proximal_solver(cost: "Cost", y: NDArray[float64], rho: float) -> NDArray[float64]:
+def proximal_solver(cost: "Cost[NDArray[float64]]", y: NDArray[float64], rho: float) -> NDArray[float64]:
     """
     Find the proximal at y using accelerated gradient descent.
 

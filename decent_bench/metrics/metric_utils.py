@@ -7,8 +7,10 @@ from numpy import linalg as la
 from numpy.linalg import LinAlgError
 from numpy.typing import NDArray
 
+import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
+from decent_bench.utils.types import TensorLike
 
 
 def single(values: Sequence[float]) -> float:
@@ -25,7 +27,7 @@ def single(values: Sequence[float]) -> float:
 
 
 @cache
-def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> NDArray[float64]:
+def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> TensorLike:
     """
     Calculate the mean x at *iteration* (or using the agents' final x if *iteration* is -1).
 
@@ -38,7 +40,7 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> NDArray
     all_x_at_iter = [a.x_history[iteration] for a in agents if len(a.x_history) > iteration]
     if len(all_x_at_iter) == 0:
         raise ValueError(f"No agent reached iteration {iteration}")
-    res: NDArray[float64] = np.mean(all_x_at_iter, axis=0)
+    res: TensorLike = iop.mean(iop.stack(all_x_at_iter), dim=0)
     return res
 
 
@@ -66,7 +68,7 @@ def gradient_norm(agents: list[AgentMetricsView], iteration: int = -1) -> float:
     .. include:: snippets/global_gradient_optimality.rst
     """
     mean_x = x_mean(tuple(agents), iteration)
-    grad_avg = sum(a.cost.gradient(mean_x) for a in agents) / len(agents)
+    grad_avg = sum(iop.to_numpy(a.cost.gradient(mean_x)) for a in agents) / len(agents)
     return float(la.norm(grad_avg)) ** 2
 
 
@@ -81,7 +83,7 @@ def x_error(agent: AgentMetricsView, problem: BenchmarkProblem) -> NDArray[float
     where :math:`\mathbf{x}_k` is the agent's local x at iteration k,
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
     """
-    x_per_iteration = np.asarray(agent.x_history)
+    x_per_iteration = np.asarray([iop.to_numpy(x) for x in agent.x_history])
     opt_x = problem.x_optimal
     errors: NDArray[float64] = la.norm(x_per_iteration - opt_x, axis=tuple(range(1, x_per_iteration.ndim)))
     return errors

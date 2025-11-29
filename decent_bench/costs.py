@@ -11,9 +11,10 @@ from numpy.typing import NDArray
 from scipy import special
 
 import decent_bench.centralized_algorithms as ca
+from decent_bench.utils.types import T
 
 
-class Cost(ABC):
+class Cost[T](ABC):
     """Used by agents to evaluate the cost and its derivatives at a certain x."""
 
     @property
@@ -64,31 +65,31 @@ class Cost(ABC):
         """
 
     @abstractmethod
-    def function(self, x: NDArray[float64]) -> float:
+    def function(self, x: T) -> float:
         """Evaluate function at x."""
 
-    def evaluate(self, x: NDArray[float64]) -> float:
+    def evaluate(self, x: T) -> float:
         """Alias for :meth:`function`."""
         return self.function(x)
 
-    def loss(self, x: NDArray[float64]) -> float:
+    def loss(self, x: T) -> float:
         """Alias for :meth:`function`."""
         return self.function(x)
 
-    def f(self, x: NDArray[float64]) -> float:
+    def f(self, x: T) -> float:
         """Alias for :meth:`function`."""
         return self.function(x)
 
     @abstractmethod
-    def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
+    def gradient(self, x: T) -> T:
         """Gradient at x."""
 
     @abstractmethod
-    def hessian(self, x: NDArray[float64]) -> NDArray[float64]:
+    def hessian(self, x: T) -> T:
         """Hessian at x."""
 
     @abstractmethod
-    def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
+    def proximal(self, y: T, rho: float) -> T:
         r"""
         Proximal at y.
 
@@ -101,7 +102,7 @@ class Cost(ABC):
         """
 
     @abstractmethod
-    def __add__(self, other: Cost) -> Cost:
+    def __add__(self, other: Cost[T]) -> Cost[T]:
         """
         Add another cost function to create a new one.
 
@@ -114,7 +115,7 @@ class Cost(ABC):
         """
 
 
-class QuadraticCost(Cost):
+class QuadraticCost(Cost[NDArray[float64]]):
     r"""
     Quadratic cost function.
 
@@ -222,7 +223,7 @@ class QuadraticCost(Cost):
         rhs = y - self.b * rho
         return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
 
-    def __add__(self, other: Cost) -> Cost:
+    def __add__(self, other: Cost[NDArray[float64]]) -> Cost[NDArray[float64]]:
         """
         Add another cost function.
 
@@ -239,7 +240,7 @@ class QuadraticCost(Cost):
         return SumCost([self, other])
 
 
-class LinearRegressionCost(Cost):
+class LinearRegressionCost(Cost[NDArray[float64]]):
     r"""
     Linear regression cost function.
 
@@ -338,12 +339,12 @@ class LinearRegressionCost(Cost):
         """
         return self.inner.proximal(y, rho)
 
-    def __add__(self, other: Cost) -> Cost:
+    def __add__(self, other: Cost[NDArray[float64]]) -> Cost[NDArray[float64]]:
         """Add another cost function."""
         return self.inner + other
 
 
-class LogisticRegressionCost(Cost):
+class LogisticRegressionCost(Cost[NDArray[float64]]):
     r"""
     Logistic regression cost function.
 
@@ -445,7 +446,7 @@ class LogisticRegressionCost(Cost):
         """
         return ca.proximal_solver(self, y, rho)
 
-    def __add__(self, other: Cost) -> Cost:
+    def __add__(self, other: Cost[NDArray[float64]]) -> Cost[NDArray[float64]]:
         """
         Add another cost function.
 
@@ -460,13 +461,13 @@ class LogisticRegressionCost(Cost):
         return SumCost([self, other])
 
 
-class SumCost(Cost):
+class SumCost(Cost[NDArray[float64]]):
     """The sum of multiple cost functions."""
 
-    def __init__(self, costs: list[Cost]):
+    def __init__(self, costs: list[Cost[NDArray[float64]]]):
         if not all(costs[0].shape == cf.shape for cf in costs):
             raise ValueError("All cost functions must have the same domain shape")
-        self.costs: list[Cost] = []
+        self.costs: list[Cost[NDArray[float64]]] = []
         for cf in costs:
             if isinstance(cf, SumCost):
                 self.costs.extend(cf.costs)
@@ -537,6 +538,6 @@ class SumCost(Cost):
         """
         return ca.proximal_solver(self, y, rho)
 
-    def __add__(self, other: Cost) -> SumCost:
+    def __add__(self, other: Cost[NDArray[float64]]) -> SumCost:
         """Add another cost function."""
         return SumCost([self, other])

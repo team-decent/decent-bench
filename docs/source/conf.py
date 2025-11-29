@@ -40,6 +40,7 @@ autodoc_type_aliases = {
 nitpicky = True
 nitpick_ignore = [
     ("py:class", "numpy.float64"),
+    ("py:class", "float64"),
     ("py:class", "numpy._typing._array_like._SupportsArray"),
     ("py:class", "numpy._typing._nested_sequence._NestedSequence"),
 ]
@@ -48,6 +49,12 @@ intersphinx_mapping = {
     "networkx": ("https://networkx.org/documentation/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "python": ("https://docs.python.org/3", None),
+    "torch": ("https://pytorch.org/docs/stable/", None),
+    "tensorflow": (
+        "https://www.tensorflow.org/api_docs/python",
+        "https://github.com/GPflow/tensorflow-intersphinx/raw/master/tf2_py_objects.inv",
+    ),
+    "jax": ("https://jax.readthedocs.io/en/latest/", None),
 }
 
 

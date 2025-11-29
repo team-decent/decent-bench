@@ -4,23 +4,21 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 
-from numpy import float64
-from numpy.typing import NDArray
-
 from decent_bench.costs import Cost
 from decent_bench.schemes import AgentActivationScheme
+from decent_bench.utils.types import TensorLike
 
 
 class Agent:
     """Agent with unique id, local cost function, and activation scheme."""
 
-    def __init__(self, agent_id: int, cost: Cost, activation: AgentActivationScheme):
+    def __init__(self, agent_id: int, cost: Cost[TensorLike], activation: AgentActivationScheme):
         self._id = agent_id
         self._cost = cost
         self._activation = activation
-        self._x_history: list[NDArray[float64]] = []
-        self._auxiliary_variables: dict[str, NDArray[float64]] = {}
-        self._received_messages: dict[Agent, NDArray[float64]] = {}
+        self._x_history: list[TensorLike] = []
+        self._auxiliary_variables: dict[str, TensorLike] = {}
+        self._received_messages: dict[Agent, TensorLike] = {}
         self._n_sent_messages = 0
         self._n_received_messages = 0
         self._n_sent_messages_dropped = 0
@@ -39,7 +37,7 @@ class Agent:
         return self._id
 
     @property
-    def cost(self) -> Cost:
+    def cost(self) -> Cost[TensorLike]:
         """
         Local cost function.
 
@@ -52,7 +50,7 @@ class Agent:
     loss = cost
 
     @property
-    def x(self) -> NDArray[float64]:
+    def x(self) -> TensorLike:
         """
         Local optimization variable x.
 
@@ -65,25 +63,25 @@ class Agent:
         return self._x_history[-1]
 
     @x.setter
-    def x(self, x: NDArray[float64]) -> None:
+    def x(self, x: TensorLike) -> None:
         self._x_history.append(x)
 
     @property
-    def messages(self) -> Mapping[Agent, NDArray[float64]]:
+    def messages(self) -> Mapping[Agent, TensorLike]:
         """Messages received by neighbors."""
         return MappingProxyType(self._received_messages)
 
     @property
-    def aux_vars(self) -> dict[str, NDArray[float64]]:
+    def aux_vars(self) -> dict[str, TensorLike]:
         """Auxiliary optimization variables used by algorithms that require more variables than x."""
         return self._auxiliary_variables
 
     def initialize(
         self,
         *,
-        x: NDArray[float64] | None = None,
-        aux_vars: dict[str, NDArray[float64]] | None = None,
-        received_msgs: dict[Agent, NDArray[float64]] | None = None,
+        x: TensorLike | None = None,
+        aux_vars: dict[str, TensorLike] | None = None,
+        received_msgs: dict[Agent, TensorLike] | None = None,
     ) -> None:
         """
         Initialize local variables and messages before running an algorithm.
@@ -101,19 +99,19 @@ class Agent:
         if received_msgs:
             self._received_messages = received_msgs
 
-    def _call_counting_function(self, x: NDArray[float64]) -> float:
+    def _call_counting_function(self, x: TensorLike) -> float:
         self._n_function_calls += 1
         return self._cost.__class__.function(self.cost, x)
 
-    def _call_counting_gradient(self, x: NDArray[float64]) -> NDArray[float64]:
+    def _call_counting_gradient(self, x: TensorLike) -> TensorLike:
         self._n_gradient_calls += 1
         return self._cost.__class__.gradient(self.cost, x)
 
-    def _call_counting_hessian(self, x: NDArray[float64]) -> NDArray[float64]:
+    def _call_counting_hessian(self, x: TensorLike) -> TensorLike:
         self._n_hessian_calls += 1
         return self._cost.__class__.hessian(self.cost, x)
 
-    def _call_counting_proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
+    def _call_counting_proximal(self, y: TensorLike, rho: float) -> TensorLike:
         self._n_proximal_calls += 1
         return self._cost.__class__.proximal(self.cost, y, rho)
 
@@ -126,8 +124,8 @@ class Agent:
 class AgentMetricsView:
     """Immutable view of agent that exposes useful properties for calculating metrics."""
 
-    cost: Cost
-    x_history: list[NDArray[float64]]
+    cost: Cost[TensorLike]
+    x_history: list[TensorLike]
     n_function_calls: int
     n_gradient_calls: int
     n_hessian_calls: int

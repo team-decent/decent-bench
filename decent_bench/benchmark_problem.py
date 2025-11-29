@@ -6,8 +6,6 @@ from typing import TYPE_CHECKING, Any
 
 import networkx as nx
 from networkx import Graph
-from numpy import float64
-from numpy.typing import NDArray
 
 import decent_bench.centralized_algorithms as ca
 from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCost
@@ -26,11 +24,14 @@ from decent_bench.schemes import (
     UniformActivationRate,
     UniformDropRate,
 )
+from decent_bench.utils.types import TensorLike
 
 if TYPE_CHECKING:
     AnyGraph = Graph[Any]
+    AnyCost = Cost[Any]
 else:
     AnyGraph = Graph
+    AnyCost = Cost
 
 
 @dataclass(eq=False)
@@ -50,8 +51,8 @@ class BenchmarkProblem:
     """
 
     network_structure: AnyGraph
-    x_optimal: NDArray[float64]
-    costs: Sequence[Cost]
+    x_optimal: TensorLike
+    costs: Sequence[AnyCost]
     agent_activations: Sequence[AgentActivationScheme]
     message_compression: CompressionScheme
     message_noise: NoiseScheme

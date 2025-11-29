@@ -1,11 +1,10 @@
 import random
 from abc import ABC, abstractmethod
-from functools import cached_property
 
 import numpy as np
-from numpy import float64
-from numpy.random import MT19937, Generator
-from numpy.typing import NDArray
+
+import decent_bench.utils.interoperability as iop
+from decent_bench.utils.types import T
 
 
 class AgentActivationScheme(ABC):
@@ -43,14 +42,14 @@ class CompressionScheme(ABC):
     """Scheme defining how messages are compressed when sent over the network."""
 
     @abstractmethod
-    def compress(self, msg: NDArray[float64]) -> NDArray[float64]:
+    def compress(self, msg: T) -> T:
         """Apply compression and return a new, compressed message."""
 
 
 class NoCompression(CompressionScheme):
     """Scheme that leaves messages uncompressed."""
 
-    def compress(self, msg: NDArray[float64]) -> NDArray[float64]:  # noqa: D102
+    def compress(self, msg: T) -> T:  # noqa: D102
         return msg
 
 
@@ -60,9 +59,9 @@ class Quantization(CompressionScheme):
     def __init__(self, n_significant_digits: int):
         self.n_significant_digits = n_significant_digits
 
-    def compress(self, msg: NDArray[float64]) -> NDArray[float64]:  # noqa: D102
-        res: NDArray[float64] = np.vectorize(lambda x: float(f"%.{self.n_significant_digits - 1}e" % x))(msg)
-        return res
+    def compress(self, msg: T) -> T:  # noqa: D102
+        res = np.vectorize(lambda x: float(f"%.{self.n_significant_digits - 1}e" % x))(iop.to_numpy(msg))
+        return iop.from_numpy_like(res, msg)
 
 
 class DropScheme(ABC):
@@ -96,14 +95,14 @@ class NoiseScheme(ABC):
     """Scheme defining how noise impacts messages."""
 
     @abstractmethod
-    def make_noise(self, msg: NDArray[float64]) -> NDArray[float64]:
+    def make_noise(self, msg: T) -> T:
         """Apply noise scheme without mutating the *msg* passed in."""
 
 
 class NoNoise(NoiseScheme):
     """Scheme that leaves messages untouched."""
 
-    def make_noise(self, msg: NDArray[float64]) -> NDArray[float64]:  # noqa: D102
+    def make_noise(self, msg: T) -> T:  # noqa: D102
         return msg
 
 
@@ -116,9 +115,5 @@ class GaussianNoise(NoiseScheme):
         self.mean = mean
         self.sd = sd
 
-    @cached_property
-    def _generator(self) -> Generator:
-        return Generator(MT19937())
-
-    def make_noise(self, msg: NDArray[float64]) -> NDArray[float64]:  # noqa: D102
-        return msg + self._generator.normal(self.mean, self.sd, msg.shape)
+    def make_noise(self, msg: T) -> T:  # noqa: D102
+        return iop.add(msg, iop.randn_like(msg, mean=self.mean, std=self.sd))
