@@ -24,14 +24,12 @@ from decent_bench.schemes import (
     UniformActivationRate,
     UniformDropRate,
 )
-from decent_bench.utils.types import TensorLike
+from decent_bench.utils.parameter import X
 
 if TYPE_CHECKING:
     AnyGraph = Graph[Any]
-    AnyCost = Cost[Any]
 else:
     AnyGraph = Graph
-    AnyCost = Cost
 
 
 @dataclass(eq=False)
@@ -51,8 +49,8 @@ class BenchmarkProblem:
     """
 
     network_structure: AnyGraph
-    x_optimal: TensorLike
-    costs: Sequence[AnyCost]
+    x_optimal: X
+    costs: Sequence[Cost]
     agent_activations: Sequence[AgentActivationScheme]
     message_compression: CompressionScheme
     message_noise: NoiseScheme

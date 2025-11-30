@@ -11,10 +11,10 @@ from numpy.typing import NDArray
 from scipy import special
 
 import decent_bench.centralized_algorithms as ca
-from decent_bench.utils.types import T
+from decent_bench.utils.parameter import X
 
 
-class Cost[T](ABC):
+class Cost(ABC):
     """Used by agents to evaluate the cost and its derivatives at a certain x."""
 
     @property
@@ -65,31 +65,31 @@ class Cost[T](ABC):
         """
 
     @abstractmethod
-    def function(self, x: T) -> float:
+    def function(self, x: X) -> float:
         """Evaluate function at x."""
 
-    def evaluate(self, x: T) -> float:
+    def evaluate(self, x: X) -> float:
         """Alias for :meth:`function`."""
         return self.function(x)
 
-    def loss(self, x: T) -> float:
+    def loss(self, x: X) -> float:
         """Alias for :meth:`function`."""
         return self.function(x)
 
-    def f(self, x: T) -> float:
+    def f(self, x: X) -> float:
         """Alias for :meth:`function`."""
         return self.function(x)
 
     @abstractmethod
-    def gradient(self, x: T) -> T:
+    def gradient(self, x: X) -> X:
         """Gradient at x."""
 
     @abstractmethod
-    def hessian(self, x: T) -> T:
+    def hessian(self, x: X) -> X:
         """Hessian at x."""
 
     @abstractmethod
-    def proximal(self, y: T, rho: float) -> T:
+    def proximal(self, y: X, rho: float) -> X:
         r"""
         Proximal at y.
 
@@ -102,7 +102,7 @@ class Cost[T](ABC):
         """
 
     @abstractmethod
-    def __add__(self, other: Cost[T]) -> Cost[T]:
+    def __add__(self, other: Cost) -> Cost:
         """
         Add another cost function to create a new one.
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
@@ -24,8 +24,19 @@ else:
         """Required for proper autodoc generation."""
 
 
-T = TypeVar("T", bound=TensorLike)
+SupportedFrameworks = Literal["numpy", "torch", "tensorflow", "jax"]
 """
-TypeVar for TensorLike types such as NumPy arrays, PyTorch tensors or
-TensorFlow tensors.
+Literal type for supported frameworks in decent-bench.
+"""
+
+SupportedDevices = Literal["cpu", "gpu"]
+"""
+Literal type for supported devices in decent-bench. Depends on the framework used.
+"""
+
+SupportedXTypes = TensorLike | float | int
+"""
+Type alias for supported types for optimization variables in decent-bench,
+including Tensor-like types and scalars.
+Alias of :class:`TensorLike` | :class:`float` | :class:`int`
 """

@@ -5,12 +5,13 @@ import networkx as nx
 import numpy as np
 from networkx import Graph
 from numpy import float64
-from numpy.typing import NDArray
 
+import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme
-from decent_bench.utils.types import TensorLike
+from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
+from decent_bench.utils.parameter import X
 
 if TYPE_CHECKING:
     AgentGraph = Graph[Agent]
@@ -41,14 +42,30 @@ class P2PNetwork:
         self._message_noise = message_noise
         self._message_compression = message_compression
         self._message_drop = message_drop
+        self.W: X | None = None
 
-    @cached_property
-    def weights(self) -> NDArray[float64]:
+    def set_weights(self, weights: X) -> None:
+        """
+        Set custom consensus weights matrix.
+
+        A simple way to create custom weights is to start using numpy and then
+        use :func:`decent_bench.utils.interoperability.numpy_to_X` to convert to an X object
+        with the desired framework and device.
+
+        If not set, the weights matrix is initialized using the Metropolis-Hastings method.
+        Weights will be overwritten if framework or device differ from previous call to :meth:`weights`.
+        """
+        self.W = weights
+
+    def weights(self, framework: SupportedFrameworks = "numpy", device: SupportedDevices = "cpu") -> X:
         """
         Symmetric, doubly stochastic matrix for consensus weights. Initialized using the Metropolis-Hastings method.
 
         Use ``weights[i, j]`` or ``weights[i.id, j.id]`` to get the weight between agent i and j.
         """
+        if self.W is not None and self.W.framework == framework and self.W.device == device:
+            return self.W
+
         agents = self.agents()
         n = len(agents)
         W = np.zeros((n, n))  # noqa: N806
@@ -60,7 +77,10 @@ class P2PNetwork:
                 W[i, j] = 1 / (1 + max(d_i, d_j))
         for i in agents:
             W[i, i] = 1 - sum(W[i])
-        return W
+
+        self.W = iop.numpy_to_X(W, framework, device)
+
+        return self.W
 
     def agents(self) -> list[Agent]:
         """Get all agents in the network."""
@@ -79,7 +99,7 @@ class P2PNetwork:
         """
         return [a for a in self.agents() if a._activation.is_active(iteration)]  # noqa: SLF001
 
-    def send(self, sender: Agent, receiver: Agent, msg: TensorLike) -> None:
+    def send(self, sender: Agent, receiver: Agent, msg: X) -> None:
         """
         Send message to a neighbor.
 
@@ -99,7 +119,7 @@ class P2PNetwork:
         msg = self._message_noise.make_noise(msg)
         self._graph.edges[sender, receiver][str(receiver.id)] = msg
 
-    def broadcast(self, sender: Agent, msg: TensorLike) -> None:
+    def broadcast(self, sender: Agent, msg: X) -> None:
         """
         Send message to all neighbors.
 

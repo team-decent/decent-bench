@@ -6,19 +6,19 @@ from types import MappingProxyType
 
 from decent_bench.costs import Cost
 from decent_bench.schemes import AgentActivationScheme
-from decent_bench.utils.types import TensorLike
+from decent_bench.utils.parameter import X
 
 
 class Agent:
     """Agent with unique id, local cost function, and activation scheme."""
 
-    def __init__(self, agent_id: int, cost: Cost[TensorLike], activation: AgentActivationScheme):
+    def __init__(self, agent_id: int, cost: Cost, activation: AgentActivationScheme):
         self._id = agent_id
         self._cost = cost
         self._activation = activation
-        self._x_history: list[TensorLike] = []
-        self._auxiliary_variables: dict[str, TensorLike] = {}
-        self._received_messages: dict[Agent, TensorLike] = {}
+        self._x_history: list[X] = []
+        self._auxiliary_variables: dict[str, X] = {}
+        self._received_messages: dict[Agent, X] = {}
         self._n_sent_messages = 0
         self._n_received_messages = 0
         self._n_sent_messages_dropped = 0
@@ -37,7 +37,7 @@ class Agent:
         return self._id
 
     @property
-    def cost(self) -> Cost[TensorLike]:
+    def cost(self) -> Cost:
         """
         Local cost function.
 
@@ -50,7 +50,7 @@ class Agent:
     loss = cost
 
     @property
-    def x(self) -> TensorLike:
+    def x(self) -> X:
         """
         Local optimization variable x.
 
@@ -63,25 +63,25 @@ class Agent:
         return self._x_history[-1]
 
     @x.setter
-    def x(self, x: TensorLike) -> None:
+    def x(self, x: X) -> None:
         self._x_history.append(x)
 
     @property
-    def messages(self) -> Mapping[Agent, TensorLike]:
+    def messages(self) -> Mapping[Agent, X]:
         """Messages received by neighbors."""
         return MappingProxyType(self._received_messages)
 
     @property
-    def aux_vars(self) -> dict[str, TensorLike]:
+    def aux_vars(self) -> dict[str, X]:
         """Auxiliary optimization variables used by algorithms that require more variables than x."""
         return self._auxiliary_variables
 
     def initialize(
         self,
         *,
-        x: TensorLike | None = None,
-        aux_vars: dict[str, TensorLike] | None = None,
-        received_msgs: dict[Agent, TensorLike] | None = None,
+        x: X | None = None,
+        aux_vars: dict[str, X] | None = None,
+        received_msgs: dict[Agent, X] | None = None,
     ) -> None:
         """
         Initialize local variables and messages before running an algorithm.
@@ -99,19 +99,19 @@ class Agent:
         if received_msgs:
             self._received_messages = received_msgs
 
-    def _call_counting_function(self, x: TensorLike) -> float:
+    def _call_counting_function(self, x: X) -> float:
         self._n_function_calls += 1
         return self._cost.__class__.function(self.cost, x)
 
-    def _call_counting_gradient(self, x: TensorLike) -> TensorLike:
+    def _call_counting_gradient(self, x: X) -> X:
         self._n_gradient_calls += 1
         return self._cost.__class__.gradient(self.cost, x)
 
-    def _call_counting_hessian(self, x: TensorLike) -> TensorLike:
+    def _call_counting_hessian(self, x: X) -> X:
         self._n_hessian_calls += 1
         return self._cost.__class__.hessian(self.cost, x)
 
-    def _call_counting_proximal(self, y: TensorLike, rho: float) -> TensorLike:
+    def _call_counting_proximal(self, y: X, rho: float) -> X:
         self._n_proximal_calls += 1
         return self._cost.__class__.proximal(self.cost, y, rho)
 
@@ -124,8 +124,8 @@ class Agent:
 class AgentMetricsView:
     """Immutable view of agent that exposes useful properties for calculating metrics."""
 
-    cost: Cost[TensorLike]
-    x_history: list[TensorLike]
+    cost: Cost
+    x_history: list[X]
     n_function_calls: int
     n_gradient_calls: int
     n_hessian_calls: int
