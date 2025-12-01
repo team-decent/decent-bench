@@ -5,11 +5,11 @@ import numpy as np
 from numpy import float64
 from numpy.typing import NDArray
 
-import decent_bench.utils.interoperability as iop
-from decent_bench.network import Network
+from decent_bench.networks import P2PNetwork
+from decent_bench.utils import interoperability as iop
 
 
-class DstAlgorithm(ABC):
+class Algorithm(ABC):
     """Distributed algorithm - agents collaborate to solve an optimization problem using peer-to-peer communication."""
 
     @property
@@ -18,7 +18,7 @@ class DstAlgorithm(ABC):
         """Name of the algorithm."""
 
     @abstractmethod
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         """
         Run the algorithm.
 
@@ -29,7 +29,7 @@ class DstAlgorithm(ABC):
 
 
 @dataclass(eq=False)
-class DGD(DstAlgorithm):
+class DGD(Algorithm):
     r"""
     Distributed gradient descent characterized by the update step below.
 
@@ -49,7 +49,7 @@ class DGD(DstAlgorithm):
     step_size: float
     name: str = "DGD"
 
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         r"""
         Run the algorithm.
 
@@ -57,23 +57,23 @@ class DGD(DstAlgorithm):
             network: provides agents, neighbors etc.
 
         """
-        for agent in network.get_all_agents():
-            x0 = np.zeros(agent.cost_function.domain_shape)
-            agent.initialize(x=x0, received_msgs=dict.fromkeys(network.get_neighbors(agent), x0))
-        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        for agent in network.agents():
+            x0 = np.zeros(agent.cost.shape)
+            agent.initialize(x=x0, received_msgs=dict.fromkeys(network.neighbors(agent), x0))
+        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
         for k in range(self.iterations):
-            for i in network.get_active_agents(k):
-                neighborhood_avg = iop.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
+            for i in network.active_agents(k):
+                neighborhood_avg = iop.sum([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
                 neighborhood_avg += W[i, i] * i.x
-                i.x = neighborhood_avg - self.step_size * i.cost_function.gradient(i.x)
-            for i in network.get_active_agents(k):
+                i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
+            for i in network.active_agents(k):
                 network.broadcast(i, i.x)
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
 
 
 @dataclass(eq=False)
-class ATC(DstAlgorithm):
+class ATC(Algorithm):
     r"""
     Adapt-Then-Combine (ATC) distributed gradient descent characterized by the update below [r1]_.
 
@@ -99,7 +99,7 @@ class ATC(DstAlgorithm):
     step_size: float
     name: str = "ATC"
 
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         r"""
         Run the algorithm.
 
@@ -107,30 +107,30 @@ class ATC(DstAlgorithm):
             network: provides agents, neighbors etc.
 
         """
-        for agent in network.get_all_agents():
-            x0 = np.zeros(agent.cost_function.domain_shape)
+        for agent in network.agents():
+            x0 = np.zeros(agent.cost.shape)
             agent.initialize(
                 x=x0,
-                received_msgs=dict.fromkeys(network.get_neighbors(agent), x0),
+                received_msgs=dict.fromkeys(network.neighbors(agent), x0),
                 aux_vars={"y": x0},
             )
-        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
 
         for k in range(self.iterations):
             # gradient step (a.k.a. adapt step)
-            for i in network.get_active_agents(k):
-                i.aux_vars["y"] = i.x - self.step_size * i.cost_function.gradient(i.x)
+            for i in network.active_agents(k):
+                i.aux_vars["y"] = i.x - self.step_size * i.cost.gradient(i.x)
 
             # transmit and receive
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.broadcast(i, i.aux_vars["y"])
 
             # consensus (a.k.a. combine step)
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
 
-            for i in network.get_active_agents(k):
-                s = iop.stack([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
+            for i in network.active_agents(k):
+                s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
                 neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.x
                 i.x = neighborhood_avg
@@ -140,7 +140,7 @@ AdaptThenCombine = ATC  # alias
 
 
 @dataclass(eq=False)
-class GT1(DstAlgorithm):
+class SimpleGT(Algorithm):
     r"""
     Gradient tracking algorithm characterized by the update step below.
 
@@ -156,13 +156,15 @@ class GT1(DstAlgorithm):
     j is a neighbor of i or i itself,
     and :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j.
 
+    Alias: :class:`SimpleGradientTracking`
+
     """
 
     iterations: int
     step_size: float
-    name: str = "GT1"
+    name: str = "SimpleGT"
 
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         r"""
         Run the algorithm.
 
@@ -170,27 +172,30 @@ class GT1(DstAlgorithm):
             network: provides agents, neighbors etc.
 
         """
-        for agent in network.get_all_agents():
-            x0 = np.zeros(agent.cost_function.domain_shape)
-            y0 = np.zeros(agent.cost_function.domain_shape)
-            neighbors = network.get_neighbors(agent)
+        for agent in network.agents():
+            x0 = np.zeros(agent.cost.shape)
+            y0 = np.zeros(agent.cost.shape)
+            neighbors = network.neighbors(agent)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
-        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
         for k in range(self.iterations):
-            for i in network.get_active_agents(k):
-                i.aux_vars["y_new"] = i.x - self.step_size * i.cost_function.gradient(i.x)
-                neighborhood_avg = iop.sum([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
+            for i in network.active_agents(k):
+                i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
+                neighborhood_avg = iop.sum([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
                 neighborhood_avg += W[i, i] * i.x
                 i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
                 i.aux_vars["y"] = i.aux_vars["y_new"]
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.broadcast(i, i.x)
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
 
 
+SimpleGradientTracking = SimpleGT  # Alias
+
+
 @dataclass(eq=False)
-class GT2(DstAlgorithm):
+class ED(Algorithm):
     r"""
     Gradient tracking algorithm characterized by the update step below.
 
@@ -207,13 +212,15 @@ class GT2(DstAlgorithm):
     j is a neighbor of i or i itself,
     and :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j.
 
+    Alias: :class:`ExactDiffusion`
+
     """
 
     iterations: int
     step_size: float
-    name: str = "GT2"
+    name: str = "ED"
 
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         r"""
         Run the algorithm.
 
@@ -221,36 +228,39 @@ class GT2(DstAlgorithm):
             network: provides agents, neighbors etc.
 
         """
-        for i in network.get_all_agents():
-            x0 = np.zeros(i.cost_function.domain_shape)
-            y0 = np.zeros(i.cost_function.domain_shape)
-            y1 = x0 - self.step_size * i.cost_function.gradient(x0)
+        for i in network.agents():
+            x0 = np.zeros(i.cost.shape)
+            y0 = np.zeros(i.cost.shape)
+            y1 = x0 - self.step_size * i.cost.gradient(x0)
             # note: msg0's y1 is an approximation of the neighbors' y1 (x0 and y0 are exact: all agents start with same)
             msg0 = x0 + y1 - y0
             i.initialize(
                 x=x0,
                 aux_vars={"y": y0, "y_new": y1},
-                received_msgs=dict.fromkeys(network.get_neighbors(i), msg0),
+                received_msgs=dict.fromkeys(network.neighbors(i), msg0),
             )
         W = iop.from_numpy_like(  # noqa: N806
-            0.5 * (np.eye(*(network.metropolis_weights.shape)) + network.metropolis_weights),
-            network.get_all_agents()[0].x,
+            0.5 * (np.eye(*(network.weights.shape)) + network.weights),
+            network.agents()[0].x,
         )
         for k in range(self.iterations):
-            for i in network.get_active_agents(k):
-                i.x = iop.sum([W[i, j] * msg for j, msg in i.received_messages.items()], dim=0) + W[i, i] * (
+            for i in network.active_agents(k):
+                i.x = iop.sum([W[i, j] * msg for j, msg in i.messages.items()], dim=0) + W[i, i] * (
                     i.x + i.aux_vars["y_new"] - i.aux_vars["y"]
                 )
                 i.aux_vars["y"] = i.aux_vars["y_new"]
-                i.aux_vars["y_new"] = i.x - self.step_size * i.cost_function.gradient(i.x)
-            for i in network.get_active_agents(k):
+                i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
+            for i in network.active_agents(k):
                 network.broadcast(i, i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
 
 
+ExactDiffusion = ED  # alias
+
+
 @dataclass(eq=False)
-class AugDGM(DstAlgorithm):
+class AugDGM(Algorithm):
     r"""
     Aug-DGM [r2]_ or ATC-DIGing [r3]_ gradient tracking algorithm, characterized by the updates below.
 
@@ -282,7 +292,7 @@ class AugDGM(DstAlgorithm):
     step_size: float
     name: str = "Aug-DGM"
 
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         r"""
         Run the algorithm.
 
@@ -290,49 +300,49 @@ class AugDGM(DstAlgorithm):
             network: provides agents, neighbors etc.
 
         """
-        for i in network.get_all_agents():
-            x0 = np.zeros(i.cost_function.domain_shape)
-            y0 = i.cost_function.gradient(x0)
-            neighbors = network.get_neighbors(i)
+        for i in network.agents():
+            x0 = np.zeros(i.cost.shape)
+            y0 = i.cost.gradient(x0)
+            neighbors = network.neighbors(i)
             i.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(neighbors, x0),
                 aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0},
             )
 
-        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
 
         for k in range(self.iterations):
             # 1st communication round
             #     step 1: perform local gradient step and communicate
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 i.aux_vars["s"] = i.x - self.step_size * i.aux_vars["y"]
 
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.broadcast(i, i.aux_vars["s"])
 
             #     step 2: update state and compute new local gradient
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
 
-            for i in network.get_active_agents(k):
-                s = iop.stack([W[i, j] * s_j for j, s_j in i.received_messages.items()], dim=0)
+            for i in network.active_agents(k):
+                s = iop.stack([W[i, j] * s_j for j, s_j in i.messages.items()], dim=0)
                 neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.aux_vars["s"]
                 i.x = neighborhood_avg
-                i.aux_vars["g_new"] = i.cost_function.gradient(i.x)
+                i.aux_vars["g_new"] = i.cost.gradient(i.x)
 
             # 2nd communication round
             #     step 1: transmit local gradient tracker
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.broadcast(i, i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
 
             #     step 2: update y (global gradient estimator)
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
 
-            for i in network.get_active_agents(k):
-                s = iop.stack([W[i, j] * q_j for j, q_j in i.received_messages.items()], dim=0)
+            for i in network.active_agents(k):
+                s = iop.stack([W[i, j] * q_j for j, q_j in i.messages.items()], dim=0)
                 neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
                 i.aux_vars["y"] = neighborhood_avg
@@ -343,7 +353,7 @@ ATCDIGing = AugDGM  # alias
 
 
 @dataclass(eq=False)
-class WangElia(DstAlgorithm):
+class WangElia(Algorithm):
     r"""
     Wang-Elia gradient tracking algorithm characterized by the updates below, see [r4]_ and [r5]_.
 
@@ -376,7 +386,7 @@ class WangElia(DstAlgorithm):
     step_size: float
     name: str = "Wang-Elia"
 
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         r"""
         Run the algorithm.
 
@@ -384,50 +394,50 @@ class WangElia(DstAlgorithm):
             network: provides agents, neighbors etc.
 
         """
-        for i in network.get_all_agents():
-            x0 = np.zeros(i.cost_function.domain_shape)
-            neighbors = network.get_neighbors(i)
+        for i in network.agents():
+            x0 = np.zeros(i.cost.shape)
+            neighbors = network.neighbors(i)
             i.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(neighbors, x0),
                 aux_vars={"z": x0, "x_old": x0},
             )
 
-        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
         K = 0.5 * (iop.eye_like(W) - W)  # noqa: N806
 
         for k in range(self.iterations):
             # 1st communication round
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.broadcast(i, i.x + i.aux_vars["z"])
 
             # do consensus and local gradient step
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
 
-            for i in network.get_active_agents(k):
-                neighborhood_avg = iop.sum([K[i, j] * m_j for j, m_j in i.received_messages.items()], dim=0)
+            for i in network.active_agents(k):
+                neighborhood_avg = iop.sum([K[i, j] * m_j for j, m_j in i.messages.items()], dim=0)
                 neighborhood_avg += K[i, i] * (i.x + i.aux_vars["z"])
 
                 i.aux_vars["x_old"] = i.x
-                i.x = i.x - neighborhood_avg - self.step_size * i.cost_function.gradient(i.x)
+                i.x = i.x - neighborhood_avg - self.step_size * i.cost.gradient(i.x)
 
             # 2nd communication round
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.broadcast(i, i.aux_vars["x_old"])
 
             # update auxiliary variable
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
 
-            for i in network.get_active_agents(k):
-                neighborhood_avg = iop.sum([K[i, j] * m_j for j, m_j in i.received_messages.items()], dim=0)
+            for i in network.active_agents(k):
+                neighborhood_avg = iop.sum([K[i, j] * m_j for j, m_j in i.messages.items()], dim=0)
                 neighborhood_avg += K[i, i] * i.aux_vars["x_old"]
                 i.aux_vars["z"] += neighborhood_avg
 
 
 @dataclass(eq=False)
-class EXTRA(DstAlgorithm):
+class EXTRA(Algorithm):
     r"""
     EXTRA [r6]_ gradient tracking algorithm characterized by the update steps below.
 
@@ -455,7 +465,7 @@ class EXTRA(DstAlgorithm):
     step_size: float
     name: str = "EXTRA"
 
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         r"""
         Run the algorithm.
 
@@ -464,37 +474,37 @@ class EXTRA(DstAlgorithm):
 
         """
         # initialization (iteration k=0)
-        for i in network.get_all_agents():
-            x0 = np.zeros(i.cost_function.domain_shape)
+        for i in network.agents():
+            x0 = np.zeros(i.cost.shape)
             i.initialize(
                 x=x0,
-                received_msgs=dict.fromkeys(network.get_neighbors(i), x0),
+                received_msgs=dict.fromkeys(network.neighbors(i), x0),
                 aux_vars={"x_old": x0, "x_old_old": x0, "x_cons": x0},
             )
 
-        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
 
         # first iteration (iteration k=1)
-        for i in network.get_active_agents(0):
+        for i in network.active_agents(0):
             network.broadcast(i, i.x)
-        for i in network.get_active_agents(0):
+        for i in network.active_agents(0):
             network.receive_all(i)
-        for i in network.get_active_agents(0):
-            s = iop.stack([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
+        for i in network.active_agents(0):
+            s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
             neighborhood_avg = iop.sum(s, dim=0)
             neighborhood_avg += W[i, i] * i.x
             i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
             i.aux_vars["x_old"] = i.x  # store x_0
-            i.x = neighborhood_avg - self.step_size * i.cost_function.gradient(i.x)
+            i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
 
         # subsequent iterations (k >= 2)
         for k in range(1, self.iterations):
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.broadcast(i, i.x)
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
-            for i in network.get_active_agents(k):
-                s = iop.stack([W[i, j] * x_j for j, x_j in i.received_messages.items()], dim=0)
+            for i in network.active_agents(k):
+                s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
                 neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.x
                 i.aux_vars["x_old_old"] = i.aux_vars["x_old"]  # store x_{k-1}
@@ -505,14 +515,13 @@ class EXTRA(DstAlgorithm):
                     + neighborhood_avg
                     - 0.5 * i.aux_vars["x_old_old"]
                     - 0.5 * i.aux_vars["x_cons"]
-                    - self.step_size
-                    * (i.cost_function.gradient(i.x) - i.cost_function.gradient(i.aux_vars["x_old_old"]))
+                    - self.step_size * (i.cost.gradient(i.x) - i.cost.gradient(i.aux_vars["x_old_old"]))
                 )
                 i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
 
 
 @dataclass(eq=False)
-class ATCTracking(DstAlgorithm):
+class ATCTracking(Algorithm):
     r"""
     ATC-Tracking [r7]_, [r8]_, [r9]_ gradient tracking algorithm, characterized by the updates below.
 
@@ -548,7 +557,7 @@ class ATCTracking(DstAlgorithm):
     step_size: float
     name: str = "ATC-Tracking"
 
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         r"""
         Run the algorithm.
 
@@ -556,49 +565,49 @@ class ATCTracking(DstAlgorithm):
             network: provides agents, neighbors etc.
 
         """
-        for i in network.get_all_agents():
-            x0 = np.zeros(i.cost_function.domain_shape)
-            y0 = i.cost_function.gradient(x0)
-            neighbors = network.get_neighbors(i)
+        for i in network.agents():
+            x0 = np.zeros(i.cost.shape)
+            y0 = i.cost.gradient(x0)
+            neighbors = network.neighbors(i)
             i.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(neighbors, x0),
                 aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0},
             )
 
-        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
 
         for k in range(self.iterations):
             # 1st communication round
             #     step 1: perform local gradient step and communicate
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 i.aux_vars["s"] = i.x - self.step_size * i.aux_vars["y"]
 
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.broadcast(i, i.aux_vars["s"])
 
             #     step 2: update state and compute new local gradient
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
 
-            for i in network.get_active_agents(k):
-                s = iop.stack([W[i, j] * s_j for j, s_j in i.received_messages.items()], dim=0)
+            for i in network.active_agents(k):
+                s = iop.stack([W[i, j] * s_j for j, s_j in i.messages.items()], dim=0)
                 neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.aux_vars["s"]
                 i.x = neighborhood_avg
-                i.aux_vars["g_new"] = i.cost_function.gradient(i.x)
+                i.aux_vars["g_new"] = i.cost.gradient(i.x)
 
             # 2nd communication round
             #     step 1: transmit local gradient tracker
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.broadcast(i, i.aux_vars["y"])
 
             #     step 2: update y (global gradient estimator)
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
 
-            for i in network.get_active_agents(k):
-                neighborhood_avg = iop.sum([W[i, j] * q_j for j, q_j in i.received_messages.items()], dim=0)
+            for i in network.active_agents(k):
+                neighborhood_avg = iop.sum([W[i, j] * q_j for j, q_j in i.messages.items()], dim=0)
                 neighborhood_avg += W[i, i] * i.aux_vars["y"]
                 i.aux_vars["y"] = neighborhood_avg + i.aux_vars["g_new"] - i.aux_vars["g"]
                 i.aux_vars["g"] = i.aux_vars["g_new"]
@@ -610,7 +619,7 @@ ATCT = ATCTracking  # alias
 
 
 @dataclass(eq=False)
-class NIDS(DstAlgorithm):
+class NIDS(Algorithm):
     r"""
     NIDS [r10]_ gradient tracking algorithm characterized by the update steps below.
 
@@ -639,7 +648,7 @@ class NIDS(DstAlgorithm):
     step_size: float
     name: str = "NIDS"
 
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         r"""
         Run the algorithm.
 
@@ -648,40 +657,40 @@ class NIDS(DstAlgorithm):
 
         """
         # initialization (iteration k=0)
-        for i in network.get_all_agents():
-            x0 = np.zeros(i.cost_function.domain_shape)
+        for i in network.agents():
+            x0 = np.zeros(i.cost.shape)
             i.initialize(
                 x=x0,
-                received_msgs=dict.fromkeys(network.get_neighbors(i), x0),
+                received_msgs=dict.fromkeys(network.neighbors(i), x0),
                 aux_vars={"x_old": x0, "g": x0, "g_old": x0, "y": x0},
             )
 
-        W = iop.from_numpy_like(network.metropolis_weights, network.get_all_agents()[0].x)  # noqa: N806
+        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
         W_tilde = 0.5 * (iop.eye_like(W) + W)  # noqa: N806
 
         # first iteration (iteration k=1)
-        for i in network.get_active_agents(0):
-            i.aux_vars["g"] = i.cost_function.gradient(i.x)  # store grad f_i(x_0)
+        for i in network.active_agents(0):
+            i.aux_vars["g"] = i.cost.gradient(i.x)  # store grad f_i(x_0)
             i.x = i.aux_vars["x_old"] - self.step_size * i.aux_vars["g"]
 
         # subsequent iterations (k >= 2)
         for k in range(1, self.iterations):
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 i.aux_vars["g_old"] = i.aux_vars["g"]  # store grad f_i(x_{k-1})
-                i.aux_vars["g"] = i.cost_function.gradient(i.x)  # store grad f_i(x_k)
+                i.aux_vars["g"] = i.cost.gradient(i.x)  # store grad f_i(x_k)
                 i.aux_vars["y"] = (
                     2 * i.x
                     - i.aux_vars["x_old"]
                     - self.step_size * i.aux_vars["g"]
                     + self.step_size * i.aux_vars["g_old"]
                 )
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.broadcast(i, i.aux_vars["y"])
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 s = iop.stack(
-                    [W_tilde[i, j] * y_j for j, y_j in i.received_messages.items()],
+                    [W_tilde[i, j] * y_j for j, y_j in i.messages.items()],
                     dim=0,
                 )
                 neighborhood_avg = iop.sum(
@@ -694,7 +703,7 @@ class NIDS(DstAlgorithm):
 
 
 @dataclass(eq=False)
-class ADMM(DstAlgorithm):
+class ADMM(Algorithm):
     r"""
     Distributed Alternating Direction Method of Multipliers characterized by the update step below.
 
@@ -706,8 +715,8 @@ class ADMM(DstAlgorithm):
 
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
-    :math:`\operatorname{prox}` is the proximal operator described in :meth:`CostFunction.proximal()
-    <decent_bench.cost_functions.CostFunction.proximal>`,
+    :math:`\operatorname{prox}` is the proximal operator described in :meth:`Cost.proximal()
+    <decent_bench.costs.Cost.proximal>`,
     :math:`\rho > 0` is the Lagrangian penalty parameter,
     :math:`N_i` is the number of neighbors of i,
     :math:`f_i` is i's local cost function,
@@ -721,7 +730,7 @@ class ADMM(DstAlgorithm):
     alpha: float
     name: str = "ADMM"
 
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         r"""
         Run the algorithm.
 
@@ -729,33 +738,33 @@ class ADMM(DstAlgorithm):
             network: provides agents, neighbors etc.
 
         """
-        pN = {i: self.rho * len(network.get_neighbors(i)) for i in network.get_all_agents()}  # noqa: N806
-        all_agents = network.get_all_agents()
+        pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
+        all_agents = network.agents()
         for agent in all_agents:
-            z0 = np.zeros((len(all_agents), *(agent.cost_function.domain_shape)))
-            x1 = agent.cost_function.proximal(y=np.sum(z0, axis=0) / pN[agent], rho=1 / pN[agent])
+            z0 = np.zeros((len(all_agents), *(agent.cost.shape)))
+            x1 = agent.cost.proximal(y=np.sum(z0, axis=0) / pN[agent], rho=1 / pN[agent])
             # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
             msg0: NDArray[float64] = z0[agent] - 2 * self.rho * x1
             agent.initialize(
                 x=x1,
                 aux_vars={"z": z0},
-                received_msgs=dict.fromkeys(network.get_neighbors(agent), msg0),
+                received_msgs=dict.fromkeys(network.neighbors(agent), msg0),
             )
         for k in range(self.iterations):
-            for i in network.get_active_agents(k):
-                i.x = i.cost_function.proximal(y=iop.sum(i.aux_vars["z"], dim=0) / pN[i], rho=1 / pN[i])
-            for i in network.get_active_agents(k):
-                for j in network.get_neighbors(i):
+            for i in network.active_agents(k):
+                i.x = i.cost.proximal(y=iop.sum(i.aux_vars["z"], dim=0) / pN[i], rho=1 / pN[i])
+            for i in network.active_agents(k):
+                for j in network.neighbors(i):
                     network.send(i, j, i.aux_vars["z"][j] - 2 * self.rho * i.x)
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
-            for i in network.get_active_agents(k):
-                for j in network.get_neighbors(i):
-                    i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (i.received_messages[j])
+            for i in network.active_agents(k):
+                for j in network.neighbors(i):
+                    i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (i.messages[j])
 
 
 @dataclass(eq=False)
-class ATG(DstAlgorithm):
+class ATG(Algorithm):
     r"""
     ADMM-Tracking Gradient (ATG) [r11]_ characterized by the update steps below.
 
@@ -800,7 +809,7 @@ class ATG(DstAlgorithm):
     delta: float = 0.1
     name: str = "ATG"
 
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         r"""
         Run the algorithm.
 
@@ -808,29 +817,29 @@ class ATG(DstAlgorithm):
             network: provides agents, neighbors etc.
 
         """
-        pN = {i: self.rho * len(network.get_neighbors(i)) for i in network.get_all_agents()}  # noqa: N806
-        all_agents = network.get_all_agents()
+        pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
+        all_agents = network.agents()
         for i in all_agents:
-            z_y0 = np.zeros((len(all_agents), *(i.cost_function.domain_shape)))
-            z_s0 = np.zeros((len(all_agents), *(i.cost_function.domain_shape)))
-            x0 = np.zeros(i.cost_function.domain_shape)
+            z_y0 = np.zeros((len(all_agents), *(i.cost.shape)))
+            z_s0 = np.zeros((len(all_agents), *(i.cost.shape)))
+            x0 = np.zeros(i.cost.shape)
             i.initialize(
                 x=x0,
                 aux_vars={"y": x0, "s": x0, "z_y": z_y0, "z_s": z_s0},
-                received_msgs=dict.fromkeys(network.get_neighbors(i), x0),
+                received_msgs=dict.fromkeys(network.neighbors(i), x0),
             )
         for k in range(self.iterations):
             # step 1: update consensus-ADMM variables
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 # update auxiliary variables
                 i.aux_vars["y"] = (i.x + iop.sum(i.aux_vars["z_y"], dim=0)) / (1 + pN[i])
-                i.aux_vars["s"] = (i.cost_function.gradient(i.x) + iop.sum(i.aux_vars["z_s"], dim=0)) / (1 + pN[i])
+                i.aux_vars["s"] = (i.cost.gradient(i.x) + iop.sum(i.aux_vars["z_s"], dim=0)) / (1 + pN[i])
                 # update local state
                 i.x = (1 - self.gamma) * i.x + self.gamma * (i.aux_vars["y"] - self.delta * i.aux_vars["s"])
 
             # step 2: communicate and update z_{ij} variables
-            for i in network.get_active_agents(k):
-                for j in network.get_neighbors(i):
+            for i in network.active_agents(k):
+                for j in network.neighbors(i):
                     # transmit the messages as a single message, stacking along the first axis
                     network.send(i, j,
                         iop.stack(
@@ -839,14 +848,14 @@ class ATG(DstAlgorithm):
                                 -i.aux_vars["z_s"][j] + 2 * self.rho * i.aux_vars["s"],
                             ), dim=0),
                     )  # fmt: skip
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
-            for i in network.get_active_agents(k):
-                for j in network.get_neighbors(i):
+            for i in network.active_agents(k):
+                for j in network.neighbors(i):
                     i.aux_vars["z_y"][j] = (1 - self.alpha) * i.aux_vars["z_y"][j] \
-                                         + self.alpha * i.received_messages[j][0]  # fmt: skip
+                                         + self.alpha * i.messages[j][0]  # fmt: skip
                     i.aux_vars["z_s"][j] = (1 - self.alpha) * i.aux_vars["z_s"][j] \
-                                         + self.alpha * i.received_messages[j][1]  # fmt: skip
+                                         + self.alpha * i.messages[j][1]  # fmt: skip
 
 
 ADMMTracking = ATG  # alias
@@ -854,7 +863,7 @@ ADMMTrackingGradient = ATG  # alias
 
 
 @dataclass(eq=False)
-class DLM(DstAlgorithm):
+class DLM(Algorithm):
     r"""
     Decentralized Linearized ADMM (DLM) [r12]_ characterized by the update steps below (see also [r13]_).
 
@@ -888,7 +897,7 @@ class DLM(DstAlgorithm):
     penalty: float
     name: str = "DLM"
 
-    def run(self, network: Network) -> None:
+    def run(self, network: P2PNetwork) -> None:
         r"""
         Run the algorithm.
 
@@ -896,44 +905,44 @@ class DLM(DstAlgorithm):
             network: provides agents, neighbors etc.
 
         """
-        all_agents = network.get_all_agents()
+        all_agents = network.agents()
         for i in all_agents:
-            x0 = np.zeros(i.cost_function.domain_shape)
+            x0 = np.zeros(i.cost.shape)
             i.initialize(
                 x=x0,
-                aux_vars={"y": np.zeros(i.cost_function.domain_shape)},  # y must be initialized to zero
+                aux_vars={"y": np.zeros(i.cost.shape)},  # y must be initialized to zero
             )
 
         # step 0: first communication round
-        for i in network.get_active_agents(0):
+        for i in network.active_agents(0):
             network.broadcast(i, i.x)
-        for i in network.get_active_agents(0):
+        for i in network.active_agents(0):
             network.receive_all(i)
         # compute and store \sum_j (\mathbf{x}_{i,0} - \mathbf{x}_{j,0})
-        for i in network.get_active_agents(0):
-            s = iop.stack([i.x - x_j for _, x_j in i.received_messages.items()], dim=0)
+        for i in network.active_agents(0):
+            s = iop.stack([i.x - x_j for _, x_j in i.messages.items()], dim=0)
             i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
 
         # main iteration
         for k in range(self.iterations):
             # step 1: update primal variable
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 i.x = i.x - self.step_size * (  # noqa: PLR6104
-                    i.cost_function.gradient(i.x) + self.penalty * i.aux_vars["s"] + i.aux_vars["y"]
+                    i.cost.gradient(i.x) + self.penalty * i.aux_vars["s"] + i.aux_vars["y"]
                 )
 
             # step 2: communication round
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.broadcast(i, i.x)
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 network.receive_all(i)
             # compute and store \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
-            for i in network.get_active_agents(k):
-                s = iop.stack([i.x - x_j for _, x_j in i.received_messages.items()], dim=0)
+            for i in network.active_agents(k):
+                s = iop.stack([i.x - x_j for _, x_j in i.messages.items()], dim=0)
                 i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
 
             # step 3: update dual variable
-            for i in network.get_active_agents(k):
+            for i in network.active_agents(k):
                 i.aux_vars["y"] += self.penalty * i.aux_vars["s"]
 
 

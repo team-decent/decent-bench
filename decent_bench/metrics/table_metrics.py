@@ -9,9 +9,9 @@ from numpy import linalg as la
 from scipy import stats
 
 import decent_bench.metrics.metric_utils as utils
-from decent_bench.agent import AgentMetricsView
+from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import DstAlgorithm
+from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.utils.logger import LOGGER
 
 Statistic = Callable[[Sequence[float]], float]
@@ -41,34 +41,34 @@ class TableMetric(ABC):
         """Extract trial data to be aggregated into a single value by each of the *statistics*."""
 
 
-class GlobalCostError(TableMetric):
+class Regret(TableMetric):
     """
-    Global cost error using the agents' final x.
+    Global regret using the agents' final x.
 
-    Global cost error is defined as:
+    Global regret is defined as:
 
     .. include:: snippets/global_cost_error.rst
     """
 
-    description: str = "global cost error \n[<1e-9 = exact conv.]"
+    description: str = "regret \n[<1e-9 = exact conv.]"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> tuple[float]:  # noqa: D102
-        return (utils.global_cost_error_at_iter(agents, problem, iteration=-1),)
+        return (utils.regret(agents, problem, iteration=-1),)
 
 
-class GlobalGradientOptimality(TableMetric):
+class GradientNorm(TableMetric):
     """
-    Global gradient optimality using the agents' final x.
+    Global gradient norm using the agents' final x.
 
-    Global gradient optimality is defined as:
+    Global gradient norm is defined as:
 
     .. include:: snippets/global_gradient_optimality.rst
     """
 
-    description: str = "global gradient optimality"
+    description: str = "gradient norm"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> tuple[float]:  # noqa: D102
-        return (utils.global_gradient_optimality_at_iter(agents, iteration=-1),)
+        return (utils.gradient_norm(agents, iteration=-1),)
 
 
 class XError(TableMetric):
@@ -87,7 +87,7 @@ class XError(TableMetric):
     description: str = "x error"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
-        return [float(la.norm(problem.optimal_x - a.x_per_iteration[-1])) for a in agents]
+        return [float(la.norm(problem.x_optimal - a.x_history[-1])) for a in agents]
 
 
 class AsymptoticConvergenceOrder(TableMetric):
@@ -142,25 +142,25 @@ class IterativeConvergenceRate(TableMetric):
         return [utils.iterative_convergence_rate_and_order(a, problem)[0] for a in agents]
 
 
-class NrXUpdates(TableMetric):
+class XUpdates(TableMetric):
     """Number of iterations/updates of x per agent."""
 
     description: str = "nr x updates"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
-        return [len(a.x_per_iteration) - 1 for a in agents]
+        return [len(a.x_history) - 1 for a in agents]
 
 
-class NrEvaluateCalls(TableMetric):
+class FunctionCalls(TableMetric):
     """Number of cost function evaluate calls per agent."""
 
-    description: str = "nr evaluate calls"
+    description: str = "nr function calls"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
-        return [a.n_evaluate_calls for a in agents]
+        return [a.n_function_calls for a in agents]
 
 
-class NrGradientCalls(TableMetric):
+class GradientCalls(TableMetric):
     """Number of cost function gradient calls per agent."""
 
     description: str = "nr gradient calls"
@@ -169,7 +169,7 @@ class NrGradientCalls(TableMetric):
         return [a.n_gradient_calls for a in agents]
 
 
-class NrHessianCalls(TableMetric):
+class HessianCalls(TableMetric):
     """Number of cost function hessian calls per agent."""
 
     description: str = "nr hessian calls"
@@ -178,7 +178,7 @@ class NrHessianCalls(TableMetric):
         return [a.n_hessian_calls for a in agents]
 
 
-class NrProximalCalls(TableMetric):
+class ProximalCalls(TableMetric):
     """Number of cost function proximal calls per agent."""
 
     description: str = "nr proximal calls"
@@ -187,7 +187,7 @@ class NrProximalCalls(TableMetric):
         return [a.n_proximal_calls for a in agents]
 
 
-class NrSentMessages(TableMetric):
+class SentMessages(TableMetric):
     """Number of sent messages per agent."""
 
     description: str = "nr sent messages"
@@ -196,7 +196,7 @@ class NrSentMessages(TableMetric):
         return [a.n_sent_messages for a in agents]
 
 
-class NrReceivedMessages(TableMetric):
+class ReceivedMessages(TableMetric):
     """Number of received messages per agent."""
 
     description: str = "nr received messages"
@@ -205,7 +205,7 @@ class NrReceivedMessages(TableMetric):
         return [a.n_received_messages for a in agents]
 
 
-class NrSentMessagesDropped(TableMetric):
+class SentMessagesDropped(TableMetric):
     """Number of sent messages that were dropped per agent."""
 
     description: str = "nr sent messages dropped"
@@ -215,38 +215,38 @@ class NrSentMessagesDropped(TableMetric):
 
 
 DEFAULT_TABLE_METRICS = [
-    GlobalCostError([utils.single]),
-    GlobalGradientOptimality([utils.single]),
+    Regret([utils.single]),
+    GradientNorm([utils.single]),
     XError([min, np.average, max]),
     AsymptoticConvergenceOrder([np.average]),
     AsymptoticConvergenceRate([np.average]),
     IterativeConvergenceOrder([np.average]),
     IterativeConvergenceRate([np.average]),
-    NrXUpdates([np.average, sum]),
-    NrEvaluateCalls([np.average, sum]),
-    NrGradientCalls([np.average, sum]),
-    NrHessianCalls([np.average, sum]),
-    NrProximalCalls([np.average, sum]),
-    NrSentMessages([np.average, sum]),
-    NrReceivedMessages([np.average, sum]),
-    NrSentMessagesDropped([np.average, sum]),
+    XUpdates([np.average, sum]),
+    FunctionCalls([np.average, sum]),
+    GradientCalls([np.average, sum]),
+    HessianCalls([np.average, sum]),
+    ProximalCalls([np.average, sum]),
+    SentMessages([np.average, sum]),
+    ReceivedMessages([np.average, sum]),
+    SentMessagesDropped([np.average, sum]),
 ]
 """
-- :class:`GlobalCostError` - :func:`~.metric_utils.single`
-- :class:`GlobalGradientOptimality` - :func:`~.metric_utils.single`
+- :class:`Regret` - :func:`~.metric_utils.single`
+- :class:`GradientNorm` - :func:`~.metric_utils.single`
 - :class:`XError` - :func:`min`, :func:`~numpy.average`, :func:`max`
 - :class:`AsymptoticConvergenceOrder` - :func:`~numpy.average`
 - :class:`AsymptoticConvergenceRate` - :func:`~numpy.average`
 - :class:`IterativeConvergenceOrder` - :func:`~numpy.average`
 - :class:`IterativeConvergenceRate` - :func:`~numpy.average`
-- :class:`NrXUpdates` - :func:`~numpy.average`, :func:`sum`
-- :class:`NrEvaluateCalls` - :func:`~numpy.average`, :func:`sum`
-- :class:`NrGradientCalls` - :func:`~numpy.average`, :func:`sum`
-- :class:`NrHessianCalls` - :func:`~numpy.average`, :func:`sum`
-- :class:`NrProximalCalls` - :func:`~numpy.average`, :func:`sum`
-- :class:`NrSentMessages` - :func:`~numpy.average`, :func:`sum`
-- :class:`NrReceivedMessages` - :func:`~numpy.average`, :func:`sum`
-- :class:`NrSentMessagesDropped` - :func:`~numpy.average`, :func:`sum`
+- :class:`XUpdates` - :func:`~numpy.average`, :func:`sum`
+- :class:`FunctionCalls` - :func:`~numpy.average`, :func:`sum`
+- :class:`GradientCalls` - :func:`~numpy.average`, :func:`sum`
+- :class:`HessianCalls` - :func:`~numpy.average`, :func:`sum`
+- :class:`ProximalCalls` - :func:`~numpy.average`, :func:`sum`
+- :class:`SentMessages` - :func:`~numpy.average`, :func:`sum`
+- :class:`ReceivedMessages` - :func:`~numpy.average`, :func:`sum`
+- :class:`SentMessagesDropped` - :func:`~numpy.average`, :func:`sum`
 
 :meta hide-value:
 """
@@ -256,7 +256,7 @@ TABLE_METRICS_DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/api/dece
 
 
 def tabulate(
-    resulting_agent_states: dict[DstAlgorithm, list[list[AgentMetricsView]]],
+    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[TableMetric],
     confidence_level: float,
@@ -268,7 +268,7 @@ def tabulate(
     Args:
         resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties, e.g.
-            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.optimal_x`,
+            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.x_optimal`,
             are used for metric calculations
         metrics: metrics to calculate
         confidence_level: confidence level of the confidence intervals
