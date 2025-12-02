@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from enum import Enum
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -24,19 +25,26 @@ else:
         """Required for proper autodoc generation."""
 
 
-SupportedFrameworks = Literal["numpy", "torch", "tensorflow", "jax"]
-"""
-Literal type for supported frameworks in decent-bench.
-"""
+class SupportedFrameworks(Enum):
+    """Enum for supported frameworks in decent-bench."""
 
-SupportedDevices = Literal["cpu", "gpu"]
-"""
-Literal type for supported devices in decent-bench. Depends on the framework used.
-"""
+    NUMPY = "numpy"
+    TORCH = "torch"
+    TENSORFLOW = "tensorflow"
+    JAX = "jax"
 
-SupportedXTypes = TensorLike | float | int
+
+class SupportedDevices(Enum):
+    """Enum for supported devices in decent-bench."""
+
+    CPU = "cpu"
+    GPU = "gpu"
+
+
+type SupportedXTypes = TensorLike | float | int
 """
 Type alias for supported types for optimization variables in decent-bench,
 including Tensor-like types and scalars.
-Alias of :class:`TensorLike` | :class:`float` | :class:`int`
+
+alias of :class:`TensorLike` | :class:`float` | :class:`int`
 """

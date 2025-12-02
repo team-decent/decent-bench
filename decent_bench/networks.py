@@ -4,13 +4,11 @@ from typing import TYPE_CHECKING
 import networkx as nx
 import numpy as np
 from networkx import Graph
-from numpy import float64
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme
-from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 from decent_bench.utils.parameter import X
 
 if TYPE_CHECKING:
@@ -53,20 +51,27 @@ class P2PNetwork:
         with the desired framework and device.
 
         If not set, the weights matrix is initialized using the Metropolis-Hastings method.
-        Weights will be overwritten if framework or device differ from previous call to :meth:`weights`.
+        Weights will be overwritten if framework or device differ from
+        :attr:`agent.cost.framework` or :attr:`agent.cost.device`.
         """
         self.W = weights
 
-    def weights(self, framework: SupportedFrameworks = "numpy", device: SupportedDevices = "cpu") -> X:
+    @property
+    def weights(self) -> X:
         """
         Symmetric, doubly stochastic matrix for consensus weights. Initialized using the Metropolis-Hastings method.
 
         Use ``weights[i, j]`` or ``weights[i.id, j.id]`` to get the weight between agent i and j.
         """
-        if self.W is not None and self.W.framework == framework and self.W.device == device:
+        agents = self.agents()
+
+        if (
+            self.W is not None
+            and self.W.framework == agents[0].cost.framework
+            and self.W.device == agents[0].cost.device
+        ):
             return self.W
 
-        agents = self.agents()
         n = len(agents)
         W = np.zeros((n, n))  # noqa: N806
         for i in agents:
@@ -78,9 +83,24 @@ class P2PNetwork:
         for i in agents:
             W[i, i] = 1 - sum(W[i])
 
-        self.W = iop.numpy_to_X(W, framework, device)
-
+        self.W = iop.numpy_to_X(W, agents[0].cost.framework, agents[0].cost.device)
         return self.W
+
+    @cached_property
+    def adjacency(self) -> X:
+        """
+        Adjacency matrix of the network.
+
+        Use ``adjacency[i, j]`` or ``adjacency[i.id, j.id]`` to get the adjacency between agent i and j.
+        """
+        agents = self.agents()
+        n = len(agents)
+        A = np.zeros((n, n))  # noqa: N806
+        for i in agents:
+            for j in self.neighbors(i):
+                A[i, j] = 1
+
+        return iop.numpy_to_X(A, agents[0].cost.framework, agents[0].cost.device)
 
     def agents(self) -> list[Agent]:
         """Get all agents in the network."""

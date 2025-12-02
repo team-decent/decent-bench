@@ -1,24 +1,20 @@
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Generic, NewType, TypeAlias
+from typing import TypeAlias, TypeVar
 
 from numpy import float64
 from numpy.typing import NDArray
 from sklearn import datasets
 
-from decent_bench.utils.types import T
+from decent_bench.utils.types import TensorLike
 
-A_numpy = NewType("A_numpy", NDArray[float64])
-"""Feature matrix type."""
+_T = TypeVar("_T", bound=TensorLike)
 
-b_numpy = NewType("b_numpy", NDArray[float64])
-"""Target vector type."""
-
-DatasetPartition: TypeAlias = tuple[T, T]  # noqa: UP040
+DatasetPartition: TypeAlias = tuple[_T, _T]  # noqa: UP040
 """Tuple of (A, b) representing one dataset partition."""
 
 
-class Dataset(ABC, Generic[T]):  # noqa: UP046
+class Dataset[T: TensorLike](ABC):
     """Dataset containing partitions in the form of feature matrix A and target vector b."""
 
     @abstractmethod

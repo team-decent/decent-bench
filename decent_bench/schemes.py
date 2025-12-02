@@ -5,7 +5,7 @@ import numpy as np
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.utils.parameter import X
-from decent_bench.utils.types import T
+from decent_bench.utils.types import SupportedXTypes
 
 
 class AgentActivationScheme(ABC):
@@ -43,14 +43,14 @@ class CompressionScheme(ABC):
     """Scheme defining how messages are compressed when sent over the network."""
 
     @abstractmethod
-    def compress(self, msg: X) -> X:
+    def compress[T: SupportedXTypes](self, msg: X[T]) -> X[T]:
         """Apply compression and return a new, compressed message."""
 
 
 class NoCompression(CompressionScheme):
     """Scheme that leaves messages uncompressed."""
 
-    def compress(self, msg: X) -> X:  # noqa: D102
+    def compress[T: SupportedXTypes](self, msg: X[T]) -> X[T]:  # noqa: D102
         return msg
 
 
@@ -60,7 +60,7 @@ class Quantization(CompressionScheme):
     def __init__(self, n_significant_digits: int):
         self.n_significant_digits = n_significant_digits
 
-    def compress(self, msg: X) -> X:  # noqa: D102
+    def compress[T: SupportedXTypes](self, msg: X[T]) -> X[T]:  # noqa: D102
         res = np.vectorize(lambda x: float(f"%.{self.n_significant_digits - 1}e" % x))(iop.to_numpy(msg))
         return iop.numpy_to_X(res, msg.framework, msg.device)
 
@@ -96,14 +96,14 @@ class NoiseScheme(ABC):
     """Scheme defining how noise impacts messages."""
 
     @abstractmethod
-    def make_noise(self, msg: X) -> X:
+    def make_noise[T: SupportedXTypes](self, msg: X[T]) -> X[T]:
         """Apply noise scheme without mutating the *msg* passed in."""
 
 
 class NoNoise(NoiseScheme):
     """Scheme that leaves messages untouched."""
 
-    def make_noise(self, msg: X) -> X:  # noqa: D102
+    def make_noise[T: SupportedXTypes](self, msg: X[T]) -> X[T]:  # noqa: D102
         return msg
 
 
@@ -116,5 +116,5 @@ class GaussianNoise(NoiseScheme):
         self.mean = mean
         self.sd = sd
 
-    def make_noise(self, msg: X) -> X:  # noqa: D102
+    def make_noise[T: SupportedXTypes](self, msg: X[T]) -> X[T]:  # noqa: D102
         return msg + iop.randn_like(msg, mean=self.mean, std=self.sd)

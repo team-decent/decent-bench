@@ -1,21 +1,13 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-import numpy as np
-from numpy import float64
-from numpy.typing import NDArray
-
 from decent_bench.networks import P2PNetwork
 from decent_bench.utils import interoperability as iop
 from decent_bench.utils.parameter import X
-from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
 class Algorithm(ABC):
     """Distributed algorithm - agents collaborate to solve an optimization problem using peer-to-peer communication."""
-
-    framework: SupportedFrameworks = "numpy"
-    device: SupportedDevices = "cpu"
 
     @property
     @abstractmethod
@@ -63,10 +55,10 @@ class DGD(Algorithm):
 
         """
         for agent in network.agents():
-            x0 = X(framework=self.framework, shape=agent.cost.shape, device=self.device)
+            x0 = X(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(network.neighbors(agent), x0))
 
-        W = network.weights(framework=self.framework, device=self.device)  # noqa: N806
+        W = network.weights  # noqa: N806
         for k in range(self.iterations):
             for i in network.active_agents(k):
                 s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
@@ -115,14 +107,14 @@ class ATC(Algorithm):
 
         """
         for agent in network.agents():
-            x0 = X(framework=self.framework, shape=agent.cost.shape, device=self.device)
+            x0 = X(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
             agent.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(network.neighbors(agent), x0),
                 aux_vars={"y": x0},
             )
 
-        W = network.weights(framework=self.framework, device=self.device)  # noqa: N806
+        W = network.weights  # noqa: N806
         for k in range(self.iterations):
             # gradient step (a.k.a. adapt step)
             for i in network.active_agents(k):
@@ -180,12 +172,12 @@ class SimpleGT(Algorithm):
 
         """
         for agent in network.agents():
-            x0 = X(framework=self.framework, shape=agent.cost.shape, device=self.device)
-            y0 = X(framework=self.framework, shape=agent.cost.shape, device=self.device)
+            x0 = X(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
+            y0 = X(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
             neighbors = network.neighbors(agent)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
 
-        W = network.weights(framework=self.framework, device=self.device)  # noqa: N806
+        W = network.weights  # noqa: N806
         for k in range(self.iterations):
             for i in network.active_agents(k):
                 i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
@@ -308,7 +300,7 @@ class AugDGM(Algorithm):
 
         """
         for i in network.agents():
-            x0 = X(framework=self.framework, shape=i.cost.shape, device=self.device)
+            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             y0 = i.cost.gradient(x0)
             neighbors = network.neighbors(i)
             i.initialize(
@@ -317,7 +309,7 @@ class AugDGM(Algorithm):
                 aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0},
             )
 
-        W = network.weights(framework=self.framework, device=self.device)  # noqa: N806
+        W = network.weights  # noqa: N806
         for k in range(self.iterations):
             # 1st communication round
             #     step 1: perform local gradient step and communicate
@@ -401,7 +393,7 @@ class WangElia(Algorithm):
 
         """
         for i in network.agents():
-            x0 = X(framework=self.framework, shape=i.cost.shape, device=self.device)
+            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             neighbors = network.neighbors(i)
             i.initialize(
                 x=x0,
@@ -409,7 +401,7 @@ class WangElia(Algorithm):
                 aux_vars={"z": x0, "x_old": x0},
             )
 
-        W = network.weights(framework=self.framework, device=self.device)  # noqa: N806
+        W = network.weights  # noqa: N806
         K = 0.5 * (iop.eye_like(W) - W)  # noqa: N806
 
         for k in range(self.iterations):
@@ -483,14 +475,14 @@ class EXTRA(Algorithm):
         """
         # initialization (iteration k=0)
         for i in network.agents():
-            x0 = X(framework=self.framework, shape=i.cost.shape, device=self.device)
+            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             i.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(network.neighbors(i), x0),
                 aux_vars={"x_old": x0, "x_old_old": x0, "x_cons": x0},
             )
 
-        W = network.weights(framework=self.framework, device=self.device)  # noqa: N806
+        W = network.weights  # noqa: N806
         # first iteration (iteration k=1)
         for i in network.active_agents(0):
             network.broadcast(i, i.x)
@@ -573,7 +565,7 @@ class ATCTracking(Algorithm):
 
         """
         for i in network.agents():
-            x0 = X(framework=self.framework, shape=i.cost.shape, device=self.device)
+            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             y0 = i.cost.gradient(x0)
             neighbors = network.neighbors(i)
             i.initialize(
@@ -582,7 +574,7 @@ class ATCTracking(Algorithm):
                 aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0},
             )
 
-        W = network.weights(framework=self.framework, device=self.device)  # noqa: N806
+        W = network.weights  # noqa: N806
         for k in range(self.iterations):
             # 1st communication round
             #     step 1: perform local gradient step and communicate
@@ -665,14 +657,14 @@ class NIDS(Algorithm):
         """
         # initialization (iteration k=0)
         for i in network.agents():
-            x0 = X(framework=self.framework, shape=i.cost.shape, device=self.device)
+            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             i.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(network.neighbors(i), x0),
                 aux_vars={"x_old": x0, "g": x0, "g_old": x0, "y": x0},
             )
 
-        W = network.weights(framework=self.framework, device=self.device)  # noqa: N806
+        W = network.weights  # noqa: N806
         W_tilde = 0.5 * (iop.eye_like(W) + W)  # noqa: N806
 
         # first iteration (iteration k=1)
@@ -742,7 +734,7 @@ class ADMM(Algorithm):
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
         for agent in all_agents:
-            z0 = X(framework=self.framework, shape=(len(all_agents), *(agent.cost.shape)), device=self.device)
+            z0 = X(framework=agent.cost.framework, shape=(len(all_agents), *(agent.cost.shape)), device=agent.cost.device)
             x1 = agent.cost.proximal(y=iop.sum(z0, dim=0) / pN[agent], rho=1 / pN[agent])
             # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
             msg0 = z0[agent] - 2 * self.rho * x1
@@ -821,9 +813,9 @@ class ATG(Algorithm):
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
         for i in all_agents:
-            z_y0 = X(framework=self.framework, shape=(len(all_agents), *(i.cost.shape)), device=self.device)
-            z_s0 = X(framework=self.framework, shape=(len(all_agents), *(i.cost.shape)), device=self.device)
-            x0 = X(framework=self.framework, shape=i.cost.shape, device=self.device)
+            z_y0 = X(framework=i.cost.framework, shape=(len(all_agents), *(i.cost.shape)), device=i.cost.device)
+            z_s0 = X(framework=i.cost.framework, shape=(len(all_agents), *(i.cost.shape)), device=i.cost.device)
+            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             i.initialize(
                 x=x0,
                 aux_vars={"y": x0, "s": x0, "z_y": z_y0, "z_s": z_s0},
@@ -909,8 +901,8 @@ class DLM(Algorithm):
         """
         all_agents = network.agents()
         for i in all_agents:
-            x0 = X(framework=self.framework, shape=i.cost.shape, device=self.device)
-            y = X(framework=self.framework, shape=i.cost.shape, device=self.device)  # y must be initialized to zero
+            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            y = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)  # y must be initialized to zero
             i.initialize(
                 x=x0,
                 aux_vars={"y": y},
