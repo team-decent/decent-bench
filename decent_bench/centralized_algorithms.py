@@ -1,9 +1,6 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy import float64
-from numpy import linalg as la
-from numpy.typing import NDArray
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.utils.parameter import X
@@ -13,14 +10,14 @@ if TYPE_CHECKING:
 
 
 def gradient_descent(
-    cost: "Cost[NDArray[float64]]",
-    x0: X[NDArray[float64]] | None,
+    cost: "Cost",
+    x0: X | None,
     *,
     step_size: float,
     max_iter: int,
     stop_tol: float | None,
     max_tol: float | None,
-) -> X[NDArray[float64]]:
+) -> X:
     """
     Find the x that minimizes the cost function using gradient descent.
 
@@ -43,7 +40,7 @@ def gradient_descent(
     x = x0 if x0 is not None else iop.zeros(shape=cost.shape, framework=cost.framework, device=cost.device)
     for _ in range(max_iter):
         x_new = x - step_size * cost.gradient(x)
-        delta = float(la.norm(x_new - x))
+        delta = float(iop.norm(x_new - x))
         x = x_new
         if stop_tol is not None and delta <= stop_tol:
             break
@@ -57,13 +54,13 @@ def gradient_descent(
 
 
 def accelerated_gradient_descent(
-    cost: "Cost[NDArray[float64]]",
-    x0: X[NDArray[float64]] | None,
+    cost: "Cost",
+    x0: X | None,
     *,
     max_iter: int,
     stop_tol: float | None,
     max_tol: float | None,
-) -> X[NDArray[float64]]:
+) -> X:
     r"""
     Find the x that minimizes the cost function using accelerated gradient descent.
 
@@ -103,7 +100,7 @@ def accelerated_gradient_descent(
     delta = np.inf
     for k in range(1, max_iter + 1):
         x_new = y - cost.gradient(y) / cost.m_smooth
-        delta = float(la.norm(x_new - x))
+        delta = float(iop.norm(x_new - x))
         beta = c if cost.m_cvx > 0 else (k - 1) / (k + 2)
         y_new = x_new + beta * (x_new - x)
         x, y = x_new, y_new
@@ -118,7 +115,7 @@ def accelerated_gradient_descent(
     return x
 
 
-def proximal_solver(cost: "Cost[NDArray[Any]]", y: X[NDArray[Any]], rho: float) -> X[NDArray[Any]]:
+def proximal_solver(cost: "Cost", y: X, rho: float) -> X:
     """
     Find the proximal at y using accelerated gradient descent.
 
@@ -136,5 +133,5 @@ def proximal_solver(cost: "Cost[NDArray[Any]]", y: X[NDArray[Any]], rho: float) 
         raise ValueError("Penalty term `rho` must be greater than 0")
     from decent_bench.costs import QuadraticCost  # noqa: PLC0415
 
-    proximal_cost = QuadraticCost(A=iop.eye_like(y) / rho, b=-y / rho, c=y.dot(y).float / (2 * rho)) + cost
+    proximal_cost = QuadraticCost(A=iop.eye_like(y) / rho, b=-y / rho, c=float(y.dot(y)) / (2 * rho)) + cost
     return accelerated_gradient_descent(proximal_cost, y, max_iter=100, stop_tol=1e-10, max_tol=None)

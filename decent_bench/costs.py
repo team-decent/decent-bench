@@ -13,10 +13,10 @@ from scipy import special
 import decent_bench.centralized_algorithms as ca
 import decent_bench.utils.interoperability as iop
 from decent_bench.utils.parameter import X
-from decent_bench.utils.types import SupportedDevices, SupportedFrameworks, SupportedXTypes
+from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
-class Cost[Xtype: SupportedXTypes](ABC):
+class Cost(ABC):
     """Used by agents to evaluate the cost and its derivatives at a certain x."""
 
     @property
@@ -77,31 +77,31 @@ class Cost[Xtype: SupportedXTypes](ABC):
         """
 
     @abstractmethod
-    def function(self, x: X[Xtype]) -> float:
+    def function(self, x: X) -> float:
         """Evaluate function at x."""
 
-    def evaluate(self, x: X[Xtype]) -> float:
+    def evaluate(self, x: X) -> float:
         """Alias for :meth:`function`."""
         return self.function(x)
 
-    def loss(self, x: X[Xtype]) -> float:
+    def loss(self, x: X) -> float:
         """Alias for :meth:`function`."""
         return self.function(x)
 
-    def f(self, x: X[Xtype]) -> float:
+    def f(self, x: X) -> float:
         """Alias for :meth:`function`."""
         return self.function(x)
 
     @abstractmethod
-    def gradient(self, x: X[Xtype]) -> X[Xtype]:
+    def gradient(self, x: X) -> X:
         """Gradient at x."""
 
     @abstractmethod
-    def hessian(self, x: X[Xtype]) -> X[Xtype]:
+    def hessian(self, x: X) -> X:
         """Hessian at x."""
 
     @abstractmethod
-    def proximal(self, y: X[Xtype], rho: float) -> X[Xtype]:
+    def proximal(self, y: X, rho: float) -> X:
         r"""
         Proximal at y.
 
@@ -114,7 +114,7 @@ class Cost[Xtype: SupportedXTypes](ABC):
         """
 
     @abstractmethod
-    def __add__(self, other: Cost[Xtype]) -> Cost[Xtype]:
+    def __add__(self, other: Cost) -> Cost:
         """
         Add another cost function to create a new one.
 
@@ -127,14 +127,14 @@ class Cost[Xtype: SupportedXTypes](ABC):
         """
 
 
-class QuadraticCost(Cost[NDArray[float64]]):
+class QuadraticCost(Cost):
     r"""
     Quadratic cost function.
 
     .. math:: f(\mathbf{x}) = \frac{1}{2} \mathbf{x}^T \mathbf{Ax} + \mathbf{b}^T \mathbf{x} + c
     """
 
-    def __init__(self, A: X[NDArray[Any]], b: X[NDArray[Any]], c: float):  # noqa: N803
+    def __init__(self, A: X, b: X, c: float):  # noqa: N803
         if A.ndim != 2:
             raise ValueError("Matrix A must be 2D")
         if A.shape[0] != A.shape[1]:
@@ -161,7 +161,7 @@ class QuadraticCost(Cost[NDArray[float64]]):
         return SupportedDevices.CPU
 
     @cached_property
-    def m_smooth(self) -> float:
+    def m_smooth(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         r"""
         The cost function's smoothness constant.
 
@@ -173,11 +173,11 @@ class QuadraticCost(Cost[NDArray[float64]]):
         For the general definition, see
         :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
         """
-        eigs = np.linalg.eigvalsh(self.A_sym)
+        eigs = np.linalg.eigvalsh(self.A_sym.to_numpy())
         return float(np.max(np.abs(eigs)))
 
     @cached_property
-    def m_cvx(self) -> float:
+    def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         r"""
         The cost function's convexity constant.
 
@@ -193,7 +193,7 @@ class QuadraticCost(Cost[NDArray[float64]]):
         For the general definition, see
         :attr:`Cost.m_cvx <decent_bench.costs.Cost.m_cvx>`.
         """
-        eigs = np.linalg.eigvalsh(self.A_sym)
+        eigs = np.linalg.eigvalsh(self.A_sym.to_numpy())
         l_min = float(np.min(eigs))
         tol = 1e-12
         if l_min > tol:
@@ -202,7 +202,7 @@ class QuadraticCost(Cost[NDArray[float64]]):
             return 0
         return np.nan
 
-    def function(self, x: X[NDArray[float64]]) -> float:
+    def function(self, x: X) -> float:
         r"""
         Evaluate function at x.
 
@@ -210,7 +210,7 @@ class QuadraticCost(Cost[NDArray[float64]]):
         """
         return float(0.5 * x.dot(self.A.dot(x)) + self.b.dot(x) + self.c)
 
-    def gradient(self, x: X[NDArray[float64]]) -> X[NDArray[float64]]:
+    def gradient(self, x: X) -> X:
         r"""
         Gradient at x.
 
@@ -218,7 +218,7 @@ class QuadraticCost(Cost[NDArray[float64]]):
         """
         return self.A_sym @ x + self.b
 
-    def hessian(self, x: X[NDArray[float64]]) -> X[NDArray[float64]]:  # noqa: ARG002
+    def hessian(self, x: X) -> X:  # noqa: ARG002
         r"""
         Hessian at x.
 
@@ -226,7 +226,7 @@ class QuadraticCost(Cost[NDArray[float64]]):
         """
         return self.A_sym
 
-    def proximal(self, y: X[NDArray[float64]], rho: float) -> X[NDArray[float64]]:
+    def proximal(self, y: X, rho: float) -> X:
         r"""
         Proximal at y.
 
@@ -242,12 +242,12 @@ class QuadraticCost(Cost[NDArray[float64]]):
         lhs = rho * self.A_sym + np.eye(self.A.shape[1])
         rhs = y - self.b * rho
         return iop.numpy_to_X(
-            np.asarray(np.linalg.solve(lhs, rhs), dtype=float64),
+            np.asarray(np.linalg.solve(lhs.to_numpy(), rhs.to_numpy()), dtype=float64),
             framework=self.framework,
             device=self.device,
         )
 
-    def __add__(self, other: Cost[NDArray[float64]]) -> Cost[NDArray[float64]]:
+    def __add__(self, other: Cost) -> Cost:
         """
         Add another cost function.
 
@@ -264,7 +264,7 @@ class QuadraticCost(Cost[NDArray[float64]]):
         return SumCost([self, other])
 
 
-class LinearRegressionCost(Cost[NDArray[float64]]):
+class LinearRegressionCost(Cost):
     r"""
     Linear regression cost function.
 
@@ -279,10 +279,10 @@ class LinearRegressionCost(Cost[NDArray[float64]]):
         + \frac{1}{2} \mathbf{b}^T\mathbf{b}
     """
 
-    def __init__(self, A: X[NDArray[Any]], b: X[NDArray[Any]]):  # noqa: N803
+    def __init__(self, A: X, b: X):  # noqa: N803
         if A.shape[0] != b.shape[0]:
             raise ValueError(f"Dimension mismatch: A has {A.shape[0]} rows but b has {b.shape[0]} elements")
-        self.inner = QuadraticCost(A.T.dot(A), -A.T.dot(b), 0.5 * b.dot(b).float)
+        self.inner = QuadraticCost(A.T.dot(A), -A.T.dot(b), float(0.5 * b.dot(b)))
         self.A = A
         self.b = b
 
@@ -332,7 +332,7 @@ class LinearRegressionCost(Cost[NDArray[float64]]):
         """
         return self.inner.m_cvx
 
-    def function(self, x: X[NDArray[float64]]) -> float:
+    def function(self, x: X) -> float:
         r"""
         Evaluate function at x.
 
@@ -340,7 +340,7 @@ class LinearRegressionCost(Cost[NDArray[float64]]):
         """
         return self.inner.function(x)
 
-    def gradient(self, x: X[NDArray[float64]]) -> X[NDArray[float64]]:
+    def gradient(self, x: X) -> X:
         r"""
         Gradient at x.
 
@@ -348,7 +348,7 @@ class LinearRegressionCost(Cost[NDArray[float64]]):
         """
         return self.inner.gradient(x)
 
-    def hessian(self, x: X[NDArray[float64]]) -> X[NDArray[float64]]:
+    def hessian(self, x: X) -> X:
         r"""
         Hessian at x.
 
@@ -356,7 +356,7 @@ class LinearRegressionCost(Cost[NDArray[float64]]):
         """
         return self.inner.hessian(x)
 
-    def proximal(self, y: X[NDArray[float64]], rho: float) -> X[NDArray[float64]]:
+    def proximal(self, y: X, rho: float) -> X:
         r"""
         Proximal at y.
 
@@ -371,12 +371,12 @@ class LinearRegressionCost(Cost[NDArray[float64]]):
         """
         return self.inner.proximal(y, rho)
 
-    def __add__(self, other: Cost[NDArray[float64]]) -> Cost[NDArray[float64]]:
+    def __add__(self, other: Cost) -> Cost:
         """Add another cost function."""
         return self.inner + other
 
 
-class LogisticRegressionCost(Cost[NDArray[float64]]):
+class LogisticRegressionCost(Cost):
     r"""
     Logistic regression cost function.
 
@@ -386,14 +386,14 @@ class LogisticRegressionCost(Cost[NDArray[float64]]):
             \log( 1 - \sigma(\mathbf{Ax}) ) \right]
     """
 
-    def __init__(self, A: X[NDArray[Any]], b: X[NDArray[Any]]):  # noqa: N803
+    def __init__(self, A: X, b: X):  # noqa: N803
         if A.ndim != 2:
             raise ValueError("Matrix A must be 2D")
         if b.ndim != 1:
             raise ValueError("Vector b must be 1D")
         if A.shape[0] != b.shape[0]:
             raise ValueError(f"Dimension mismatch: A has shape {A.shape} but b has length {b.shape[0]}")
-        class_labels = np.unique(b)
+        class_labels = np.unique(b.to_numpy())
         if class_labels.shape != (2,):
             raise ValueError("Vector b must contain exactly two classes")
 
@@ -414,7 +414,7 @@ class LogisticRegressionCost(Cost[NDArray[float64]]):
         return SupportedDevices.CPU
 
     @cached_property
-    def m_smooth(self) -> float:
+    def m_smooth(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         r"""
         The cost function's smoothness constant.
 
@@ -437,7 +437,7 @@ class LogisticRegressionCost(Cost[NDArray[float64]]):
         """
         return 0
 
-    def function(self, x: X[NDArray[float64]]) -> float:
+    def function(self, x: X) -> float:
         r"""
         Evaluate function at x.
 
@@ -446,21 +446,21 @@ class LogisticRegressionCost(Cost[NDArray[float64]]):
             + ( \mathbf{1} - \mathbf{b} )^T
                 \log( 1 - \sigma(\mathbf{Ax}) ) \right]
         """
-        Ax = self.A.dot(x)  # noqa: N806
+        Ax = self.A.dot(x).to_numpy()  # noqa: N806
         neg_log_sig = np.logaddexp(0.0, -Ax)
         cost = self.b.dot(neg_log_sig) + (1 - self.b).dot(Ax + neg_log_sig)
         return float(cost)
 
-    def gradient(self, x: X[NDArray[float64]]) -> X[NDArray[float64]]:
+    def gradient(self, x: X) -> X:
         r"""
         Gradient at x.
 
         .. math:: \mathbf{A}^T (\sigma(\mathbf{Ax}) - \mathbf{b})
         """
-        sig = special.expit(self.A.dot(x))
+        sig = special.expit(self.A.dot(x).to_numpy())
         return self.A.T.dot(sig - self.b)
 
-    def hessian(self, x: X[NDArray[float64]]) -> X[NDArray[float64]]:
+    def hessian(self, x: X) -> X:
         r"""
         Hessian at x.
 
@@ -469,11 +469,11 @@ class LogisticRegressionCost(Cost[NDArray[float64]]):
         where :math:`\mathbf{D}` is a diagonal matrix such that
         :math:`\mathbf{D}_i = \sigma(\mathbf{Ax}_i) (1-\sigma(\mathbf{Ax}_i))`
         """
-        sig = special.expit(self.A.dot(x))
+        sig = special.expit(self.A.dot(x).to_numpy())
         D = np.diag(sig * (1 - sig))  # noqa: N806
         return self.A.T.dot(D).dot(self.A)
 
-    def proximal(self, y: X[NDArray[float64]], rho: float) -> X[NDArray[float64]]:
+    def proximal(self, y: X, rho: float) -> X:
         """
         Proximal at y solved using an iterative method.
 
@@ -483,7 +483,7 @@ class LogisticRegressionCost(Cost[NDArray[float64]]):
         """
         return ca.proximal_solver(self, y, rho)
 
-    def __add__(self, other: Cost[NDArray[float64]]) -> Cost[NDArray[float64]]:
+    def __add__(self, other: Cost) -> Cost:
         """
         Add another cost function.
 
@@ -495,19 +495,27 @@ class LogisticRegressionCost(Cost[NDArray[float64]]):
             raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
         if isinstance(other, LogisticRegressionCost):
             return LogisticRegressionCost(
-                iop.numpy_to_X(np.vstack([self.A, other.A]), framework=self.framework, device=self.device),
-                iop.numpy_to_X(np.concatenate([self.b, other.b]), framework=self.framework, device=self.device),
+                iop.numpy_to_X(
+                    np.vstack([self.A.to_numpy(), other.A.to_numpy()]),
+                    framework=self.framework,
+                    device=self.device,
+                ),
+                iop.numpy_to_X(
+                    np.concatenate([self.b.to_numpy(), other.b.to_numpy()]),
+                    framework=self.framework,
+                    device=self.device,
+                ),
             )
         return SumCost([self, other])
 
 
-class SumCost(Cost[NDArray[float64]]):
+class SumCost(Cost):
     """The sum of multiple cost functions."""
 
-    def __init__(self, costs: list[Cost[NDArray[float64]]]):
+    def __init__(self, costs: list[Cost]):
         if not all(costs[0].shape == cf.shape for cf in costs):
             raise ValueError("All cost functions must have the same domain shape")
-        self.costs: list[Cost[NDArray[float64]]] = []
+        self.costs: list[Cost] = []
         for cf in costs:
             if isinstance(cf, SumCost):
                 self.costs.extend(cf.costs)
@@ -527,7 +535,7 @@ class SumCost(Cost[NDArray[float64]]):
         return self.costs[0].device
 
     @cached_property
-    def m_smooth(self) -> float:
+    def m_smooth(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         r"""
         The cost function's smoothness constant.
 
@@ -545,7 +553,7 @@ class SumCost(Cost[NDArray[float64]]):
         return np.nan if any(np.isnan(v) for v in m_smooth_vals) else sum(m_smooth_vals)
 
     @cached_property
-    def m_cvx(self) -> float:
+    def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         r"""
         The cost function's convexity constant.
 
@@ -562,19 +570,19 @@ class SumCost(Cost[NDArray[float64]]):
         m_cvx_vals = [cf.m_cvx for cf in self.costs]
         return np.nan if any(np.isnan(v) for v in m_cvx_vals) else sum(m_cvx_vals)
 
-    def function(self, x: X[NDArray[float64]]) -> float:
+    def function(self, x: X) -> float:
         """Sum the :meth:`function` of each cost function."""
         return sum(cf.function(x) for cf in self.costs)
 
-    def gradient(self, x: X[NDArray[float64]]) -> X[NDArray[float64]]:
+    def gradient(self, x: X) -> X:
         """Sum the :meth:`gradient` of each cost function."""
         return iop.sum(iop.stack([cf.gradient(x) for cf in self.costs]), dim=0)
 
-    def hessian(self, x: X[NDArray[float64]]) -> X[NDArray[float64]]:
+    def hessian(self, x: X) -> X:
         """Sum the :meth:`hessian` of each cost function."""
         return iop.sum(iop.stack([cf.hessian(x) for cf in self.costs]), dim=0)
 
-    def proximal(self, y: X[NDArray[float64]], rho: float) -> X[NDArray[float64]]:
+    def proximal(self, y: X, rho: float) -> X:
         """
         Proximal at y solved using an iterative method.
 
@@ -584,6 +592,6 @@ class SumCost(Cost[NDArray[float64]]):
         """
         return ca.proximal_solver(self, y, rho)
 
-    def __add__(self, other: Cost[NDArray[float64]]) -> SumCost:
+    def __add__(self, other: Cost) -> SumCost:
         """Add another cost function."""
         return SumCost([self, other])

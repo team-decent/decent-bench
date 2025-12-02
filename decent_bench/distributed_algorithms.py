@@ -230,8 +230,8 @@ class ED(Algorithm):
 
         """
         for i in network.agents():
-            x0 = X(framework=self.framework, shape=i.cost.shape, device=self.device)
-            y0 = X(framework=self.framework, shape=i.cost.shape, device=self.device)
+            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            y0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             y1 = x0 - self.step_size * i.cost.gradient(x0)
             # note: msg0's y1 is an approximation of the neighbors' y1 (x0 and y0 are exact: all agents start with same)
             msg0 = x0 + y1 - y0
@@ -241,7 +241,7 @@ class ED(Algorithm):
                 received_msgs=dict.fromkeys(network.neighbors(i), msg0),
             )
 
-        W = network.weights(framework=self.framework, device=self.device)  # noqa: N806
+        W = network.weights  # noqa: N806
         W = 0.5 * (iop.eye_like(W) + W)  # noqa: N806
         for k in range(self.iterations):
             for i in network.active_agents(k):
@@ -734,7 +734,9 @@ class ADMM(Algorithm):
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
         for agent in all_agents:
-            z0 = X(framework=agent.cost.framework, shape=(len(all_agents), *(agent.cost.shape)), device=agent.cost.device)
+            z0 = X(
+                framework=agent.cost.framework, shape=(len(all_agents), *(agent.cost.shape)), device=agent.cost.device
+            )
             x1 = agent.cost.proximal(y=iop.sum(z0, dim=0) / pN[agent], rho=1 / pN[agent])
             # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
             msg0 = z0[agent] - 2 * self.rho * x1

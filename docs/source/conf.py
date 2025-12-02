@@ -43,6 +43,7 @@ nitpick_ignore = [
     ("py:class", "float64"),
     ("py:class", "numpy._typing._array_like._SupportsArray"),
     ("py:class", "numpy._typing._nested_sequence._NestedSequence"),
+    ("py:class", "decent_bench.utils.types.SupportedXTypes"),
 ]
 
 intersphinx_mapping = {

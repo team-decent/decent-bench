@@ -10,16 +10,16 @@ from decent_bench.utils.parameter import X
 from decent_bench.utils.types import SupportedXTypes
 
 
-class Agent[Xtype: SupportedXTypes]:
+class Agent:
     """Agent with unique id, local cost function, and activation scheme."""
 
-    def __init__(self, agent_id: int, cost: Cost[Xtype], activation: AgentActivationScheme):
+    def __init__(self, agent_id: int, cost: Cost, activation: AgentActivationScheme):
         self._id = agent_id
         self._cost = cost
         self._activation = activation
-        self._x_history: list[X[Xtype]] = []
-        self._auxiliary_variables: dict[str, X[Xtype]] = {}
-        self._received_messages: dict[Agent[Xtype], X[Xtype]] = {}
+        self._x_history: list[X] = []
+        self._auxiliary_variables: dict[str, X] = {}
+        self._received_messages: dict[Agent, X] = {}
         self._n_sent_messages = 0
         self._n_received_messages = 0
         self._n_sent_messages_dropped = 0
@@ -38,7 +38,7 @@ class Agent[Xtype: SupportedXTypes]:
         return self._id
 
     @property
-    def cost(self) -> Cost[Xtype]:
+    def cost(self) -> Cost:
         """
         Local cost function.
 
@@ -51,7 +51,7 @@ class Agent[Xtype: SupportedXTypes]:
     loss = cost
 
     @property
-    def x(self) -> X[Xtype]:
+    def x(self) -> X:
         """
         Local optimization variable x.
 
@@ -64,25 +64,25 @@ class Agent[Xtype: SupportedXTypes]:
         return self._x_history[-1]
 
     @x.setter
-    def x(self, x: X[Xtype]) -> None:
+    def x(self, x: X) -> None:
         self._x_history.append(x)
 
     @property
-    def messages(self) -> Mapping[Agent[Xtype], X[Xtype]]:
+    def messages(self) -> Mapping[Agent, X]:
         """Messages received by neighbors."""
         return MappingProxyType(self._received_messages)
 
     @property
-    def aux_vars(self) -> dict[str, X[Xtype]]:
+    def aux_vars(self) -> dict[str, X]:
         """Auxiliary optimization variables used by algorithms that require more variables than x."""
         return self._auxiliary_variables
 
     def initialize(
         self,
         *,
-        x: X[Xtype] | None = None,
-        aux_vars: dict[str, X[Xtype]] | None = None,
-        received_msgs: dict[Agent[Xtype], X[Xtype]] | None = None,
+        x: X | None = None,
+        aux_vars: dict[str, X] | None = None,
+        received_msgs: dict[Agent, X] | None = None,
     ) -> None:
         """
         Initialize local variables and messages before running an algorithm.
@@ -100,19 +100,19 @@ class Agent[Xtype: SupportedXTypes]:
         if received_msgs:
             self._received_messages = received_msgs
 
-    def _call_counting_function(self, x: X[Xtype]) -> float:
+    def _call_counting_function(self, x: X) -> float:
         self._n_function_calls += 1
         return self._cost.__class__.function(self.cost, x)
 
-    def _call_counting_gradient(self, x: X[Xtype]) -> X[Xtype]:
+    def _call_counting_gradient(self, x: X) -> X:
         self._n_gradient_calls += 1
         return self._cost.__class__.gradient(self.cost, x)
 
-    def _call_counting_hessian(self, x: X[Xtype]) -> X[Xtype]:
+    def _call_counting_hessian(self, x: X) -> X:
         self._n_hessian_calls += 1
         return self._cost.__class__.hessian(self.cost, x)
 
-    def _call_counting_proximal(self, y: X[Xtype], rho: float) -> X[Xtype]:
+    def _call_counting_proximal(self, y: X, rho: float) -> X:
         self._n_proximal_calls += 1
         return self._cost.__class__.proximal(self.cost, y, rho)
 

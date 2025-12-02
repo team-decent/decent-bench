@@ -25,6 +25,7 @@ from decent_bench.schemes import (
     UniformDropRate,
 )
 from decent_bench.utils.parameter import X
+from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 if TYPE_CHECKING:
     AnyGraph = Graph[Any]
@@ -82,7 +83,13 @@ def create_regression_problem(
     """
     network_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
     dataset = SyntheticClassificationData(
-        n_classes=2, n_partitions=n_agents, n_samples_per_partition=10, n_features=3, seed=0
+        n_classes=2,
+        n_partitions=n_agents,
+        n_samples_per_partition=10,
+        n_features=3,
+        framework=SupportedFrameworks.NUMPY,
+        device=SupportedDevices.CPU,
+        seed=0,
     )
     costs = [cost_cls(*p) for p in dataset.training_partitions()]
     sum_cost = reduce(add, costs)

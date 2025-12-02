@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.utils.types import TensorLike
+from decent_bench.utils.parameter import X
 
 
 def single(values: Sequence[float]) -> float:
@@ -27,7 +27,7 @@ def single(values: Sequence[float]) -> float:
 
 
 @cache
-def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> TensorLike:
+def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> X:
     """
     Calculate the mean x at *iteration* (or using the agents' final x if *iteration* is -1).
 
@@ -40,8 +40,8 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> TensorL
     all_x_at_iter = [a.x_history[iteration] for a in agents if len(a.x_history) > iteration]
     if len(all_x_at_iter) == 0:
         raise ValueError(f"No agent reached iteration {iteration}")
-    res: TensorLike = iop.mean(iop.stack(all_x_at_iter), dim=0)
-    return res
+
+    return iop.mean(iop.stack(all_x_at_iter), dim=0)
 
 
 def regret(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int = -1) -> float:

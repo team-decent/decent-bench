@@ -52,7 +52,7 @@ class P2PNetwork:
 
         If not set, the weights matrix is initialized using the Metropolis-Hastings method.
         Weights will be overwritten if framework or device differ from
-        :attr:`agent.cost.framework` or :attr:`agent.cost.device`.
+        ``agent.cost.framework`` or ``agent.cost.device``.
         """
         self.W = weights
 

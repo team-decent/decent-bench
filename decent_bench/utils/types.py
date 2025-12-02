@@ -3,26 +3,25 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING
-
-import numpy as np
+from typing import TYPE_CHECKING, TypeAlias, Union
 
 if TYPE_CHECKING:
     import jax
+    import numpy
     import tensorflow as tf
     import torch
 
-    TensorLike = np.ndarray | torch.Tensor | tf.Tensor | jax.Array
-    """
-    Type alias for Tensor-like types supported in decent-bench, including NumPy arrays,
-    PyTorch tensors, TensorFlow tensors, and JAX arrays.
+TensorLike: TypeAlias = Union["numpy.ndarray", "torch.Tensor", "tf.Tensor", "jax.Array"]  # noqa: UP040
+"""
+Type alias for Tensor-like types supported in decent-bench, including NumPy arrays,
+PyTorch tensors, TensorFlow tensors, and JAX arrays.
+"""
 
-    alias of :class:`numpy.ndarray` | :class:`torch.Tensor` | :class:`tf.Tensor` | :class:`jax.Array`
-    """
-else:
-
-    class TensorLike(type):
-        """Required for proper autodoc generation."""
+SupportedXTypes: TypeAlias = TensorLike | float | int  # noqa: UP040
+"""
+Type alias for supported types for optimization variables in decent-bench,
+including Tensor-like types and scalars.
+"""
 
 
 class SupportedFrameworks(Enum):
@@ -39,12 +38,3 @@ class SupportedDevices(Enum):
 
     CPU = "cpu"
     GPU = "gpu"
-
-
-type SupportedXTypes = TensorLike | float | int
-"""
-Type alias for supported types for optimization variables in decent-bench,
-including Tensor-like types and scalars.
-
-alias of :class:`TensorLike` | :class:`float` | :class:`int`
-"""

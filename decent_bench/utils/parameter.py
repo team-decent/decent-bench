@@ -11,12 +11,12 @@ from . import interoperability as iop
 from .types import SupportedDevices, SupportedFrameworks, SupportedXTypes
 
 
-class X[XType: SupportedXTypes]:  # noqa: PLR0904
+class X:  # noqa: PLR0904
     """A wrapper class for :type:`SupportedXTypes` objects to enable operator overloading."""
 
     def __init__(
         self,
-        value: XType | None = None,
+        value: SupportedXTypes | None = None,
         framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
         shape: tuple[int, ...] | None = None,
         device: SupportedDevices = SupportedDevices.CPU,
@@ -39,12 +39,12 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             ValueError: If initialization parameters are incorrect.
 
         """
-        if value and shape:
+        if value is not None and shape is not None:
             raise ValueError("Either 'value' or'shape' must be provided, not a mix.")
 
         if value is not None:
             self.value = value
-        elif shape:
+        elif shape is not None:
             self.value = iop.zeros(framework=framework, shape=shape, device=device).value
         else:
             raise ValueError("Either 'value' or both 'framework' and 'shape' must be provided.")
@@ -63,16 +63,11 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
         return len(self.shape)
 
     @property
-    def T(self) -> X[XType]:  # noqa: N802
+    def T(self) -> X:  # noqa: N802
         """Return the transpose of the wrapped tensor."""
         return iop.transpose(self)
 
-    @property
-    def float(self) -> float:
-        """Return the wrapped tensor cast to float type."""
-        return iop.astype(self, float)
-
-    def dot(self, other: X[XType] | XType) -> X[XType]:
+    def dot(self, other: X | SupportedXTypes) -> X:
         """
         Compute the dot product with another X object.
 
@@ -87,7 +82,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             return iop.dot(self, other)
         return iop.dot(self, X(other))
 
-    def copy(self) -> X[XType]:
+    def copy(self) -> X:
         """
         Create a copy of the X object.
 
@@ -101,7 +96,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
         """Convert the wrapped tensor to a NumPy array."""
         return iop.to_numpy(self.value)
 
-    def __add__(self, other: X[XType] | XType | float) -> X[XType]:
+    def __add__(self, other: X | SupportedXTypes) -> X:
         """
         Add another X object or a scalar to this one.
 
@@ -116,7 +111,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             return iop.add(self, other)
         return iop.add(self, X(other))
 
-    def __sub__(self, other: X[XType] | XType | float) -> X[XType]:
+    def __sub__(self, other: X | SupportedXTypes) -> X:
         """
         Subtract another X object or a scalar from this one.
 
@@ -131,7 +126,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             return iop.sub(self, other)
         return iop.sub(self, X(other))
 
-    def __mul__(self, other: X[XType] | XType | float) -> X[XType]:
+    def __mul__(self, other: X | SupportedXTypes) -> X:
         """
         Multiply this object by another X object or a scalar.
 
@@ -146,7 +141,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             return iop.mul(self, other)
         return iop.mul(self, X(other))
 
-    def __truediv__(self, other: X[XType] | XType | float) -> X[XType]:
+    def __truediv__(self, other: X | SupportedXTypes) -> X:
         """
         Divide this object by another X object or a scalar.
 
@@ -161,7 +156,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             return iop.div(self, other)
         return iop.div(self, X(other))
 
-    def __matmul__(self, other: X[XType] | XType) -> X[XType]:
+    def __matmul__(self, other: X | SupportedXTypes) -> X:
         """
         Perform matrix multiplication with another X object.
 
@@ -179,7 +174,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
     __radd__ = __add__
     __rsub__ = __sub__
 
-    def __rmul__(self, other: XType | float) -> X[XType]:
+    def __rmul__(self, other: SupportedXTypes) -> X:
         """
         Handle right-side multiplication.
 
@@ -194,7 +189,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             return iop.mul(other, self)
         return iop.mul(X(other), self)
 
-    def __rtruediv__(self, other: XType | float) -> X[XType]:
+    def __rtruediv__(self, other: SupportedXTypes) -> X:
         """
         Handle right-side division.
 
@@ -209,7 +204,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             return iop.div(other, self)
         return iop.div(X(other), self)
 
-    def __pow__(self, other: float) -> X[XType]:
+    def __pow__(self, other: float) -> X:
         """
         Raise the wrapped tensor to a power.
 
@@ -222,7 +217,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
         """
         return iop.power(self, other)
 
-    def __iadd__(self, other: X[XType] | XType | float) -> Self:
+    def __iadd__(self, other: X | SupportedXTypes) -> Self:
         """
         Perform in-place addition.
 
@@ -237,7 +232,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             return iop.iadd(self, other)
         return iop.iadd(self, X(other))
 
-    def __isub__(self, other: X[XType] | XType | float) -> Self:
+    def __isub__(self, other: X | SupportedXTypes) -> Self:
         """
         Perform in-place subtraction.
 
@@ -252,7 +247,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             return iop.isub(self, other)
         return iop.isub(self, X(other))
 
-    def __imul__(self, other: X[XType] | XType | float) -> Self:
+    def __imul__(self, other: X | SupportedXTypes) -> Self:
         """
         Perform in-place multiplication.
 
@@ -267,7 +262,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             return iop.imul(self, other)
         return iop.imul(self, X(other))
 
-    def __itruediv__(self, other: X[XType] | XType | float) -> Self:
+    def __itruediv__(self, other: X | SupportedXTypes) -> Self:
         """
         Perform in-place division.
 
@@ -295,7 +290,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
         """
         return iop.ipow(self, other)
 
-    def __neg__(self) -> X[XType]:
+    def __neg__(self) -> X:
         """
         Negate the wrapped tensor.
 
@@ -305,7 +300,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
         """
         return iop.negative(self)
 
-    def __abs__(self) -> X[XType]:
+    def __abs__(self) -> X:
         """
         Return the absolute value of the wrapped tensor.
 
@@ -315,7 +310,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
         """
         return iop.absolute(self)
 
-    def __getitem__(self, key: SupportsIndex | tuple[SupportsIndex, ...]) -> X[XType]:
+    def __getitem__(self, key: SupportsIndex | tuple[SupportsIndex, ...]) -> X:
         """
         Get an item or slice from the wrapped tensor.
 
@@ -334,7 +329,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
 
         return X(self.value[key])  # type: ignore[index]
 
-    def __setitem__(self, key: SupportsIndex | tuple[SupportsIndex, ...], value: X[XType] | XType | float) -> None:
+    def __setitem__(self, key: SupportsIndex | tuple[SupportsIndex, ...], value: X | SupportedXTypes) -> None:
         """
         Set an item or slice in the wrapped tensor.
 
@@ -378,7 +373,7 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             raise TypeError("Scalar values do not have length.")
         return len(self.value)
 
-    def __iter__(self) -> Iterator[XType]:
+    def __iter__(self) -> Iterator[SupportedXTypes]:
         """
         Return an iterator over the first dimension, yielding TensorLike elements.
 
@@ -388,9 +383,9 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
         """
         if isinstance(self.value, (float, int, complex)):
             raise TypeError("Scalar values are not iterable.")
-        return iter(self.value)  # pyright: ignore[reportReturnType]
+        return iter(self.value)
 
-    def __array__(self) -> XType:  # noqa: PLW3201
+    def __array__(self) -> SupportedXTypes:  # noqa: PLW3201
         """
         Return the underlying array-like object.
 
@@ -408,4 +403,4 @@ class X[XType: SupportedXTypes]:  # noqa: PLR0904
             The float representation of the wrapped tensor.
 
         """
-        return self.float
+        return iop.astype(self, float)

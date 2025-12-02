@@ -1,28 +1,26 @@
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import TypeAlias, TypeVar
+from typing import TypeAlias
 
-from numpy import float64
-from numpy.typing import NDArray
 from sklearn import datasets
 
-from decent_bench.utils.types import TensorLike
+import decent_bench.utils.interoperability as iop
+from decent_bench.utils.parameter import X
+from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
-_T = TypeVar("_T", bound=TensorLike)
-
-DatasetPartition: TypeAlias = tuple[_T, _T]  # noqa: UP040
+DatasetPartition: TypeAlias = tuple[X, X]  # noqa: UP040
 """Tuple of (A, b) representing one dataset partition."""
 
 
-class Dataset[T: TensorLike](ABC):
+class Dataset(ABC):
     """Dataset containing partitions in the form of feature matrix A and target vector b."""
 
     @abstractmethod
-    def training_partitions(self) -> Sequence[DatasetPartition[T]]:
+    def training_partitions(self) -> Sequence[DatasetPartition]:
         """Partitions used for finding the optimal optimization variable x."""
 
 
-class SyntheticClassificationData(Dataset[NDArray[float64]]):
+class SyntheticClassificationData(Dataset):
     """
     Dataset with synthetic classification data.
 
@@ -37,15 +35,24 @@ class SyntheticClassificationData(Dataset[NDArray[float64]]):
     """
 
     def __init__(
-        self, n_partitions: int, n_classes: int, n_samples_per_partition: int, n_features: int, seed: int | None = None
+        self,
+        n_partitions: int,
+        n_classes: int,
+        n_samples_per_partition: int,
+        n_features: int,
+        framework: SupportedFrameworks,
+        device: SupportedDevices,
+        seed: int | None = None,
     ):
         self.n_partitions = n_partitions
         self.n_classes = n_classes
         self.n_samples_per_partition = n_samples_per_partition
         self.n_features = n_features
+        self.framework = framework
+        self.device = device
         self.seed = seed
 
-    def training_partitions(self) -> list[DatasetPartition[NDArray[float64]]]:  # noqa: D102
+    def training_partitions(self) -> list[DatasetPartition]:  # noqa: D102
         res = []
         for i in range(self.n_partitions):
             seed = self.seed + i if self.seed is not None else None
@@ -56,5 +63,7 @@ class SyntheticClassificationData(Dataset[NDArray[float64]]):
                 n_classes=self.n_classes,
                 random_state=seed,
             )
-            res.append(partition)
+            A = iop.numpy_to_X(partition[0], self.framework, self.device)  # noqa: N806
+            b = iop.numpy_to_X(partition[1], self.framework, self.device)
+            res.append((A, b))
         return res
