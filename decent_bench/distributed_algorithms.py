@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from decent_bench.networks import P2PNetwork
 from decent_bench.utils import interoperability as iop
-from decent_bench.utils.parameter import X
+from decent_bench.utils.array import Array
 
 
 class Algorithm(ABC):
@@ -55,7 +55,7 @@ class DGD(Algorithm):
 
         """
         for agent in network.agents():
-            x0 = X(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
+            x0 = iop.zeros(agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(network.neighbors(agent), x0))
 
         W = network.weights  # noqa: N806
@@ -107,7 +107,7 @@ class ATC(Algorithm):
 
         """
         for agent in network.agents():
-            x0 = X(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
+            x0 = iop.zeros(agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
             agent.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(network.neighbors(agent), x0),
@@ -172,8 +172,8 @@ class SimpleGT(Algorithm):
 
         """
         for agent in network.agents():
-            x0 = X(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            y0 = X(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
+            x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
+            y0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
             neighbors = network.neighbors(agent)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
 
@@ -230,8 +230,8 @@ class ED(Algorithm):
 
         """
         for i in network.agents():
-            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            y0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            y0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             y1 = x0 - self.step_size * i.cost.gradient(x0)
             # note: msg0's y1 is an approximation of the neighbors' y1 (x0 and y0 are exact: all agents start with same)
             msg0 = x0 + y1 - y0
@@ -300,7 +300,7 @@ class AugDGM(Algorithm):
 
         """
         for i in network.agents():
-            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             y0 = i.cost.gradient(x0)
             neighbors = network.neighbors(i)
             i.initialize(
@@ -393,7 +393,7 @@ class WangElia(Algorithm):
 
         """
         for i in network.agents():
-            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             neighbors = network.neighbors(i)
             i.initialize(
                 x=x0,
@@ -475,7 +475,7 @@ class EXTRA(Algorithm):
         """
         # initialization (iteration k=0)
         for i in network.agents():
-            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             i.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(network.neighbors(i), x0),
@@ -565,7 +565,7 @@ class ATCTracking(Algorithm):
 
         """
         for i in network.agents():
-            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             y0 = i.cost.gradient(x0)
             neighbors = network.neighbors(i)
             i.initialize(
@@ -657,7 +657,7 @@ class NIDS(Algorithm):
         """
         # initialization (iteration k=0)
         for i in network.agents():
-            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             i.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(network.neighbors(i), x0),
@@ -734,8 +734,10 @@ class ADMM(Algorithm):
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
         for agent in all_agents:
-            z0 = X(
-                framework=agent.cost.framework, shape=(len(all_agents), *(agent.cost.shape)), device=agent.cost.device
+            z0 = iop.zeros(
+                framework=agent.cost.framework,
+                shape=(len(all_agents), *(agent.cost.shape)),
+                device=agent.cost.device,
             )
             x1 = agent.cost.proximal(y=iop.sum(z0, dim=0) / pN[agent], rho=1 / pN[agent])
             # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
@@ -815,9 +817,9 @@ class ATG(Algorithm):
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
         for i in all_agents:
-            z_y0 = X(framework=i.cost.framework, shape=(len(all_agents), *(i.cost.shape)), device=i.cost.device)
-            z_s0 = X(framework=i.cost.framework, shape=(len(all_agents), *(i.cost.shape)), device=i.cost.device)
-            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            z_y0 = iop.zeros(framework=i.cost.framework, shape=(len(all_agents), *(i.cost.shape)), device=i.cost.device)
+            z_s0 = iop.zeros(framework=i.cost.framework, shape=(len(all_agents), *(i.cost.shape)), device=i.cost.device)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             i.initialize(
                 x=x0,
                 aux_vars={"y": x0, "s": x0, "z_y": z_y0, "z_s": z_s0},
@@ -903,8 +905,10 @@ class DLM(Algorithm):
         """
         all_agents = network.agents()
         for i in all_agents:
-            x0 = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            y = X(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)  # y must be initialized to zero
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            y = iop.zeros(
+                framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device
+            )  # y must be initialized to zero
             i.initialize(
                 x=x0,
                 aux_vars={"y": y},

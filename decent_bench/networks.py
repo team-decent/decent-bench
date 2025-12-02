@@ -9,7 +9,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme
-from decent_bench.utils.parameter import X
+from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
     AgentGraph = Graph[Agent]
@@ -40,9 +40,9 @@ class P2PNetwork:
         self._message_noise = message_noise
         self._message_compression = message_compression
         self._message_drop = message_drop
-        self.W: X | None = None
+        self.W: Array | None = None
 
-    def set_weights(self, weights: X) -> None:
+    def set_weights(self, weights: Array) -> None:
         """
         Set custom consensus weights matrix.
 
@@ -57,7 +57,7 @@ class P2PNetwork:
         self.W = weights
 
     @property
-    def weights(self) -> X:
+    def weights(self) -> Array:
         """
         Symmetric, doubly stochastic matrix for consensus weights. Initialized using the Metropolis-Hastings method.
 
@@ -87,7 +87,7 @@ class P2PNetwork:
         return self.W
 
     @cached_property
-    def adjacency(self) -> X:
+    def adjacency(self) -> Array:
         """
         Adjacency matrix of the network.
 
@@ -119,7 +119,7 @@ class P2PNetwork:
         """
         return [a for a in self.agents() if a._activation.is_active(iteration)]  # noqa: SLF001
 
-    def send(self, sender: Agent, receiver: Agent, msg: X) -> None:
+    def send(self, sender: Agent, receiver: Agent, msg: Array) -> None:
         """
         Send message to a neighbor.
 
@@ -139,7 +139,7 @@ class P2PNetwork:
         msg = self._message_noise.make_noise(msg)
         self._graph.edges[sender, receiver][str(receiver.id)] = msg
 
-    def broadcast(self, sender: Agent, msg: X) -> None:
+    def broadcast(self, sender: Agent, msg: Array) -> None:
         """
         Send message to all neighbors.
 

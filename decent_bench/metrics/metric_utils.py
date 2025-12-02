@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.utils.parameter import X
+from decent_bench.utils.array import Array
 
 
 def single(values: Sequence[float]) -> float:
@@ -27,7 +27,7 @@ def single(values: Sequence[float]) -> float:
 
 
 @cache
-def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> X:
+def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
     """
     Calculate the mean x at *iteration* (or using the agents' final x if *iteration* is -1).
 

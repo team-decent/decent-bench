@@ -6,12 +6,12 @@ import contextlib
 import random
 from collections.abc import Sequence
 from copy import deepcopy
-from typing import Any, cast
+from typing import Any, SupportsIndex, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
-from decent_bench.utils.parameter import X
+from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks, SupportedXTypes
 
 torch = None
@@ -39,10 +39,10 @@ with contextlib.suppress(ImportError, ModuleNotFoundError):
     jax = _jax
 
 
-_np_types = (np.generic, np.ndarray, float, int)
+_np_types = (np.ndarray, np.generic, float, int)
 _torch_types = (torch.Tensor, float, int) if torch else (float,)
 _tf_types = (tf.Tensor, float, int) if tf else (float,)
-_jnp_types = (jnp.generic, jnp.ndarray, float, int) if jnp else (float,)
+_jnp_types = (jnp.ndarray, jnp.generic, float, int) if jnp else (float,)
 
 
 def _device_literal_to_framework_device(device: SupportedDevices, framework: SupportedFrameworks) -> Any:
@@ -74,7 +74,7 @@ def _device_literal_to_framework_device(device: SupportedDevices, framework: Sup
     raise ValueError(f"Unsupported framework: {framework}")
 
 
-def to_numpy(array: X | SupportedXTypes) -> NDArray[Any]:
+def to_numpy(array: Array | SupportedXTypes) -> NDArray[Any]:
     """
     Convert input array to a NumPy array.
 
@@ -85,7 +85,7 @@ def to_numpy(array: X | SupportedXTypes) -> NDArray[Any]:
         NDArray: Converted NumPy array.
 
     """
-    if isinstance(array, X):
+    if isinstance(array, Array):
         return to_numpy(array.value)
 
     if isinstance(array, np.ndarray):
@@ -103,7 +103,7 @@ def numpy_to_X(  # noqa: N802
     array: NDArray[Any],
     framework: SupportedFrameworks,
     device: SupportedDevices = SupportedDevices.CPU,
-) -> X:
+) -> Array:
     """
     Convert a NumPy array to the specified framework type.
 
@@ -122,26 +122,27 @@ def numpy_to_X(  # noqa: N802
     if not isinstance(array, np.ndarray):
         raise TypeError(f"Input must be a NumPy array, got {type(array)}")
 
+    if framework == SupportedFrameworks.NUMPY:
+        return Array(array)
+
     framework_device = _device_literal_to_framework_device(device, framework)
 
-    if framework == SupportedFrameworks.NUMPY:
-        return X(array, framework=framework, device=device)
     if torch and framework == SupportedFrameworks.TORCH:
-        return X(torch.from_numpy(array).to(framework_device), framework=framework, device=device)
+        return Array(torch.from_numpy(array).to(framework_device))
     if tf and framework == SupportedFrameworks.TENSORFLOW:
         with tf.device(framework_device):
-            return X(tf.convert_to_tensor(array), framework=framework, device=device)
+            return Array(tf.convert_to_tensor(array))
     if jnp and framework == SupportedFrameworks.JAX:
-        return X(jnp.array(array, device=framework_device), framework=framework, device=device)
+        return Array(jnp.array(array, device=framework_device))
 
     raise TypeError(f"Unsupported framework type: {framework}")
 
 
 def sum(  # noqa: A001
-    array: X,
+    array: Array,
     dim: int | tuple[int, ...] | None = None,
     keepdims: bool = False,
-) -> X:
+) -> Array:
     """
     Sum elements of an array.
 
@@ -158,39 +159,25 @@ def sum(  # noqa: A001
         TypeError: if the framework type of `array` is unsupported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.sum(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.sum(array.value, dim=dim, keepdim=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
-        return X(
-            tf.reduce_sum(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.sum(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
+    value = array.value if isinstance(array, Array) else array
 
-    raise TypeError(f"Unsupported framework type: {type(array.value)}")
+    if isinstance(value, np.ndarray):
+        return Array(np.sum(value, axis=dim, keepdims=keepdims))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.sum(value, dim=dim, keepdim=keepdims))
+    if tf and isinstance(value, tf.Tensor):
+        return Array(tf.reduce_sum(value, axis=dim, keepdims=keepdims))
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.sum(value, axis=dim, keepdims=keepdims))
+
+    raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
 def mean(
-    array: X,
+    array: Array,
     dim: int | tuple[int, ...] | None = None,
     keepdims: bool = False,
-) -> X:
+) -> Array:
     """
     Compute mean of array elements.
 
@@ -207,39 +194,25 @@ def mean(
         TypeError: if the framework type of `array` is unsupported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.mean(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.mean(array.value, dim=dim, keepdim=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
-        return X(
-            tf.reduce_mean(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.mean(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
+    value = array.value if isinstance(array, Array) else array
 
-    raise TypeError(f"Unsupported framework type: {type(array.value)}")
+    if isinstance(value, np.ndarray):
+        return Array(np.mean(value, axis=dim, keepdims=keepdims))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.mean(value, dim=dim, keepdim=keepdims))
+    if tf and isinstance(value, tf.Tensor):
+        return Array(tf.reduce_mean(value, axis=dim, keepdims=keepdims))
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.mean(value, axis=dim, keepdims=keepdims))
+
+    raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
 def min(  # noqa: A001
-    array: X,
+    array: Array,
     dim: int | tuple[int, ...] | None = None,
     keepdims: bool = False,
-) -> X:
+) -> Array:
     """
     Compute minimum of array elements.
 
@@ -256,39 +229,25 @@ def min(  # noqa: A001
         TypeError: if the framework type of `array` is unsupported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.min(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.amin(array.value, dim=dim, keepdim=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
-        return X(
-            tf.reduce_min(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.min(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
+    value = array.value if isinstance(array, Array) else array
 
-    raise TypeError(f"Unsupported framework type: {type(array.value)}")
+    if isinstance(value, np.ndarray):
+        return Array(np.min(value, axis=dim, keepdims=keepdims))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.amin(value, dim=dim, keepdim=keepdims))
+    if tf and isinstance(value, tf.Tensor):
+        return Array(tf.reduce_min(value, axis=dim, keepdims=keepdims))
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.min(value, axis=dim, keepdims=keepdims))
+
+    raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
 def max(  # noqa: A001
-    array: X,
+    array: Array,
     dim: int | tuple[int, ...] | None = None,
     keepdims: bool = False,
-) -> X:
+) -> Array:
     """
     Compute maximum of array elements.
 
@@ -305,35 +264,21 @@ def max(  # noqa: A001
         TypeError: if the framework type of `array` is unsupported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.max(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.amax(array.value, dim=dim, keepdim=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
-        return X(
-            tf.reduce_max(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.max(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
+    value = array.value if isinstance(array, Array) else array
 
-    raise TypeError(f"Unsupported framework type: {type(array.value)}")
+    if isinstance(value, np.ndarray):
+        return Array(np.max(value, axis=dim, keepdims=keepdims))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.amax(value, dim=dim, keepdim=keepdims))
+    if tf and isinstance(value, tf.Tensor):
+        return Array(tf.reduce_max(value, axis=dim, keepdims=keepdims))
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.max(value, axis=dim, keepdims=keepdims))
+
+    raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def argmax(array: X, dim: int | None = None, keepdims: bool = False) -> X:
+def argmax(array: Array, dim: int | None = None, keepdims: bool = False) -> Array:
     """
     Compute index of maximum value.
 
@@ -349,51 +294,33 @@ def argmax(array: X, dim: int | None = None, keepdims: bool = False) -> X:
         TypeError: if the framework type of `array` is unsupported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.argmax(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.argmax(array.value, dim=dim, keepdim=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
+    value = array.value if isinstance(array, Array) else array
+
+    if isinstance(value, np.ndarray):
+        return Array(np.argmax(value, axis=dim, keepdims=keepdims))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.argmax(value, dim=dim, keepdim=keepdims))
+    if tf and isinstance(value, tf.Tensor):
         if dim is None:
             # TensorFlow's argmax does not support dim=None directly
-            dims = array.value.ndim if array.value.ndim is not None else 0
-            array = tf.reshape(array, [-1])
-            amax = tf.math.argmax(array.value, axis=0)
-            ret = (
-                X(amax, framework=array.framework, device=array.device)
-                if not keepdims
-                else X(tf.reshape(amax, [1] * dims), framework=array.framework, device=array.device)
-            )
+            dims = value.ndim if value.ndim is not None else 0
+            reshaped_array = tf.reshape(value, [-1])
+            amax = tf.math.argmax(reshaped_array, axis=0)
+            ret = Array(amax) if not keepdims else Array(tf.reshape(amax, [1] * dims))
         else:
             ret = (
-                X(tf.math.argmax(array.value, axis=dim), framework=array.framework, device=array.device)
+                Array(tf.math.argmax(value, axis=dim))
                 if not keepdims
-                else X(
-                    tf.expand_dims(tf.math.argmax(array.value, axis=dim), axis=dim),
-                    framework=array.framework,
-                    device=array.device,
-                )
+                else Array(tf.expand_dims(tf.math.argmax(value, axis=dim), axis=dim))
             )
         return ret
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.argmax(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.argmax(value, axis=dim, keepdims=keepdims))
 
-    raise TypeError(f"Unsupported framework type: {type(array.value)}")
+    raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def argmin(array: X, dim: int | None = None, keepdims: bool = False) -> X:
+def argmin(array: Array, dim: int | None = None, keepdims: bool = False) -> Array:
     """
     Compute index of minimum value.
 
@@ -409,52 +336,34 @@ def argmin(array: X, dim: int | None = None, keepdims: bool = False) -> X:
         TypeError: if the framework type of `array` is unsupported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.argmin(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.argmin(array.value, dim=dim, keepdim=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
+    value = array.value if isinstance(array, Array) else array
+
+    if isinstance(value, np.ndarray):
+        return Array(np.argmin(value, axis=dim, keepdims=keepdims))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.argmin(value, dim=dim, keepdim=keepdims))
+    if tf and isinstance(value, tf.Tensor):
         ret = None
         if dim is None:
             # TensorFlow's argmin does not support dim=None directly
-            dims = array.value.ndim if array.value.ndim is not None else 0
-            tf_array = tf.reshape(array.value, [-1])
+            dims = value.ndim if value.ndim is not None else 0
+            tf_array = tf.reshape(value, [-1])
             amin = tf.math.argmin(tf_array, axis=0)
-            ret = (
-                X(amin, framework=array.framework, device=array.device)
-                if not keepdims
-                else X(tf.reshape(amin, [1] * dims), framework=array.framework, device=array.device)
-            )
+            ret = Array(amin) if not keepdims else Array(tf.reshape(amin, [1] * dims))
         else:
             ret = (
-                X(tf.math.argmin(array.value, axis=dim), framework=array.framework, device=array.device)
+                Array(tf.math.argmin(value, axis=dim))
                 if not keepdims
-                else X(
-                    tf.expand_dims(tf.math.argmin(array.value, axis=dim), axis=dim),
-                    framework=array.framework,
-                    device=array.device,
-                )
+                else Array(tf.expand_dims(tf.math.argmin(value, axis=dim), axis=dim))
             )
         return ret
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.argmin(array.value, axis=dim, keepdims=keepdims),
-            framework=array.framework,
-            device=array.device,
-        )
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.argmin(value, axis=dim, keepdims=keepdims))
 
-    raise TypeError(f"Unsupported framework type: {type(array.value)}")
+    raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def copy(array: X) -> X:
+def copy(array: Array) -> Array:
     """
     Create a copy of the input array.
 
@@ -465,34 +374,20 @@ def copy(array: X) -> X:
         X: A copy of the input array in the same framework type.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.copy(array.value),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.clone(array.value),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
-        return X(
-            tf.identity(array.value),
-            framework=array.framework,
-            device=array.device,
-        )
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.array(array.value, copy=True),
-            framework=array.framework,
-            device=array.device,
-        )
+    value = array.value if isinstance(array, Array) else array
+
+    if isinstance(value, np.ndarray):
+        return Array(np.copy(value))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.clone(value))
+    if tf and isinstance(value, tf.Tensor):
+        return Array(tf.identity(value))
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.array(value, copy=True))
     return deepcopy(array)
 
 
-def stack(arrays: Sequence[X], dim: int = 0) -> X:
+def stack(arrays: Sequence[Array], dim: int = 0) -> Array:
     """
     Stack a sequence of arrays along a new dimension.
 
@@ -508,21 +403,21 @@ def stack(arrays: Sequence[X], dim: int = 0) -> X:
         TypeError: if the framework type of the input arrays is unsupported.
 
     """
-    arrs = [arr.value for arr in arrays]
+    arrs = [arr.value for arr in arrays] if isinstance(arrays[0], Array) else arrays
 
     if isinstance(arrs[0], np.ndarray):
-        return X(np.stack(arrs, axis=dim))
+        return Array(np.stack(arrs, axis=dim))
     if torch and isinstance(arrs[0], torch.Tensor):
-        return X(torch.stack(arrs, dim=dim))
+        return Array(torch.stack(arrs, dim=dim))
     if tf and isinstance(arrs[0], tf.Tensor):
-        return X(tf.stack(arrs, axis=dim))
+        return Array(tf.stack(arrs, axis=dim))
     if jnp and isinstance(arrs[0], jnp.ndarray):
-        return X(jnp.stack(arrs, axis=dim))
+        return Array(jnp.stack(arrs, axis=dim))
 
-    raise TypeError(f"Unsupported framework type or mixed types: {[type(arr.value) for arr in arrs]}")
+    raise TypeError(f"Unsupported framework type or mixed types: {[type(arr) for arr in arrs]}")
 
 
-def reshape(array: X, shape: tuple[int, ...]) -> X:
+def reshape(array: Array, shape: tuple[int, ...]) -> Array:
     """
     Reshape an array to the specified shape.
 
@@ -537,35 +432,21 @@ def reshape(array: X, shape: tuple[int, ...]) -> X:
         TypeError: if the framework type of `array` is unsupported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.reshape(array.value, shape),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.reshape(array.value, shape),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
-        return X(
-            tf.reshape(array.value, shape),
-            framework=array.framework,
-            device=array.device,
-        )
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.reshape(array.value, shape),
-            framework=array.framework,
-            device=array.device,
-        )
+    value = array.value if isinstance(array, Array) else array
 
-    raise TypeError(f"Unsupported framework type: {type(array.value)}")
+    if isinstance(value, np.ndarray):
+        return Array(np.reshape(value, shape))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.reshape(value, shape))
+    if tf and isinstance(value, tf.Tensor):
+        return Array(tf.reshape(value, shape))
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.reshape(value, shape))
+
+    raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def zeros_like(array: X) -> X:
+def zeros_like(array: Array) -> Array:
     """
     Create an array of zeros with the same shape and type as the input.
 
@@ -579,35 +460,21 @@ def zeros_like(array: X) -> X:
         TypeError: if the framework type of `array` is unsupported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.zeros_like(array.value),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.zeros_like(array.value),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
-        return X(
-            tf.zeros_like(array.value),
-            framework=array.framework,
-            device=array.device,
-        )
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.zeros_like(array.value),
-            framework=array.framework,
-            device=array.device,
-        )
+    value = array.value if isinstance(array, Array) else array
 
-    raise TypeError(f"Unsupported framework type: {type(array.value)}")
+    if isinstance(value, np.ndarray):
+        return Array(np.zeros_like(value))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.zeros_like(value))
+    if tf and isinstance(value, tf.Tensor):
+        return Array(tf.zeros_like(value))
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.zeros_like(value))
+
+    raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def ones_like(array: X) -> X:
+def ones_like(array: Array) -> Array:
     """
     Create an array of ones with the same shape and type as the input.
 
@@ -622,25 +489,25 @@ def ones_like(array: X) -> X:
 
     """
     if isinstance(array.value, np.ndarray):
-        return X(
+        return Array(
             np.ones_like(array.value),
             framework=array.framework,
             device=array.device,
         )
     if torch and isinstance(array.value, torch.Tensor):
-        return X(
+        return Array(
             torch.ones_like(array.value),
             framework=array.framework,
             device=array.device,
         )
     if tf and isinstance(array.value, tf.Tensor):
-        return X(
+        return Array(
             tf.ones_like(array.value),
             framework=array.framework,
             device=array.device,
         )
     if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
+        return Array(
             jnp.ones_like(array.value),
             framework=array.framework,
             device=array.device,
@@ -649,7 +516,7 @@ def ones_like(array: X) -> X:
     raise TypeError(f"Unsupported framework type: {type(array.value)}")
 
 
-def rand_like(array: X, low: float = 0.0, high: float = 1.0) -> X:
+def rand_like(array: Array, low: float = 0.0, high: float = 1.0) -> Array:
     """
     Create an array of random values with the same shape and type as the input.
 
@@ -674,19 +541,19 @@ def rand_like(array: X, low: float = 0.0, high: float = 1.0) -> X:
             size=array.shape,
         )
         random_array = random_array.astype(array.value.dtype) if isinstance(random_array, np.ndarray) else random_array
-        return X(
+        return Array(
             random_array,
             framework=array.framework,
             device=array.device,
         )
     if torch and isinstance(array.value, torch.Tensor):
-        return X(
+        return Array(
             (high - low) * torch.rand_like(array.value) + low,
             framework=array.framework,
             device=array.device,
         )
     if tf and isinstance(array.value, tf.Tensor):
-        return X(
+        return Array(
             tf.random.uniform(
                 tf.shape(array.value),
                 dtype=array.value.dtype,
@@ -697,7 +564,7 @@ def rand_like(array: X, low: float = 0.0, high: float = 1.0) -> X:
             device=array.device,
         )
     if jnp and jax and isinstance(array.value, jnp.ndarray):
-        return X(
+        return Array(
             jax.random.uniform(
                 jax.random.key(random.randint(0, 2**32 - 1)),
                 shape=array.value.shape,
@@ -712,7 +579,7 @@ def rand_like(array: X, low: float = 0.0, high: float = 1.0) -> X:
     raise TypeError(f"Unsupported framework type: {type(array.value)}")
 
 
-def randn_like(array: X, mean: float = 0.0, std: float = 1.0) -> X:
+def randn_like(array: Array, mean: float = 0.0, std: float = 1.0) -> Array:
     """
     Create an array of random values with the same shape and type as the input.
 
@@ -737,13 +604,13 @@ def randn_like(array: X, mean: float = 0.0, std: float = 1.0) -> X:
             size=array.value.shape,
         )
         random_array = random_array.astype(array.value.dtype) if isinstance(random_array, np.ndarray) else random_array
-        return X(
+        return Array(
             random_array,
             framework=array.framework,
             device=array.device,
         )
     if torch and isinstance(array.value, torch.Tensor):
-        return X(
+        return Array(
             torch.normal(
                 mean=mean,
                 std=std,
@@ -756,7 +623,7 @@ def randn_like(array: X, mean: float = 0.0, std: float = 1.0) -> X:
         )
     if tf and isinstance(array.value, tf.Tensor):
         shape = tf.shape(array.value)
-        return X(
+        return Array(
             tf.random.normal(
                 shape=shape,
                 mean=mean,
@@ -767,7 +634,7 @@ def randn_like(array: X, mean: float = 0.0, std: float = 1.0) -> X:
             device=array.device,
         )
     if jnp and jax and isinstance(array.value, jnp.ndarray):
-        return X(
+        return Array(
             mean
             + std
             * jax.random.normal(
@@ -782,7 +649,7 @@ def randn_like(array: X, mean: float = 0.0, std: float = 1.0) -> X:
     raise TypeError(f"Unsupported framework type: {type(array.value)}")
 
 
-def eye_like(array: X) -> X:
+def eye_like(array: Array) -> Array:
     """
     Create an identity matrix with the same shape as the input.
 
@@ -796,36 +663,54 @@ def eye_like(array: X) -> X:
         TypeError: if the framework type of `array` is unsupported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.eye(*array.value.shape[-2:], dtype=array.value.dtype),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.eye(*array.value.shape[-2:], dtype=array.value.dtype, device=array.device),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
-        shape = tf.shape(array.value)
-        return X(
-            tf.eye(*shape[-2:], dtype=array.value.dtype),
-            framework=array.framework,
-            device=array.device,
-        )
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.eye(*array.value.shape[-2:], dtype=array.value.dtype, device=array.device),
-            framework=array.framework,
-            device=array.device,
-        )
+    value = array.value if isinstance(array, Array) else array
 
-    raise TypeError(f"Unsupported framework type: {type(array.value)}")
+    if isinstance(value, np.ndarray):
+        return Array(np.eye(*value.shape[-2:], dtype=value.dtype))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.eye(*value.shape[-2:], dtype=value.dtype, device=value.device))
+    if tf and isinstance(value, tf.Tensor):
+        shape = tf.shape(value)
+        return Array(tf.eye(*shape[-2:], dtype=value.dtype))
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.eye(*value.shape[-2:], dtype=value.dtype, device=value.device))
+
+    raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def transpose(array: X, dim: tuple[int, ...] | None = None) -> X:
+def eye(n: int, framework: SupportedFrameworks, device: SupportedDevices = SupportedDevices.CPU) -> Array:
+    """
+    Create an identity matrix of size n x n in the specified framework.
+
+    Args:
+        n (int): Size of the identity matrix.
+        framework (SupportedFrameworks): Target framework type (e.g., "torch", "tf").
+        device (SupportedDevices): Target device ("cpu" or "gpu").
+
+    Returns:
+        X: Identity matrix in the specified framework type.
+
+    Raises:
+        TypeError: if the framework type of `framework` is unsupported.
+
+    """
+    if framework == SupportedFrameworks.NUMPY:
+        return Array(np.eye(n))
+
+    framework_device = _device_literal_to_framework_device(device, framework)
+
+    if torch and framework == SupportedFrameworks.TORCH:
+        return Array(torch.eye(n, device=framework_device))
+    if tf and framework == SupportedFrameworks.TENSORFLOW:
+        with tf.device(framework_device):
+            return Array(tf.eye(n))
+    if jnp and framework == SupportedFrameworks.JAX:
+        return Array(jnp.eye(n, device=framework_device))
+
+    raise TypeError(f"Unsupported framework type: {framework}")
+
+
+def transpose(array: Array, dim: tuple[int, ...] | None = None) -> Array:
     """
     Transpose an array.
 
@@ -840,44 +725,26 @@ def transpose(array: X, dim: tuple[int, ...] | None = None) -> X:
         TypeError: if the framework type of `array` is unsupported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.transpose(array.value, axes=dim),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
+    value = array.value if isinstance(array, Array) else array
+
+    if isinstance(value, np.ndarray):
+        return Array(np.transpose(value, axes=dim))
+    if torch and isinstance(value, torch.Tensor):
         # Handle None case for PyTorch
         return (
-            X(
-                torch.permute(array.value, dims=dim),
-                framework=array.framework,
-                device=array.device,
-            )
+            Array(torch.permute(value, dims=dim))
             if dim
-            else X(
-                torch.permute(array.value, dims=list(reversed(range(array.value.ndim)))),
-                framework=array.framework,
-                device=array.device,
-            )
+            else Array(torch.permute(value, dims=list(reversed(range(value.ndim)))))
         )
-    if tf and isinstance(array.value, tf.Tensor):
-        return X(
-            tf.transpose(array.value, perm=dim),
-            framework=array.framework,
-            device=array.device,
-        )
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.transpose(array.value, axes=dim),
-            framework=array.framework,
-            device=array.device,
-        )
+    if tf and isinstance(value, tf.Tensor):
+        return Array(tf.transpose(value, perm=dim))
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.transpose(value, axes=dim))
 
-    raise TypeError(f"Unsupported framework type: {type(array.value)}")
+    raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def shape(array: X) -> tuple[int, ...]:
+def shape(array: Array) -> tuple[int, ...]:
     """
     Get the shape of an array.
 
@@ -904,7 +771,7 @@ def shape(array: X) -> tuple[int, ...]:
     raise TypeError(f"Unsupported framework type: {type(array.value)}")
 
 
-def add(array1: X, array2: X) -> X:
+def add(array1: Array, array2: Array) -> Array:
     """
     Element-wise addition of two arrays.
 
@@ -920,35 +787,22 @@ def add(array1: X, array2: X) -> X:
             or if the input arrays are not of the same framework type.
 
     """
-    if isinstance(array1.value, _np_types) and isinstance(array2.value, _np_types):
-        return X(
-            array1.value + array2.value,
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if torch and isinstance(array1.value, _torch_types) and isinstance(array2.value, _torch_types):
-        return X(
-            torch.add(array1.value, array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if tf and isinstance(array1.value, _tf_types) and isinstance(array2.value, _tf_types):
-        return X(
-            tf.add(array1.value, array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if jnp and isinstance(array1.value, _jnp_types) and isinstance(array2.value, _jnp_types):
-        return X(
-            jnp.add(array1.value, array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
+    value1 = array1.value if isinstance(array1, Array) else array1
+    value2 = array2.value if isinstance(array2, Array) else array2
 
-    raise TypeError(f"Unsupported framework type: {type(array1.value)} and {type(array2.value)}")
+    if isinstance(value1, _np_types) and isinstance(value2, _np_types):
+        return Array(value1 + value2)
+    if torch and isinstance(value1, _torch_types) and isinstance(value2, _torch_types):
+        return Array(torch.add(value1, value2))
+    if tf and isinstance(value1, _tf_types) and isinstance(value2, _tf_types):
+        return Array(tf.add(value1, value2))
+    if jnp and isinstance(value1, _jnp_types) and isinstance(value2, _jnp_types):
+        return Array(jnp.add(value1, value2))
+
+    raise TypeError(f"Unsupported framework type: {type(value1)} and {type(value2)}")
 
 
-def iadd[T: X](array1: T, array2: X) -> T:
+def iadd[T: Array](array1: T, array2: Array) -> T:
     """
     Element-wise in-place addition of two arrays.
 
@@ -964,23 +818,26 @@ def iadd[T: X](array1: T, array2: X) -> T:
             or if the input arrays are not of the same framework type.
 
     """
-    if isinstance(array1.value, np.ndarray) and isinstance(array2.value, _np_types):
-        array1.value += array2.value
+    value1 = array1.value if isinstance(array1, Array) else array1
+    value2 = array2.value if isinstance(array2, Array) else array2
+
+    if isinstance(value1, np.ndarray) and isinstance(value2, _np_types):
+        value1 += value2
         return array1
-    if torch and isinstance(array1.value, torch.Tensor) and isinstance(array2.value, _torch_types):
-        array1.value += array2.value
+    if torch and isinstance(value1, torch.Tensor) and isinstance(value2, _torch_types):
+        value1 += value2
         return array1
-    if tf and isinstance(array1.value, tf.Tensor) and isinstance(array2.value, _tf_types):
-        array1.value += array2.value
+    if tf and isinstance(value1, tf.Tensor) and isinstance(value2, _tf_types):
+        value1 += value2
         return array1
-    if jnp and isinstance(array1.value, jnp.ndarray) and isinstance(array2.value, _jnp_types):
-        array1.value += array2.value
+    if jnp and isinstance(value1, jnp.ndarray) and isinstance(value2, _jnp_types):
+        value1 += value2
         return array1
 
-    raise TypeError(f"Unsupported framework type: {type(array1.value)} and {type(array2.value)}")
+    raise TypeError(f"Unsupported framework type: {type(value1)} and {type(value2)}")
 
 
-def sub(array1: X, array2: X) -> X:
+def sub(array1: Array, array2: Array) -> Array:
     """
     Element-wise subtraction of two arrays.
 
@@ -996,35 +853,22 @@ def sub(array1: X, array2: X) -> X:
             or if the input arrays are not of the same framework type.
 
     """
-    if isinstance(array1.value, _np_types) and isinstance(array2.value, _np_types):
-        return X(
-            array1.value - array2.value,
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if torch and isinstance(array1.value, _torch_types) and isinstance(array2.value, _torch_types):
-        return X(
-            torch.sub(array1.value, array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if tf and isinstance(array1.value, _tf_types) and isinstance(array2.value, _tf_types):
-        return X(
-            tf.subtract(array1.value, array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if jnp and isinstance(array1.value, _jnp_types) and isinstance(array2.value, _jnp_types):
-        return X(
-            jnp.subtract(array1.value, array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
+    value1 = array1.value if isinstance(array1, Array) else array1
+    value2 = array2.value if isinstance(array2, Array) else array2
 
-    raise TypeError(f"Unsupported framework type: {type(array1.value)} and {type(array2.value)}")
+    if isinstance(value1, _np_types) and isinstance(value2, _np_types):
+        return Array(value1 - value2)
+    if torch and isinstance(value1, _torch_types) and isinstance(value2, _torch_types):
+        return Array(torch.sub(value1, value2))
+    if tf and isinstance(value1, _tf_types) and isinstance(value2, _tf_types):
+        return Array(tf.subtract(value1, value2))
+    if jnp and isinstance(value1, _jnp_types) and isinstance(value2, _jnp_types):
+        return Array(jnp.subtract(value1, value2))
+
+    raise TypeError(f"Unsupported framework type: {type(value1)} and {type(value2)}")
 
 
-def isub[T: X](array1: T, array2: X) -> T:
+def isub[T: Array](array1: T, array2: Array) -> T:
     """
     Element-wise in-place subtraction of two arrays.
 
@@ -1040,23 +884,26 @@ def isub[T: X](array1: T, array2: X) -> T:
             or if the input arrays are not of the same framework type.
 
     """
-    if isinstance(array1.value, np.ndarray) and isinstance(array2.value, _np_types):
-        array1.value -= array2.value
+    value1 = array1.value if isinstance(array1, Array) else array1
+    value2 = array2.value if isinstance(array2, Array) else array2
+
+    if isinstance(value1, np.ndarray) and isinstance(value2, _np_types):
+        value1 -= value2
         return array1
-    if torch and isinstance(array1.value, torch.Tensor) and isinstance(array2.value, _torch_types):
-        array1.value -= array2.value
+    if torch and isinstance(value1, torch.Tensor) and isinstance(value2, _torch_types):
+        value1 -= value2
         return array1
-    if tf and isinstance(array1.value, tf.Tensor) and isinstance(array2.value, _tf_types):
-        array1.value -= array2.value
+    if tf and isinstance(value1, tf.Tensor) and isinstance(value2, _tf_types):
+        value1 -= value2
         return array1
-    if jnp and isinstance(array1.value, jnp.ndarray) and isinstance(array2.value, _jnp_types):
-        array1.value -= array2.value
+    if jnp and isinstance(value1, jnp.ndarray) and isinstance(value2, _jnp_types):
+        value1 -= value2
         return array1
 
-    raise TypeError(f"Unsupported framework type: {type(array1.value)} and {type(array2.value)}")
+    raise TypeError(f"Unsupported framework type: {type(value1)} and {type(value2)}")
 
 
-def mul(array1: X, array2: X) -> X:
+def mul(array1: Array, array2: Array) -> Array:
     """
     Element-wise multiplication of two arrays.
 
@@ -1072,35 +919,22 @@ def mul(array1: X, array2: X) -> X:
             or if the input arrays are not of the same framework type.
 
     """
-    if isinstance(array1.value, _np_types) and isinstance(array2.value, _np_types):
-        return X(
-            array1.value * array2.value,
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if torch and isinstance(array1.value, _torch_types) and isinstance(array2.value, _torch_types):
-        return X(
-            torch.mul(array1.value, array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if tf and isinstance(array1.value, _tf_types) and isinstance(array2.value, _tf_types):
-        return X(
-            tf.multiply(array1.value, array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if jnp and isinstance(array1.value, _jnp_types) and isinstance(array2.value, _jnp_types):
-        return X(
-            jnp.multiply(array1.value, array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
+    value1 = array1.value if isinstance(array1, Array) else array1
+    value2 = array2.value if isinstance(array2, Array) else array2
 
-    raise TypeError(f"Unsupported framework type: {type(array1.value)} and {type(array2.value)}")
+    if isinstance(value1, _np_types) and isinstance(value2, _np_types):
+        return Array(value1 * value2)
+    if torch and isinstance(value1, _torch_types) and isinstance(value2, _torch_types):
+        return Array(torch.mul(value1, value2))
+    if tf and isinstance(value1, _tf_types) and isinstance(value2, _tf_types):
+        return Array(tf.multiply(value1, value2))
+    if jnp and isinstance(value1, _jnp_types) and isinstance(value2, _jnp_types):
+        return Array(jnp.multiply(value1, value2))
+
+    raise TypeError(f"Unsupported framework type: {type(value1)} and {type(value2)}")
 
 
-def imul[T: X](array1: T, array2: X) -> T:
+def imul[T: Array](array1: T, array2: Array) -> T:
     """
     Element-wise in-place multiplication of two arrays.
 
@@ -1116,23 +950,26 @@ def imul[T: X](array1: T, array2: X) -> T:
             or if the input arrays are not of the same framework type.
 
     """
-    if isinstance(array1.value, np.ndarray) and isinstance(array2.value, _np_types):
-        array1.value *= array2.value
+    value1 = array1.value if isinstance(array1, Array) else array1
+    value2 = array2.value if isinstance(array2, Array) else array2
+
+    if isinstance(value1, np.ndarray) and isinstance(value2, _np_types):
+        value1 *= value2
         return array1
-    if torch and isinstance(array1.value, torch.Tensor) and isinstance(array2.value, _torch_types):
-        array1.value *= array2.value
+    if torch and isinstance(value1, torch.Tensor) and isinstance(value2, _torch_types):
+        value1 *= value2
         return array1
-    if tf and isinstance(array1.value, tf.Tensor) and isinstance(array2.value, _tf_types):
-        array1.value *= array2.value
+    if tf and isinstance(value1, tf.Tensor) and isinstance(value2, _tf_types):
+        value1 *= value2
         return array1
-    if jnp and isinstance(array1.value, jnp.ndarray) and isinstance(array2.value, _jnp_types):
-        array1.value *= array2.value
+    if jnp and isinstance(value1, jnp.ndarray) and isinstance(value2, _jnp_types):
+        value1 *= value2
         return array1
 
-    raise TypeError(f"Unsupported framework type: {type(array1.value)} and {type(array2.value)}")
+    raise TypeError(f"Unsupported framework type: {type(value1)} and {type(value2)}")
 
 
-def div(array1: X, array2: X) -> X:
+def div(array1: Array, array2: Array) -> Array:
     """
     Element-wise division of two arrays.
 
@@ -1148,35 +985,22 @@ def div(array1: X, array2: X) -> X:
             or if the input arrays are not of the same framework type.
 
     """
-    if isinstance(array1.value, _np_types) and isinstance(array2.value, _np_types):
-        return X(
-            array1.value / array2.value,
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if torch and isinstance(array1.value, _torch_types) and isinstance(array2.value, _torch_types):
-        return X(
-            torch.div(array1.value, array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if tf and isinstance(array1.value, _tf_types) and isinstance(array2.value, _tf_types):
-        return X(
-            tf.divide(array1.value, array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if jnp and isinstance(array1.value, _jnp_types) and isinstance(array2.value, _jnp_types):
-        return X(
-            jnp.divide(array1.value, array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
+    value1 = array1.value if isinstance(array1, Array) else array1
+    value2 = array2.value if isinstance(array2, Array) else array2
 
-    raise TypeError(f"Unsupported framework type: {type(array1.value)} and {type(array2.value)}")
+    if isinstance(value1, _np_types) and isinstance(value2, _np_types):
+        return Array(value1 / value2)
+    if torch and isinstance(value1, _torch_types) and isinstance(value2, _torch_types):
+        return Array(torch.div(value1, value2))
+    if tf and isinstance(value1, _tf_types) and isinstance(value2, _tf_types):
+        return Array(tf.divide(value1, value2))
+    if jnp and isinstance(value1, _jnp_types) and isinstance(value2, _jnp_types):
+        return Array(jnp.divide(value1, value2))
+
+    raise TypeError(f"Unsupported framework type: {type(value1)} and {type(value2)}")
 
 
-def idiv[T: X](array1: T, array2: X) -> T:
+def idiv[T: Array](array1: T, array2: Array) -> T:
     """
     Element-wise in-place division of two arrays.
 
@@ -1192,23 +1016,26 @@ def idiv[T: X](array1: T, array2: X) -> T:
             or if the input arrays are not of the same framework type.
 
     """
-    if isinstance(array1.value, np.ndarray) and isinstance(array2.value, _np_types):
-        array1.value /= array2.value
+    value1 = array1.value if isinstance(array1, Array) else array1
+    value2 = array2.value if isinstance(array2, Array) else array2
+
+    if isinstance(value1, np.ndarray) and isinstance(value2, _np_types):
+        value1 /= value2
         return array1
-    if torch and isinstance(array1.value, torch.Tensor) and isinstance(array2.value, _torch_types):
-        array1.value /= array2.value
+    if torch and isinstance(value1, torch.Tensor) and isinstance(value2, _torch_types):
+        value1 /= value2
         return array1
-    if tf and isinstance(array1.value, tf.Tensor) and isinstance(array2.value, _tf_types):
-        array1.value /= array2.value
+    if tf and isinstance(value1, tf.Tensor) and isinstance(value2, _tf_types):
+        value1 /= value2
         return array1
-    if jnp and isinstance(array1.value, jnp.ndarray) and isinstance(array2.value, _jnp_types):
-        array1.value /= array2.value
+    if jnp and isinstance(value1, jnp.ndarray) and isinstance(value2, _jnp_types):
+        value1 /= value2
         return array1
 
-    raise TypeError(f"Unsupported framework type: {type(array1.value)} and {type(array2.value)}")
+    raise TypeError(f"Unsupported framework type: {type(value1)} and {type(value2)}")
 
 
-def matmul(array1: X, array2: X) -> X:
+def matmul(array1: Array, array2: Array) -> Array:
     """
     Matrix multiplication of two arrays.
 
@@ -1224,35 +1051,22 @@ def matmul(array1: X, array2: X) -> X:
             or if the input arrays are not of the same framework type.
 
     """
-    if isinstance(array1.value, np.ndarray) and isinstance(array2.value, np.ndarray):
-        return X(
-            array1.value @ array2.value,
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if torch and isinstance(array1.value, torch.Tensor) and isinstance(array2.value, torch.Tensor):
-        return X(
-            array1.value @ array2.value,
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if tf and isinstance(array1.value, tf.Tensor) and isinstance(array2.value, tf.Tensor):
-        return X(
-            array1.value @ array2.value,
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if jnp and isinstance(array1.value, jnp.ndarray) and isinstance(array2.value, jnp.ndarray):
-        return X(
-            array1.value @ array2.value,
-            framework=array1.framework,
-            device=array1.device,
-        )
+    value1 = array1.value if isinstance(array1, Array) else array1
+    value2 = array2.value if isinstance(array2, Array) else array2
 
-    raise TypeError(f"Unsupported framework type: {type(array1.value)} and {type(array2.value)}")
+    if isinstance(value1, np.ndarray) and isinstance(value2, np.ndarray):
+        return Array(value1 @ value2)
+    if torch and isinstance(value1, torch.Tensor) and isinstance(value2, torch.Tensor):
+        return Array(value1 @ value2)
+    if tf and isinstance(value1, tf.Tensor) and isinstance(value2, tf.Tensor):
+        return Array(value1 @ value2)
+    if jnp and isinstance(value1, jnp.ndarray) and isinstance(value2, jnp.ndarray):
+        return Array(value1 @ value2)
+
+    raise TypeError(f"Unsupported framework type: {type(value1)} and {type(value2)}")
 
 
-def dot(array1: X, array2: X) -> X:
+def dot(array1: Array, array2: Array) -> Array:
     """
     Dot product of two arrays.
 
@@ -1268,32 +1082,19 @@ def dot(array1: X, array2: X) -> X:
             or if the input arrays are not of the same framework type.
 
     """
-    if isinstance(array1.value, np.ndarray) and isinstance(array2.value, np.ndarray):
-        return X(
-            array1.value.dot(array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if torch and isinstance(array1.value, torch.Tensor) and isinstance(array2.value, torch.Tensor):
-        return X(
-            array1.value.dot(array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if tf and isinstance(array1.value, tf.Tensor) and isinstance(array2.value, tf.Tensor):
-        return X(
-            array1.value.dot(array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
-    if jnp and isinstance(array1.value, jnp.ndarray) and isinstance(array2.value, jnp.ndarray):
-        return X(
-            array1.value.dot(array2.value),
-            framework=array1.framework,
-            device=array1.device,
-        )
+    value1 = array1.value if isinstance(array1, Array) else array1
+    value2 = array2.value if isinstance(array2, Array) else array2
 
-    raise TypeError(f"Unsupported framework type: {type(array1.value)} and {type(array2.value)}")
+    if isinstance(value1, np.ndarray) and isinstance(value2, np.ndarray):
+        return Array(value1.dot(value2))
+    if torch and isinstance(value1, torch.Tensor) and isinstance(value2, torch.Tensor):
+        return Array(value1.dot(value2))
+    if tf and isinstance(value1, tf.Tensor) and isinstance(value2, tf.Tensor):
+        return Array(value1.dot(value2))
+    if jnp and isinstance(value1, jnp.ndarray) and isinstance(value2, jnp.ndarray):
+        return Array(value1.dot(value2))
+
+    raise TypeError(f"Unsupported framework type: {type(value1)} and {type(value2)}")
 
 
 def zeros(
@@ -1301,7 +1102,7 @@ def zeros(
     shape: tuple[int, ...],
     dtype: Any = None,  # noqa: ANN401
     device: SupportedDevices = SupportedDevices.CPU,
-) -> X:
+) -> Array:
     """
     Create a tensor of zeros.
 
@@ -1320,7 +1121,7 @@ def zeros(
     return numpy_to_X(x, framework=framework, device=device)
 
 
-def power(array: X, p: float) -> X:
+def power(array: Array, p: float) -> Array:
     """
     Raise array to p power.
 
@@ -1335,35 +1136,21 @@ def power(array: X, p: float) -> X:
         TypeError: If the type is not supported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.power(array.value, p),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.pow(array.value, p),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
-        return X(
-            tf.pow(array.value, p),
-            framework=array.framework,
-            device=array.device,
-        )
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.power(array.value, p),
-            framework=array.framework,
-            device=array.device,
-        )
+    value = array.value if isinstance(array, Array) else array
 
-    raise TypeError(f"Unsupported type: {type(array.value)}")
+    if isinstance(value, np.ndarray):
+        return Array(np.power(value, p))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.pow(value, p))
+    if tf and isinstance(value, tf.Tensor):
+        return Array(tf.pow(value, p))
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.power(value, p))
+
+    raise TypeError(f"Unsupported type: {type(value)}")
 
 
-def ipow[T: X](array1: T, p: float) -> T:
+def ipow[T: Array](array1: T, p: float) -> T:
     """
     Element-wise in-place power of an array.
 
@@ -1378,23 +1165,25 @@ def ipow[T: X](array1: T, p: float) -> T:
         TypeError: if the framework type of the input arrays is unsupported
 
     """
-    if isinstance(array1.value, np.ndarray):
-        array1.value **= p
+    value = array1.value if isinstance(array1, Array) else array1
+
+    if isinstance(value, np.ndarray):
+        value **= p
         return array1
-    if torch and isinstance(array1.value, torch.Tensor):
-        array1.value **= p
+    if torch and isinstance(value, torch.Tensor):
+        value **= p
         return array1
-    if tf and isinstance(array1.value, tf.Tensor):
-        array1.value **= p
+    if tf and isinstance(value, tf.Tensor):
+        value **= p
         return array1
-    if jnp and isinstance(array1.value, jnp.ndarray):
-        array1.value **= p
+    if jnp and isinstance(value, jnp.ndarray):
+        value **= p
         return array1
 
-    raise TypeError(f"Unsupported framework type: {type(array1.value)}")
+    raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def set_item(array: X, key: tuple[int, ...] | int, value: X) -> None:
+def set_item(array: Array, key: SupportsIndex | tuple[SupportsIndex, ...], value: Array) -> None:
     """
     Set the item at the specified index of the array to the given value.
 
@@ -1407,27 +1196,30 @@ def set_item(array: X, key: tuple[int, ...] | int, value: X) -> None:
         TypeError: If the type is not supported.
 
     """
-    if isinstance(array.value, np.ndarray) and isinstance(value.value, _np_types):
-        array.value[key] = value.value
+    array_value = array.value if isinstance(array, Array) else array
+    value_value = value.value if isinstance(value, Array) else value
+
+    if isinstance(array_value, np.ndarray) and isinstance(value_value, _np_types):
+        array_value[key] = value_value
         return
-    if torch and isinstance(array.value, torch.Tensor) and isinstance(value.value, _torch_types):
-        array.value[key] = value.value
+    if torch and isinstance(array_value, torch.Tensor) and isinstance(value_value, _torch_types):
+        array_value[key] = value_value
         return
-    if tf and isinstance(array.value, tf.Tensor) and isinstance(value.value, _tf_types):
-        array.value = tf.tensor_scatter_nd_update(
-            array.value,
+    if tf and isinstance(array_value, tf.Tensor) and isinstance(value_value, _tf_types):
+        array_value = tf.tensor_scatter_nd_update(
+            array_value,
             tf.expand_dims(tf.constant(key), axis=0),
-            tf.expand_dims(value.value, axis=0),
+            tf.expand_dims(value_value, axis=0),
         )
         return
-    if jnp and isinstance(array.value, jnp.ndarray) and isinstance(value.value, _jnp_types):
-        array.value = array.value.at[key].set(value.value)
+    if jnp and isinstance(array_value, jnp.ndarray) and isinstance(value_value, _jnp_types):
+        array_value = array_value.at[key].set(value_value)
         return
 
-    raise TypeError(f"Unsupported type: {type(array.value)} with value: {type(value.value)}")
+    raise TypeError(f"Unsupported type: {type(array_value)} with value: {type(value_value)}")
 
 
-def negative(array: X) -> X:
+def negative(array: Array) -> Array:
     """
     Negate array.
 
@@ -1441,35 +1233,21 @@ def negative(array: X) -> X:
         TypeError: If the type is not supported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            np.negative(array.value),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.neg(array.value),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
-        return X(
-            tf.negative(array.value),
-            framework=array.framework,
-            device=array.device,
-        )
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.negative(array.value),
-            framework=array.framework,
-            device=array.device,
-        )
+    value = array.value if isinstance(array, Array) else array
+
+    if isinstance(value, np.ndarray):
+        return Array(np.negative(value))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.neg(value))
+    if tf and isinstance(value, tf.Tensor):
+        return Array(tf.negative(value))
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.negative(value))
 
     raise TypeError(f"Unsupported type: {type(array.value)}")
 
 
-def absolute(array: X) -> X:
+def absolute(array: Array) -> Array:
     """
     Return the absolute value of a tensor.
 
@@ -1484,25 +1262,25 @@ def absolute(array: X) -> X:
 
     """
     if isinstance(array.value, np.ndarray):
-        return X(
+        return Array(
             np.abs(array.value),
             framework=array.framework,
             device=array.device,
         )
     if torch and isinstance(array.value, torch.Tensor):
-        return X(
+        return Array(
             torch.abs(array.value),
             framework=array.framework,
             device=array.device,
         )
     if tf and isinstance(array.value, tf.Tensor):
-        return X(
+        return Array(
             tf.abs(array.value),
             framework=array.framework,
             device=array.device,
         )
     if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
+        return Array(
             jnp.abs(array.value),
             framework=array.framework,
             device=array.device,
@@ -1511,7 +1289,7 @@ def absolute(array: X) -> X:
     raise TypeError(f"Unsupported type: {type(array.value)}")
 
 
-def astype(array: X, dtype: type[float | int | bool]) -> float | int | bool:
+def astype(array: Array, dtype: type[float | int | bool]) -> float | int | bool:
     """
     Cast array to a specified data type.
 
@@ -1538,7 +1316,7 @@ def astype(array: X, dtype: type[float | int | bool]) -> float | int | bool:
     raise TypeError(f"Unsupported type: {type(array.value)}")
 
 
-def norm(array: X, p: float = 2) -> X:
+def norm(array: Array, p: float = 2) -> Array:
     """
     Compute the norm of an array.
 
@@ -1553,29 +1331,15 @@ def norm(array: X, p: float = 2) -> X:
         TypeError: If the type is not supported.
 
     """
-    if isinstance(array.value, np.ndarray):
-        return X(
-            cast("SupportedXTypes", np.linalg.norm(array.value, ord=p)),
-            framework=array.framework,
-            device=array.device,
-        )
-    if torch and isinstance(array.value, torch.Tensor):
-        return X(
-            torch.norm(array.value, p=p),
-            framework=array.framework,
-            device=array.device,
-        )
-    if tf and isinstance(array.value, tf.Tensor):
-        return X(
-            tf.norm(array.value, ord=p),
-            framework=array.framework,
-            device=array.device,
-        )
-    if jnp and isinstance(array.value, jnp.ndarray):
-        return X(
-            jnp.linalg.norm(array.value, ord=p),
-            framework=array.framework,
-            device=array.device,
-        )
+    value = array.value if isinstance(array, Array) else array
 
-    raise TypeError(f"Unsupported type: {type(array.value)}")
+    if isinstance(value, np.ndarray):
+        return Array(cast("SupportedXTypes", np.linalg.norm(value, ord=p)))
+    if torch and isinstance(value, torch.Tensor):
+        return Array(torch.norm(value, p=p))
+    if tf and isinstance(value, tf.Tensor):
+        return Array(tf.norm(value, ord=p))
+    if jnp and isinstance(value, jnp.ndarray):
+        return Array(jnp.linalg.norm(value, ord=p))
+
+    raise TypeError(f"Unsupported type: {type(value)}")

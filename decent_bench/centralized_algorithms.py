@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.utils.parameter import X
+from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
     from decent_bench.costs import Cost
@@ -11,13 +11,13 @@ if TYPE_CHECKING:
 
 def gradient_descent(
     cost: "Cost",
-    x0: X | None,
+    x0: Array | None,
     *,
     step_size: float,
     max_iter: int,
     stop_tol: float | None,
     max_tol: float | None,
-) -> X:
+) -> Array:
     """
     Find the x that minimizes the cost function using gradient descent.
 
@@ -55,12 +55,12 @@ def gradient_descent(
 
 def accelerated_gradient_descent(
     cost: "Cost",
-    x0: X | None,
+    x0: Array | None,
     *,
     max_iter: int,
     stop_tol: float | None,
     max_tol: float | None,
-) -> X:
+) -> Array:
     r"""
     Find the x that minimizes the cost function using accelerated gradient descent.
 
@@ -115,7 +115,7 @@ def accelerated_gradient_descent(
     return x
 
 
-def proximal_solver(cost: "Cost", y: X, rho: float) -> X:
+def proximal_solver(cost: "Cost", y: Array, rho: float) -> Array:
     """
     Find the proximal at y using accelerated gradient descent.
 

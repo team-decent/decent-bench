@@ -6,7 +6,7 @@ from types import MappingProxyType
 
 from decent_bench.costs import Cost
 from decent_bench.schemes import AgentActivationScheme
-from decent_bench.utils.parameter import X
+from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedXTypes
 
 
@@ -17,9 +17,9 @@ class Agent:
         self._id = agent_id
         self._cost = cost
         self._activation = activation
-        self._x_history: list[X] = []
-        self._auxiliary_variables: dict[str, X] = {}
-        self._received_messages: dict[Agent, X] = {}
+        self._x_history: list[Array] = []
+        self._auxiliary_variables: dict[str, Array] = {}
+        self._received_messages: dict[Agent, Array] = {}
         self._n_sent_messages = 0
         self._n_received_messages = 0
         self._n_sent_messages_dropped = 0
@@ -51,7 +51,7 @@ class Agent:
     loss = cost
 
     @property
-    def x(self) -> X:
+    def x(self) -> Array:
         """
         Local optimization variable x.
 
@@ -64,25 +64,25 @@ class Agent:
         return self._x_history[-1]
 
     @x.setter
-    def x(self, x: X) -> None:
+    def x(self, x: Array) -> None:
         self._x_history.append(x)
 
     @property
-    def messages(self) -> Mapping[Agent, X]:
+    def messages(self) -> Mapping[Agent, Array]:
         """Messages received by neighbors."""
         return MappingProxyType(self._received_messages)
 
     @property
-    def aux_vars(self) -> dict[str, X]:
+    def aux_vars(self) -> dict[str, Array]:
         """Auxiliary optimization variables used by algorithms that require more variables than x."""
         return self._auxiliary_variables
 
     def initialize(
         self,
         *,
-        x: X | None = None,
-        aux_vars: dict[str, X] | None = None,
-        received_msgs: dict[Agent, X] | None = None,
+        x: Array | None = None,
+        aux_vars: dict[str, Array] | None = None,
+        received_msgs: dict[Agent, Array] | None = None,
     ) -> None:
         """
         Initialize local variables and messages before running an algorithm.
@@ -100,19 +100,19 @@ class Agent:
         if received_msgs:
             self._received_messages = received_msgs
 
-    def _call_counting_function(self, x: X) -> float:
+    def _call_counting_function(self, x: Array) -> float:
         self._n_function_calls += 1
         return self._cost.__class__.function(self.cost, x)
 
-    def _call_counting_gradient(self, x: X) -> X:
+    def _call_counting_gradient(self, x: Array) -> Array:
         self._n_gradient_calls += 1
         return self._cost.__class__.gradient(self.cost, x)
 
-    def _call_counting_hessian(self, x: X) -> X:
+    def _call_counting_hessian(self, x: Array) -> Array:
         self._n_hessian_calls += 1
         return self._cost.__class__.hessian(self.cost, x)
 
-    def _call_counting_proximal(self, y: X, rho: float) -> X:
+    def _call_counting_proximal(self, y: Array, rho: float) -> Array:
         self._n_proximal_calls += 1
         return self._cost.__class__.proximal(self.cost, y, rho)
 
@@ -126,7 +126,7 @@ class AgentMetricsView:
     """Immutable view of agent that exposes useful properties for calculating metrics."""
 
     cost: Cost
-    x_history: list[X]
+    x_history: list[Array]
     n_function_calls: int
     n_gradient_calls: int
     n_hessian_calls: int

@@ -24,7 +24,7 @@ from decent_bench.schemes import (
     UniformActivationRate,
     UniformDropRate,
 )
-from decent_bench.utils.parameter import X
+from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 if TYPE_CHECKING:
@@ -50,7 +50,7 @@ class BenchmarkProblem:
     """
 
     network_structure: AnyGraph
-    x_optimal: X
+    x_optimal: Array
     costs: Sequence[Cost]
     agent_activations: Sequence[AgentActivationScheme]
     message_compression: CompressionScheme

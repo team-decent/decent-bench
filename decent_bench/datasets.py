@@ -5,10 +5,10 @@ from typing import TypeAlias
 from sklearn import datasets
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.utils.parameter import X
+from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
-DatasetPartition: TypeAlias = tuple[X, X]  # noqa: UP040
+DatasetPartition: TypeAlias = tuple[Array, Array]  # noqa: UP040
 """Tuple of (A, b) representing one dataset partition."""
 
 
