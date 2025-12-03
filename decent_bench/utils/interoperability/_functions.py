@@ -47,18 +47,24 @@ with contextlib.suppress(ImportError, ModuleNotFoundError):
     jax = _jax
 
 if TYPE_CHECKING:
+    from jax import Array as JaxArray
+    from tensorflow import Tensor as TfTensor
     from torch import Tensor as TorchTensor
 
 
-def to_numpy(array: Array | SupportedArrayTypes) -> NDArray[Any]:
+def to_numpy(array: Array | SupportedArrayTypes, device: SupportedDevices = SupportedDevices.CPU) -> NDArray[Any]:  # noqa: ARG001
     """
     Convert input array to a NumPy array.
 
     Args:
         array (Array | SupportedArrayTypes): Input Array
+        device (SupportedDevices): Device of the input array.
 
     Returns:
         NDArray: Converted NumPy array.
+
+    Note:
+        The `device` parameter is currently not used in this function but is included for API consistency.
 
     """
     value = array.value if isinstance(array, Array) else array
@@ -74,12 +80,13 @@ def to_numpy(array: Array | SupportedArrayTypes) -> NDArray[Any]:
     return np.array(value)
 
 
-def to_torch(array: Array | SupportedArrayTypes) -> TorchTensor:
+def to_torch(array: Array | SupportedArrayTypes, device: SupportedDevices) -> TorchTensor:
     """
     Convert input array to a PyTorch tensor.
 
     Args:
         array (Array | SupportedArrayTypes): Input Array
+        device (SupportedDevices): Device of the input array.
 
     Returns:
         torch.Tensor: Converted PyTorch tensor.
@@ -92,16 +99,86 @@ def to_torch(array: Array | SupportedArrayTypes) -> TorchTensor:
         raise ImportError("PyTorch is not installed.")
 
     value = array.value if isinstance(array, Array) else array
+    framework_device = _device_literal_to_framework_device(device, SupportedFrameworks.TORCH)
 
     if isinstance(value, torch.Tensor):
         return cast("TorchTensor", value)
     if isinstance(value, np.ndarray | np.generic):
-        return cast("TorchTensor", torch.from_numpy(value))
+        return cast("TorchTensor", torch.from_numpy(value).to(framework_device))
     if tf and isinstance(value, tf.Tensor):
-        return cast("TorchTensor", torch.tensor(value))
+        return cast("TorchTensor", torch.tensor(value.cpu(), device=framework_device))
     if jnp and isinstance(value, jnp.ndarray | jnp.generic):
-        return cast("TorchTensor", torch.from_numpy(np.array(value)))
-    return cast("TorchTensor", torch.tensor(value))
+        return cast("TorchTensor", torch.from_numpy(np.array(value)).to(framework_device))
+    return cast("TorchTensor", torch.tensor(value, device=framework_device))
+
+
+def to_tensorflow(array: Array | SupportedArrayTypes, device: SupportedDevices) -> TfTensor:
+    """
+    Convert input array to a TensorFlow tensor.
+
+    Args:
+        array (Array | SupportedArrayTypes): Input Array
+        device (SupportedDevices): Device of the input array.
+
+    Returns:
+        tf.Tensor: Converted TensorFlow tensor.
+
+    Raises:
+        ImportError: if TensorFlow is not installed.
+
+    """
+    if not tf:
+        raise ImportError("TensorFlow is not installed.")
+
+    value = array.value if isinstance(array, Array) else array
+    framework_device = _device_literal_to_framework_device(device, SupportedFrameworks.TENSORFLOW)
+
+    if isinstance(value, tf.Tensor):
+        with tf.device(framework_device):
+            return cast("TfTensor", value)
+    if isinstance(value, np.ndarray | np.generic):
+        with tf.device(framework_device):
+            return cast("TfTensor", tf.convert_to_tensor(value))
+    if torch and isinstance(value, torch.Tensor):
+        with tf.device(framework_device):
+            return cast("TfTensor", tf.convert_to_tensor(value.cpu()))  # pyright: ignore[reportArgumentType]
+    if jnp and isinstance(value, jnp.ndarray | jnp.generic):
+        with tf.device(framework_device):
+            return cast("TfTensor", tf.convert_to_tensor(value))  # pyright: ignore[reportArgumentType]
+    with tf.device(framework_device):
+        return cast("TfTensor", tf.convert_to_tensor(value))  # pyright: ignore[reportArgumentType]
+
+
+def to_jax(array: Array | SupportedArrayTypes, device: SupportedDevices) -> JaxArray:
+    """
+    Convert input array to a JAX array.
+
+    Args:
+        array (Array | SupportedArrayTypes): Input Array
+        device (SupportedDevices): Device of the input array.
+
+    Returns:
+        jax.numpy.ndarray: Converted JAX array.
+
+    Raises:
+        ImportError: if JAX is not installed.
+
+    """
+    if not jnp:
+        raise ImportError("JAX is not installed.")
+
+    value = array.value if isinstance(array, Array) else array
+    framework_device = _device_literal_to_framework_device(device, SupportedFrameworks.JAX)
+
+    if isinstance(value, jnp.ndarray | jnp.generic):
+        return cast("JaxArray", value.to_device(framework_device))
+    if isinstance(value, np.ndarray | np.generic):
+        return cast("JaxArray", jnp.array(value, device=framework_device))
+    if torch and isinstance(value, torch.Tensor):
+        return cast("JaxArray", jnp.array(value, device=framework_device))
+    if tf and isinstance(value, tf.Tensor):
+        return cast("JaxArray", jnp.array(value, device=framework_device))
+    return cast("JaxArray", jnp.array(value, device=framework_device))
 
 
 def to_array(array: SupportedArrayTypes) -> Array:
@@ -642,7 +719,7 @@ def eye_like(array: Array) -> Array:
     raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def eye(n: int, framework: SupportedFrameworks, device: SupportedDevices = SupportedDevices.CPU) -> Array:
+def eye(n: int, framework: SupportedFrameworks, device: SupportedDevices) -> Array:
     """
     Create an identity matrix of size n x n in the specified framework.
 
@@ -831,7 +908,7 @@ def astype(array: Array, dtype: type[float | int | bool]) -> float | int | bool:
     value = array.value if isinstance(array, Array) else array
 
     if isinstance(value, _np_types):
-        return dtype(value.item() if hasattr(value, "item") else value)
+        return dtype(value.item() if hasattr(value, "item") else value)  # pyright: ignore[reportAttributeAccessIssue]
     if torch and isinstance(value, torch.Tensor):
         return dtype(value.item())
     if tf and isinstance(value, tf.Tensor):

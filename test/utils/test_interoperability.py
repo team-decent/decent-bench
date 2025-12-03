@@ -261,7 +261,7 @@ def test_to_numpy_frameworks(framework: str, device: str):
         ),
     ],
 )
-def test_from_numpy_frameworks(framework, device: str):
+def test_numpy_to_frameworks_like(framework, device: str):
     """Test from_numpy conversion for all frameworks and devices."""
 
     like = create_array([1, 2], framework, device)
@@ -271,6 +271,168 @@ def test_from_numpy_frameworks(framework, device: str):
     out = iop.numpy_to_array_like(np_arr, like)
 
     assert isinstance(out, type(like.value)), f"Expected type {type(like.value)}, got {type(out)}"
+
+
+# ============================================================================
+# Tests for Interoperability.to_torch
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    "framework,device",
+    [
+        pytest.param(
+            "torch",
+            "cpu",
+            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+        ),
+        pytest.param(
+            "torch",
+            "gpu",
+            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "cpu",
+            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "gpu",
+            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+        ),
+        pytest.param(
+            "jax",
+            "cpu",
+            marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
+        ),
+        pytest.param(
+            "jax",
+            "gpu",
+            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+        ),
+    ],
+)
+def test_to_torch_frameworks(framework: str, device: str):
+    """Test to_torch conversion for all frameworks and devices."""
+    data = [1, 2, 3]
+    arr = create_array(data, framework, device)
+    out = iop.to_torch(arr, SupportedDevices(device))
+
+    assert isinstance(out, torch.Tensor), f"Expected torch.Tensor, got {type(out)}"
+    assert out.device.type == ("cuda" if device == "gpu" and TORCH_CUDA_AVAILABLE else "cpu"), (
+        f"Expected device {device}, got {out.device.type}"
+    )
+    equals = create_array(data, "torch", device)
+    assert_arrays_equal(out, equals, "torch")
+
+
+# ============================================================================
+# Tests for Interoperability.to_tensorflow
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    "framework,device",
+    [
+        pytest.param(
+            "torch",
+            "cpu",
+            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+        ),
+        pytest.param(
+            "torch",
+            "gpu",
+            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "cpu",
+            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "gpu",
+            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+        ),
+        pytest.param(
+            "jax",
+            "cpu",
+            marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
+        ),
+        pytest.param(
+            "jax",
+            "gpu",
+            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+        ),
+    ],
+)
+def test_to_tensorflow_frameworks(framework: str, device: str):
+    """Test to_tensorflow conversion for all frameworks and devices."""
+    data = [1, 2, 3]
+    arr = create_array(data, framework, device)
+    out = iop.to_tensorflow(arr, SupportedDevices(device))
+
+    assert isinstance(out, tf.Tensor), f"Expected tf.Tensor, got {type(out)}"
+    assert ("gpu" if device == "gpu" and TF_GPU_AVAILABLE else "cpu") in out.device.lower(), (
+        f"Expected device {device}, got {out.device}"
+    )
+    equals = create_array(data, "tensorflow", device)
+    assert_arrays_equal(out, equals, "tensorflow")
+
+
+# ============================================================================
+# Tests for Interoperability.to_jax
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    "framework,device",
+    [
+        pytest.param(
+            "torch",
+            "cpu",
+            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+        ),
+        pytest.param(
+            "torch",
+            "gpu",
+            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "cpu",
+            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "gpu",
+            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+        ),
+        pytest.param(
+            "jax",
+            "cpu",
+            marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
+        ),
+        pytest.param(
+            "jax",
+            "gpu",
+            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+        ),
+    ],
+)
+def test_to_jax_frameworks(framework: str, device: str):
+    """Test to_jax conversion for all frameworks and devices."""
+    data = [1, 2, 3]
+    arr = create_array(data, framework, device)
+    out = iop.to_jax(arr, SupportedDevices(device))
+
+    assert isinstance(out, jax.Array), f"Expected jax.Array, got {type(out)}"
+    assert out.device.platform == ("gpu" if device == "gpu" and JAX_GPU_AVAILABLE else "cpu"), (
+        f"Expected device {device}, got {out.device.platform}"
+    )
+    equals = create_array(data, "jax", device)
+    assert_arrays_equal(out, equals, "jax")
 
 
 # ============================================================================
@@ -786,7 +948,7 @@ def test_stack_frameworks(framework: str, device: str, dim: int):
     # Compute expected result using numpy
     np_arr1 = create_array(data1, "numpy")
     np_arr2 = create_array(data2, "numpy")
-    expected = np.stack([np_arr1, np_arr2], axis=dim)
+    expected = np.stack([np_arr1.value, np_arr2.value], axis=dim)
 
     assert_arrays_equal(stacked, expected, framework)
     assert_same_type(stacked, framework)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ._decorators import autodecorate_cost_method
 from ._functions import (
     argmax,
     argmin,
@@ -25,7 +26,9 @@ from ._functions import (
     stack,
     sum,  # noqa: A004
     to_array,
+    to_jax,
     to_numpy,
+    to_tensorflow,
     to_torch,
     transpose,
     zeros,
@@ -75,6 +78,8 @@ __all__ = [  # noqa: RUF022
     "to_array",
     "to_numpy",
     "to_torch",
+    "to_tensorflow",
+    "to_jax",
     "transpose",
     "zeros",
     "zeros_like",
@@ -94,4 +99,6 @@ __all__ = [  # noqa: RUF022
     "power",
     "sqrt",
     "sub",
+    # From _helpers
+    "autodecorate_cost_method",
 ]

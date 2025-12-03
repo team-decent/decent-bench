@@ -21,7 +21,7 @@ class Array:  # noqa: PLR0904
         value: SupportedArrayTypes,
     ):
         """
-        Initialize the X object.
+        Initialize the Array object.
 
         Can be initialized either by providing a tensor-like `value`,
         framework and its device or using one of the methods in
@@ -35,7 +35,7 @@ class Array:  # noqa: PLR0904
 
     def __add__(self, other: Array | SupportedArrayTypes) -> Array:
         """
-        Add another X object or a scalar to this one.
+        Add another Array object or SupportedArrayTypes to this one.
 
         Args:
             other: The object to add.
@@ -50,7 +50,7 @@ class Array:  # noqa: PLR0904
 
     def __sub__(self, other: Array | SupportedArrayTypes) -> Array:
         """
-        Subtract another X object or a scalar from this one.
+        Subtract another Array object or a scalar from this one.
 
         Args:
             other: The object to subtract.
@@ -76,7 +76,7 @@ class Array:  # noqa: PLR0904
 
     def __mul__(self, other: Array | SupportedArrayTypes) -> Array:
         """
-        Multiply this object by another X object or a scalar.
+        Multiply this object by another Array object or a scalar.
 
         Args:
             other: The object to multiply by.
@@ -89,7 +89,7 @@ class Array:  # noqa: PLR0904
 
     def __truediv__(self, other: Array | SupportedArrayTypes) -> Array:
         """
-        Divide this object by another X object or a scalar.
+        Divide this object by another Array object or a scalar.
 
         Args:
             other: The object to divide by.
@@ -102,7 +102,7 @@ class Array:  # noqa: PLR0904
 
     def __matmul__(self, other: Array | SupportedArrayTypes) -> Array:
         """
-        Perform matrix multiplication with another X object.
+        Perform matrix multiplication with another Array object.
 
         Args:
             other: The object to multiply with.
@@ -115,7 +115,7 @@ class Array:  # noqa: PLR0904
 
     def __rmatmul__(self, other: SupportedArrayTypes) -> Array:
         """
-        Perform right-side matrix multiplication with another X object.
+        Perform right-side matrix multiplication with another Array object.
 
         Args:
             other: The object to multiply with.
@@ -295,7 +295,7 @@ class Array:  # noqa: PLR0904
 
     def __repr__(self) -> str:
         """Return the official string representation of the object."""
-        return f"X({self.value!r})"
+        return f"Array({self.value!r})"
 
     def __str__(self) -> str:
         """Return the user-friendly string representation of the object."""

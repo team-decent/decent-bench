@@ -6,6 +6,7 @@ from functools import cached_property
 import numpy as np
 import numpy.linalg as la
 from numpy import float64
+from numpy.typing import NDArray
 from scipy import special
 
 import decent_bench.centralized_algorithms as ca
@@ -145,8 +146,8 @@ class QuadraticCost(Cost):
     """
 
     def __init__(self, A: Array, b: Array, c: float):  # noqa: N803
-        self.A = iop.to_numpy(A)
-        self.b = iop.to_numpy(b)
+        self.A: NDArray[float64] = iop.to_numpy(A)
+        self.b: NDArray[float64] = iop.to_numpy(b)
 
         if self.A.ndim != 2:
             raise ValueError("Matrix A must be 2D")
@@ -214,33 +215,35 @@ class QuadraticCost(Cost):
             return 0
         return np.nan
 
-    def function(self, x: Array) -> float:
+    @iop.autodecorate_cost_method(Cost.function)
+    def function(self, x: NDArray[float64]) -> float:
         r"""
         Evaluate function at x.
 
         .. math:: \frac{1}{2} \mathbf{x}^T \mathbf{Ax} + \mathbf{b}^T \mathbf{x} + c
         """
-        x_np = iop.to_numpy(x)
-        return float(0.5 * x_np.dot(self.A.dot(x_np)) + self.b.dot(x_np) + self.c)
+        return float(0.5 * x.dot(self.A.dot(x)) + self.b.dot(x) + self.c)
 
-    def gradient(self, x: Array) -> Array:
+    @iop.autodecorate_cost_method(Cost.gradient)
+    def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
         r"""
         Gradient at x.
 
         .. math:: \frac{1}{2} (\mathbf{A}+\mathbf{A}^T)\mathbf{x} + \mathbf{b}
         """
-        ret: Array = self.A_sym @ x + self.b
-        return ret
+        return self.A_sym @ x + self.b
 
-    def hessian(self, x: Array) -> Array:  # noqa: ARG002
+    @iop.autodecorate_cost_method(Cost.hessian)
+    def hessian(self, x: NDArray[float64]) -> NDArray[float64]:  # noqa: ARG002
         r"""
         Hessian at x.
 
         .. math:: \frac{1}{2} (\mathbf{A}+\mathbf{A}^T)
         """
-        return iop.to_array(self.A_sym)  # Using iop.to_array because self.A_sym is a numpy array
+        return self.A_sym
 
-    def proximal(self, y: Array, rho: float) -> Array:
+    @iop.autodecorate_cost_method(Cost.proximal)
+    def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
         r"""
         Proximal at y.
 
@@ -254,10 +257,9 @@ class QuadraticCost(Cost):
         for the general proximal definition.
         """
         lhs = rho * self.A_sym + np.eye(self.A.shape[1])
-        rhs = iop.to_numpy(y) - self.b * rho
+        rhs = y - self.b * rho
 
-        # Using iop.to_array because the result is a numpy array
-        return iop.to_array(np.asarray(np.linalg.solve(lhs, rhs), dtype=float64))
+        return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
 
     def __add__(self, other: Cost) -> Cost:
         """
@@ -412,9 +414,9 @@ class LogisticRegressionCost(Cost):
         if class_labels.shape != (2,):
             raise ValueError("Vector b must contain exactly two classes")
 
-        b[np.where(b == class_labels[0])], b[np.where(b == class_labels[1])] = 0, 1
-        self.A = iop.to_numpy(A)
-        self.b = iop.to_numpy(b)
+        self.A: NDArray[float64] = iop.to_numpy(A)
+        self.b: NDArray[float64] = iop.to_numpy(b)
+        self.b[np.where(self.b == class_labels[0])], self.b[np.where(self.b == class_labels[1])] = 0, 1
 
     @property
     def shape(self) -> tuple[int, ...]:  # noqa: D102
@@ -452,7 +454,8 @@ class LogisticRegressionCost(Cost):
         """
         return 0
 
-    def function(self, x: Array) -> float:
+    @iop.autodecorate_cost_method(Cost.function)
+    def function(self, x: NDArray[float64]) -> float:
         r"""
         Evaluate function at x.
 
@@ -461,21 +464,24 @@ class LogisticRegressionCost(Cost):
             + ( \mathbf{1} - \mathbf{b} )^T
                 \log( 1 - \sigma(\mathbf{Ax}) ) \right]
         """
-        Ax = self.A.dot(iop.to_numpy(x))  # noqa: N806
+        Ax = self.A.dot(x)  # noqa: N806
         neg_log_sig = np.logaddexp(0.0, -Ax)
         cost = self.b.dot(neg_log_sig) + (1 - self.b).dot(Ax + neg_log_sig)
         return float(cost)
 
-    def gradient(self, x: Array) -> Array:
+    @iop.autodecorate_cost_method(Cost.gradient)
+    def gradient(self, x: NDArray[float64]) -> NDArray[float64]:
         r"""
         Gradient at x.
 
         .. math:: \mathbf{A}^T (\sigma(\mathbf{Ax}) - \mathbf{b})
         """
-        sig = special.expit(self.A.dot(iop.to_numpy(x)))
-        return iop.to_array(self.A.T.dot(sig - self.b))
+        sig = special.expit(self.A.dot(x))
+        res: NDArray[float64] = self.A.T.dot(sig - self.b)
+        return res
 
-    def hessian(self, x: Array) -> Array:
+    @iop.autodecorate_cost_method(Cost.hessian)
+    def hessian(self, x: NDArray[float64]) -> NDArray[float64]:
         r"""
         Hessian at x.
 
@@ -484,9 +490,10 @@ class LogisticRegressionCost(Cost):
         where :math:`\mathbf{D}` is a diagonal matrix such that
         :math:`\mathbf{D}_i = \sigma(\mathbf{Ax}_i) (1-\sigma(\mathbf{Ax}_i))`
         """
-        sig = special.expit(self.A.dot(iop.to_numpy(x)))
+        sig = special.expit(self.A.dot(x))
         D = np.diag(sig * (1 - sig))  # noqa: N806
-        return iop.to_array(self.A.T.dot(D).dot(self.A))
+        res: NDArray[float64] = self.A.T.dot(D).dot(self.A)
+        return res
 
     def proximal(self, y: Array, rho: float) -> Array:
         """

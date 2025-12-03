@@ -46,12 +46,15 @@ class P2PNetwork:
         Set custom consensus weights matrix.
 
         A simple way to create custom weights is to start using numpy and then
-        use :func:`decent_bench.utils.interoperability.numpy_to_array` to convert to an X object
-        with the desired framework and device. For an example see :func:`decent_bench.utils.interoperability.zeros`.
+        use :func:`~decent_bench.utils.interoperability.numpy_to_array` to convert to an
+        :class:`~decent_bench.utils.array.Array` object with the desired framework and device.
+        For an example see :func:`~decent_bench.utils.interoperability.zeros`.
 
-        If not set, the weights matrix is initialized using the Metropolis-Hastings method.
-        Weights will be overwritten if framework or device differ from
-        ``Agent.cost.framework`` or ``Agent.cost.device``.
+        Note:
+            If not set, the weights matrix is initialized using the Metropolis-Hastings method.
+            Weights will be overwritten if framework or device differ from
+            ``Agent.cost.framework`` or ``Agent.cost.device``.
+
         """
         self.W = weights
 

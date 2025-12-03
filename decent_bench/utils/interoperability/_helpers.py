@@ -26,8 +26,7 @@ def _device_literal_to_framework_device(device: SupportedDevices, framework: Sup
     if framework == SupportedFrameworks.NUMPY:
         return device  # NumPy does not have explicit device management
     if torch and framework == SupportedFrameworks.TORCH:
-        torch_device = "cuda" if device == SupportedDevices.GPU else "cpu"
-        return torch.device(torch_device)
+        return "cuda" if device == SupportedDevices.GPU else "cpu"
     if tf and framework == SupportedFrameworks.TENSORFLOW:
         return f"/{device.value}:0"
     if jax and framework == SupportedFrameworks.JAX:
@@ -82,7 +81,7 @@ def _framework_device_of_array(array: Array) -> tuple[SupportedFrameworks, Suppo
         device_type = SupportedDevices.GPU if "gpu" in device_str or "cuda" in device_str else SupportedDevices.CPU
         return SupportedFrameworks.TENSORFLOW, device_type
     if jnp and isinstance(value, _jnp_types):
-        backend = jnp.array(value).device.platform  # pyright: ignore[reportAttributeAccessIssue]
+        backend = value.device.platform  # pyright: ignore[reportAttributeAccessIssue]
         device_type = SupportedDevices.GPU if backend == "gpu" else SupportedDevices.CPU
         return SupportedFrameworks.JAX, device_type
 
