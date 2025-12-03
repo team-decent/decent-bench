@@ -42,6 +42,8 @@ nitpick_ignore = [
     ("py:class", "numpy._typing._nested_sequence._NestedSequence"),
     ("py:class", "T"),
     ("py:class", "TorchTensor"),
+    ("py:class", "TensorFlowTensor"),
+    ("py:class", "JaxArray"),
 ]
 
 intersphinx_mapping = {

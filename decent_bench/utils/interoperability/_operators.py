@@ -315,7 +315,7 @@ def dot(array1: Array | SupportedArrayTypes, array2: Array | SupportedArrayTypes
         array2 (Array | SupportedArrayTypes): Second input array.
 
     Returns:
-        Array: Result of matrix multiplication in the same framework type as the inputs.
+        Array: Result of the dot product in the same framework type as the inputs.
 
     Raises:
         TypeError: if the framework type of the input arrays is unsupported
@@ -371,7 +371,7 @@ def ipow[T: Array](array: T, p: float) -> T:
     Element-wise in-place power of an array.
 
     Args:
-        array (Array | SupportedArrayTypes): First input array.
+        array (Array | SupportedArrayTypes): Input array.
         p (float): The power.
 
     Returns:

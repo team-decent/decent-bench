@@ -23,7 +23,7 @@ def gradient_descent(
 
     Args:
         cost: cost function to minimize
-        x0: initial guess, defaults to ``np.zeros()`` if ``None`` is provided
+        x0: initial guess, defaults to ``iop.zeros()`` if ``None`` is provided
         step_size: scaling factor for each update
         max_iter: maximum number of iterations to run
         stop_tol: early stopping criteria - stop if ``norm(x_new - x) <= stop_tol``
@@ -66,7 +66,7 @@ def accelerated_gradient_descent(
 
     Args:
         cost: cost function to minimize
-        x0: initial guess, defaults to ``np.zeros()`` if ``None`` is provided
+        x0: initial guess, defaults to ``iop.zeros()`` if ``None`` is provided
         max_iter: maximum number of iterations to run
         stop_tol: early stopping criteria - stop if ``norm(x_new - x) <= stop_tol``
         max_tol: maximum tolerated ``norm(x_new - x)`` at the end

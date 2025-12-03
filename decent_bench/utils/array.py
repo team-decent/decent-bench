@@ -23,12 +23,11 @@ class Array:  # noqa: PLR0904
         """
         Initialize the Array object.
 
-        Can be initialized either by providing a tensor-like `value`,
-        framework and its device or using one of the methods in
-        :mod:`decent_bench.utils.interoperability`.
+        Can be initialized either by providing a array-like `value` or using one
+        of the methods in :mod:`decent_bench.utils.interoperability`.
 
         Args:
-            value (SupportedArrayTypes): The tensor-like object to wrap.
+            value (SupportedArrayTypes): The array-like object to wrap.
 
         """
         self.value: SupportedArrayTypes = value
@@ -66,7 +65,7 @@ class Array:  # noqa: PLR0904
         Handle right-side subtraction.
 
         Args:
-            other: The scalar to subtract from.
+            other: The object to be subtracted from.
 
         Returns:
             The result of the subtraction.
@@ -131,7 +130,7 @@ class Array:  # noqa: PLR0904
         Handle right-side multiplication.
 
         Args:
-            other: The scalar to multiply by.
+            other: The object to multiply by.
 
         Returns:
             The result of the multiplication.
@@ -144,7 +143,7 @@ class Array:  # noqa: PLR0904
         Handle right-side division.
 
         Args:
-            other: The scalar to be divided by the object.
+            other: The object to be divided by the array.
 
         Returns:
             The result of the division.

@@ -38,15 +38,18 @@ def _device_literal_to_framework_device(device: SupportedDevices, framework: Sup
 
 def _return_array(array: SupportedArrayTypes) -> Array:
     """
-    Wrap input array in an Array object.
+    Wrap a framework-native array in an `Array` wrapper.
 
-    Used to return wrapped arrays from internally defined functions during type checking but not during runtime.
+    This helper standardizes return types across interoperability functions,
+    returning the same framework-native object at runtime, while providing a
+    typed `Array` during static type checking.
 
     Args:
         array (SupportedArrayTypes): Input array (NumPy, torch, tf, jax).
 
     Returns:
-        Array: Wrapped array.
+        Array: Wrapped array (type-only during static analysis; at runtime
+        this returns the original framework-native value).
 
     """
     if not TYPE_CHECKING:
@@ -81,7 +84,7 @@ def _framework_device_of_array(array: Array) -> tuple[SupportedFrameworks, Suppo
         device_type = SupportedDevices.GPU if "gpu" in device_str or "cuda" in device_str else SupportedDevices.CPU
         return SupportedFrameworks.TENSORFLOW, device_type
     if jnp and isinstance(value, _jnp_types):
-        backend = value.device.platform  # pyright: ignore[reportAttributeAccessIssue]
+        backend = value.device.platform  # type: ignore[union-attr]
         device_type = SupportedDevices.GPU if backend == "gpu" else SupportedDevices.CPU
         return SupportedFrameworks.JAX, device_type
 

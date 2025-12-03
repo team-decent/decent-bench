@@ -48,7 +48,7 @@ with contextlib.suppress(ImportError, ModuleNotFoundError):
 
 if TYPE_CHECKING:
     from jax import Array as JaxArray
-    from tensorflow import Tensor as TfTensor
+    from tensorflow import Tensor as TensorFlowTensor
     from torch import Tensor as TorchTensor
 
 
@@ -112,7 +112,7 @@ def to_torch(array: Array | SupportedArrayTypes, device: SupportedDevices) -> To
     return cast("TorchTensor", torch.tensor(value, device=framework_device))
 
 
-def to_tensorflow(array: Array | SupportedArrayTypes, device: SupportedDevices) -> TfTensor:
+def to_tensorflow(array: Array | SupportedArrayTypes, device: SupportedDevices) -> TensorFlowTensor:
     """
     Convert input array to a TensorFlow tensor.
 
@@ -135,18 +135,18 @@ def to_tensorflow(array: Array | SupportedArrayTypes, device: SupportedDevices) 
 
     if isinstance(value, tf.Tensor):
         with tf.device(framework_device):
-            return cast("TfTensor", value)
+            return cast("TensorFlowTensor", value)
     if isinstance(value, np.ndarray | np.generic):
         with tf.device(framework_device):
-            return cast("TfTensor", tf.convert_to_tensor(value))
+            return cast("TensorFlowTensor", tf.convert_to_tensor(value))
     if torch and isinstance(value, torch.Tensor):
         with tf.device(framework_device):
-            return cast("TfTensor", tf.convert_to_tensor(value.cpu()))  # pyright: ignore[reportArgumentType]
+            return cast("TensorFlowTensor", tf.convert_to_tensor(value.cpu()))  # pyright: ignore[reportArgumentType]
     if jnp and isinstance(value, jnp.ndarray | jnp.generic):
         with tf.device(framework_device):
-            return cast("TfTensor", tf.convert_to_tensor(value))  # pyright: ignore[reportArgumentType]
+            return cast("TensorFlowTensor", tf.convert_to_tensor(value))  # pyright: ignore[reportArgumentType]
     with tf.device(framework_device):
-        return cast("TfTensor", tf.convert_to_tensor(value))  # pyright: ignore[reportArgumentType]
+        return cast("TensorFlowTensor", tf.convert_to_tensor(value))  # pyright: ignore[reportArgumentType]
 
 
 def to_jax(array: Array | SupportedArrayTypes, device: SupportedDevices) -> JaxArray:
@@ -158,7 +158,7 @@ def to_jax(array: Array | SupportedArrayTypes, device: SupportedDevices) -> JaxA
         device (SupportedDevices): Device of the input array.
 
     Returns:
-        jax.numpy.ndarray: Converted JAX array.
+        jax.Array: Converted JAX array.
 
     Raises:
         ImportError: if JAX is not installed.
@@ -183,11 +183,12 @@ def to_jax(array: Array | SupportedArrayTypes, device: SupportedDevices) -> JaxA
 
 def to_array(array: SupportedArrayTypes) -> Array:
     """
-    Convert input array to an Array object.
+    Wrap a framework-native array in an `Array`.
 
-    Should only be used when you are sure that the input is of correct type and not already an Array.
-    Use :func:`decent_bench.utils.interoperability.numpy_to_array` when you are unsure or want to convert from a
-    NumPy array to the desired framework and device.
+    Use this when the input is already in the desired framework/device but
+    needs to conform to the `Array` wrapper API. When converting specifically
+    from NumPy to a target framework/device, prefer
+    :func:`decent_bench.utils.interoperability.numpy_to_array`.
 
     Args:
         array (SupportedArrayTypes): Input array (NumPy, torch, tf, jax).
@@ -206,6 +207,9 @@ def numpy_to_array(
 ) -> Array:
     """
     Convert a NumPy array to the specified framework type.
+
+    See :func:`decent_bench.utils.interoperability.numpy_to_array_like` if you want to convert a NumPy array to match
+    the framework and device of another array.
 
     Args:
         array (NDArray): Input NumPy array.
@@ -240,7 +244,9 @@ def numpy_to_array(
 
 def numpy_to_array_like(array: NDArray[Any], like: Array) -> Array:
     """
-    Convert a NumPy array to the specified framework type.
+    Convert a NumPy array to the framework/device of `like`.
+
+    See :func:`decent_bench.utils.interoperability.numpy_to_array` for details.
 
     Args:
         array (NDArray): Input NumPy array.
@@ -815,8 +821,8 @@ def shape(array: Array) -> tuple[int, ...]:
 
 
 def zeros(
-    framework: SupportedFrameworks,
     shape: tuple[int, ...],
+    framework: SupportedFrameworks,
     device: SupportedDevices,
     dtype: Any | None = None,  # noqa: ANN401
 ) -> Array:
@@ -824,8 +830,8 @@ def zeros(
     Create a tensor of zeros.
 
     Args:
-        framework (SupportedFrameworks): The framework to use ("numpy", "torch", "tensorflow", "jax").
         shape (tuple): The shape of the tensor.
+        framework (SupportedFrameworks): The framework to use ("numpy", "torch", "tensorflow", "jax").
         device (SupportedDevices): The device to place the tensor on.
         dtype (Any | None): The data type of the tensor. Defaults to None.
 
@@ -892,14 +898,14 @@ def get_item(array: Array, key: ArrayKey) -> Array:
 
 def astype(array: Array, dtype: type[float | int | bool]) -> float | int | bool:
     """
-    Cast an array of a single element to a specified data type.
+    Cast a single-element array to a Python scalar of the specified type.
 
     Args:
         array (Array): The tensor.
         dtype (float | int | bool): The target data type.
 
     Returns:
-        float | int | bool: The casted tensor.
+        float | int | bool: The casted scalar value.
 
     Raises:
         TypeError: If the type is not supported.

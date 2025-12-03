@@ -1566,7 +1566,7 @@ def test_shape_frameworks(framework: str, device: str) -> None:
 )
 def test_zeros_frameworks(framework: str, device: str, shape: tuple[int, ...]) -> None:
     """Test zeros function for all frameworks and devices."""
-    zeros_arr = iop.zeros(SupportedFrameworks(framework), shape, SupportedDevices(device))
+    zeros_arr = iop.zeros(framework=SupportedFrameworks(framework), shape=shape, device=SupportedDevices(device))
     expected = np.zeros(shape)
 
     assert_shapes_equal(zeros_arr, expected, framework)

@@ -54,7 +54,7 @@ class DGD(Algorithm):
 
         """
         for agent in network.agents():
-            x0 = iop.zeros(agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
+            x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(network.neighbors(agent), x0))
 
         W = network.weights  # noqa: N806
@@ -106,7 +106,7 @@ class ATC(Algorithm):
 
         """
         for agent in network.agents():
-            x0 = iop.zeros(agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
+            x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
             agent.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(network.neighbors(agent), x0),
