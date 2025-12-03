@@ -63,7 +63,7 @@ class SyntheticClassificationData(Dataset):
                 n_classes=self.n_classes,
                 random_state=seed,
             )
-            A = iop.numpy_to_array(partition[0], self.framework, self.device)  # noqa: N806
-            b = iop.numpy_to_array(partition[1], self.framework, self.device)
+            A = iop.to_array(partition[0], self.framework, self.device)  # noqa: N806
+            b = iop.to_array(partition[1], self.framework, self.device)
             res.append((A, b))
         return res

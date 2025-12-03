@@ -268,7 +268,7 @@ def test_numpy_to_frameworks_like(framework, device: str):
 
     data = [1, 2, 3]
     np_arr = np.array(data, dtype=np.float32)
-    out = iop.numpy_to_array_like(np_arr, like)
+    out = iop.to_array_like(np_arr, like)
 
     assert isinstance(out, type(like.value)), f"Expected type {type(like.value)}, got {type(out)}"
 

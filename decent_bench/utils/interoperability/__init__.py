@@ -15,8 +15,6 @@ from ._functions import (
     mean,
     min,  # noqa: A004
     norm,
-    numpy_to_array,
-    numpy_to_array_like,
     ones_like,
     rand_like,
     randn_like,
@@ -26,6 +24,7 @@ from ._functions import (
     stack,
     sum,  # noqa: A004
     to_array,
+    to_array_like,
     to_jax,
     to_numpy,
     to_tensorflow,
@@ -65,8 +64,6 @@ __all__ = [  # noqa: RUF022
     "mean",
     "min",
     "norm",
-    "numpy_to_array",
-    "numpy_to_array_like",
     "ones_like",
     "rand_like",
     "randn_like",
@@ -76,6 +73,7 @@ __all__ = [  # noqa: RUF022
     "stack",
     "sum",
     "to_array",
+    "to_array_like",
     "to_numpy",
     "to_torch",
     "to_tensorflow",

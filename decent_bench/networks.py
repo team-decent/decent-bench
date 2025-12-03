@@ -46,7 +46,7 @@ class P2PNetwork:
         Set custom consensus weights matrix.
 
         A simple way to create custom weights is to start using numpy and then
-        use :func:`~decent_bench.utils.interoperability.numpy_to_array` to convert to an
+        use :func:`~decent_bench.utils.interoperability.to_array` to convert to an
         :class:`~decent_bench.utils.array.Array` object with the desired framework and device.
         For an example see :func:`~decent_bench.utils.interoperability.zeros`.
 
@@ -81,7 +81,7 @@ class P2PNetwork:
         for i in agents:
             W[i, i] = 1 - sum(W[i])
 
-        self.W = iop.numpy_to_array(W, agents[0].cost.framework, agents[0].cost.device)
+        self.W = iop.to_array(W, agents[0].cost.framework, agents[0].cost.device)
         return self.W
 
     @cached_property
@@ -98,7 +98,7 @@ class P2PNetwork:
             for j in self.neighbors(i):
                 A[i, j] = 1
 
-        return iop.numpy_to_array(A, agents[0].cost.framework, agents[0].cost.device)
+        return iop.to_array(A, agents[0].cost.framework, agents[0].cost.device)
 
     def agents(self) -> list[Agent]:
         """Get all agents in the network."""

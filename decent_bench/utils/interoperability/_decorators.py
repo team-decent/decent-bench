@@ -8,8 +8,8 @@ from decent_bench.utils.array import Array
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
-from ._functions import to_jax, to_numpy, to_tensorflow, to_torch
-from ._helpers import _framework_device_of_array, _return_array
+from ._functions import to_array_like, to_jax, to_numpy, to_tensorflow, to_torch
+from ._helpers import _framework_device_of_array
 
 if TYPE_CHECKING:
     from decent_bench.costs import Cost
@@ -44,6 +44,7 @@ def autodecorate_cost_method[T: Callable[..., Any]](superclass_method: T) -> Cal
 
     Note:
         Does not work on __add__ or similar special methods.
+        Only works when first argument is ``x`` or ``y``.
 
     """
 
@@ -55,8 +56,17 @@ def autodecorate_cost_method[T: Callable[..., Any]](superclass_method: T) -> Cal
             return_type_annotation = None
 
         @wraps(func)
-        def wrapper(self: Cost, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        def wrapper(self: Cost, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401, PLR0912
             converter = _get_converter(self.framework)
+
+            if len(args) > 0:
+                x_like = args[0]
+            elif "x" in kwargs:
+                x_like = kwargs["x"]
+            elif "y" in kwargs:
+                x_like = kwargs["y"]
+            else:
+                raise ValueError("First argument must be 'x' or 'y' for autodecorate_cost_method to work.")
 
             new_args = []
             for arg in args:
@@ -87,7 +97,7 @@ def autodecorate_cost_method[T: Callable[..., Any]](superclass_method: T) -> Cal
             result = func(self, *new_args, **new_kwargs)
 
             if return_type_annotation is Array:
-                return _return_array(result)
+                return to_array_like(result, x_like)
 
             return result
 

@@ -181,38 +181,19 @@ def to_jax(array: Array | SupportedArrayTypes, device: SupportedDevices) -> JaxA
     return cast("JaxArray", jnp.array(value, device=framework_device))
 
 
-def to_array(array: SupportedArrayTypes) -> Array:
-    """
-    Wrap a framework-native array in an `Array`.
-
-    Use this when the input is already in the desired framework/device but
-    needs to conform to the `Array` wrapper API. When converting specifically
-    from NumPy to a target framework/device, prefer
-    :func:`decent_bench.utils.interoperability.numpy_to_array`.
-
-    Args:
-        array (SupportedArrayTypes): Input array (NumPy, torch, tf, jax).
-
-    Returns:
-        Array: Converted Array object.
-
-    """
-    return _return_array(array)
-
-
-def numpy_to_array(
-    array: NDArray[Any],
+def to_array(
+    array: SupportedArrayTypes,
     framework: SupportedFrameworks,
-    device: SupportedDevices = SupportedDevices.CPU,
+    device: SupportedDevices,
 ) -> Array:
     """
-    Convert a NumPy array to the specified framework type.
+    Convert an array to the specified framework type.
 
-    See :func:`decent_bench.utils.interoperability.numpy_to_array_like` if you want to convert a NumPy array to match
+    See :func:`decent_bench.utils.interoperability.to_array_like` if you want to convert an array to match
     the framework and device of another array.
 
     Args:
-        array (NDArray): Input NumPy array.
+        array (SupportedArrayTypes): Input array.
         framework (SupportedFrameworks): Target framework type (e.g., "torch", "tf").
         device (SupportedDevices): Target device ("cpu" or "gpu").
 
@@ -223,33 +204,26 @@ def numpy_to_array(
         TypeError: if the framework type of `framework` is unsupported.
 
     """
-    if not isinstance(array, np.ndarray | np.generic):
-        raise TypeError(f"Input must be a NumPy array, got {type(array)}")
-
     if framework == SupportedFrameworks.NUMPY:
-        return _return_array(array)
-
-    framework_device = _device_literal_to_framework_device(device, framework)
-
+        return _return_array(to_numpy(array, device))
     if torch and framework == SupportedFrameworks.TORCH:
-        return _return_array(torch.from_numpy(array).to(framework_device))
+        return _return_array(to_torch(array, device))
     if tf and framework == SupportedFrameworks.TENSORFLOW:
-        with tf.device(framework_device):
-            return _return_array(tf.convert_to_tensor(array))
+        return _return_array(to_tensorflow(array, device))
     if jnp and framework == SupportedFrameworks.JAX:
-        return _return_array(jnp.array(array, device=framework_device))
+        return _return_array(to_jax(array, device))
 
     raise TypeError(f"Unsupported framework type: {framework}")
 
 
-def numpy_to_array_like(array: NDArray[Any], like: Array) -> Array:
+def to_array_like(array: SupportedArrayTypes, like: Array) -> Array:
     """
-    Convert a NumPy array to the framework/device of `like`.
+    Convert an array to the framework/device of `like`.
 
-    See :func:`decent_bench.utils.interoperability.numpy_to_array` for details.
+    See :func:`decent_bench.utils.interoperability.to_array` for details.
 
     Args:
-        array (NDArray): Input NumPy array.
+        array (SupportedArrayTypes): Input array.
         like (Array): Array whose framework and device to match.
 
     Returns:
@@ -258,7 +232,7 @@ def numpy_to_array_like(array: NDArray[Any], like: Array) -> Array:
     """
     framework, device = _framework_device_of_array(like)
 
-    return numpy_to_array(array, framework, device)
+    return to_array(array, framework, device)
 
 
 def sum(  # noqa: A001
@@ -841,7 +815,7 @@ def zeros(
     """
     x = np.zeros(shape, dtype=dtype)
 
-    return numpy_to_array(x, framework=framework, device=device)
+    return to_array(x, framework=framework, device=device)
 
 
 def set_item(

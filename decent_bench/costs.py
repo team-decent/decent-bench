@@ -272,8 +272,11 @@ class QuadraticCost(Cost):
         if self.shape != other.shape:
             raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
         if isinstance(other, QuadraticCost):
-            # Using iop.to_array because the result is a numpy array
-            return QuadraticCost(iop.to_array(self.A + other.A), iop.to_array(self.b + other.b), self.c + other.c)
+            return QuadraticCost(
+                iop.to_array(self.A + other.A, self.framework, self.device),
+                iop.to_array(self.b + other.b, self.framework, self.device),
+                self.c + other.c,
+            )
         if isinstance(other, LinearRegressionCost):
             return self + other.inner
         return SumCost([self, other])
@@ -517,8 +520,8 @@ class LogisticRegressionCost(Cost):
             raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
         if isinstance(other, LogisticRegressionCost):
             return LogisticRegressionCost(
-                iop.to_array(np.vstack([self.A, other.A])),
-                iop.to_array(np.concatenate([self.b, other.b])),
+                iop.to_array(np.vstack([self.A, other.A]), self.framework, self.device),
+                iop.to_array(np.concatenate([self.b, other.b]), self.framework, self.device),
             )
         return SumCost([self, other])
 

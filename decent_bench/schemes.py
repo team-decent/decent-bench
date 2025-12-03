@@ -61,7 +61,7 @@ class Quantization(CompressionScheme):
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
         res = np.vectorize(lambda x: float(f"%.{self.n_significant_digits - 1}e" % x))(iop.to_numpy(msg))
-        return iop.numpy_to_array_like(res, msg)
+        return iop.to_array_like(res, msg)
 
 
 class DropScheme(ABC):
