@@ -42,6 +42,22 @@ dev = [
   "types-tensorflow",
   "jax",
 ]
+dev-gpu = [
+  "hatch",
+  "mypy",
+  "pytest",
+  "ruff",
+  "scipy-stubs",
+  "sphinx",
+  "types-networkx",
+  "types-tabulate",
+  "torch",
+  "torchvision",
+  "tensorflow[and-cuda]",
+  "types-tensorflow",
+  "jax[cuda12]",
+]
+
 
 [build-system]
 requires = ["hatchling"]
@@ -54,6 +70,14 @@ envlist = ["dev", "mypy", "pytest", "ruff", "sphinx"]
 description = "Generate dev venv with all dependencies, active with `source .tox/dev/bin/activate`"
 deps = [
   ".[dev]",
+  "git+https://github.com/microsoft/python-type-stubs.git@main",
+  "git+https://github.com/pydata/pydata-sphinx-theme.git@main"
+]
+
+[tool.tox.env.dev-gpu]
+description = "Generate dev venv with all dependencies including GPU support, active with `source .tox/dev-gpu/bin/activate`"
+deps = [
+  ".[dev-gpu]",
   "git+https://github.com/microsoft/python-type-stubs.git@main",
   "git+https://github.com/pydata/pydata-sphinx-theme.git@main"
 ]
