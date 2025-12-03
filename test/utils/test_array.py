@@ -1,11 +1,9 @@
 import numpy as np
 import pytest
 from numpy.testing import assert_array_almost_equal as np_assert_almost_equal
-from numpy.testing import assert_array_equal as np_assert_equal
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.utils.array import Array
-from decent_bench.utils.types import SupportedArrayTypes
 
 try:
     import torch
