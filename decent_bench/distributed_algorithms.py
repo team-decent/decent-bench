@@ -3,7 +3,6 @@ from dataclasses import dataclass
 
 from decent_bench.networks import P2PNetwork
 from decent_bench.utils import interoperability as iop
-from decent_bench.utils.array import Array
 
 
 class Algorithm(ABC):
@@ -906,9 +905,8 @@ class DLM(Algorithm):
         all_agents = network.agents()
         for i in all_agents:
             x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            y = iop.zeros(
-                framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device
-            )  # y must be initialized to zero
+            # y must be initialized to zero
+            y = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             i.initialize(
                 x=x0,
                 aux_vars={"y": y},

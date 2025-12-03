@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, TypeAlias, Union
+from typing import TYPE_CHECKING, SupportsIndex, TypeAlias, Union
 
 if TYPE_CHECKING:
     import jax
@@ -11,16 +11,22 @@ if TYPE_CHECKING:
     import tensorflow as tf
     import torch
 
-TensorLike: TypeAlias = Union["numpy.ndarray", "torch.Tensor", "tf.Tensor", "jax.Array"]  # noqa: UP040
+ArrayLike: TypeAlias = Union["numpy.ndarray", "torch.Tensor", "tf.Tensor", "jax.Array"]  # noqa: UP040
 """
-Type alias for Tensor-like types supported in decent-bench, including NumPy arrays,
+Type alias for array-like types supported in decent-bench, including NumPy arrays,
 PyTorch tensors, TensorFlow tensors, and JAX arrays.
 """
 
-SupportedXTypes: TypeAlias = TensorLike | float | int  # noqa: UP040
+SupportedArrayTypes: TypeAlias = ArrayLike | float | int  # noqa: UP040
 """
 Type alias for supported types for optimization variables in decent-bench,
-including Tensor-like types and scalars.
+including array-like types and scalars.
+"""
+
+ArrayKey: TypeAlias = SupportsIndex | tuple[SupportsIndex, ...] | slice | tuple[SupportsIndex | slice, ...]  # noqa: UP040
+"""
+Type alias for valid keys used to index into supported array types.
+Includes single indices, tuples of indices, slices, and tuples of slices.
 """
 
 

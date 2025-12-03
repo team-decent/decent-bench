@@ -34,14 +34,14 @@ class SyntheticClassificationData(Dataset):
 
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0917
         self,
         n_partitions: int,
         n_classes: int,
         n_samples_per_partition: int,
         n_features: int,
         framework: SupportedFrameworks,
-        device: SupportedDevices,
+        device: SupportedDevices = SupportedDevices.CPU,
         seed: int | None = None,
     ):
         self.n_partitions = n_partitions
@@ -63,7 +63,7 @@ class SyntheticClassificationData(Dataset):
                 n_classes=self.n_classes,
                 random_state=seed,
             )
-            A = iop.numpy_to_X(partition[0], self.framework, self.device)  # noqa: N806
-            b = iop.numpy_to_X(partition[1], self.framework, self.device)
+            A = iop.numpy_to_array(partition[0], self.framework, self.device)  # noqa: N806
+            b = iop.numpy_to_array(partition[1], self.framework, self.device)
             res.append((A, b))
         return res

@@ -1,20 +1,24 @@
-"""Custom parameter class."""
-
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Self, SupportsIndex
+from typing import Self
 
-from . import interoperability as iop
-from .types import SupportedXTypes
+import decent_bench.utils.interoperability as iop
+from decent_bench.utils.types import ArrayKey, SupportedArrayTypes
 
 
 class Array:  # noqa: PLR0904
-    """A wrapper class for :type:`SupportedXTypes` objects to enable operator overloading."""
+    """
+    A wrapper class for :data:`decent_bench.utils.types.SupportedArrayTypes` objects to enable operator overloading.
+
+    This class allows for seamless interoperability between different tensor frameworks
+    by overloading standard arithmetic operators.It supports operations such as addition, subtraction, multiplication,
+    division, matrix multiplication, and in-place operations.
+    """
 
     def __init__(
         self,
-        value: SupportedXTypes,
+        value: SupportedArrayTypes,
     ):
         """
         Initialize the X object.
@@ -24,12 +28,12 @@ class Array:  # noqa: PLR0904
         :mod:`decent_bench.utils.interoperability`.
 
         Args:
-            value (SupportedXTypes): The tensor-like object to wrap.
+            value (SupportedArrayTypes): The tensor-like object to wrap.
 
         """
-        self.value: SupportedXTypes = value
+        self.value: SupportedArrayTypes = value
 
-    def __add__(self, other: Array | SupportedXTypes) -> Array:
+    def __add__(self, other: Array | SupportedArrayTypes) -> Array:
         """
         Add another X object or a scalar to this one.
 
@@ -40,14 +44,11 @@ class Array:  # noqa: PLR0904
             The result of the addition.
 
         """
-        if not TYPE_CHECKING:
-            return self.value + (other.value if isinstance(other, Array) else other)
+        return iop.add(self, other)
 
-        if isinstance(other, Array):
-            return iop.add(self, other)
-        return iop.add(self, Array(other))
+    __radd__ = __add__
 
-    def __sub__(self, other: Array | SupportedXTypes) -> Array:
+    def __sub__(self, other: Array | SupportedArrayTypes) -> Array:
         """
         Subtract another X object or a scalar from this one.
 
@@ -58,14 +59,22 @@ class Array:  # noqa: PLR0904
             The result of the subtraction.
 
         """
-        if not TYPE_CHECKING:
-            return self.value - (other.value if isinstance(other, Array) else other)
+        return iop.sub(self, other)
 
-        if isinstance(other, Array):
-            return iop.sub(self, other)
-        return iop.sub(self, Array(other))
+    def __rsub__(self, other: SupportedArrayTypes) -> Array:
+        """
+        Handle right-side subtraction.
 
-    def __mul__(self, other: Array | SupportedXTypes) -> Array:
+        Args:
+            other: The scalar to subtract from.
+
+        Returns:
+            The result of the subtraction.
+
+        """
+        return iop.sub(other, self)
+
+    def __mul__(self, other: Array | SupportedArrayTypes) -> Array:
         """
         Multiply this object by another X object or a scalar.
 
@@ -76,14 +85,9 @@ class Array:  # noqa: PLR0904
             The result of the multiplication.
 
         """
-        if not TYPE_CHECKING:
-            return self.value * (other.value if isinstance(other, Array) else other)
+        return iop.mul(self, other)
 
-        if isinstance(other, Array):
-            return iop.mul(self, other)
-        return iop.mul(self, Array(other))
-
-    def __truediv__(self, other: Array | SupportedXTypes) -> Array:
+    def __truediv__(self, other: Array | SupportedArrayTypes) -> Array:
         """
         Divide this object by another X object or a scalar.
 
@@ -94,14 +98,9 @@ class Array:  # noqa: PLR0904
             The result of the division.
 
         """
-        if not TYPE_CHECKING:
-            return self.value / (other.value if isinstance(other, Array) else other)
+        return iop.div(self, other)
 
-        if isinstance(other, Array):
-            return iop.div(self, other)
-        return iop.div(self, Array(other))
-
-    def __matmul__(self, other: Array | SupportedXTypes) -> Array:
+    def __matmul__(self, other: Array | SupportedArrayTypes) -> Array:
         """
         Perform matrix multiplication with another X object.
 
@@ -112,14 +111,9 @@ class Array:  # noqa: PLR0904
             The result of the matrix multiplication.
 
         """
-        if not TYPE_CHECKING:
-            return self.value @ (other.value if isinstance(other, Array) else other)
+        return iop.matmul(self, other)
 
-        if isinstance(other, Array):
-            return iop.matmul(self, other)
-        return iop.matmul(self, Array(other))
-
-    def __rmatmul__(self, other: SupportedXTypes) -> Array:
+    def __rmatmul__(self, other: SupportedArrayTypes) -> Array:
         """
         Perform right-side matrix multiplication with another X object.
 
@@ -130,15 +124,9 @@ class Array:  # noqa: PLR0904
             The result of the matrix multiplication.
 
         """
-        if not TYPE_CHECKING:
-            return other @ self.value
+        return iop.matmul(other, self)
 
-        return iop.matmul(Array(other), self)
-
-    __radd__ = __add__
-    __rsub__ = __sub__
-
-    def __rmul__(self, other: SupportedXTypes) -> Array:
+    def __rmul__(self, other: SupportedArrayTypes) -> Array:
         """
         Handle right-side multiplication.
 
@@ -149,12 +137,9 @@ class Array:  # noqa: PLR0904
             The result of the multiplication.
 
         """
-        if not TYPE_CHECKING:
-            return other * self.value
+        return iop.mul(other, self)
 
-        return iop.mul(Array(other), self)
-
-    def __rtruediv__(self, other: SupportedXTypes) -> Array:
+    def __rtruediv__(self, other: SupportedArrayTypes) -> Array:
         """
         Handle right-side division.
 
@@ -165,10 +150,7 @@ class Array:  # noqa: PLR0904
             The result of the division.
 
         """
-        if not TYPE_CHECKING:
-            return other / self.value
-
-        return iop.div(Array(other), self)
+        return iop.div(other, self)
 
     def __pow__(self, other: float) -> Array:
         """
@@ -181,12 +163,9 @@ class Array:  # noqa: PLR0904
             The result of the operation.
 
         """
-        if not TYPE_CHECKING:
-            return self.value**other
-
         return iop.power(self, other)
 
-    def __iadd__(self, other: Array | SupportedXTypes) -> Self:
+    def __iadd__(self, other: Array | SupportedArrayTypes) -> Self:
         """
         Perform in-place addition.
 
@@ -197,15 +176,9 @@ class Array:  # noqa: PLR0904
             The modified object.
 
         """
-        if not TYPE_CHECKING:
-            self.value += other.value if isinstance(other, Array) else other
-            return self.value
+        return iop.iadd(self, other)
 
-        if isinstance(other, Array):
-            return iop.iadd(self, other)
-        return iop.iadd(self, Array(other))
-
-    def __isub__(self, other: Array | SupportedXTypes) -> Self:
+    def __isub__(self, other: Array | SupportedArrayTypes) -> Self:
         """
         Perform in-place subtraction.
 
@@ -216,15 +189,9 @@ class Array:  # noqa: PLR0904
             The modified object.
 
         """
-        if not TYPE_CHECKING:
-            self.value -= other.value if isinstance(other, Array) else other
-            return self.value
+        return iop.isub(self, other)
 
-        if isinstance(other, Array):
-            return iop.isub(self, other)
-        return iop.isub(self, Array(other))
-
-    def __imul__(self, other: Array | SupportedXTypes) -> Self:
+    def __imul__(self, other: Array | SupportedArrayTypes) -> Self:
         """
         Perform in-place multiplication.
 
@@ -235,15 +202,9 @@ class Array:  # noqa: PLR0904
             The modified object.
 
         """
-        if not TYPE_CHECKING:
-            self.value *= other.value if isinstance(other, Array) else other
-            return self.value
+        return iop.imul(self, other)
 
-        if isinstance(other, Array):
-            return iop.imul(self, other)
-        return iop.imul(self, Array(other))
-
-    def __itruediv__(self, other: Array | SupportedXTypes) -> Self:
+    def __itruediv__(self, other: Array | SupportedArrayTypes) -> Self:
         """
         Perform in-place division.
 
@@ -254,13 +215,7 @@ class Array:  # noqa: PLR0904
             The modified object.
 
         """
-        if not TYPE_CHECKING:
-            self.value /= other.value if isinstance(other, Array) else other
-            return self.value
-
-        if isinstance(other, Array):
-            return iop.idiv(self, other)
-        return iop.idiv(self, Array(other))
+        return iop.idiv(self, other)
 
     def __ipow__(self, other: float) -> Self:
         """
@@ -273,10 +228,6 @@ class Array:  # noqa: PLR0904
             The modified object.
 
         """
-        if not TYPE_CHECKING:
-            self.value **= other
-            return self.value
-
         return iop.ipow(self, other)
 
     def __neg__(self) -> Array:
@@ -287,9 +238,6 @@ class Array:  # noqa: PLR0904
             The negated tensor.
 
         """
-        if not TYPE_CHECKING:
-            return -self.value
-
         return iop.negative(self)
 
     def __abs__(self) -> Array:
@@ -300,17 +248,14 @@ class Array:  # noqa: PLR0904
             The absolute value.
 
         """
-        if not TYPE_CHECKING:
-            return abs(self.value)
-
         return iop.absolute(self)
 
-    def __getitem__(self, key: SupportsIndex | tuple[SupportsIndex, ...]) -> Array:
+    def __getitem__(self, key: ArrayKey) -> Array:
         """
         Get an item or slice from the wrapped tensor.
 
         Args:
-            key: The key or slice.
+            key (ArrayKey): The key or slice.
 
         Returns:
             The resulting item or slice.
@@ -322,17 +267,17 @@ class Array:  # noqa: PLR0904
         if isinstance(self.value, (float, int, complex)):
             raise TypeError("Scalar values do not support indexing.")
 
-        if not TYPE_CHECKING:
-            return self.value[key]
+        return iop.get_item(self, key)
 
-        return Array(self.value[key])  # type: ignore[index]
-
-    def __setitem__(self, key: SupportsIndex | tuple[SupportsIndex, ...], value: Array | SupportedXTypes) -> None:
+    def __setitem__(self, key: ArrayKey, value: Array | SupportedArrayTypes) -> None:
         """
         Set an item or slice in the wrapped tensor.
 
+        Be aware that this operation may not be supported by all underlying frameworks.
+        JAX and TensorFlow, for example, use immutable arrays by default.
+
         Args:
-            key: The key or slice.
+            key (ArrayKey): The key or slice.
             value: The value to set.
 
         Raises:
@@ -342,10 +287,7 @@ class Array:  # noqa: PLR0904
         if isinstance(self.value, (float, int, complex)):
             raise TypeError("Scalar values do not support indexing.")
 
-        if isinstance(value, Array):
-            iop.set_item(self, key, value)
-            return
-        iop.set_item(self, key, Array(value))
+        iop.set_item(self, key, value)
 
     def __hash__(self) -> int:
         """Return the hash of the wrapped tensor."""
@@ -371,9 +313,9 @@ class Array:  # noqa: PLR0904
             raise TypeError("Scalar values do not have length.")
         return len(self.value)
 
-    def __iter__(self) -> Iterator[SupportedXTypes]:
+    def __iter__(self) -> Iterator[SupportedArrayTypes]:
         """
-        Return an iterator over the first dimension, yielding TensorLike elements.
+        Return an iterator over the first dimension, yielding array elements.
 
         Raises:
             TypeError: If the wrapped value is a scalar.
@@ -383,7 +325,7 @@ class Array:  # noqa: PLR0904
             raise TypeError("Scalar values are not iterable.")
         return iter(self.value)
 
-    def __array__(self) -> SupportedXTypes:  # noqa: PLW3201
+    def __array__(self) -> SupportedArrayTypes:  # noqa: PLW3201
         """
         Return the underlying array-like object.
 

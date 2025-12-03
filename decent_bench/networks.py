@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
-from networkx import Graph
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
@@ -12,9 +11,9 @@ from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme
 from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
-    AgentGraph = Graph[Agent]
+    AgentGraph = nx.Graph[Agent]
 else:
-    AgentGraph = Graph
+    AgentGraph = nx.Graph
 
 
 class P2PNetwork:
@@ -47,12 +46,12 @@ class P2PNetwork:
         Set custom consensus weights matrix.
 
         A simple way to create custom weights is to start using numpy and then
-        use :func:`decent_bench.utils.interoperability.numpy_to_X` to convert to an X object
-        with the desired framework and device.
+        use :func:`decent_bench.utils.interoperability.numpy_to_array` to convert to an X object
+        with the desired framework and device. For an example see :func:`decent_bench.utils.interoperability.zeros`.
 
         If not set, the weights matrix is initialized using the Metropolis-Hastings method.
         Weights will be overwritten if framework or device differ from
-        ``agent.cost.framework`` or ``agent.cost.device``.
+        ``Agent.cost.framework`` or ``Agent.cost.device``.
         """
         self.W = weights
 
@@ -65,11 +64,7 @@ class P2PNetwork:
         """
         agents = self.agents()
 
-        if (
-            self.W is not None
-            and self.W.framework == agents[0].cost.framework
-            and self.W.device == agents[0].cost.device
-        ):
+        if self.W is not None:
             return self.W
 
         n = len(agents)
@@ -83,7 +78,7 @@ class P2PNetwork:
         for i in agents:
             W[i, i] = 1 - sum(W[i])
 
-        self.W = iop.numpy_to_X(W, agents[0].cost.framework, agents[0].cost.device)
+        self.W = iop.numpy_to_array(W, agents[0].cost.framework, agents[0].cost.device)
         return self.W
 
     @cached_property
@@ -100,7 +95,7 @@ class P2PNetwork:
             for j in self.neighbors(i):
                 A[i, j] = 1
 
-        return iop.numpy_to_X(A, agents[0].cost.framework, agents[0].cost.device)
+        return iop.numpy_to_array(A, agents[0].cost.framework, agents[0].cost.device)
 
     def agents(self) -> list[Agent]:
         """Get all agents in the network."""

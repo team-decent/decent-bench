@@ -79,7 +79,7 @@ def accelerated_gradient_descent(
         x that minimizes the cost function.
 
     """
-    if x0 is not None and x0.shape != cost.shape:
+    if x0 is not None and iop.shape(x0) != cost.shape:
         raise ValueError("x0 and cost function domain must have same shape")
     if cost.m_smooth == 0:
         raise ValueError("Function must not be affine")
@@ -127,11 +127,11 @@ def proximal_solver(cost: "Cost", y: Array, rho: float) -> Array:
         ValueError: if *cost*'s domain and *y* don't have the same shape, or if *rho* is not greater than 0
 
     """
-    if cost.shape != y.shape:
+    if cost.shape != iop.shape(y):
         raise ValueError("Cost function domain and y need to have the same shape")
     if rho <= 0:
         raise ValueError("Penalty term `rho` must be greater than 0")
     from decent_bench.costs import QuadraticCost  # noqa: PLC0415
 
-    proximal_cost = QuadraticCost(A=iop.eye_like(y) / rho, b=-y / rho, c=float(y.dot(y)) / (2 * rho)) + cost
+    proximal_cost = QuadraticCost(A=iop.eye_like(y) / rho, b=-y / rho, c=float(iop.dot(y, y)) / (2 * rho)) + cost
     return accelerated_gradient_descent(proximal_cost, y, max_iter=100, stop_tol=1e-10, max_tol=None)

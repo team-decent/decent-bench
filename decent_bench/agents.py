@@ -7,7 +7,6 @@ from types import MappingProxyType
 from decent_bench.costs import Cost
 from decent_bench.schemes import AgentActivationScheme
 from decent_bench.utils.array import Array
-from decent_bench.utils.types import SupportedXTypes
 
 
 class Agent:

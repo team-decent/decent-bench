@@ -5,7 +5,6 @@ from operator import add
 from typing import TYPE_CHECKING, Any
 
 import networkx as nx
-from networkx import Graph
 
 import decent_bench.centralized_algorithms as ca
 from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCost
@@ -28,9 +27,9 @@ from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 if TYPE_CHECKING:
-    AnyGraph = Graph[Any]
+    AnyGraph = nx.Graph[Any]
 else:
-    AnyGraph = Graph
+    AnyGraph = nx.Graph
 
 
 @dataclass(eq=False)

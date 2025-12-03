@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Any
 
 import numpy as np
 import numpy.linalg as la
 from numpy import float64
-from numpy.typing import NDArray
 from scipy import special
 
 import decent_bench.centralized_algorithms as ca
@@ -32,12 +30,24 @@ class Cost(ABC):
     @property
     @abstractmethod
     def framework(self) -> SupportedFrameworks:
-        """The framework used by this cost function."""
+        """
+        The framework used by this cost function.
+
+        Make sure that all :class:`decent_bench.utils.array.Array` objects returned by this cost function's methods
+        use this framework.
+
+        """
 
     @property
     @abstractmethod
     def device(self) -> SupportedDevices:
-        """The device used by this cost function."""
+        """
+        The device used by this cost function.
+
+        Make sure that all :class:`decent_bench.utils.array.Array` objects returned by this cost function's methods
+        use this device.
+
+        """
 
     @property
     @abstractmethod
@@ -219,7 +229,8 @@ class QuadraticCost(Cost):
 
         .. math:: \frac{1}{2} (\mathbf{A}+\mathbf{A}^T)\mathbf{x} + \mathbf{b}
         """
-        return self.A_sym @ x + self.b
+        ret: Array = self.A_sym @ x + self.b
+        return ret
 
     def hessian(self, x: Array) -> Array:  # noqa: ARG002
         r"""
@@ -227,7 +238,7 @@ class QuadraticCost(Cost):
 
         .. math:: \frac{1}{2} (\mathbf{A}+\mathbf{A}^T)
         """
-        return iop.numpy_to_X(self.A_sym, framework=self.framework, device=self.device)
+        return iop.to_array(self.A_sym)  # Using iop.to_array because self.A_sym is a numpy array
 
     def proximal(self, y: Array, rho: float) -> Array:
         r"""
@@ -244,11 +255,9 @@ class QuadraticCost(Cost):
         """
         lhs = rho * self.A_sym + np.eye(self.A.shape[1])
         rhs = iop.to_numpy(y) - self.b * rho
-        return iop.numpy_to_X(
-            np.asarray(np.linalg.solve(lhs, rhs), dtype=float64),
-            framework=self.framework,
-            device=self.device,
-        )
+
+        # Using iop.to_array because the result is a numpy array
+        return iop.to_array(np.asarray(np.linalg.solve(lhs, rhs), dtype=float64))
 
     def __add__(self, other: Cost) -> Cost:
         """
@@ -261,11 +270,8 @@ class QuadraticCost(Cost):
         if self.shape != other.shape:
             raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
         if isinstance(other, QuadraticCost):
-            return QuadraticCost(
-                iop.numpy_to_X(self.A + other.A, framework=self.framework, device=self.device),
-                iop.numpy_to_X(self.b + other.b, framework=self.framework, device=self.device),
-                self.c + other.c,
-            )
+            # Using iop.to_array because the result is a numpy array
+            return QuadraticCost(iop.to_array(self.A + other.A), iop.to_array(self.b + other.b), self.c + other.c)
         if isinstance(other, LinearRegressionCost):
             return self + other.inner
         return SumCost([self, other])
@@ -457,7 +463,7 @@ class LogisticRegressionCost(Cost):
         """
         Ax = self.A.dot(iop.to_numpy(x))  # noqa: N806
         neg_log_sig = np.logaddexp(0.0, -Ax)
-        cost = iop.to_numpy(self.b).dot(neg_log_sig) + (1 - self.b).dot(Ax + neg_log_sig)
+        cost = self.b.dot(neg_log_sig) + (1 - self.b).dot(Ax + neg_log_sig)
         return float(cost)
 
     def gradient(self, x: Array) -> Array:
@@ -467,7 +473,7 @@ class LogisticRegressionCost(Cost):
         .. math:: \mathbf{A}^T (\sigma(\mathbf{Ax}) - \mathbf{b})
         """
         sig = special.expit(self.A.dot(iop.to_numpy(x)))
-        return iop.numpy_to_X(self.A.T.dot(sig - self.b), framework=self.framework, device=self.device)
+        return iop.to_array(self.A.T.dot(sig - self.b))
 
     def hessian(self, x: Array) -> Array:
         r"""
@@ -480,7 +486,7 @@ class LogisticRegressionCost(Cost):
         """
         sig = special.expit(self.A.dot(iop.to_numpy(x)))
         D = np.diag(sig * (1 - sig))  # noqa: N806
-        return iop.numpy_to_X(self.A.T.dot(D).dot(self.A), framework=self.framework, device=self.device)
+        return iop.to_array(self.A.T.dot(D).dot(self.A))
 
     def proximal(self, y: Array, rho: float) -> Array:
         """
@@ -504,16 +510,8 @@ class LogisticRegressionCost(Cost):
             raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
         if isinstance(other, LogisticRegressionCost):
             return LogisticRegressionCost(
-                iop.numpy_to_X(
-                    np.vstack([self.A, other.A]),
-                    framework=self.framework,
-                    device=self.device,
-                ),
-                iop.numpy_to_X(
-                    np.concatenate([self.b, other.b]),
-                    framework=self.framework,
-                    device=self.device,
-                ),
+                iop.to_array(np.vstack([self.A, other.A])),
+                iop.to_array(np.concatenate([self.b, other.b])),
             )
         return SumCost([self, other])
 
