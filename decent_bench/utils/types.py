@@ -23,7 +23,7 @@ Type alias for supported types for optimization variables in decent-bench,
 including array-like types and scalars.
 """
 
-ArrayKey: TypeAlias = SupportsIndex | tuple[SupportsIndex, ...] | slice | tuple[SupportsIndex | slice, ...]  # noqa: UP040
+ArrayKey: TypeAlias = SupportsIndex | slice | tuple[SupportsIndex | slice, ...]  # noqa: UP040
 """
 Type alias for valid keys used to index into supported array types.
 Includes single indices, tuples of indices, slices, and tuples of slices.

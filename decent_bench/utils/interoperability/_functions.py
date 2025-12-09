@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import ArrayKey, SupportedArrayTypes, SupportedDevices, SupportedFrameworks
 
-from ._helpers import _device_literal_to_framework_device, _framework_device_of_array, _return_array
+from ._helpers import _device_literal_to_framework_device, _return_array, framework_device_of_array
 from ._imports_types import (
     _jax_key,
     _jnp_types,
@@ -182,7 +182,7 @@ def to_jax(array: Array | SupportedArrayTypes, device: SupportedDevices) -> JaxA
 
 
 def to_array(
-    array: SupportedArrayTypes,
+    array: Array | SupportedArrayTypes,
     framework: SupportedFrameworks,
     device: SupportedDevices,
 ) -> Array:
@@ -193,7 +193,7 @@ def to_array(
     the framework and device of another array.
 
     Args:
-        array (SupportedArrayTypes): Input array.
+        array (Array | SupportedArrayTypes): Input array.
         framework (SupportedFrameworks): Target framework type (e.g., "torch", "tf").
         device (SupportedDevices): Target device ("cpu" or "gpu").
 
@@ -216,21 +216,19 @@ def to_array(
     raise TypeError(f"Unsupported framework type: {framework}")
 
 
-def to_array_like(array: SupportedArrayTypes, like: Array) -> Array:
+def to_array_like(array: Array | SupportedArrayTypes, like: Array) -> Array:
     """
     Convert an array to the framework/device of `like`.
 
-    See :func:`decent_bench.utils.interoperability.to_array` for details.
-
     Args:
-        array (SupportedArrayTypes): Input array.
+        array (Array | SupportedArrayTypes): Input array.
         like (Array): Array whose framework and device to match.
 
     Returns:
         Array: Converted array in the specified framework type.
 
     """
-    framework, device = _framework_device_of_array(like)
+    framework, device = framework_device_of_array(like)
 
     return to_array(array, framework, device)
 
@@ -899,13 +897,21 @@ def astype(array: Array, dtype: type[float | int | bool]) -> float | int | bool:
     raise TypeError(f"Unsupported type: {type(value)}")
 
 
-def norm(array: Array, p: float = 2) -> Array:
+def norm(
+    array: Array,
+    p: float = 2,
+    dim: int | tuple[int, ...] | None = None,
+    keepdims: bool = False,
+) -> Array:
     """
     Compute the norm of an array.
 
     Args:
         array (Array): The tensor.
         p (float): The order of the norm.
+        dim (int | tuple[int, ...] | None): Dimension or dimensions along which to compute the norm.
+            If None, computes norm over flattened array.
+        keepdims (bool): If True, retains reduced dimensions with length 1.
 
     Returns:
         Array: The norm of the tensor.
@@ -917,12 +923,14 @@ def norm(array: Array, p: float = 2) -> Array:
     value = array.value if isinstance(array, Array) else array
 
     if isinstance(value, np.ndarray | np.generic):
-        return _return_array(cast("SupportedArrayTypes", np.linalg.norm(value, ord=p)))
+        return _return_array(cast("SupportedArrayTypes", np.linalg.norm(value, ord=p, axis=dim, keepdims=keepdims)))
     if torch and isinstance(value, torch.Tensor):
-        return _return_array(torch.linalg.norm(value, ord=p))
+        return _return_array(torch.linalg.norm(value, ord=p, dim=dim, keepdim=keepdims))
     if tf and isinstance(value, tf.Tensor):
-        return _return_array(tf.norm(value, ord=p, axis=[-2, -1] if value.ndim >= 2 else None))
+        if dim is None and value.ndim == 2:
+            dim = (-2, -1)
+        return _return_array(tf.norm(value, ord=p, axis=dim, keepdims=keepdims))
     if jnp and isinstance(value, jnp.ndarray | jnp.generic):
-        return _return_array(jnp.linalg.norm(value, ord=p))
+        return _return_array(jnp.linalg.norm(value, ord=p, axis=dim, keepdims=keepdims))
 
     raise TypeError(f"Unsupported type: {type(value)}")

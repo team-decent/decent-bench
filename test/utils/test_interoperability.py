@@ -77,9 +77,13 @@ def create_array(data: list, framework: str, device: str = "cpu"):
     elif framework == "jax":
         array3 = jnp.array(data, dtype=jnp.float32)
         if device == "gpu" and JAX_GPU_AVAILABLE:
-            gpu_devices = [d for d in jax.devices() if d.platform == "gpu"]
+            gpu_devices = [d for d in jax.devices("gpu") if d.platform == "gpu"]
             if gpu_devices:
                 array3 = jax.device_put(array3, device=gpu_devices[0])
+        elif device == "cpu":
+            cpu_devices = [d for d in jax.devices("cpu") if d.platform == "cpu"]
+            if cpu_devices:
+                array3 = jax.device_put(array3, device=cpu_devices[0])
         return Array(array3)
     else:
         raise ValueError(f"Unknown framework: {framework}")
@@ -1719,3 +1723,53 @@ def test_norm_frameworks(framework: str, device: str, p_norm: int, data: list) -
 
     assert_arrays_equal(norm_val, expected, framework)
     assert_same_type(norm_val, framework)
+
+
+# ============================================================================
+# Tests for framework_device_of_array
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    ("framework", "device"),
+    [
+        ("numpy", "cpu"),
+        pytest.param(
+            "torch",
+            "cpu",
+            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+        ),
+        pytest.param(
+            "torch",
+            "gpu",
+            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "cpu",
+            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "gpu",
+            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+        ),
+        pytest.param(
+            "jax",
+            "cpu",
+            marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
+        ),
+        pytest.param(
+            "jax",
+            "gpu",
+            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+        ),
+    ],
+)
+def test_framework_device_of_array(framework: str, device: str) -> None:
+    """Test framework_device_of_array function for all frameworks and devices."""
+    arr = create_array([1.0, 2.0, 3.0], framework, device)
+    fw, dev = iop.framework_device_of_array(arr)
+
+    assert fw == SupportedFrameworks(framework), f"Expected framework {framework}, got {fw}"
+    assert dev == SupportedDevices(device), f"Expected device {device}, got {dev}"

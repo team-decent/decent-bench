@@ -76,6 +76,10 @@ def create_array(data: list, framework: str, device: str = "cpu"):
             gpu_devices = [d for d in jax.devices() if d.platform == "gpu"]
             if gpu_devices:
                 array3 = jax.device_put(array3, device=gpu_devices[0])
+        elif device == "cpu":
+            cpu_devices = [d for d in jax.devices("cpu") if d.platform == "cpu"]
+            if cpu_devices:
+                array3 = jax.device_put(array3, device=cpu_devices[0])
         return Array(array3)
     else:
         raise ValueError(f"Unknown framework: {framework}")

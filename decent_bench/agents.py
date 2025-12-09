@@ -54,6 +54,13 @@ class Agent:
         """
         Local optimization variable x.
 
+        Warning:
+            Do not use in-place operations (``+=``, ``-=``, ``*=``, etc.) on this property.
+            In-place operations will corrupt the optimization history by modifying all
+            historical values. Always use ``agent.x = agent.x + value`` instead of
+            ``agent.x += value``. Does not affect the outcome of the optimization, but
+            will affect logging and metrics that depend on the optimization history.
+
         Raises:
             RuntimeError: if x is retrieved before being set or initialized
 
@@ -111,9 +118,9 @@ class Agent:
         self._n_hessian_calls += 1
         return self._cost.__class__.hessian(self.cost, x)
 
-    def _call_counting_proximal(self, y: Array, rho: float) -> Array:
+    def _call_counting_proximal(self, x: Array, rho: float) -> Array:
         self._n_proximal_calls += 1
-        return self._cost.__class__.proximal(self.cost, y, rho)
+        return self._cost.__class__.proximal(self.cost, x, rho)
 
     def __index__(self) -> int:
         """Enable using agent as index, for example ``W[a1, a2]`` instead of ``W[a1.id, a2.id]``."""

@@ -33,6 +33,16 @@ Benchmark algorithms on a regression problem without any communication constrain
         )
 
 
+Benchmark executions will have outputs like these:
+
+.. list-table::
+
+   * - .. image:: _static/table.png
+          :align: center
+     - .. image:: _static/plot.png
+          :align: center
+
+
 Execution settings
 ------------------
 Configure settings for metrics, trials, statistical confidence level, logging, and multiprocessing.
@@ -442,15 +452,3 @@ compatibility with the selected framework and device of your custom cost.
                 raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
 
             return SumCost([self, other])
-
-
-Output
-------
-Benchmark executions will have outputs like these:
-
-.. list-table::
-
-   * - .. image:: _static/table.png
-          :align: center
-     - .. image:: _static/plot.png
-          :align: center

@@ -112,9 +112,9 @@ class Cost(ABC):
         """Hessian at x."""
 
     @abstractmethod
-    def proximal(self, y: Array, rho: float) -> Array:
+    def proximal(self, x: Array, rho: float) -> Array:
         r"""
-        Proximal at y.
+        Proximal at x.
 
         The proximal operator is defined as:
 
@@ -240,15 +240,16 @@ class QuadraticCost(Cost):
 
         .. math:: \frac{1}{2} (\mathbf{A}+\mathbf{A}^T)
         """
-        return self.A_sym
+        ret: NDArray[float64] = self.A_sym.copy()
+        return ret
 
     @iop.autodecorate_cost_method(Cost.proximal)
-    def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
+    def proximal(self, x: NDArray[float64], rho: float) -> NDArray[float64]:
         r"""
-        Proximal at y.
+        Proximal at x.
 
         .. math::
-            (\frac{\rho}{2} (\mathbf{A} + \mathbf{A}^T) + \mathbf{I})^{-1} (\mathbf{y} - \rho \mathbf{b})
+            (\frac{\rho}{2} (\mathbf{A} + \mathbf{A}^T) + \mathbf{I})^{-1} (\mathbf{x} - \rho \mathbf{b})
 
         where :math:`\rho > 0` is the penalty.
 
@@ -257,7 +258,7 @@ class QuadraticCost(Cost):
         for the general proximal definition.
         """
         lhs = rho * self.A_sym + np.eye(self.A.shape[1])
-        rhs = y - self.b * rho
+        rhs = x - self.b * rho
 
         return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
 
@@ -376,12 +377,12 @@ class LinearRegressionCost(Cost):
         """
         return self.inner.hessian(x)
 
-    def proximal(self, y: Array, rho: float) -> Array:
+    def proximal(self, x: Array, rho: float) -> Array:
         r"""
-        Proximal at y.
+        Proximal at x.
 
         .. math::
-            (\rho \mathbf{A}^T \mathbf{A} + \mathbf{I})^{-1} (\mathbf{y} + \rho \mathbf{A}^T\mathbf{b})
+            (\rho \mathbf{A}^T \mathbf{A} + \mathbf{I})^{-1} (\mathbf{x} + \rho \mathbf{A}^T\mathbf{b})
 
         where :math:`\rho > 0` is the penalty.
 
@@ -389,7 +390,7 @@ class LinearRegressionCost(Cost):
         :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>`
         for the general proximal definition.
         """
-        return self.inner.proximal(y, rho)
+        return self.inner.proximal(x, rho)
 
     def __add__(self, other: Cost) -> Cost:
         """Add another cost function."""
@@ -418,7 +419,7 @@ class LogisticRegressionCost(Cost):
             raise ValueError("Vector b must contain exactly two classes")
 
         self.A: NDArray[float64] = iop.to_numpy(A)
-        self.b: NDArray[float64] = iop.to_numpy(b)
+        self.b: NDArray[float64] = iop.to_numpy(iop.copy(b))  # Copy b to avoid modifying original array pointer
         self.b[np.where(self.b == class_labels[0])], self.b[np.where(self.b == class_labels[1])] = 0, 1
 
     @property
@@ -498,15 +499,15 @@ class LogisticRegressionCost(Cost):
         res: NDArray[float64] = self.A.T.dot(D).dot(self.A)
         return res
 
-    def proximal(self, y: Array, rho: float) -> Array:
+    def proximal(self, x: Array, rho: float) -> Array:
         """
-        Proximal at y solved using an iterative method.
+        Proximal at x solved using an iterative method.
 
         See
         :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>`
         for the general proximal definition.
         """
-        return ca.proximal_solver(self, y, rho)
+        return ca.proximal_solver(self, x, rho)
 
     def __add__(self, other: Cost) -> Cost:
         """
@@ -599,15 +600,15 @@ class SumCost(Cost):
         """Sum the :meth:`hessian` of each cost function."""
         return iop.sum(iop.stack([cf.hessian(x) for cf in self.costs]), dim=0)
 
-    def proximal(self, y: Array, rho: float) -> Array:
+    def proximal(self, x: Array, rho: float) -> Array:
         """
-        Proximal at y solved using an iterative method.
+        Proximal at x solved using an iterative method.
 
         See
         :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>`
         for the general proximal definition.
         """
-        return ca.proximal_solver(self, y, rho)
+        return ca.proximal_solver(self, x, rho)
 
     def __add__(self, other: Cost) -> SumCost:
         """Add another cost function."""

@@ -9,11 +9,17 @@ from decent_bench.utils.types import ArrayKey, SupportedArrayTypes
 
 class Array:  # noqa: PLR0904
     """
-    A wrapper class for :data:`decent_bench.utils.types.SupportedArrayTypes` objects to enable operator overloading.
+    A wrapper class for :data:`~decent_bench.utils.types.SupportedArrayTypes` objects to enable operator overloading.
 
-    This class allows for seamless interoperability between different tensor frameworks
-    by overloading standard arithmetic operators.It supports operations such as addition, subtraction, multiplication,
-    division, matrix multiplication, and in-place operations.
+    This class allows for seamless interoperability between different array/tensor frameworks
+    by overloading standard arithmetic operators. Operations supported are addition, subtraction, multiplication,
+    division, matrix multiplication, exponentiation, negation and in-place operations.
+
+    Note:
+        Instantiation of this class is typically done through the functions in
+        :mod:`~decent_bench.utils.interoperability` rather than direct instantiation.
+        This is to ensure proper handling of different underlying array types.
+
     """
 
     def __init__(
@@ -175,7 +181,7 @@ class Array:  # noqa: PLR0904
             The modified object.
 
         """
-        return iop.iadd(self, other)
+        return iop.ext.iadd(self, other)
 
     def __isub__(self, other: Array | SupportedArrayTypes) -> Self:
         """
@@ -188,7 +194,7 @@ class Array:  # noqa: PLR0904
             The modified object.
 
         """
-        return iop.isub(self, other)
+        return iop.ext.isub(self, other)
 
     def __imul__(self, other: Array | SupportedArrayTypes) -> Self:
         """
@@ -201,7 +207,7 @@ class Array:  # noqa: PLR0904
             The modified object.
 
         """
-        return iop.imul(self, other)
+        return iop.ext.imul(self, other)
 
     def __itruediv__(self, other: Array | SupportedArrayTypes) -> Self:
         """
@@ -214,7 +220,7 @@ class Array:  # noqa: PLR0904
             The modified object.
 
         """
-        return iop.idiv(self, other)
+        return iop.ext.idiv(self, other)
 
     def __ipow__(self, other: float) -> Self:
         """
@@ -227,7 +233,7 @@ class Array:  # noqa: PLR0904
             The modified object.
 
         """
-        return iop.ipow(self, other)
+        return iop.ext.ipow(self, other)
 
     def __neg__(self) -> Array:
         """
@@ -287,10 +293,6 @@ class Array:  # noqa: PLR0904
             raise TypeError("Scalar values do not support indexing.")
 
         iop.set_item(self, key, value)
-
-    def __hash__(self) -> int:
-        """Return the hash of the wrapped tensor."""
-        return hash(self.value)
 
     def __repr__(self) -> str:
         """Return the official string representation of the object."""

@@ -738,7 +738,7 @@ class ADMM(Algorithm):
                 shape=(len(all_agents), *(agent.cost.shape)),
                 device=agent.cost.device,
             )
-            x1 = agent.cost.proximal(y=iop.sum(z0, dim=0) / pN[agent], rho=1 / pN[agent])
+            x1 = agent.cost.proximal(x=iop.sum(z0, dim=0) / pN[agent], rho=1 / pN[agent])
             # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
             msg0 = z0[agent] - 2 * self.rho * x1
             agent.initialize(
@@ -748,7 +748,7 @@ class ADMM(Algorithm):
             )
         for k in range(self.iterations):
             for i in network.active_agents(k):
-                i.x = i.cost.proximal(y=iop.sum(i.aux_vars["z"], dim=0) / pN[i], rho=1 / pN[i])
+                i.x = i.cost.proximal(x=iop.sum(i.aux_vars["z"], dim=0) / pN[i], rho=1 / pN[i])
             for i in network.active_agents(k):
                 for j in network.neighbors(i):
                     network.send(i, j, i.aux_vars["z"][j] - 2 * self.rho * i.x)

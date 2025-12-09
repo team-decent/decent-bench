@@ -1,7 +1,12 @@
-"""Utilities for operating on arrays from different deep learning and linear algebra frameworks."""
+"""
+Utilities for operating on arrays from different deep learning and linear algebra frameworks.
+
+Mirrors NumPy's functionality for interoperability across frameworks.
+"""
 
 from __future__ import annotations
 
+from . import _ext as ext
 from ._decorators import autodecorate_cost_method
 from ._functions import (
     argmax,
@@ -33,16 +38,12 @@ from ._functions import (
     zeros,
     zeros_like,
 )
+from ._helpers import framework_device_of_array
 from ._operators import (
     absolute,
     add,
     div,
     dot,
-    iadd,
-    idiv,
-    imul,
-    ipow,
-    isub,
     matmul,
     mul,
     negative,
@@ -86,11 +87,6 @@ __all__ = [  # noqa: RUF022
     "add",
     "div",
     "dot",
-    "iadd",
-    "idiv",
-    "imul",
-    "ipow",
-    "isub",
     "matmul",
     "mul",
     "negative",
@@ -98,5 +94,9 @@ __all__ = [  # noqa: RUF022
     "sqrt",
     "sub",
     # From _helpers
+    "framework_device_of_array",
+    # From _decorators
     "autodecorate_cost_method",
+    # Extensions
+    "ext",
 ]
