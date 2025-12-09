@@ -1,4 +1,7 @@
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from functools import cached_property
+from operator import itemgetter
 from typing import TYPE_CHECKING
 
 import networkx as nx
@@ -17,17 +20,8 @@ else:
     AgentGraph = Graph
 
 
-class P2PNetwork:
-    """
-    Peer-to-Peer Network of agents that communicate by sending and receiving messages.
-
-    Args:
-        graph: topology defining how the agents are connected
-        message_noise: message noise setting
-        message_compression: message compression setting
-        message_drop: message drops setting
-
-    """
+class Network(ABC):
+    """Base network that defines the communication constraints shared by all network types."""
 
     def __init__(
         self,
@@ -35,39 +29,40 @@ class P2PNetwork:
         message_noise: NoiseScheme,
         message_compression: CompressionScheme,
         message_drop: DropScheme,
-    ):
+    ) -> None:
         self._graph = graph
         self._message_noise = message_noise
         self._message_compression = message_compression
         self._message_drop = message_drop
 
-    @cached_property
-    def weights(self) -> NDArray[float64]:
-        """
-        Symmetric, doubly stochastic matrix for consensus weights. Initialized using the Metropolis-Hastings method.
+    @property
+    def graph(self) -> AgentGraph:
+        """Underlying agent graph."""
+        return self._graph
 
-        Use ``weights[i, j]`` or ``weights[i.id, j.id]`` to get the weight between agent i and j.
-        """
-        agents = self.agents()
-        n = len(agents)
-        W = np.zeros((n, n))  # noqa: N806
-        for i in agents:
-            neighbors = self.neighbors(i)
-            d_i = len(neighbors)
-            for j in neighbors:
-                d_j = len(self.neighbors(j))
-                W[i, j] = 1 / (1 + max(d_i, d_j))
-        for i in agents:
-            W[i, i] = 1 - sum(W[i])
-        return W
+    @property
+    def message_noise(self) -> NoiseScheme:
+        """Noise scheme applied to messages."""
+        return self._message_noise
+
+    @property
+    def message_compression(self) -> CompressionScheme:
+        """Compression scheme applied to messages."""
+        return self._message_compression
+
+    @property
+    def message_drop(self) -> DropScheme:
+        """Drop scheme applied to messages."""
+        return self._message_drop
+
+    @abstractmethod
+    def kind(self) -> str:
+        """Label for the network subtype (e.g., 'p2p', 'fed')."""
+        raise NotImplementedError
 
     def agents(self) -> list[Agent]:
         """Get all agents in the network."""
-        return list(self._graph)
-
-    def neighbors(self, agent: Agent) -> list[Agent]:
-        """Get all neighbors of an agent."""
-        return list(self._graph[agent])
+        return list(self.graph)
 
     def active_agents(self, iteration: int) -> list[Agent]:
         """
@@ -91,12 +86,71 @@ class P2PNetwork:
         same receiver. After being received or replaced, the message is destroyed.
         """
         sender._n_sent_messages += 1  # noqa: SLF001
-        if self._message_drop.should_drop():
+        if self.message_drop.should_drop():
             sender._n_sent_messages_dropped += 1  # noqa: SLF001
             return
-        msg = self._message_compression.compress(msg)
-        msg = self._message_noise.make_noise(msg)
-        self._graph.edges[sender, receiver][str(receiver.id)] = msg
+        msg = self.message_compression.compress(msg)
+        msg = self.message_noise.make_noise(msg)
+        self.graph.edges[sender, receiver][str(receiver.id)] = msg
+
+    def receive(self, receiver: Agent, sender: Agent) -> None:
+        """
+        Receive message from a neighbor.
+
+        Received messages are stored in
+        :attr:`Agent.messages <decent_bench.agents.Agent.messages>`.
+        """
+        msg = self.graph.edges[sender, receiver].get(str(receiver.id))
+        if msg is not None:
+            receiver._n_received_messages += 1  # noqa: SLF001
+            receiver._received_messages[sender] = msg  # noqa: SLF001
+            self.graph.edges[sender, receiver][str(receiver.id)] = None
+
+
+class P2PNetwork(Network):
+    """Peer-to-peer network of agents that communicate by sending and receiving messages."""
+
+    def __init__(
+        self,
+        graph: AgentGraph,
+        message_noise: NoiseScheme,
+        message_compression: CompressionScheme,
+        message_drop: DropScheme,
+    ) -> None:
+        super().__init__(
+            graph=graph,
+            message_noise=message_noise,
+            message_compression=message_compression,
+            message_drop=message_drop,
+        )
+
+    def kind(self) -> str:
+        """Label for the network subtype."""
+        return "p2p"
+
+    @cached_property
+    def weights(self) -> NDArray[float64]:
+        """
+        Symmetric, doubly stochastic matrix for consensus weights. Initialized using the Metropolis-Hastings method.
+
+        Use ``weights[i, j]`` or ``weights[i.id, j.id]`` to get the weight between agent i and j.
+        """
+        agents = self.agents()
+        n = len(agents)
+        W = np.zeros((n, n))  # noqa: N806
+        for i in agents:
+            neighbors = self.neighbors(i)
+            d_i = len(neighbors)
+            for j in neighbors:
+                d_j = len(self.neighbors(j))
+                W[i, j] = 1 / (1 + max(d_i, d_j))
+        for i in agents:
+            W[i, i] = 1 - sum(W[i])
+        return W
+
+    def neighbors(self, agent: Agent) -> list[Agent]:
+        """Get all neighbors of an agent."""
+        return list(self.graph[agent])
 
     def broadcast(self, sender: Agent, msg: NDArray[float64]) -> None:
         """
@@ -110,21 +164,8 @@ class P2PNetwork:
         The message will stay in-flight until it is received or replaced by a newer message from the same sender to the
         same receiver. After being received or replaced, the message is destroyed.
         """
-        for neighbor in self._graph.neighbors(sender):
+        for neighbor in self.neighbors(sender):
             self.send(sender=sender, receiver=neighbor, msg=msg)
-
-    def receive(self, receiver: Agent, sender: Agent) -> None:
-        """
-        Receive message from a neighbor.
-
-        Received messages are stored in
-        :attr:`Agent.messages <decent_bench.agents.Agent.messages>`.
-        """
-        msg = self._graph.edges[sender, receiver].get(str(receiver.id))
-        if msg is not None:
-            receiver._n_received_messages += 1  # noqa: SLF001
-            receiver._received_messages[sender] = msg  # noqa: SLF001
-            self._graph.edges[sender, receiver][str(receiver.id)] = None
 
     def receive_all(self, receiver: Agent) -> None:
         """
@@ -133,8 +174,143 @@ class P2PNetwork:
         Received messages are stored in
         :attr:`Agent.messages <decent_bench.agents.Agent.messages>`.
         """
-        for neighbor in self._graph.neighbors(receiver):
+        for neighbor in self.neighbors(receiver):
             self.receive(receiver, neighbor)
+
+
+class FedNetwork(Network):
+    """Federated learning network with one server node connected to all client nodes (star topology)."""
+
+    def __init__(
+        self,
+        graph: AgentGraph,
+        message_noise: NoiseScheme,
+        message_compression: CompressionScheme,
+        message_drop: DropScheme,
+    ) -> None:
+        super().__init__(
+            graph=graph,
+            message_noise=message_noise,
+            message_compression=message_compression,
+            message_drop=message_drop,
+        )
+        self._server = self._identify_server()
+
+    def _identify_server(self) -> Agent:
+        degrees = dict(self.graph.degree())
+        if not degrees:
+            raise ValueError("FedNetwork requires at least one agent")
+        server, max_degree = max(degrees.items(), key=itemgetter(1))
+        n = len(degrees)
+        if max_degree != n - 1 or any(deg != 1 for node, deg in degrees.items() if node != server):
+            raise ValueError("FedNetwork expects a star topology with one server connected to all clients")
+        return server
+
+    def kind(self) -> str:
+        """Label for the network subtype."""
+        return "fed"
+
+    @property
+    def server(self) -> Agent:
+        """Agent acting as the central server."""
+        return self._server
+
+    @property
+    def clients(self) -> list[Agent]:
+        """Agents acting as clients."""
+        return [agent for agent in self.graph if agent is not self.server]
+
+    def active_clients(self, iteration: int) -> list[Agent]:
+        """
+        Get all active clients (excludes the server).
+
+        Uses :meth:`Network.active_agents` to honor activation schemes and then filters out the server.
+        """
+        return [agent for agent in self.active_agents(iteration) if agent is not self.server]
+
+    def send_to_client(self, client: Agent, msg: NDArray[float64]) -> None:
+        """
+        Send a message from the server to a specific client.
+
+        Raises:
+            ValueError: if the receiver is not a client.
+
+        """
+        if client not in self.clients:
+            raise ValueError("Receiver must be a client")
+        self.send(sender=self.server, receiver=client, msg=msg)
+
+    def send_to_all_clients(self, msg: NDArray[float64]) -> None:
+        """Send the same message from the server to every client (synchronous FL push)."""
+        for client in self.clients:
+            self.send_to_client(client, msg)
+
+    def send_from_client(self, client: Agent, msg: NDArray[float64]) -> None:
+        """
+        Send a message from a client to the server.
+
+        Raises:
+            ValueError: if the sender is not a client.
+
+        """
+        if client not in self.clients:
+            raise ValueError("Sender must be a client")
+        self.send(sender=client, receiver=self.server, msg=msg)
+
+    def send_from_all_clients(self, msgs: Mapping[Agent, NDArray[float64]]) -> None:
+        """
+        Send messages from each client to the server (synchronous FL push).
+
+        Args:
+            msgs: mapping from client Agent to the message that client should send. Must include all clients.
+
+        Raises:
+            ValueError: if any sender is not a client or if any client is missing.
+
+        """
+        clients = set(self.clients)
+        invalid = [client for client in msgs if client not in clients]
+        if invalid:
+            raise ValueError("All senders must be clients")
+        missing = clients - set(msgs)
+        if missing:
+            raise ValueError("Messages must be provided for all clients")
+        for client, msg in msgs.items():
+            self.send_from_client(client, msg)
+
+    def receive_at_client(self, client: Agent) -> None:
+        """
+        Receive a message at a client from the server.
+
+        Raises:
+            ValueError: if the receiver is not a client.
+
+        """
+        if client not in self.clients:
+            raise ValueError("Receiver must be a client")
+        self.receive(receiver=client, sender=self.server)
+
+    def receive_at_all_clients(self) -> None:
+        """Receive messages at every client from the server (synchronous FL pull)."""
+        for client in self.clients:
+            self.receive_at_client(client)
+
+    def receive_from_client(self, client: Agent) -> None:
+        """
+        Receive a message at the server from a specific client.
+
+        Raises:
+            ValueError: if the sender is not a client.
+
+        """
+        if client not in self.clients:
+            raise ValueError("Sender must be a client")
+        self.receive(receiver=self.server, sender=client)
+
+    def receive_from_all_clients(self) -> None:
+        """Receive messages at the server from every client (synchronous FL pull)."""
+        for client in self.clients:
+            self.receive_from_client(client)
 
 
 def create_distributed_network(problem: BenchmarkProblem) -> P2PNetwork:
@@ -160,6 +336,42 @@ def create_distributed_network(problem: BenchmarkProblem) -> P2PNetwork:
     agent_node_map = {node: agents[i] for i, node in enumerate(problem.network_structure.nodes())}
     graph = nx.relabel_nodes(problem.network_structure, agent_node_map)
     return P2PNetwork(
+        graph=graph,
+        message_noise=problem.message_noise,
+        message_compression=problem.message_compression,
+        message_drop=problem.message_drop,
+    )
+
+
+def create_federated_network(problem: BenchmarkProblem) -> FedNetwork:
+    """
+    Create a federated learning network with a single server and multiple clients (star topology).
+
+    Raises:
+        ValueError: if there are fewer activation schemes or cost functions than agents
+        ValueError: if the provided graph is not a star (one server connected to all clients)
+
+    """
+    n_agents = len(problem.network_structure)
+    if len(problem.agent_activations) < n_agents:
+        raise ValueError("Insufficient number of agent activation schemes, please provide one per agent")
+    if len(problem.costs) < n_agents:
+        raise ValueError("Insufficient number of cost functions, please provide one per agent")
+    if problem.network_structure.is_directed():
+        raise NotImplementedError("Support for directed graphs has not been implemented yet")
+    if problem.network_structure.is_multigraph():
+        raise NotImplementedError("Support for multi-graphs has not been implemented yet")
+    if not nx.is_connected(problem.network_structure):
+        raise NotImplementedError("Support for disconnected graphs has not been implemented yet")
+    degrees = dict(problem.network_structure.degree())
+    if n_agents:
+        server, max_degree = max(degrees.items(), key=itemgetter(1))
+        if max_degree != n_agents - 1 or any(deg != 1 for node, deg in degrees.items() if node != server):
+            raise ValueError("Federated network requires a star topology (one server connected to all clients)")
+    agents = [Agent(i, problem.costs[i], problem.agent_activations[i]) for i in range(n_agents)]
+    agent_node_map = {node: agents[i] for i, node in enumerate(problem.network_structure.nodes())}
+    graph = nx.relabel_nodes(problem.network_structure, agent_node_map)
+    return FedNetwork(
         graph=graph,
         message_noise=problem.message_noise,
         message_compression=problem.message_compression,
