@@ -1,10 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-import numpy as np
-from numpy import float64
-from numpy.typing import NDArray
-
 from decent_bench.networks import P2PNetwork
 from decent_bench.utils import interoperability as iop
 
@@ -58,12 +54,14 @@ class DGD(Algorithm):
 
         """
         for agent in network.agents():
-            x0 = np.zeros(agent.cost.shape)
+            x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(network.neighbors(agent), x0))
-        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
+
+        W = network.weights  # noqa: N806
         for k in range(self.iterations):
             for i in network.active_agents(k):
-                neighborhood_avg = iop.sum([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
+                s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
+                neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.x
                 i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
             for i in network.active_agents(k):
@@ -108,14 +106,14 @@ class ATC(Algorithm):
 
         """
         for agent in network.agents():
-            x0 = np.zeros(agent.cost.shape)
+            x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
             agent.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(network.neighbors(agent), x0),
                 aux_vars={"y": x0},
             )
-        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
 
+        W = network.weights  # noqa: N806
         for k in range(self.iterations):
             # gradient step (a.k.a. adapt step)
             for i in network.active_agents(k):
@@ -173,15 +171,17 @@ class SimpleGT(Algorithm):
 
         """
         for agent in network.agents():
-            x0 = np.zeros(agent.cost.shape)
-            y0 = np.zeros(agent.cost.shape)
+            x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
+            y0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
             neighbors = network.neighbors(agent)
             agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
-        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
+
+        W = network.weights  # noqa: N806
         for k in range(self.iterations):
             for i in network.active_agents(k):
                 i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
-                neighborhood_avg = iop.sum([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
+                s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
+                neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.x
                 i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
                 i.aux_vars["y"] = i.aux_vars["y_new"]
@@ -229,8 +229,8 @@ class ED(Algorithm):
 
         """
         for i in network.agents():
-            x0 = np.zeros(i.cost.shape)
-            y0 = np.zeros(i.cost.shape)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            y0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             y1 = x0 - self.step_size * i.cost.gradient(x0)
             # note: msg0's y1 is an approximation of the neighbors' y1 (x0 and y0 are exact: all agents start with same)
             msg0 = x0 + y1 - y0
@@ -239,15 +239,13 @@ class ED(Algorithm):
                 aux_vars={"y": y0, "y_new": y1},
                 received_msgs=dict.fromkeys(network.neighbors(i), msg0),
             )
-        W = iop.from_numpy_like(  # noqa: N806
-            0.5 * (np.eye(*(network.weights.shape)) + network.weights),
-            network.agents()[0].x,
-        )
+
+        W = network.weights  # noqa: N806
+        W = 0.5 * (iop.eye_like(W) + W)  # noqa: N806
         for k in range(self.iterations):
             for i in network.active_agents(k):
-                i.x = iop.sum([W[i, j] * msg for j, msg in i.messages.items()], dim=0) + W[i, i] * (
-                    i.x + i.aux_vars["y_new"] - i.aux_vars["y"]
-                )
+                s = iop.stack([W[i, j] * msg for j, msg in i.messages.items()])
+                i.x = iop.sum(s, dim=0) + W[i, i] * (i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
                 i.aux_vars["y"] = i.aux_vars["y_new"]
                 i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
             for i in network.active_agents(k):
@@ -301,7 +299,7 @@ class AugDGM(Algorithm):
 
         """
         for i in network.agents():
-            x0 = np.zeros(i.cost.shape)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             y0 = i.cost.gradient(x0)
             neighbors = network.neighbors(i)
             i.initialize(
@@ -310,8 +308,7 @@ class AugDGM(Algorithm):
                 aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0},
             )
 
-        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
-
+        W = network.weights  # noqa: N806
         for k in range(self.iterations):
             # 1st communication round
             #     step 1: perform local gradient step and communicate
@@ -326,7 +323,7 @@ class AugDGM(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                s = iop.stack([W[i, j] * s_j for j, s_j in i.messages.items()], dim=0)
+                s = iop.stack([W[i, j] * s_j for j, s_j in i.messages.items()])
                 neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.aux_vars["s"]
                 i.x = neighborhood_avg
@@ -342,7 +339,7 @@ class AugDGM(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                s = iop.stack([W[i, j] * q_j for j, q_j in i.messages.items()], dim=0)
+                s = iop.stack([W[i, j] * q_j for j, q_j in i.messages.items()])
                 neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
                 i.aux_vars["y"] = neighborhood_avg
@@ -395,7 +392,7 @@ class WangElia(Algorithm):
 
         """
         for i in network.agents():
-            x0 = np.zeros(i.cost.shape)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             neighbors = network.neighbors(i)
             i.initialize(
                 x=x0,
@@ -403,7 +400,7 @@ class WangElia(Algorithm):
                 aux_vars={"z": x0, "x_old": x0},
             )
 
-        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
+        W = network.weights  # noqa: N806
         K = 0.5 * (iop.eye_like(W) - W)  # noqa: N806
 
         for k in range(self.iterations):
@@ -416,7 +413,8 @@ class WangElia(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                neighborhood_avg = iop.sum([K[i, j] * m_j for j, m_j in i.messages.items()], dim=0)
+                s = iop.stack([K[i, j] * m_j for j, m_j in i.messages.items()])
+                neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += K[i, i] * (i.x + i.aux_vars["z"])
 
                 i.aux_vars["x_old"] = i.x
@@ -431,7 +429,8 @@ class WangElia(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                neighborhood_avg = iop.sum([K[i, j] * m_j for j, m_j in i.messages.items()], dim=0)
+                s = iop.stack([K[i, j] * m_j for j, m_j in i.messages.items()])
+                neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += K[i, i] * i.aux_vars["x_old"]
                 i.aux_vars["z"] += neighborhood_avg
 
@@ -475,22 +474,21 @@ class EXTRA(Algorithm):
         """
         # initialization (iteration k=0)
         for i in network.agents():
-            x0 = np.zeros(i.cost.shape)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             i.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(network.neighbors(i), x0),
                 aux_vars={"x_old": x0, "x_old_old": x0, "x_cons": x0},
             )
 
-        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
-
+        W = network.weights  # noqa: N806
         # first iteration (iteration k=1)
         for i in network.active_agents(0):
             network.broadcast(i, i.x)
         for i in network.active_agents(0):
             network.receive_all(i)
         for i in network.active_agents(0):
-            s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
+            s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
             neighborhood_avg += W[i, i] * i.x
             i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
@@ -504,7 +502,7 @@ class EXTRA(Algorithm):
             for i in network.active_agents(k):
                 network.receive_all(i)
             for i in network.active_agents(k):
-                s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
+                s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
                 neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.x
                 i.aux_vars["x_old_old"] = i.aux_vars["x_old"]  # store x_{k-1}
@@ -566,7 +564,7 @@ class ATCTracking(Algorithm):
 
         """
         for i in network.agents():
-            x0 = np.zeros(i.cost.shape)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             y0 = i.cost.gradient(x0)
             neighbors = network.neighbors(i)
             i.initialize(
@@ -575,8 +573,7 @@ class ATCTracking(Algorithm):
                 aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0},
             )
 
-        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
-
+        W = network.weights  # noqa: N806
         for k in range(self.iterations):
             # 1st communication round
             #     step 1: perform local gradient step and communicate
@@ -591,7 +588,7 @@ class ATCTracking(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                s = iop.stack([W[i, j] * s_j for j, s_j in i.messages.items()], dim=0)
+                s = iop.stack([W[i, j] * s_j for j, s_j in i.messages.items()])
                 neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.aux_vars["s"]
                 i.x = neighborhood_avg
@@ -607,7 +604,8 @@ class ATCTracking(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(k):
-                neighborhood_avg = iop.sum([W[i, j] * q_j for j, q_j in i.messages.items()], dim=0)
+                s = iop.stack([W[i, j] * q_j for j, q_j in i.messages.items()])
+                neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W[i, i] * i.aux_vars["y"]
                 i.aux_vars["y"] = neighborhood_avg + i.aux_vars["g_new"] - i.aux_vars["g"]
                 i.aux_vars["g"] = i.aux_vars["g_new"]
@@ -658,14 +656,14 @@ class NIDS(Algorithm):
         """
         # initialization (iteration k=0)
         for i in network.agents():
-            x0 = np.zeros(i.cost.shape)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             i.initialize(
                 x=x0,
                 received_msgs=dict.fromkeys(network.neighbors(i), x0),
                 aux_vars={"x_old": x0, "g": x0, "g_old": x0, "y": x0},
             )
 
-        W = iop.from_numpy_like(network.weights, network.agents()[0].x)  # noqa: N806
+        W = network.weights  # noqa: N806
         W_tilde = 0.5 * (iop.eye_like(W) + W)  # noqa: N806
 
         # first iteration (iteration k=1)
@@ -689,14 +687,8 @@ class NIDS(Algorithm):
             for i in network.active_agents(k):
                 network.receive_all(i)
             for i in network.active_agents(k):
-                s = iop.stack(
-                    [W_tilde[i, j] * y_j for j, y_j in i.messages.items()],
-                    dim=0,
-                )
-                neighborhood_avg = iop.sum(
-                    s,
-                    dim=0,
-                )
+                s = iop.stack([W_tilde[i, j] * y_j for j, y_j in i.messages.items()])
+                neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += W_tilde[i, i] * i.aux_vars["y"]
                 i.aux_vars["x_old"] = i.x  # store x_k
                 i.x = neighborhood_avg  # update x_{k+1}
@@ -741,10 +733,14 @@ class ADMM(Algorithm):
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
         for agent in all_agents:
-            z0 = np.zeros((len(all_agents), *(agent.cost.shape)))
-            x1 = agent.cost.proximal(y=np.sum(z0, axis=0) / pN[agent], rho=1 / pN[agent])
+            z0 = iop.zeros(
+                framework=agent.cost.framework,
+                shape=(len(all_agents), *(agent.cost.shape)),
+                device=agent.cost.device,
+            )
+            x1 = agent.cost.proximal(x=iop.sum(z0, dim=0) / pN[agent], rho=1 / pN[agent])
             # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
-            msg0: NDArray[float64] = z0[agent] - 2 * self.rho * x1
+            msg0 = z0[agent] - 2 * self.rho * x1
             agent.initialize(
                 x=x1,
                 aux_vars={"z": z0},
@@ -752,7 +748,7 @@ class ADMM(Algorithm):
             )
         for k in range(self.iterations):
             for i in network.active_agents(k):
-                i.x = i.cost.proximal(y=iop.sum(i.aux_vars["z"], dim=0) / pN[i], rho=1 / pN[i])
+                i.x = i.cost.proximal(x=iop.sum(i.aux_vars["z"], dim=0) / pN[i], rho=1 / pN[i])
             for i in network.active_agents(k):
                 for j in network.neighbors(i):
                     network.send(i, j, i.aux_vars["z"][j] - 2 * self.rho * i.x)
@@ -820,9 +816,9 @@ class ATG(Algorithm):
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
         for i in all_agents:
-            z_y0 = np.zeros((len(all_agents), *(i.cost.shape)))
-            z_s0 = np.zeros((len(all_agents), *(i.cost.shape)))
-            x0 = np.zeros(i.cost.shape)
+            z_y0 = iop.zeros(framework=i.cost.framework, shape=(len(all_agents), *(i.cost.shape)), device=i.cost.device)
+            z_s0 = iop.zeros(framework=i.cost.framework, shape=(len(all_agents), *(i.cost.shape)), device=i.cost.device)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             i.initialize(
                 x=x0,
                 aux_vars={"y": x0, "s": x0, "z_y": z_y0, "z_s": z_s0},
@@ -841,13 +837,14 @@ class ATG(Algorithm):
             for i in network.active_agents(k):
                 for j in network.neighbors(i):
                     # transmit the messages as a single message, stacking along the first axis
-                    network.send(i, j,
-                        iop.stack(
-                            (
-                                -i.aux_vars["z_y"][j] + 2 * self.rho * i.aux_vars["y"],
-                                -i.aux_vars["z_s"][j] + 2 * self.rho * i.aux_vars["s"],
-                            ), dim=0),
-                    )  # fmt: skip
+                    s = iop.stack(
+                        (
+                            -i.aux_vars["z_y"][j] + 2 * self.rho * i.aux_vars["y"],
+                            -i.aux_vars["z_s"][j] + 2 * self.rho * i.aux_vars["s"],
+                        ),
+                        dim=0,
+                    )
+                    network.send(i, j, s)
             for i in network.active_agents(k):
                 network.receive_all(i)
             for i in network.active_agents(k):
@@ -907,10 +904,12 @@ class DLM(Algorithm):
         """
         all_agents = network.agents()
         for i in all_agents:
-            x0 = np.zeros(i.cost.shape)
+            x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            # y must be initialized to zero
+            y = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             i.initialize(
                 x=x0,
-                aux_vars={"y": np.zeros(i.cost.shape)},  # y must be initialized to zero
+                aux_vars={"y": y},
             )
 
         # step 0: first communication round
@@ -920,7 +919,7 @@ class DLM(Algorithm):
             network.receive_all(i)
         # compute and store \sum_j (\mathbf{x}_{i,0} - \mathbf{x}_{j,0})
         for i in network.active_agents(0):
-            s = iop.stack([i.x - x_j for _, x_j in i.messages.items()], dim=0)
+            s = iop.stack([i.x - x_j for _, x_j in i.messages.items()])
             i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
 
         # main iteration
@@ -938,7 +937,7 @@ class DLM(Algorithm):
                 network.receive_all(i)
             # compute and store \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
             for i in network.active_agents(k):
-                s = iop.stack([i.x - x_j for _, x_j in i.messages.items()], dim=0)
+                s = iop.stack([i.x - x_j for _, x_j in i.messages.items()])
                 i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
 
             # step 3: update dual variable

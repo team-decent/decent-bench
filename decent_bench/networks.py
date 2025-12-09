@@ -3,18 +3,17 @@ from typing import TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
-from networkx import Graph
-from numpy import float64
-from numpy.typing import NDArray
 
+import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme
+from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
-    AgentGraph = Graph[Agent]
+    AgentGraph = nx.Graph[Agent]
 else:
-    AgentGraph = Graph
+    AgentGraph = nx.Graph
 
 
 class P2PNetwork:
@@ -40,15 +39,37 @@ class P2PNetwork:
         self._message_noise = message_noise
         self._message_compression = message_compression
         self._message_drop = message_drop
+        self.W: Array | None = None
 
-    @cached_property
-    def weights(self) -> NDArray[float64]:
+    def set_weights(self, weights: Array) -> None:
+        """
+        Set custom consensus weights matrix.
+
+        A simple way to create custom weights is to start using numpy and then
+        use :func:`~decent_bench.utils.interoperability.to_array` to convert to an
+        :class:`~decent_bench.utils.array.Array` object with the desired framework and device.
+        For an example see :func:`~decent_bench.utils.interoperability.zeros`.
+
+        Note:
+            If not set, the weights matrix is initialized using the Metropolis-Hastings method.
+            Weights will be overwritten if framework or device differ from
+            ``Agent.cost.framework`` or ``Agent.cost.device``.
+
+        """
+        self.W = weights
+
+    @property
+    def weights(self) -> Array:
         """
         Symmetric, doubly stochastic matrix for consensus weights. Initialized using the Metropolis-Hastings method.
 
         Use ``weights[i, j]`` or ``weights[i.id, j.id]`` to get the weight between agent i and j.
         """
         agents = self.agents()
+
+        if self.W is not None:
+            return self.W
+
         n = len(agents)
         W = np.zeros((n, n))  # noqa: N806
         for i in agents:
@@ -59,7 +80,25 @@ class P2PNetwork:
                 W[i, j] = 1 / (1 + max(d_i, d_j))
         for i in agents:
             W[i, i] = 1 - sum(W[i])
-        return W
+
+        self.W = iop.to_array(W, agents[0].cost.framework, agents[0].cost.device)
+        return self.W
+
+    @cached_property
+    def adjacency(self) -> Array:
+        """
+        Adjacency matrix of the network.
+
+        Use ``adjacency[i, j]`` or ``adjacency[i.id, j.id]`` to get the adjacency between agent i and j.
+        """
+        agents = self.agents()
+        n = len(agents)
+        A = np.zeros((n, n))  # noqa: N806
+        for i in agents:
+            for j in self.neighbors(i):
+                A[i, j] = 1
+
+        return iop.to_array(A, agents[0].cost.framework, agents[0].cost.device)
 
     def agents(self) -> list[Agent]:
         """Get all agents in the network."""
@@ -78,7 +117,7 @@ class P2PNetwork:
         """
         return [a for a in self.agents() if a._activation.is_active(iteration)]  # noqa: SLF001
 
-    def send(self, sender: Agent, receiver: Agent, msg: NDArray[float64]) -> None:
+    def send(self, sender: Agent, receiver: Agent, msg: Array) -> None:
         """
         Send message to a neighbor.
 
@@ -98,7 +137,7 @@ class P2PNetwork:
         msg = self._message_noise.make_noise(msg)
         self._graph.edges[sender, receiver][str(receiver.id)] = msg
 
-    def broadcast(self, sender: Agent, msg: NDArray[float64]) -> None:
+    def broadcast(self, sender: Agent, msg: Array) -> None:
         """
         Send message to all neighbors.
 

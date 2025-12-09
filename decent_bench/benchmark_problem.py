@@ -5,9 +5,6 @@ from operator import add
 from typing import TYPE_CHECKING, Any
 
 import networkx as nx
-from networkx import Graph
-from numpy import float64
-from numpy.typing import NDArray
 
 import decent_bench.centralized_algorithms as ca
 from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCost
@@ -26,11 +23,13 @@ from decent_bench.schemes import (
     UniformActivationRate,
     UniformDropRate,
 )
+from decent_bench.utils.array import Array
+from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 if TYPE_CHECKING:
-    AnyGraph = Graph[Any]
+    AnyGraph = nx.Graph[Any]
 else:
-    AnyGraph = Graph
+    AnyGraph = nx.Graph
 
 
 @dataclass(eq=False)
@@ -50,7 +49,7 @@ class BenchmarkProblem:
     """
 
     network_structure: AnyGraph
-    x_optimal: NDArray[float64]
+    x_optimal: Array
     costs: Sequence[Cost]
     agent_activations: Sequence[AgentActivationScheme]
     message_compression: CompressionScheme
@@ -83,7 +82,13 @@ def create_regression_problem(
     """
     network_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
     dataset = SyntheticClassificationData(
-        n_classes=2, n_partitions=n_agents, n_samples_per_partition=10, n_features=3, seed=0
+        n_classes=2,
+        n_partitions=n_agents,
+        n_samples_per_partition=10,
+        n_features=3,
+        framework=SupportedFrameworks.NUMPY,
+        device=SupportedDevices.CPU,
+        seed=0,
     )
     costs = [cost_cls(*p) for p in dataset.training_partitions()]
     sum_cost = reduce(add, costs)
