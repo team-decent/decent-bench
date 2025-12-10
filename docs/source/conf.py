@@ -30,7 +30,10 @@ extensions = [
 autodoc_default_options = {}
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True
-autodoc_type_aliases = {}
+autodoc_type_aliases = {
+    "SupportedArrayTypes": "decent_bench.utils.types.SupportedArrayTypes",
+    "ArrayKey": "decent_bench.utils.types.ArrayKey",
+}
 
 nitpicky = True
 nitpick_ignore = [
@@ -38,10 +41,15 @@ nitpick_ignore = [
     ("py:class", "float64"),
     ("py:class", "numpy._typing._array_like._SupportsArray"),
     ("py:class", "numpy._typing._nested_sequence._NestedSequence"),
+    ("py:class", "TypeAliasForwardRef"),
     ("py:class", "T"),
     ("py:class", "TorchTensor"),
     ("py:class", "TensorFlowTensor"),
     ("py:class", "JaxArray"),
+    ("py:class", "SupportedArrayTypes"),
+    ("py:class", "decent_bench.utils.types.SupportedArrayTypes"),
+    ("py:class", "ArrayKey"),
+    ("py:class", "decent_bench.utils.types.ArrayKey"),
 ]
 
 intersphinx_mapping = {
