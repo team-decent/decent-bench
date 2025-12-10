@@ -7,17 +7,17 @@ from typing import TYPE_CHECKING
 import networkx as nx
 import numpy as np
 from networkx import Graph
-from numpy import float64
-from numpy.typing import NDArray
 
+import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme
+from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
-    AgentGraph = Graph[Agent]
+    AgentGraph = nx.Graph[Agent]
 else:
-    AgentGraph = Graph
+    AgentGraph = nx.Graph
 
 
 class Network(ABC):
@@ -73,7 +73,7 @@ class Network(ABC):
         """
         return [a for a in self.agents() if a._activation.is_active(iteration)]  # noqa: SLF001
 
-    def send(self, sender: Agent, receiver: Agent, msg: NDArray[float64]) -> None:
+    def send(self, sender: Agent, receiver: Agent, msg: Array) -> None:
         """
         Send message to a neighbor.
 
@@ -123,19 +123,41 @@ class P2PNetwork(Network):
             message_compression=message_compression,
             message_drop=message_drop,
         )
+        self.W: Array | None = None
 
     def kind(self) -> str:
         """Label for the network subtype."""
         return "p2p"
 
-    @cached_property
-    def weights(self) -> NDArray[float64]:
+    def set_weights(self, weights: Array) -> None:
+        """
+        Set custom consensus weights matrix.
+
+        A simple way to create custom weights is to start using numpy and then
+        use :func:`~decent_bench.utils.interoperability.to_array` to convert to an
+        :class:`~decent_bench.utils.array.Array` object with the desired framework and device.
+        For an example see :func:`~decent_bench.utils.interoperability.zeros`.
+
+        Note:
+            If not set, the weights matrix is initialized using the Metropolis-Hastings method.
+            Weights will be overwritten if framework or device differ from
+            ``Agent.cost.framework`` or ``Agent.cost.device``.
+
+        """
+        self.W = weights
+
+    @property
+    def weights(self) -> Array:
         """
         Symmetric, doubly stochastic matrix for consensus weights. Initialized using the Metropolis-Hastings method.
 
         Use ``weights[i, j]`` or ``weights[i.id, j.id]`` to get the weight between agent i and j.
         """
         agents = self.agents()
+
+        if self.W is not None:
+            return self.W
+
         n = len(agents)
         W = np.zeros((n, n))  # noqa: N806
         for i in agents:
@@ -146,13 +168,32 @@ class P2PNetwork(Network):
                 W[i, j] = 1 / (1 + max(d_i, d_j))
         for i in agents:
             W[i, i] = 1 - sum(W[i])
-        return W
 
+        self.W = iop.to_array(W, agents[0].cost.framework, agents[0].cost.device)
+        return self.W
+
+    @cached_property
+    def adjacency(self) -> Array:
+        """
+        Adjacency matrix of the network.
+
+        Use ``adjacency[i, j]`` or ``adjacency[i.id, j.id]`` to get the adjacency between agent i and j.
+        """
+        agents = self.agents()
+        n = len(agents)
+        A = np.zeros((n, n))  # noqa: N806
+        for i in agents:
+            for j in self.neighbors(i):
+                A[i, j] = 1
+
+        return iop.to_array(A, agents[0].cost.framework, agents[0].cost.device)
+    
     def neighbors(self, agent: Agent) -> list[Agent]:
         """Get all neighbors of an agent."""
         return list(self.graph[agent])
 
-    def broadcast(self, sender: Agent, msg: NDArray[float64]) -> None:
+
+    def broadcast(self, sender: Agent, msg: Array) -> None:
         """
         Send message to all neighbors.
 
@@ -228,7 +269,7 @@ class FedNetwork(Network):
         """
         return [agent for agent in self.active_agents(iteration) if agent is not self.server]
 
-    def send_to_client(self, client: Agent, msg: NDArray[float64]) -> None:
+    def send_to_client(self, client: Agent, msg: Array) -> None:
         """
         Send a message from the server to a specific client.
 
@@ -240,12 +281,12 @@ class FedNetwork(Network):
             raise ValueError("Receiver must be a client")
         self.send(sender=self.server, receiver=client, msg=msg)
 
-    def send_to_all_clients(self, msg: NDArray[float64]) -> None:
+    def send_to_all_clients(self, msg: Array) -> None:
         """Send the same message from the server to every client (synchronous FL push)."""
         for client in self.clients:
             self.send_to_client(client, msg)
 
-    def send_from_client(self, client: Agent, msg: NDArray[float64]) -> None:
+    def send_from_client(self, client: Agent, msg: Array) -> None:
         """
         Send a message from a client to the server.
 
@@ -257,7 +298,7 @@ class FedNetwork(Network):
             raise ValueError("Sender must be a client")
         self.send(sender=client, receiver=self.server, msg=msg)
 
-    def send_from_all_clients(self, msgs: Mapping[Agent, NDArray[float64]]) -> None:
+    def send_from_all_clients(self, msgs: Mapping[Agent, Array]) -> None:
         """
         Send messages from each client to the server (synchronous FL push).
 

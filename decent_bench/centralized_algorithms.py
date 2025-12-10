@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy import float64
-from numpy import linalg as la
-from numpy.typing import NDArray
+
+import decent_bench.utils.interoperability as iop
+from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
     from decent_bench.costs import Cost
@@ -11,19 +11,19 @@ if TYPE_CHECKING:
 
 def gradient_descent(
     cost: "Cost",
-    x0: NDArray[float64] | None,
+    x0: Array | None,
     *,
     step_size: float,
     max_iter: int,
     stop_tol: float | None,
     max_tol: float | None,
-) -> NDArray[float64]:
+) -> Array:
     """
     Find the x that minimizes the cost function using gradient descent.
 
     Args:
         cost: cost function to minimize
-        x0: initial guess, defaults to ``np.zeros()`` if ``None`` is provided
+        x0: initial guess, defaults to ``iop.zeros()`` if ``None`` is provided
         step_size: scaling factor for each update
         max_iter: maximum number of iterations to run
         stop_tol: early stopping criteria - stop if ``norm(x_new - x) <= stop_tol``
@@ -37,10 +37,10 @@ def gradient_descent(
 
     """
     delta = np.inf
-    x = x0 if x0 is not None else np.zeros(cost.shape)
+    x = x0 if x0 is not None else iop.zeros(shape=cost.shape, framework=cost.framework, device=cost.device)
     for _ in range(max_iter):
         x_new = x - step_size * cost.gradient(x)
-        delta = float(la.norm(x_new - x))
+        delta = float(iop.norm(x_new - x))
         x = x_new
         if stop_tol is not None and delta <= stop_tol:
             break
@@ -55,18 +55,18 @@ def gradient_descent(
 
 def accelerated_gradient_descent(
     cost: "Cost",
-    x0: NDArray[float64] | None,
+    x0: Array | None,
     *,
     max_iter: int,
     stop_tol: float | None,
     max_tol: float | None,
-) -> NDArray[float64]:
+) -> Array:
     r"""
     Find the x that minimizes the cost function using accelerated gradient descent.
 
     Args:
         cost: cost function to minimize
-        x0: initial guess, defaults to ``np.zeros()`` if ``None`` is provided
+        x0: initial guess, defaults to ``iop.zeros()`` if ``None`` is provided
         max_iter: maximum number of iterations to run
         stop_tol: early stopping criteria - stop if ``norm(x_new - x) <= stop_tol``
         max_tol: maximum tolerated ``norm(x_new - x)`` at the end
@@ -79,7 +79,7 @@ def accelerated_gradient_descent(
         x that minimizes the cost function.
 
     """
-    if x0 is not None and x0.shape != cost.shape:
+    if x0 is not None and iop.shape(x0) != cost.shape:
         raise ValueError("x0 and cost function domain must have same shape")
     if cost.m_smooth == 0:
         raise ValueError("Function must not be affine")
@@ -93,14 +93,14 @@ def accelerated_gradient_descent(
         raise NotImplementedError("Support for non-global differentiability is not implemented yet")
     if np.isnan(cost.m_cvx):
         raise NotImplementedError("Support for non-convexity is not implemented yet")
-    x0 = x0 if x0 is not None else np.zeros(cost.shape)
+    x0 = x0 if x0 is not None else iop.zeros(shape=cost.shape, framework=cost.framework, device=cost.device)
     x = x0
     y = x0
     c = (np.sqrt(cost.m_smooth) - np.sqrt(cost.m_cvx)) / (np.sqrt(cost.m_smooth) + np.sqrt(cost.m_cvx))
     delta = np.inf
     for k in range(1, max_iter + 1):
         x_new = y - cost.gradient(y) / cost.m_smooth
-        delta = float(la.norm(x_new - x))
+        delta = float(iop.norm(x_new - x))
         beta = c if cost.m_cvx > 0 else (k - 1) / (k + 2)
         y_new = x_new + beta * (x_new - x)
         x, y = x_new, y_new
@@ -115,7 +115,7 @@ def accelerated_gradient_descent(
     return x
 
 
-def proximal_solver(cost: "Cost", y: NDArray[float64], rho: float) -> NDArray[float64]:
+def proximal_solver(cost: "Cost", y: Array, rho: float) -> Array:
     """
     Find the proximal at y using accelerated gradient descent.
 
@@ -127,11 +127,11 @@ def proximal_solver(cost: "Cost", y: NDArray[float64], rho: float) -> NDArray[fl
         ValueError: if *cost*'s domain and *y* don't have the same shape, or if *rho* is not greater than 0
 
     """
-    if cost.shape != y.shape:
+    if cost.shape != iop.shape(y):
         raise ValueError("Cost function domain and y need to have the same shape")
     if rho <= 0:
         raise ValueError("Penalty term `rho` must be greater than 0")
     from decent_bench.costs import QuadraticCost  # noqa: PLC0415
 
-    proximal_cost = QuadraticCost(A=np.eye(len(y)) / rho, b=-y / rho, c=y.dot(y) / (2 * rho)) + cost
+    proximal_cost = QuadraticCost(A=iop.eye_like(y) / rho, b=-y / rho, c=float(iop.dot(y, y)) / (2 * rho)) + cost
     return accelerated_gradient_descent(proximal_cost, y, max_iter=100, stop_tol=1e-10, max_tol=None)

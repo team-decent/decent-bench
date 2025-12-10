@@ -5,3 +5,5 @@ decent\_bench.costs
    :members:
    :show-inheritance:
    :undoc-members:
+   :special-members:
+      __add__,

@@ -1,18 +1,14 @@
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import NewType
+from typing import TypeAlias
 
-from numpy import float64
-from numpy.typing import NDArray
 from sklearn import datasets
 
-A = NewType("A", NDArray[float64])
-"""Feature matrix type."""
+import decent_bench.utils.interoperability as iop
+from decent_bench.utils.array import Array
+from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
-b = NewType("b", NDArray[float64])
-"""Target vector type."""
-
-DatasetPartition = NewType("DatasetPartition", tuple[A, b])
+DatasetPartition: TypeAlias = tuple[Array, Array]  # noqa: UP040
 """Tuple of (A, b) representing one dataset partition."""
 
 
@@ -38,13 +34,22 @@ class SyntheticClassificationData(Dataset):
 
     """
 
-    def __init__(
-        self, n_partitions: int, n_classes: int, n_samples_per_partition: int, n_features: int, seed: int | None = None
+    def __init__(  # noqa: PLR0917
+        self,
+        n_partitions: int,
+        n_classes: int,
+        n_samples_per_partition: int,
+        n_features: int,
+        framework: SupportedFrameworks,
+        device: SupportedDevices = SupportedDevices.CPU,
+        seed: int | None = None,
     ):
         self.n_partitions = n_partitions
         self.n_classes = n_classes
         self.n_samples_per_partition = n_samples_per_partition
         self.n_features = n_features
+        self.framework = framework
+        self.device = device
         self.seed = seed
 
     def training_partitions(self) -> list[DatasetPartition]:  # noqa: D102
@@ -58,5 +63,7 @@ class SyntheticClassificationData(Dataset):
                 n_classes=self.n_classes,
                 random_state=seed,
             )
-            res.append(DatasetPartition((A(partition[0]), b(partition[1]))))
+            A = iop.to_array(partition[0], self.framework, self.device)  # noqa: N806
+            b = iop.to_array(partition[1], self.framework, self.device)
+            res.append((A, b))
         return res
