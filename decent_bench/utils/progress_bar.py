@@ -3,12 +3,12 @@ from math import ceil
 from multiprocessing.managers import SyncManager
 from queue import Queue
 from threading import Thread
+from typing import TYPE_CHECKING
 
 from rich.progress import (
     BarColumn,
     Progress,
     ProgressColumn,
-    Task,
     TaskID,
     TaskProgressColumn,
     TextColumn,
@@ -17,6 +17,9 @@ from rich.progress import (
 from rich.text import Text
 
 from decent_bench.distributed_algorithms import Algorithm
+
+if TYPE_CHECKING:
+    from rich.progress import Task
 
 
 @dataclass(eq=False)
@@ -35,7 +38,7 @@ class TrialColumn(ProgressColumn):
         self.style = style
         self.finished_style = finished_style
 
-    def render(self, task: Task) -> Text:  # noqa: D102
+    def render(self, task: "Task") -> Text:  # noqa: D102
         trial = task.fields["fields"].get("trial", "?") if "fields" in task.fields else task.fields.get("trial", "?")
         return Text(f"Trial [{trial}/{self.n_trials}]", style=self.finished_style if task.finished else self.style)
 
@@ -47,7 +50,7 @@ class SpeedColumn(ProgressColumn):
         super().__init__()
         self.progress_step = progress_step
 
-    def render(self, task: Task) -> Text:  # noqa: D102
+    def render(self, task: "Task") -> Text:  # noqa: D102
         if task.speed is None and task.finished_speed is None:
             return Text("--.-- it/s", style="progress.percentage", justify="right")
 

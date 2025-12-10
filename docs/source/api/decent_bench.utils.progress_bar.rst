@@ -6,5 +6,5 @@ decent\_bench.utils.progress\_bar
    :show-inheritance:
    :undoc-members:
    :exclude-members:
-      TrialColumn
-      SpeedColumn
+      TrialColumn,
+      SpeedColumn,
