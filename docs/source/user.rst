@@ -68,6 +68,8 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
             confidence_level=0.9,
             log_level=DEBUG,
             max_processes=1,
+            progress_step=100,
+            show_speed=True,
         )
 
 
@@ -285,34 +287,50 @@ Be sure to use :meth:`~decent_bench.networks.P2PNetwork.active_agents` to during
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD, Algorithm
     from decent_bench.networks import P2PNetwork
+    from decent_bench.utils.array import Array
 
     class MyNewAlgorithm(Algorithm):
-        iterations: int
         step_size: float
+        x0: Array | None = None
+        iterations: int = 100
         name: str = "MNA"
 
-        def run(self, network: P2PNetwork) -> None:
-            # Initialize agents with Array values using the interoperability layer
+        def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
+            # Initialize agents with Array values using the interoperability layer            
             for agent in network.agents():
-                x0 = iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
+                if self.x0 is None:
+                    self.x0 = iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
+                # Ensure x0 is in the correct framework/device for the agents cost function
+                self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
+                # Copy self.x0 to ensure each agent has its own instance
+                x0 = iop.copy(self.x0)
                 y0 = iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
                 neighbors = network.neighbors(agent)
                 agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
 
-            # Run iterations
-            W = network.weights
-            for k in range(self.iterations):
-                for i in network.active_agents(k):
-                    i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
-                    s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
-                    neighborhood_avg = iop.sum(s, axis=0)
-                    neighborhood_avg += W[i, i] * i.x
-                    i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
-                    i.aux_vars["y"] = i.aux_vars["y_new"]
-                for i in network.active_agents(k):
-                    network.broadcast(i, i.x)
-                for i in network.active_agents(k):
-                    network.receive_all(i)
+            return {"W": network.weights}
+
+        def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
+            for i in network.active_agents(iteration):
+                i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
+                s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
+                neighborhood_avg = iop.sum(s, axis=0)
+                neighborhood_avg += W[i, i] * i.x
+                i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
+                i.aux_vars["y"] = i.aux_vars["y_new"]
+
+            for i in network.active_agents(iteration):
+                network.broadcast(i, i.x)
+
+            for i in network.active_agents(iteration):
+                network.receive_all(i)
+
+        def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
+            # Optionally clear any auxiliary variables to free memory.
+            # This function is called after the algorithm completes.
+            # Not mandatory, but good practice to avoid memory leaks.
+            for agent in network.agents():
+                agent.aux_vars.clear()
 
     if __name__ == "__main__":
         benchmark.benchmark(

@@ -54,6 +54,7 @@ intersphinx_mapping = {
         "https://github.com/GPflow/tensorflow-intersphinx/raw/master/tf2_py_objects.inv",
     ),
     "jax": ("https://jax.readthedocs.io/en/latest/", None),
+    "rich": ("https://rich.readthedocs.io/en/latest/", None),
 }
 
 

@@ -32,6 +32,8 @@ def benchmark(
     confidence_level: float = 0.95,
     log_level: int = logging.INFO,
     max_processes: int | None = None,
+    progress_step: int | None = None,
+    show_speed: bool = False,
 ) -> None:
     """
     Benchmark distributed algorithms.
@@ -51,7 +53,12 @@ def benchmark(
         log_level: minimum level to log, e.g. :data:`logging.INFO`
         max_processes: maximum number of processes to use when running trials, multiprocessing improves performance
             but can be inhibiting when debugging or using a profiler, set to 1 to disable multiprocessing or ``None`` to
-            use :class:`~concurrent.futures.ProcessPoolExecutor`'s default
+            use :class:`~concurrent.futures.ProcessPoolExecutor`'s default. If your algorithm is very lightweight you
+            may want to set this to 1 to avoid the multiprocessing overhead.
+        progress_step: if provided, the progress bar will step every `progress_step` iterations.
+            When provided, each algorithm's task total becomes `n_trials * ceil(algorithm.iterations / progress_step)`.
+            If `None`, the progress bar uses 1 unit per trial.
+        show_speed: whether to show speed (iterations/second) in the progress bar.
 
     """
     manager = Manager()
@@ -60,7 +67,7 @@ def benchmark(
     with Status("Generating initial network state"):
         nw_init_state = create_distributed_network(benchmark_problem)
     LOGGER.debug(f"Nr of agents: {len(nw_init_state.agents())}")
-    prog_ctrl = ProgressBarController(manager, algorithms, n_trials)
+    prog_ctrl = ProgressBarController(manager, algorithms, n_trials, progress_step, show_speed)
     resulting_nw_states = _run_trials(algorithms, n_trials, nw_init_state, prog_ctrl, log_listener, max_processes)
     LOGGER.info("All trials complete")
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
@@ -83,13 +90,18 @@ def _run_trials(  # noqa: PLR0917
     max_processes: int | None,
 ) -> dict[Algorithm, list[P2PNetwork]]:
     if max_processes == 1:
-        return {alg: [_run_trial(alg, nw_init_state, progress_bar_ctrl) for _ in range(n_trials)] for alg in algorithms}
+        return {
+            alg: [_run_trial(alg, nw_init_state, progress_bar_ctrl, trial) for trial in range(n_trials)]
+            for alg in algorithms
+        }
     with ProcessPoolExecutor(
         initializer=logger.start_queue_logger, initargs=(log_listener.queue,), max_workers=max_processes
     ) as executor:
         LOGGER.debug(f"Concurrent processes: {executor._max_workers}")  # type: ignore[attr-defined] # noqa: SLF001
         all_futures = {
-            alg: [executor.submit(_run_trial, alg, nw_init_state, progress_bar_ctrl) for _ in range(n_trials)]
+            alg: [
+                executor.submit(_run_trial, alg, nw_init_state, progress_bar_ctrl, trial) for trial in range(n_trials)
+            ]
             for alg in algorithms
         }
         return {alg: [f.result() for f in as_completed(futures)] for alg, futures in all_futures.items()}
@@ -99,13 +111,13 @@ def _run_trial(
     algorithm: Algorithm,
     nw_init_state: P2PNetwork,
     progress_bar_ctrl: ProgressBarController,
+    trial: int,
 ) -> P2PNetwork:
-    progress_bar_ctrl.start_progress_bar(algorithm)
+    progress_bar_ctrl.start_progress_bar(algorithm, trial)
     network = deepcopy(nw_init_state)
     with warnings.catch_warnings(action="error"):
         try:
-            algorithm.run(network)
+            algorithm._run(network, progress_bar_ctrl.advance_progress_bar)  # noqa: SLF001
         except Exception as e:
             LOGGER.exception(f"An error or warning occurred when running {algorithm.name}: {type(e).__name__}: {e}")
-    progress_bar_ctrl.advance_progress_bar(algorithm)
     return network
