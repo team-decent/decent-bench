@@ -39,7 +39,12 @@ class TrialColumn(ProgressColumn):
         self.finished_style = finished_style
 
     def render(self, task: "Task") -> Text:  # noqa: D102
-        trial = task.fields["fields"].get("trial", "?") if "fields" in task.fields else task.fields.get("trial", "?")
+        if task.finished:
+            trial = self.n_trials
+        else:
+            trial = (
+                task.fields["fields"].get("trial", "?") if "fields" in task.fields else task.fields.get("trial", "?")
+            )
         return Text(f"Trial [{trial}/{self.n_trials}]", style=self.finished_style if task.finished else self.style)
 
 
