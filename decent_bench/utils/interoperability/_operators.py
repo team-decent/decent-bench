@@ -359,13 +359,7 @@ def power(array: Array | SupportedArrayTypes, p: float) -> Array:
     if torch and isinstance(value, torch.Tensor):
         return _return_array(torch.pow(value, p))
     if tf and isinstance(value, tf.Tensor):
-        orig_dtype = value.dtype
-        if getattr(orig_dtype, "is_floating", False):
-            value64 = tf.cast(value, tf.float64)
-            result = tf.pow(value64, p)
-            result = tf.cast(result, orig_dtype)
-            return Array(result)
-        return Array(tf.pow(value, p))
+        return _return_array(tf.pow(value, p))
     if jnp and isinstance(value, jnp.ndarray | jnp.generic):
         return _return_array(jnp.power(value, p))
 
@@ -396,13 +390,8 @@ def ipow[T: Array](array: T, p: float) -> T:
         value **= p
         return cast("T", _return_array(value))
     if tf and isinstance(value, tf.Tensor):
-        orig_dtype = value.dtype
-        if getattr(orig_dtype, "is_floating", False):
-            result = tf.pow(tf.cast(value, tf.float64), p)
-            result = tf.cast(result, orig_dtype)
-            return cast("T", Array(result))
         value **= p
-        return cast("T", Array(value))
+        return cast("T", _return_array(value))
     if jnp and isinstance(value, jnp.ndarray | jnp.generic):
         value **= p
         return cast("T", _return_array(value))
