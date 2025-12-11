@@ -9,6 +9,7 @@ from numpy import linalg as la
 from scipy import stats
 
 import decent_bench.metrics.metric_utils as utils
+import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import Algorithm
@@ -87,7 +88,7 @@ class XError(TableMetric):
     description: str = "x error"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
-        return [float(la.norm(problem.x_optimal - a.x_history[-1])) for a in agents]
+        return [float(la.norm(iop.to_numpy(problem.x_optimal) - iop.to_numpy(a.x_history[-1]))) for a in agents]
 
 
 class AsymptoticConvergenceOrder(TableMetric):

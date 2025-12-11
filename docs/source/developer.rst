@@ -36,7 +36,9 @@ To make sure all GitHub status checks pass, simply run :code:`tox`. You can also
     tox -e ruff       # find formatting and style issues
     tox -e sphinx     # rebuild documentation
 
-Note: Running :code:`tox` commands can take several minutes and may require admin privileges.
+Note: Running :code:`tox` commands can take several minutes and may require admin privileges. 
+If you have mypy addon installed in your IDE, you can use it to get instant feedback on typing issues while coding.
+If mypy fails with ``KeyError: 'setter_type'``, delete the ``.mypy_cache`` folder in the project root.
 
 Tools can also be used directly (instead of via tox) after activating the dev environment. Useful examples include:
 

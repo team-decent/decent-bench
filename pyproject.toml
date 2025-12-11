@@ -38,10 +38,17 @@ dev = [
   "types-tabulate",
   "torch",
   "torchvision",
-  "tensorflow",
   "types-tensorflow",
+]
+dev-cpu = [
+  "tensorflow",
   "jax",
 ]
+dev-gpu = [
+  "tensorflow[and-cuda]",
+  "jax[cuda12]",
+]
+
 
 [build-system]
 requires = ["hatchling"]
@@ -54,6 +61,16 @@ envlist = ["dev", "mypy", "pytest", "ruff", "sphinx"]
 description = "Generate dev venv with all dependencies, active with `source .tox/dev/bin/activate`"
 deps = [
   ".[dev]",
+  ".[dev-cpu]",
+  "git+https://github.com/microsoft/python-type-stubs.git@main",
+  "git+https://github.com/pydata/pydata-sphinx-theme.git@main"
+]
+
+[tool.tox.env.dev-gpu]
+description = "Generate dev venv with all dependencies including GPU support, active with `source .tox/dev-gpu/bin/activate`"
+deps = [
+  ".[dev]",
+  ".[dev-gpu]",
   "git+https://github.com/microsoft/python-type-stubs.git@main",
   "git+https://github.com/pydata/pydata-sphinx-theme.git@main"
 ]
@@ -68,7 +85,7 @@ commands = [
 
 [tool.tox.env.mypy]
 description = "Run mypy (static type checker)"
-deps = [".[dev]", "git+https://github.com/microsoft/python-type-stubs.git@main"]
+deps = [".[dev]", ".[dev-cpu]", "git+https://github.com/microsoft/python-type-stubs.git@main"]
 commands = [["mypy", "decent_bench"]]
 
 [tool.tox.env.pytest]
