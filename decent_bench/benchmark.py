@@ -60,6 +60,10 @@ def benchmark(
             If `None`, the progress bar uses 1 unit per trial.
         show_speed: whether to show speed (iterations/second) in the progress bar.
 
+    Note:
+        If ``progress_step`` is too small performance may degrade due to the
+        overhead of updating the progress bar too often.
+
     """
     manager = Manager()
     log_listener = logger.start_log_listener(manager, log_level)
@@ -117,7 +121,7 @@ def _run_trial(
     network = deepcopy(nw_init_state)
     with warnings.catch_warnings(action="error"):
         try:
-            algorithm._run(network, progress_bar_ctrl.advance_progress_bar)  # noqa: SLF001
+            algorithm.run(network, progress_bar_ctrl.advance_progress_bar)
         except Exception as e:
             LOGGER.exception(f"An error or warning occurred when running {algorithm.name}: {type(e).__name__}: {e}")
     return network

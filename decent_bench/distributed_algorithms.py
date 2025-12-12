@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, final
+from typing import TYPE_CHECKING, final
 
 from decent_bench.networks import P2PNetwork
 from decent_bench.utils import interoperability as iop
@@ -24,63 +24,64 @@ class Algorithm(ABC):
         """Name of the algorithm."""
 
     @abstractmethod
-    def initialize(self, network: P2PNetwork) -> dict[Any, Any] | None:
+    def initialize(self, network: P2PNetwork) -> None:
         """
         Initialize the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
 
-        Returns:
-            Any auxiliary information passed to :meth:`step`.
-
         """
 
     @abstractmethod
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:
+    def step(self, network: P2PNetwork, iteration: int) -> None:
         """
         Perform one iteration of the algorithm.
 
         Args:
             network: provides agents, neighbors etc.
             iteration: current iteration number
-            init_vars: auxiliary information returned by :meth:`initialize`
 
         """
 
-    def finalize(self, network: P2PNetwork) -> None:  # noqa: ARG002
+    def finalize(self, network: P2PNetwork) -> None:
         """
         Finalize the algorithm.
 
         Note:
             Override method as needed.
             Does not need to be implemented if no finalization is required.
-            Can be used to clean up auxiliary variables etc.
+            By default it is used to clean up auxiliary variables to free memory.
 
         Args:
             network: provides agents, neighbors etc.
 
         """
-        return
+        for i in network.agents():
+            if i.aux_vars is not None:
+                i.aux_vars.clear()
 
     @final
-    def _run(self, network: P2PNetwork, progress_callback: Callable[["Algorithm", int], None] | None = None) -> None:
+    def run(self, network: P2PNetwork, progress_callback: Callable[["Algorithm", int], None] | None = None) -> None:
         """
         Run the algorithm.
 
         Note:
-            This method calls :meth:`initialize`, :meth:`step` for the specified number of iterations,
-            and :meth:`finalize` in order. Do not override this method.
+            This method first calls :meth:`initialize`, then :meth:`step` for the specified number of iterations
+            and finally :meth:`finalize`.
+
+        Warning:
+            Do not override this method. Instead, override :meth:`initialize`, :meth:`step` and :meth:`finalize`
+            as needed.
 
         Args:
             network: provides agents, neighbors etc.
             progress_callback: optional callback to report progress after each iteration.
 
         """
-        init_vars = self.initialize(network)
-        init_vars = init_vars if init_vars is not None else {}
+        self.initialize(network)
         for k in range(self.iterations):
-            self.step(network, k, init_vars)
+            self.step(network, k)
             if progress_callback is not None:
                 progress_callback(self, k)
         self.finalize(network)
@@ -108,24 +109,21 @@ class DGD(Algorithm):
     iterations: int = 100
     name: str = "DGD"
 
-    def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
-        for agent in network.agents():
+    def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        for i in network.agents():
             if self.x0 is None:
-                self.x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
+                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
 
-            x0 = iop.copy(self.x0)
-            agent.initialize(x=x0, received_msgs=dict.fromkeys(network.neighbors(agent), x0))
+            i.initialize(x=self.x0, received_msgs=dict.fromkeys(network.neighbors(i), self.x0))
 
-        return {"W": network.weights}
+        self.W = network.weights
 
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
-        W = init_vars["W"]  # noqa: N806
-
+    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         for i in network.active_agents(iteration):
-            s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
+            s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += W[i, i] * i.x
+            neighborhood_avg += self.W[i, i] * i.x
             i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
 
         for i in network.active_agents(iteration):
@@ -163,23 +161,21 @@ class ATC(Algorithm):
     iterations: int = 100
     name: str = "ATC"
 
-    def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
-        for agent in network.agents():
+    def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        for i in network.agents():
             if self.x0 is None:
-                self.x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
+                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
 
-            x0 = iop.copy(self.x0)
-            agent.initialize(
-                x=x0,
-                received_msgs=dict.fromkeys(network.neighbors(agent), x0),
-                aux_vars={"y": x0},
+            i.initialize(
+                x=self.x0,
+                received_msgs=dict.fromkeys(network.neighbors(i), self.x0),
+                aux_vars={"y": self.x0},
             )
 
-        return {"W": network.weights}
+        self.W = network.weights
 
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
-        W = init_vars["W"]  # noqa: N806
+    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         # gradient step (a.k.a. adapt step)
         for i in network.active_agents(iteration):
             i.aux_vars["y"] = i.x - self.step_size * i.cost.gradient(i.x)
@@ -193,14 +189,10 @@ class ATC(Algorithm):
             network.receive_all(i)
 
         for i in network.active_agents(iteration):
-            s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
+            s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
             neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += W[i, i] * i.x
+            neighborhood_avg += self.W[i, i] * i.x
             i.x = neighborhood_avg
-
-    def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
-        for agent in network.agents():
-            agent.aux_vars.clear()
 
 
 AdaptThenCombine = ATC  # alias
@@ -232,26 +224,24 @@ class SimpleGT(Algorithm):
     iterations: int = 100
     name: str = "SimpleGT"
 
-    def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
-        for agent in network.agents():
+    def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        for i in network.agents():
             if self.x0 is None:
-                self.x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
+                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
 
-            x0 = iop.copy(self.x0)
-            y0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            neighbors = network.neighbors(agent)
-            agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
+            y0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            neighbors = network.neighbors(i)
+            i.initialize(x=self.x0, received_msgs=dict.fromkeys(neighbors, self.x0), aux_vars={"y": y0})
 
-        return {"W": network.weights}
+        self.W = network.weights
 
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
-        W = init_vars["W"]  # noqa: N806
+    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         for i in network.active_agents(iteration):
             i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
-            s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
+            s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += W[i, i] * i.x
+            neighborhood_avg += self.W[i, i] * i.x
             i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
             i.aux_vars["y"] = i.aux_vars["y_new"]
 
@@ -260,10 +250,6 @@ class SimpleGT(Algorithm):
 
         for i in network.active_agents(iteration):
             network.receive_all(i)
-
-    def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
-        for agent in network.agents():
-            agent.aux_vars.clear()
 
 
 SimpleGradientTracking = SimpleGT  # Alias
@@ -296,32 +282,29 @@ class ED(Algorithm):
     iterations: int = 100
     name: str = "ED"
 
-    def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
-        for agent in network.agents():
+    def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        for i in network.agents():
             if self.x0 is None:
-                self.x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
+                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
 
-            x0 = iop.copy(self.x0)
-            y0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            y1 = x0 - self.step_size * agent.cost.gradient(x0)
+            y0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            y1 = self.x0 - self.step_size * i.cost.gradient(self.x0)
             # note: msg0's y1 is an approximation of the neighbors' y1 (x0 and y0 are exact: all agents start with same)
-            msg0 = x0 + y1 - y0
-            agent.initialize(
-                x=x0,
+            msg0 = self.x0 + y1 - y0
+            i.initialize(
+                x=self.x0,
                 aux_vars={"y": y0, "y_new": y1},
-                received_msgs=dict.fromkeys(network.neighbors(agent), msg0),
+                received_msgs=dict.fromkeys(network.neighbors(i), msg0),
             )
 
-        W = network.weights  # noqa: N806
-        W = 0.5 * (iop.eye_like(W) + W)  # noqa: N806
-        return {"W": W}
+        self.W = network.weights
+        self.W = 0.5 * (iop.eye_like(self.W) + self.W)
 
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
-        W = init_vars["W"]  # noqa: N806
+    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         for i in network.active_agents(iteration):
-            s = iop.stack([W[i, j] * msg for j, msg in i.messages.items()])
-            i.x = iop.sum(s, dim=0) + W[i, i] * (i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
+            s = iop.stack([self.W[i, j] * msg for j, msg in i.messages.items()])
+            i.x = iop.sum(s, dim=0) + self.W[i, i] * (i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
             i.aux_vars["y"] = i.aux_vars["y_new"]
             i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
 
@@ -330,10 +313,6 @@ class ED(Algorithm):
 
         for i in network.active_agents(iteration):
             network.receive_all(i)
-
-    def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
-        for agent in network.agents():
-            agent.aux_vars.clear()
 
 
 ExactDiffusion = ED  # alias
@@ -373,25 +352,23 @@ class AugDGM(Algorithm):
     iterations: int = 100
     name: str = "Aug-DGM"
 
-    def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
-        for agent in network.agents():
+    def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        for i in network.agents():
             if self.x0 is None:
-                self.x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
+                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
 
-            x0 = iop.copy(self.x0)
-            y0 = agent.cost.gradient(x0)
-            neighbors = network.neighbors(agent)
-            agent.initialize(
-                x=x0,
-                received_msgs=dict.fromkeys(neighbors, x0),
+            y0 = i.cost.gradient(self.x0)
+            neighbors = network.neighbors(i)
+            i.initialize(
+                x=self.x0,
+                received_msgs=dict.fromkeys(neighbors, self.x0),
                 aux_vars={"y": y0, "g": y0, "g_new": self.x0, "s": self.x0},
             )
 
-        return {"W": network.weights}
+        self.W = network.weights
 
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
-        W = init_vars["W"]  # noqa: N806
+    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         # 1st communication round
         #     step 1: perform local gradient step and communicate
         for i in network.active_agents(iteration):
@@ -405,9 +382,9 @@ class AugDGM(Algorithm):
             network.receive_all(i)
 
         for i in network.active_agents(iteration):
-            s = iop.stack([W[i, j] * s_j for j, s_j in i.messages.items()])
+            s = iop.stack([self.W[i, j] * s_j for j, s_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += W[i, i] * i.aux_vars["s"]
+            neighborhood_avg += self.W[i, i] * i.aux_vars["s"]
             i.x = neighborhood_avg
             i.aux_vars["g_new"] = i.cost.gradient(i.x)
 
@@ -421,15 +398,11 @@ class AugDGM(Algorithm):
             network.receive_all(i)
 
         for i in network.active_agents(iteration):
-            s = iop.stack([W[i, j] * q_j for j, q_j in i.messages.items()])
+            s = iop.stack([self.W[i, j] * q_j for j, q_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
+            neighborhood_avg += self.W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
             i.aux_vars["y"] = neighborhood_avg
             i.aux_vars["g"] = i.aux_vars["g_new"]
-
-    def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
-        for agent in network.agents():
-            agent.aux_vars.clear()
 
 
 ATCDIGing = AugDGM  # alias
@@ -470,27 +443,25 @@ class WangElia(Algorithm):
     iterations: int = 100
     name: str = "Wang-Elia"
 
-    def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
-        for agent in network.agents():
+    def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        for i in network.agents():
             if self.x0 is None:
-                self.x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
+                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
 
-            x0 = iop.copy(self.x0)
-            neighbors = network.neighbors(agent)
-            agent.initialize(
-                x=x0,
-                received_msgs=dict.fromkeys(neighbors, x0),
-                aux_vars={"z": x0, "x_old": x0},
+            neighbors = network.neighbors(i)
+            i.initialize(
+                x=self.x0,
+                received_msgs=dict.fromkeys(neighbors, self.x0),
+                aux_vars={"z": self.x0, "x_old": self.x0},
             )
 
         W = network.weights  # noqa: N806
         K = 0.5 * (iop.eye_like(W) - W)  # noqa: N806
 
-        return {"K": K}
+        self.K = K
 
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
-        K = init_vars["K"]  # noqa: N806
+    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         # 1st communication round
         for i in network.active_agents(iteration):
             network.broadcast(i, i.x + i.aux_vars["z"])
@@ -500,9 +471,9 @@ class WangElia(Algorithm):
             network.receive_all(i)
 
         for i in network.active_agents(iteration):
-            s = iop.stack([K[i, j] * m_j for j, m_j in i.messages.items()])
+            s = iop.stack([self.K[i, j] * m_j for j, m_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += K[i, i] * (i.x + i.aux_vars["z"])
+            neighborhood_avg += self.K[i, i] * (i.x + i.aux_vars["z"])
 
             i.aux_vars["x_old"] = i.x
             i.x = i.x - neighborhood_avg - self.step_size * i.cost.gradient(i.x)
@@ -516,14 +487,10 @@ class WangElia(Algorithm):
             network.receive_all(i)
 
         for i in network.active_agents(iteration):
-            s = iop.stack([K[i, j] * m_j for j, m_j in i.messages.items()])
+            s = iop.stack([self.K[i, j] * m_j for j, m_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += K[i, i] * i.aux_vars["x_old"]
+            neighborhood_avg += self.K[i, i] * i.aux_vars["x_old"]
             i.aux_vars["z"] += neighborhood_avg
-
-    def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
-        for agent in network.agents():
-            agent.aux_vars.clear()
 
 
 @dataclass(eq=False)
@@ -556,24 +523,21 @@ class EXTRA(Algorithm):
     iterations: int = 100
     name: str = "EXTRA"
 
-    def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
-        for agent in network.agents():
+    def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        for i in network.agents():
             if self.x0 is None:
-                self.x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
+                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
 
-            x0 = iop.copy(self.x0)
-            agent.initialize(
-                x=x0,
-                received_msgs=dict.fromkeys(network.neighbors(agent), x0),
-                aux_vars={"x_old": x0, "x_old_old": x0, "x_cons": x0},
+            i.initialize(
+                x=self.x0,
+                received_msgs=dict.fromkeys(network.neighbors(i), self.x0),
+                aux_vars={"x_old": self.x0, "x_old_old": self.x0, "x_cons": self.x0},
             )
 
-        return {"W": network.weights}
+        self.W = network.weights
 
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
-        W = init_vars["W"]  # noqa: N806
-
+    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         if iteration == 0:
             # first iteration (iteration k=1)
             for i in network.active_agents(0):
@@ -583,9 +547,9 @@ class EXTRA(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(0):
-                s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
+                s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
                 neighborhood_avg = iop.sum(s, dim=0)
-                neighborhood_avg += W[i, i] * i.x
+                neighborhood_avg += self.W[i, i] * i.x
                 i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
                 i.aux_vars["x_old"] = i.x  # store x_0
                 i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
@@ -598,9 +562,9 @@ class EXTRA(Algorithm):
                 network.receive_all(i)
 
             for i in network.active_agents(iteration):
-                s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
+                s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
                 neighborhood_avg = iop.sum(s, dim=0)
-                neighborhood_avg += W[i, i] * i.x
+                neighborhood_avg += self.W[i, i] * i.x
                 i.aux_vars["x_old_old"] = i.aux_vars["x_old"]  # store x_{k-1}
                 i.aux_vars["x_old"] = i.x  # store x_k
                 # update x_{k+1}
@@ -612,10 +576,6 @@ class EXTRA(Algorithm):
                     - self.step_size * (i.cost.gradient(i.x) - i.cost.gradient(i.aux_vars["x_old_old"]))
                 )
                 i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
-
-    def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
-        for agent in network.agents():
-            agent.aux_vars.clear()
 
 
 @dataclass(eq=False)
@@ -656,26 +616,23 @@ class ATCTracking(Algorithm):
     iterations: int = 100
     name: str = "ATC-Tracking"
 
-    def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
-        for agent in network.agents():
+    def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        for i in network.agents():
             if self.x0 is None:
-                self.x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
+                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
 
-            x0 = iop.copy(self.x0)
-            y0 = agent.cost.gradient(x0)
-            neighbors = network.neighbors(agent)
-            agent.initialize(
-                x=x0,
-                received_msgs=dict.fromkeys(neighbors, x0),
-                aux_vars={"y": y0, "g": y0, "g_new": x0, "s": x0},
+            y0 = i.cost.gradient(self.x0)
+            neighbors = network.neighbors(i)
+            i.initialize(
+                x=self.x0,
+                received_msgs=dict.fromkeys(neighbors, self.x0),
+                aux_vars={"y": y0, "g": y0, "g_new": self.x0, "s": self.x0},
             )
 
-        return {"W": network.weights}
+        self.W = network.weights
 
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
-        W = init_vars["W"]  # noqa: N806
-
+    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         # 1st communication round
         #     step 1: perform local gradient step and communicate
         for i in network.active_agents(iteration):
@@ -689,9 +646,9 @@ class ATCTracking(Algorithm):
             network.receive_all(i)
 
         for i in network.active_agents(iteration):
-            s = iop.stack([W[i, j] * s_j for j, s_j in i.messages.items()])
+            s = iop.stack([self.W[i, j] * s_j for j, s_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += W[i, i] * i.aux_vars["s"]
+            neighborhood_avg += self.W[i, i] * i.aux_vars["s"]
             i.x = neighborhood_avg
             i.aux_vars["g_new"] = i.cost.gradient(i.x)
 
@@ -705,15 +662,11 @@ class ATCTracking(Algorithm):
             network.receive_all(i)
 
         for i in network.active_agents(iteration):
-            s = iop.stack([W[i, j] * q_j for j, q_j in i.messages.items()])
+            s = iop.stack([self.W[i, j] * q_j for j, q_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += W[i, i] * i.aux_vars["y"]
+            neighborhood_avg += self.W[i, i] * i.aux_vars["y"]
             i.aux_vars["y"] = neighborhood_avg + i.aux_vars["g_new"] - i.aux_vars["g"]
             i.aux_vars["g"] = i.aux_vars["g_new"]
-
-    def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
-        for agent in network.agents():
-            agent.aux_vars.clear()
 
 
 SONATA = ATCTracking  # alias
@@ -752,25 +705,23 @@ class NIDS(Algorithm):
     iterations: int = 100
     name: str = "NIDS"
 
-    def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
-        for agent in network.agents():
+    def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        for i in network.agents():
             if self.x0 is None:
-                self.x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
+                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
 
-            x0 = iop.copy(self.x0)
-            agent.initialize(
-                x=x0,
-                received_msgs=dict.fromkeys(network.neighbors(agent), x0),
-                aux_vars={"x_old": x0, "g": x0, "g_old": x0, "y": x0},
+            i.initialize(
+                x=self.x0,
+                received_msgs=dict.fromkeys(network.neighbors(i), self.x0),
+                aux_vars={"x_old": self.x0, "g": self.x0, "g_old": self.x0, "y": self.x0},
             )
 
         W = network.weights  # noqa: N806
         W_tilde = 0.5 * (iop.eye_like(W) + W)  # noqa: N806
-        return {"W_tilde": W_tilde}
+        self.W_tilde = W_tilde
 
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
-        W_tilde = init_vars["W_tilde"]  # noqa: N806
+    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         if iteration == 0:
             # first iteration (iteration k=1)
             for i in network.active_agents(0):
@@ -792,15 +743,11 @@ class NIDS(Algorithm):
             for i in network.active_agents(iteration):
                 network.receive_all(i)
             for i in network.active_agents(iteration):
-                s = iop.stack([W_tilde[i, j] * y_j for j, y_j in i.messages.items()])
+                s = iop.stack([self.W_tilde[i, j] * y_j for j, y_j in i.messages.items()])
                 neighborhood_avg = iop.sum(s, dim=0)
-                neighborhood_avg += W_tilde[i, i] * i.aux_vars["y"]
+                neighborhood_avg += self.W_tilde[i, i] * i.aux_vars["y"]
                 i.aux_vars["x_old"] = i.x  # store x_k
                 i.x = neighborhood_avg  # update x_{k+1}
-
-    def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
-        for agent in network.agents():
-            agent.aux_vars.clear()
 
 
 @dataclass(eq=False)
@@ -825,40 +772,45 @@ class ADMM(Algorithm):
     and :math:`\alpha \in (0, 1)` is the relaxation parameter.
 
     Note:
-        x0 is not used in this algorithm.
+        ``z0`` is of shape :attr:`agent.cost.shape <decent_bench.costs.Cost.shape>` which is then stacked for all agents
+        to form ``z`` of shape ``(num_agents, *agent.cost.shape)``.
 
     """
 
     rho: float
     alpha: float
+    z0: "Array | None" = None
     iterations: int = 100
     name: str = "ADMM"
 
-    def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
+    def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
-        for agent in all_agents:
-            z0 = iop.zeros(
-                framework=agent.cost.framework,
-                shape=(len(all_agents), *(agent.cost.shape)),
-                device=agent.cost.device,
-            )
-            x1 = agent.cost.proximal(x=iop.sum(z0, dim=0) / pN[agent], rho=1 / pN[agent])
+        for i in all_agents:
+            if self.z0 is None:
+                self.z0 = iop.zeros(
+                    framework=i.cost.framework,
+                    shape=(len(all_agents), *(i.cost.shape)),
+                    device=i.cost.device,
+                )
+            elif iop.shape(self.z0) != (len(all_agents), *(i.cost.shape)):
+                self.z0 = iop.stack([self.z0 for _ in all_agents])
+            self.z0 = iop.to_array(self.z0, framework=i.cost.framework, device=i.cost.device)
+
+            x1 = i.cost.proximal(x=iop.sum(self.z0, dim=0) / pN[i], rho=1 / pN[i])
             # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
-            msg0 = z0[agent] - 2 * self.rho * x1
-            agent.initialize(
+            msg0 = self.z0[i] - 2 * self.rho * x1
+            i.initialize(
                 x=x1,
-                aux_vars={"z": z0},
-                received_msgs=dict.fromkeys(network.neighbors(agent), msg0),
+                aux_vars={"z": self.z0},
+                received_msgs=dict.fromkeys(network.neighbors(i), msg0),
             )
 
-        return pN
+        self.pN = pN
 
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
-        pN = init_vars  # noqa: N806
-
+    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         for i in network.active_agents(iteration):
-            i.x = i.cost.proximal(x=iop.sum(i.aux_vars["z"], dim=0) / pN[i], rho=1 / pN[i])
+            i.x = i.cost.proximal(x=iop.sum(i.aux_vars["z"], dim=0) / self.pN[i], rho=1 / self.pN[i])
 
         for i in network.active_agents(iteration):
             for j in network.neighbors(i):
@@ -870,10 +822,6 @@ class ADMM(Algorithm):
         for i in network.active_agents(iteration):
             for j in network.neighbors(i):
                 i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (i.messages[j])
-
-    def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
-        for agent in network.agents():
-            agent.aux_vars.clear()
 
 
 @dataclass(eq=False)
@@ -923,39 +871,38 @@ class ATG(Algorithm):
     iterations: int = 100
     name: str = "ATG"
 
-    def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
-        pN = {agent: self.rho * len(network.neighbors(agent)) for agent in network.agents()}  # noqa: N806
+    def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
-        for agent in all_agents:
+        for i in all_agents:
             if self.x0 is None:
-                self.x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
+                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
 
-            x0 = iop.copy(self.x0)
             z_y0 = iop.zeros(
-                framework=agent.cost.framework,
-                shape=(len(all_agents), *(agent.cost.shape)),
-                device=agent.cost.device,
+                framework=i.cost.framework,
+                shape=(len(all_agents), *(i.cost.shape)),
+                device=i.cost.device,
             )
             z_s0 = iop.zeros(
-                framework=agent.cost.framework,
-                shape=(len(all_agents), *(agent.cost.shape)),
-                device=agent.cost.device,
+                framework=i.cost.framework,
+                shape=(len(all_agents), *(i.cost.shape)),
+                device=i.cost.device,
             )
-            agent.initialize(
-                x=x0,
-                aux_vars={"y": x0, "s": x0, "z_y": z_y0, "z_s": z_s0},
-                received_msgs=dict.fromkeys(network.neighbors(agent), x0),
+            i.initialize(
+                x=self.x0,
+                aux_vars={"y": self.x0, "s": self.x0, "z_y": z_y0, "z_s": z_s0},
+                received_msgs=dict.fromkeys(network.neighbors(i), self.x0),
             )
-        return pN
 
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
-        pN = init_vars  # noqa: N806
+        self.pN = pN
+
+    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         # step 1: update consensus-ADMM variables
         for i in network.active_agents(iteration):
             # update auxiliary variables
-            i.aux_vars["y"] = (i.x + iop.sum(i.aux_vars["z_y"], dim=0)) / (1 + pN[i])
-            i.aux_vars["s"] = (i.cost.gradient(i.x) + iop.sum(i.aux_vars["z_s"], dim=0)) / (1 + pN[i])
+            i.aux_vars["y"] = (i.x + iop.sum(i.aux_vars["z_y"], dim=0)) / (1 + self.pN[i])
+            i.aux_vars["s"] = (i.cost.gradient(i.x) + iop.sum(i.aux_vars["z_s"], dim=0)) / (1 + self.pN[i])
             # update local state
             i.x = (1 - self.gamma) * i.x + self.gamma * (i.aux_vars["y"] - self.delta * i.aux_vars["s"])
 
@@ -979,10 +926,6 @@ class ATG(Algorithm):
                                         + self.alpha * i.messages[j][0]  # fmt: skip
                 i.aux_vars["z_s"][j] = (1 - self.alpha) * i.aux_vars["z_s"][j] \
                                         + self.alpha * i.messages[j][1]  # fmt: skip
-
-    def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
-        for agent in network.agents():
-            agent.aux_vars.clear()
 
 
 ADMMTracking = ATG  # alias
@@ -1026,17 +969,16 @@ class DLM(Algorithm):
     name: str = "DLM"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        for agent in network.agents():
+        for i in network.agents():
             if self.x0 is None:
-                self.x0 = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
+                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
 
-            x0 = iop.copy(self.x0)
             # y must be initialized to zero
-            y = iop.zeros(framework=agent.cost.framework, shape=agent.cost.shape, device=agent.cost.device)
-            agent.initialize(x=x0, aux_vars={"y": y})
+            y = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+            i.initialize(x=self.x0, aux_vars={"y": y})
 
-    def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: ARG002, D102
+    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         if iteration == 0:
             # step 0: first communication round
             for i in network.active_agents(0):

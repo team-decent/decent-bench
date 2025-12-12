@@ -295,27 +295,26 @@ Be sure to use :meth:`~decent_bench.networks.P2PNetwork.active_agents` to during
         iterations: int = 100
         name: str = "MNA"
 
-        def initialize(self, network: P2PNetwork) -> dict[Any, Any]:  # noqa: D102
+        def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
             # Initialize agents with Array values using the interoperability layer            
             for agent in network.agents():
                 if self.x0 is None:
                     self.x0 = iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
                 # Ensure x0 is in the correct framework/device for the agents cost function
                 self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
-                # Copy self.x0 to ensure each agent has its own instance
-                x0 = iop.copy(self.x0)
+
                 y0 = iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
                 neighbors = network.neighbors(agent)
-                agent.initialize(x=x0, received_msgs=dict.fromkeys(neighbors, x0), aux_vars={"y": y0})
+                agent.initialize(x=self.x0, received_msgs=dict.fromkeys(neighbors, self.x0), aux_vars={"y": y0})
 
-            return {"W": network.weights}
+            self.W = network.weights
 
-        def step(self, network: P2PNetwork, iteration: int, init_vars: dict[Any, Any]) -> None:  # noqa: D102
+        def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
             for i in network.active_agents(iteration):
                 i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
-                s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
+                s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
                 neighborhood_avg = iop.sum(s, axis=0)
-                neighborhood_avg += W[i, i] * i.x
+                neighborhood_avg += self.W[i, i] * i.x
                 i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
                 i.aux_vars["y"] = i.aux_vars["y_new"]
 
@@ -326,9 +325,11 @@ Be sure to use :meth:`~decent_bench.networks.P2PNetwork.active_agents` to during
                 network.receive_all(i)
 
         def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
-            # Optionally clear any auxiliary variables to free memory.
+            # Optionally override finalize method. Code below is the default behavior
+            # which clears auxiliary variables to free memory.
             # This function is called after the algorithm completes.
-            # Not mandatory, but good practice to avoid memory leaks.
+            # It is generally not necessary to override this method unless your algorithm
+            # requires special cleanup or finalization.
             for agent in network.agents():
                 agent.aux_vars.clear()
 
