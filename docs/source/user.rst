@@ -43,6 +43,16 @@ Benchmark executions will have outputs like these:
           :align: center
 
 
+Benchmark executions will have outputs like these:
+
+.. list-table::
+
+   * - .. image:: _static/table.png
+          :align: center
+     - .. image:: _static/plot.png
+          :align: center
+
+
 Execution settings
 ------------------
 Configure settings for metrics, trials, statistical confidence level, logging, and multiprocessing.
@@ -159,10 +169,16 @@ Create a custom benchmark problem using existing resources.
     from decent_bench.distributed_algorithms import ADMM, DGD, ED
     from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
     from decent_bench.utils.types import SupportedFrameworks
+    from decent_bench.utils.types import SupportedFrameworks
 
     n_agents = 100
 
     dataset = SyntheticClassificationData(
+        n_classes=2, 
+        n_partitions=n_agents, 
+        n_samples_per_partition=10, 
+        n_features=3, 
+        framework=SupportedFrameworks.NUMPY,
         n_classes=2, 
         n_partitions=n_agents, 
         n_samples_per_partition=10, 
@@ -267,6 +283,21 @@ algorithms framework-agnostic, always use the interoperability layer :class:`~de
 - When you need to create a new array/tensor, use the interoperability layer to ensure compatibility with the agent's cost function framework and device.
     If a method to create your specific array/tensor is not available, see the implementation of :attr:`~decent_bench.networks.P2PNetwork.weights` as en example.
 
+Interoperability requirement
+----------------------------
+Decent-Bench is designed to interoperate with multiple array/tensor frameworks (NumPy, PyTorch, JAX, etc.). To keep
+algorithms framework-agnostic, always use the interoperability layer :class:`~decent_bench.utils.interoperability`, aliased as
+`iop`, and the :class:`~decent_bench.utils.array.Array` wrapper when creating, manipulating, and exchanging values:
+
+- Use :class:`decent_bench.utils.interoperability.zeros` instead of framework-specific constructors (e.g., `np.zeros`, `torch.zeros`). 
+    Other examples are :meth:`~decent_bench.utils.interoperability.ones_like`, :meth:`~decent_bench.utils.interoperability.rand_like`, :meth:`~decent_bench.utils.interoperability.randn_like`, etc.
+    See :mod:`~decent_bench.utils.interoperability` for a full list of available methods and :mod:`~decent_bench.distributed_algorithms` for examples of usage.
+- Avoid calling any framework-specific functions directly within your algorithm. 
+    Let the :class:`~decent_bench.costs.Cost` implementations handle framework-specific details for 
+    :func:`~decent_bench.costs.Cost.function`, :func:`~decent_bench.costs.Cost.gradient`, :func:`~decent_bench.costs.Cost.hessian`, and :func:`~decent_bench.costs.Cost.proximal`.
+- When you need to create a new array/tensor, use the interoperability layer to ensure compatibility with the agent's cost function framework and device.
+    If a method to create your specific array/tensor is not available, see the implementation of :attr:`~decent_bench.networks.P2PNetwork.weights` as en example.
+
 
 Algorithms
 ----------
@@ -280,6 +311,7 @@ Be sure to use :meth:`~decent_bench.networks.Network.active_agents` during algor
 .. code-block:: python
 
     import decent_bench.utils.interoperability as iop
+    import decent_bench.utils.interoperability as iop
 
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.costs import LinearRegressionCost
@@ -289,11 +321,16 @@ Be sure to use :meth:`~decent_bench.networks.Network.active_agents` during algor
     class MyNewAlgorithm(Algorithm):
         iterations: int
         step_size: float
+        iterations: int
+        step_size: float
         name: str = "MNA"
 
         def run(self, network: P2PNetwork) -> None:
             # Initialize agents with Array values using the interoperability layer
+            # Initialize agents with Array values using the interoperability layer
             for agent in network.agents():
+                x0 = iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
+                y0 = iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
                 x0 = iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
                 y0 = iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
                 neighbors = network.neighbors(agent)
@@ -304,6 +341,8 @@ Be sure to use :meth:`~decent_bench.networks.Network.active_agents` during algor
             for k in range(self.iterations):
                 for i in network.active_agents(k):
                     i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
+                    s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
+                    neighborhood_avg = iop.sum(s, axis=0)
                     s = iop.stack([W[i, j] * x_j for j, x_j in i.messages.items()])
                     neighborhood_avg = iop.sum(s, axis=0)
                     neighborhood_avg += W[i, i] * i.x
@@ -333,6 +372,7 @@ Create your own metrics to tabulate and/or plot.
 
     import numpy.linalg as la
     import decent_bench.utils.interoperability as iop
+    import decent_bench.utils.interoperability as iop
 
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.agents import AgentMetricsView
@@ -343,6 +383,8 @@ Create your own metrics to tabulate and/or plot.
     from decent_bench.metrics.table_metrics import DEFAULT_TABLE_METRICS, TableMetric
 
     def x_error_at_iter(agent: AgentMetricsView, problem: BenchmarkProblem, i: int = -1) -> float:
+        # Convert Array values to numpy for custom metric computation
+        return float(la.norm(iop.to_numpy(problem.optimal_x) - iop.to_numpy(agent.x_per_iteration[i])))
         # Convert Array values to numpy for custom metric computation
         return float(la.norm(iop.to_numpy(problem.optimal_x) - iop.to_numpy(agent.x_per_iteration[i])))
 
