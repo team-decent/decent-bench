@@ -274,8 +274,8 @@ Create a new algorithm to benchmark against existing ones.
 
 **Note**: In order for metrics to work, use :attr:`Agent.x <decent_bench.agents.Agent.x>` to update the local primal
 variable. Similarly, in order for the benchmark problem's communication schemes to be applied, use the
-:attr:`~decent_bench.networks.P2PNetwork` object to retrieve agents and to send and receive messages. 
-Be sure to use :meth:`~decent_bench.networks.P2PNetwork.active_agents` to during algorithm runtime, so that asynchrony is properly handled.
+:attr:`~decent_bench.networks.P2PNetwork`/ :attr:`~decent_bench.networks.FedNetwork` object to retrieve agents and to send and receive messages.
+Be sure to use :meth:`~decent_bench.networks.Network.active_agents` during algorithm runtime, so that asynchrony is properly handled.
 
 .. code-block:: python
 

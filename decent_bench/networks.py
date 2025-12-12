@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
-from networkx import Graph
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
@@ -187,11 +186,10 @@ class P2PNetwork(Network):
                 A[i, j] = 1
 
         return iop.to_array(A, agents[0].cost.framework, agents[0].cost.device)
-    
+
     def neighbors(self, agent: Agent) -> list[Agent]:
         """Get all neighbors of an agent."""
         return list(self.graph[agent])
-
 
     def broadcast(self, sender: Agent, msg: Array) -> None:
         """

@@ -68,7 +68,7 @@ def create_array(data: list, framework: str, device: str = "cpu"):
     if framework == "tensorflow":
         device_str = "/GPU:0" if device == "gpu" and TF_GPU_AVAILABLE else "/CPU:0"
         with tf.device(device_str):
-            array2: tf.Tensor = tf.constant(data, dtype=tf.float32)  # type: ignore
+            array2: tf.Tensor = tf.constant(data, dtype=tf.float64)  # type: ignore
             return Array(array2)
     elif framework == "jax":
         array3 = jnp.array(data, dtype=jnp.float32)
