@@ -296,7 +296,7 @@ Be sure to use :meth:`~decent_bench.networks.P2PNetwork.active_agents` to during
         name: str = "MNA"
 
         def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-            # Initialize agents with Array values using the interoperability layer            
+            # Initialize agents with Array values using the interoperability layer
             for agent in network.agents():
                 if self.x0 is None:
                     self.x0 = iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
