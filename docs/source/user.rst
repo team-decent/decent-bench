@@ -313,7 +313,7 @@ Be sure to use :meth:`~decent_bench.networks.P2PNetwork.active_agents` to during
             for i in network.active_agents(iteration):
                 i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
                 s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
-                neighborhood_avg = iop.sum(s, axis=0)
+                neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += self.W[i, i] * i.x
                 i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
                 i.aux_vars["y"] = i.aux_vars["y_new"]
