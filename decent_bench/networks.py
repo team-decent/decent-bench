@@ -55,9 +55,9 @@ class Network(ABC):
         return self._message_drop
 
     @abstractmethod
-    def kind(self) -> str:
-        """Label for the network subtype (e.g., 'p2p', 'fed')."""
-        raise NotImplementedError
+    def kind(self) -> type["Network"]:
+        """Concrete network class for type-based dispatch."""
+        ...
 
     def agents(self) -> list[Agent]:
         """Get all agents in the network."""
@@ -124,9 +124,9 @@ class P2PNetwork(Network):
         )
         self.W: Array | None = None
 
-    def kind(self) -> str:
-        """Label for the network subtype."""
-        return "p2p"
+    def kind(self) -> type["Network"]:
+        """Concrete network class for type-based dispatch."""
+        return type(self)
 
     def set_weights(self, weights: Array) -> None:
         """
@@ -245,9 +245,9 @@ class FedNetwork(Network):
             raise ValueError("FedNetwork expects a star topology with one server connected to all clients")
         return server
 
-    def kind(self) -> str:
-        """Label for the network subtype."""
-        return "fed"
+    def kind(self) -> type["Network"]:
+        """Concrete network class for type-based dispatch."""
+        return type(self)
 
     @property
     def server(self) -> Agent:
@@ -308,10 +308,11 @@ class FedNetwork(Network):
 
         """
         clients = set(self.clients)
-        invalid = [client for client in msgs if client not in clients]
+        senders = set(msgs)
+        invalid = senders - clients
         if invalid:
             raise ValueError("All senders must be clients")
-        missing = clients - set(msgs)
+        missing = clients - senders
         if missing:
             raise ValueError("Messages must be provided for all clients")
         for client, msg in msgs.items():
