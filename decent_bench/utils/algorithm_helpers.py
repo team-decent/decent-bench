@@ -17,10 +17,16 @@ def zero_initialization(x0: Array | None, network: P2PNetwork, stack_to: int | N
     Returns:
         initialized variable
 
+    Raises:
+        ValueError: if the shape of x0 does not match the expected shape
+
     """
     i = network.agents()[0]
     if x0 is None:
         x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
+
+    if iop.shape(x0) != i.cost.shape:
+        raise ValueError(f"Initial variable has shape {iop.shape(x0)}, expected {i.cost.shape}.")
 
     if stack_to is not None:
         x0 = iop.stack([x0 for _ in range(stack_to)])
@@ -50,10 +56,16 @@ def randn_initialization(
     Returns:
         initialized variable
 
+    Raises:
+        ValueError: if the shape of x0 does not match the expected shape
+
     """
     i = network.agents()[0]
     if x0 is None:
         x0 = iop.randn(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device, mean=mean, std=std)
+
+    if iop.shape(x0) != i.cost.shape:
+        raise ValueError(f"Initial variable has shape {iop.shape(x0)}, expected {i.cost.shape}.")
 
     if stack_to is not None:
         x0 = iop.stack([x0 for _ in range(stack_to)])
