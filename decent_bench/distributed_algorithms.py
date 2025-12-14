@@ -3,8 +3,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
+import decent_bench.utils.algorithm_helpers as alg_helpers
+import decent_bench.utils.interoperability as iop
 from decent_bench.networks import P2PNetwork
-from decent_bench.utils import interoperability as iop
 
 if TYPE_CHECKING:
     from decent_bench.utils.array import Array
@@ -110,11 +111,8 @@ class DGD(Algorithm):
     name: str = "DGD"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            if self.x0 is None:
-                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
-
             i.initialize(x=self.x0, received_msgs=dict.fromkeys(network.neighbors(i), self.x0))
 
         self.W = network.weights
@@ -162,11 +160,8 @@ class ATC(Algorithm):
     name: str = "ATC"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            if self.x0 is None:
-                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
-
             i.initialize(
                 x=self.x0,
                 received_msgs=dict.fromkeys(network.neighbors(i), self.x0),
@@ -225,11 +220,8 @@ class SimpleGT(Algorithm):
     name: str = "SimpleGT"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            if self.x0 is None:
-                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
-
             y0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             neighbors = network.neighbors(i)
             i.initialize(x=self.x0, received_msgs=dict.fromkeys(neighbors, self.x0), aux_vars={"y": y0})
@@ -283,11 +275,8 @@ class ED(Algorithm):
     name: str = "ED"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            if self.x0 is None:
-                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
-
             y0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             y1 = self.x0 - self.step_size * i.cost.gradient(self.x0)
             # note: msg0's y1 is an approximation of the neighbors' y1 (x0 and y0 are exact: all agents start with same)
@@ -353,11 +342,8 @@ class AugDGM(Algorithm):
     name: str = "Aug-DGM"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            if self.x0 is None:
-                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
-
             y0 = i.cost.gradient(self.x0)
             neighbors = network.neighbors(i)
             i.initialize(
@@ -444,11 +430,8 @@ class WangElia(Algorithm):
     name: str = "Wang-Elia"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            if self.x0 is None:
-                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
-
             neighbors = network.neighbors(i)
             i.initialize(
                 x=self.x0,
@@ -524,11 +507,8 @@ class EXTRA(Algorithm):
     name: str = "EXTRA"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            if self.x0 is None:
-                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
-
             i.initialize(
                 x=self.x0,
                 received_msgs=dict.fromkeys(network.neighbors(i), self.x0),
@@ -617,11 +597,8 @@ class ATCTracking(Algorithm):
     name: str = "ATC-Tracking"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            if self.x0 is None:
-                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
-
             y0 = i.cost.gradient(self.x0)
             neighbors = network.neighbors(i)
             i.initialize(
@@ -706,11 +683,8 @@ class NIDS(Algorithm):
     name: str = "NIDS"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            if self.x0 is None:
-                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
-
             i.initialize(
                 x=self.x0,
                 received_msgs=dict.fromkeys(network.neighbors(i), self.x0),
@@ -786,17 +760,8 @@ class ADMM(Algorithm):
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
+        self.z0 = alg_helpers.zero_initialization(self.z0, network, stack_to=len(all_agents))
         for i in all_agents:
-            if self.z0 is None:
-                self.z0 = iop.zeros(
-                    framework=i.cost.framework,
-                    shape=(len(all_agents), *(i.cost.shape)),
-                    device=i.cost.device,
-                )
-            elif iop.shape(self.z0) != (len(all_agents), *(i.cost.shape)):
-                self.z0 = iop.stack([self.z0 for _ in all_agents])
-            self.z0 = iop.to_array(self.z0, framework=i.cost.framework, device=i.cost.device)
-
             x1 = i.cost.proximal(x=iop.sum(self.z0, dim=0) / pN[i], rho=1 / pN[i])
             # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
             msg0 = self.z0[i] - 2 * self.rho * x1
@@ -874,11 +839,8 @@ class ATG(Algorithm):
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in all_agents:
-            if self.x0 is None:
-                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
-
             z_y0 = iop.zeros(
                 framework=i.cost.framework,
                 shape=(len(all_agents), *(i.cost.shape)),
@@ -969,11 +931,8 @@ class DLM(Algorithm):
     name: str = "DLM"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            if self.x0 is None:
-                self.x0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            self.x0 = iop.to_array(self.x0, framework=i.cost.framework, device=i.cost.device)
-
             # y must be initialized to zero
             y = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             i.initialize(x=self.x0, aux_vars={"y": y})

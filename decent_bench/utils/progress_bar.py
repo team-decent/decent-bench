@@ -74,7 +74,9 @@ class ProgressBarController:
     Controller of progress bars showing how far each algorithm has progressed and the estimated time remaining.
 
     Args:
-        manager: used to create a progress increment queue that can be shared across processes
+        manager: A multiprocessing :class:`~multiprocessing.managers.SyncManager` instance used to create a shared queue
+            for coordinating progress updates across multiple processes. This enables thread-safe communication between
+            worker processes and the progress bar listener thread.
         algorithms: algorithms that will be run, each gets its own bar
         n_trials: number of trials the algorithms will run
         progress_step: if provided, the progress bar will step every `progress_step`.

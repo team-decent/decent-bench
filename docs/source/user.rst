@@ -272,17 +272,32 @@ algorithms framework-agnostic, always use the interoperability layer :class:`~de
 
 Algorithms
 ----------
-Create a new algorithm to benchmark against existing ones. 
+Create a new algorithm to benchmark against existing ones.
+
+When implementing a custom algorithm by subclassing :class:`~decent_bench.distributed_algorithms.Algorithm`, you need to understand the following methods:
+
+- **initialize(network)**: Called once before the algorithm starts. Use this to set up initial values for agents' primal variables (:attr:`Agent.x <decent_bench.agents.Agent.x>`), auxiliary variables (:attr:`Agent.aux_vars <decent_bench.agents.Agent.aux_vars>`), and received messages (:attr:`Agent.messages <decent_bench.agents.Agent.messages>`). **Required to implement.**
+    If you want the agents' primal variable to be a customizable parameter to the algorithm, consider using a field like ``x0: Array | None = None`` in your algorithm class.
+    Use a helper function like :func:`~decent_bench.utils.algorithm_helpers.zero_initialization` to initialize it properly if the input argument is ``None``. 
+    :func:`~decent_bench.utils.algorithm_helpers.zero_initialization` initializes x0 to zero if x0 is None, otherwise uses provided x0. 
+    :func:`~decent_bench.utils.algorithm_helpers.randn_initialization` can also be used to create normally distributed random initializations.
+
+- **step(network, iteration)**: Called at each iteration of the algorithm. This is where the main algorithm logic goes - updating agent states, computing gradients, exchanging messages, etc. **Required to implement.**
+
+- **finalize(network)**: Called once after all iterations complete. Use this for cleanup operations like clearing auxiliary variables to free memory. **Optional to implement** - the default implementation clears all auxiliary variables.
+
+- **run(network)**: Orchestrates the full algorithm execution by calling :meth:`initialize <decent_bench.distributed_algorithms.Algorithm.initialize>`, then :meth:`step <decent_bench.distributed_algorithms.Algorithm.step>` for each iteration, and finally :meth:`finalize <decent_bench.distributed_algorithms.Algorithm.finalize>`. **You should NOT implement this** - it is already provided by the base :class:`~decent_bench.distributed_algorithms.Algorithm` class.
 
 **Note**: In order for metrics to work, use :attr:`Agent.x <decent_bench.agents.Agent.x>` to update the local primal
-variable. Similarly, in order for the benchmark problem's communication schemes to be applied, use the
+variable **once** every iteration. If you need to perform multiple updates within an iteration, consider accumulating them and applying a single update at the end of the iteration. 
+Similarly, in order for the benchmark problem's communication schemes to be applied, use the
 :attr:`~decent_bench.networks.P2PNetwork` object to retrieve agents and to send and receive messages. 
-Be sure to use :meth:`~decent_bench.networks.P2PNetwork.active_agents` to during algorithm runtime, so that asynchrony is properly handled.
+Be sure to use :meth:`~decent_bench.networks.P2PNetwork.active_agents` during algorithm runtime so that asynchrony is properly handled.
 
 .. code-block:: python
 
+    import decent_bench.utils.algorithm_helpers as alg_helpers
     import decent_bench.utils.interoperability as iop
-
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD, Algorithm
@@ -295,14 +310,10 @@ Be sure to use :meth:`~decent_bench.networks.P2PNetwork.active_agents` to during
         iterations: int = 100
         name: str = "MNA"
 
+        # Initialize agents with Array values using the interoperability layer
         def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-            # Initialize agents with Array values using the interoperability layer
+            self.x0 = alg_helpers.zero_initialization(self.x0, network)
             for agent in network.agents():
-                if self.x0 is None:
-                    self.x0 = iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
-                # Ensure x0 is in the correct framework/device for the agents cost function
-                self.x0 = iop.to_array(self.x0, framework=agent.cost.framework, device=agent.cost.device)
-
                 y0 = iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
                 neighbors = network.neighbors(agent)
                 agent.initialize(x=self.x0, received_msgs=dict.fromkeys(neighbors, self.x0), aux_vars={"y": y0})
@@ -460,10 +471,10 @@ compatibility with the selected framework and device of your custom cost.
             return self.A.T @ self.A
 
         @iop.autodecorate_cost_method(Cost.proximal)
-        def proximal(self, y: NDArray[float64], rho: float) -> NDArray[float64]:
+        def proximal(self, x: NDArray[float64], rho: float) -> NDArray[float64]:
             # Optional: provide a closed-form proximal if available
             # Otherwise you can rely on `centralized_algorithms.proximal_solver`.
-            return y  # identity as a placeholder
+            return x  # identity as a placeholder
 
         def __add__(self, other: Cost) -> Cost:
             # Support addition of costs
