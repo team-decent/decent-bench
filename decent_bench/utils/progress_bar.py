@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
 from math import ceil
 from multiprocessing.managers import SyncManager
@@ -5,7 +6,6 @@ from queue import Queue
 from threading import Thread
 from typing import TYPE_CHECKING
 
-from rich.console import Console
 from rich.progress import (
     BarColumn,
     Progress,
@@ -15,6 +15,7 @@ from rich.progress import (
     TextColumn,
     TimeRemainingColumn,
 )
+from rich.table import Column, Table
 from rich.text import Text
 
 from decent_bench.distributed_algorithms import Algorithm
@@ -40,13 +41,8 @@ class TrialColumn(ProgressColumn):
         self.finished_style = finished_style
 
     def render(self, task: "Task") -> Text:  # noqa: D102
-        if task.finished:
-            trial = self.n_trials
-        else:
-            trial = (
-                task.fields["fields"].get("trial", "?") if "fields" in task.fields else task.fields.get("trial", "?")
-            )
-        return Text(f"Trial [{trial}/{self.n_trials}]", style=self.finished_style if task.finished else self.style)
+        trial = self.n_trials if task.finished else task.fields.get("fields", task.fields).get("trial", "?")
+        return Text(f"{trial}/{self.n_trials}", style=self.finished_style if task.finished else self.style)
 
 
 class SpeedColumn(ProgressColumn):
@@ -68,6 +64,55 @@ class SpeedColumn(ProgressColumn):
         text = TaskProgressColumn.render_speed(speed)
         text.justify = "right"
         return text
+
+
+class ProgressWithHeader(Progress):
+    """Custom Progress display with column headers."""
+
+    def __init__(  # type: ignore[no-untyped-def]
+        self,
+        *columns: str | ProgressColumn,
+        headers: Iterable[Text] | None = None,
+        **kwargs,  # noqa: ANN003
+    ) -> None:
+        self.headers = headers
+        super().__init__(*columns, **kwargs)
+
+    def make_tasks_table(self, tasks: Iterable["Task"]) -> Table:
+        """Override to add header row to the table."""
+        if not tasks or not self.headers:
+            return super().make_tasks_table(tasks)
+
+        # Mimic super() implementation but render headers of columns
+        table_columns = [
+            (Column(no_wrap=True) if isinstance(col, str) else col.get_table_column().copy()) for col in self.columns
+        ]
+        for col, header in zip(table_columns, self.headers, strict=False):
+            col.header = header
+
+        table = Table(
+            *table_columns,
+            padding=(0, 1),
+            expand=self.expand,
+            show_header=True,
+            box=None,
+            collapse_padding=True,
+            show_footer=False,
+            show_edge=False,
+            pad_edge=False,
+        )
+
+        # Add each task as a row
+        for task in tasks:
+            if task.visible:
+                table.add_row(
+                    *(
+                        (column.format(task=task) if isinstance(column, str) else column(task))
+                        for column in self.columns
+                    )
+                )
+
+        return table
 
 
 class ProgressBarController:
@@ -102,34 +147,25 @@ class ProgressBarController:
         self._progress_increment_queue: Queue[_ProgressRecord] = manager.Queue()
         self.progress_step = progress_step
         p_cols = [
-            TextColumn("{task.description}"),
-            BarColumn(finished_style="bold green", pulse_style="none"),
-            TaskProgressColumn(),
-            *([SpeedColumn(progress_step)] if show_speed else []),
-            TimeRemainingColumn(elapsed_when_finished=True),
+            (TextColumn("{task.description}"), Text("Algorithm", style="bold")),
+            (BarColumn(finished_style="bold green", pulse_style="none"), Text("Progress Bar", style="bold")),
+            (TaskProgressColumn(), Text("", style="bold")),  # Skip % Completed header as it's part of progress bar
+            *([(SpeedColumn(progress_step), Text("Speed", style="bold"))] if show_speed else []),
+            (TimeRemainingColumn(elapsed_when_finished=True), Text("Time", style="bold")),
             *(
-                [TrialColumn(n_trials=n_trials, style="progress.remaining", finished_style="progress.elapsed")]
+                [
+                    (
+                        TrialColumn(n_trials=n_trials, style="progress.remaining", finished_style="progress.elapsed"),
+                        Text("Active Trials", style="bold"),
+                    )
+                ]
                 if show_trial
                 else []
             ),
         ]
 
-        # Build header text explaining columns
-        console = Console()
-        header_parts = ["[bold]Algorithm[/bold]", "[bold]Progress Bar[/bold]", "[bold]Done/Total[/bold]"]
-        if show_speed:
-            header_parts.append("[bold]Speed[/bold]")
-        header_parts.append("[bold]Time Left[/bold]")
-        if show_trial:
-            header_parts.append("[bold]Active Trials[/bold]")
-        header_text = Text.from_markup(" | ".join(header_parts))
-
-        # Print header before progress bars
-        console.print("─" * header_text.cell_len)
-        console.print(header_text)
-        console.print("─" * header_text.cell_len)
-
-        orchestrator = Progress(*p_cols)
+        cols, headers = zip(*p_cols, strict=True)
+        orchestrator = ProgressWithHeader(*cols, headers=headers)
         if progress_step is None:
             self._progress_bar_ids = {alg: orchestrator.add_task(alg.name, total=n_trials) for alg in algorithms}
         else:

@@ -8,3 +8,4 @@ decent\_bench.utils.progress\_bar
    :exclude-members:
       TrialColumn,
       SpeedColumn,
+      ProgressWithHeader,
