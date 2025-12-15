@@ -5,6 +5,7 @@ from queue import Queue
 from threading import Thread
 from typing import TYPE_CHECKING
 
+from rich.console import Console
 from rich.progress import (
     BarColumn,
     Progress,
@@ -89,13 +90,14 @@ class ProgressBarController:
 
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0917
         self,
         manager: SyncManager,
         algorithms: list[Algorithm],
         n_trials: int,
         progress_step: int | None,
-        show_speed: bool = True,
+        show_speed: bool = False,
+        show_trial: bool = False,
     ):
         self._progress_increment_queue: Queue[_ProgressRecord] = manager.Queue()
         self.progress_step = progress_step
@@ -105,8 +107,27 @@ class ProgressBarController:
             TaskProgressColumn(),
             *([SpeedColumn(progress_step)] if show_speed else []),
             TimeRemainingColumn(elapsed_when_finished=True),
-            TrialColumn(n_trials=n_trials, style="progress.remaining", finished_style="progress.elapsed"),
+            *(
+                [TrialColumn(n_trials=n_trials, style="progress.remaining", finished_style="progress.elapsed")]
+                if show_trial
+                else []
+            ),
         ]
+
+        # Build header text explaining columns
+        console = Console()
+        header_parts = ["[bold]Algorithm[/bold]", "[bold]Progress Bar[/bold]", "[bold]Done/Total[/bold]"]
+        if show_speed:
+            header_parts.append("[bold]Speed[/bold]")
+        header_parts.append("[bold]Time Left[/bold]")
+        if show_trial:
+            header_parts.append("[bold]Active Trials[/bold]")
+        header_text = Text.from_markup(" | ".join(header_parts))
+
+        # Print header before progress bars
+        console.print("─" * header_text.cell_len)
+        console.print(header_text)
+        console.print("─" * header_text.cell_len)
 
         orchestrator = Progress(*p_cols)
         if progress_step is None:

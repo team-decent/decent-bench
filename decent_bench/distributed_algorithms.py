@@ -760,7 +760,7 @@ class ADMM(Algorithm):
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
-        self.z0 = alg_helpers.zero_initialization(self.z0, network, stack_to=len(all_agents))
+        self.z0 = alg_helpers.zero_initialization(self.z0, network, stacked_copies=len(all_agents))
         for i in all_agents:
             x1 = i.cost.proximal(x=iop.sum(self.z0, dim=0) / pN[i], rho=1 / pN[i])
             # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)

@@ -34,6 +34,7 @@ def benchmark(
     max_processes: int | None = None,
     progress_step: int | None = None,
     show_speed: bool = False,
+    show_trial: bool = False,
 ) -> None:
     """
     Benchmark distributed algorithms.
@@ -59,6 +60,7 @@ def benchmark(
             When provided, each algorithm's task total becomes `n_trials * ceil(algorithm.iterations / progress_step)`.
             If `None`, the progress bar uses 1 unit per trial.
         show_speed: whether to show speed (iterations/second) in the progress bar.
+        show_trial: whether to show which trials are currently running in the progress bar.
 
     Note:
         If ``progress_step`` is too small performance may degrade due to the
@@ -71,7 +73,7 @@ def benchmark(
     with Status("Generating initial network state"):
         nw_init_state = create_distributed_network(benchmark_problem)
     LOGGER.debug(f"Nr of agents: {len(nw_init_state.agents())}")
-    prog_ctrl = ProgressBarController(manager, algorithms, n_trials, progress_step, show_speed)
+    prog_ctrl = ProgressBarController(manager, algorithms, n_trials, progress_step, show_speed, show_trial)
     resulting_nw_states = _run_trials(algorithms, n_trials, nw_init_state, prog_ctrl, log_listener, max_processes)
     LOGGER.info("All trials complete")
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
