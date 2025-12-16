@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 
+import decent_bench.utils.interoperability as iop
 from decent_bench.costs import Cost
 from decent_bench.schemes import AgentActivationScheme
 from decent_bench.utils.array import Array
@@ -98,13 +99,18 @@ class Agent:
             aux_vars: initial auxiliary variables
             received_msgs: initial messages from neighbors
 
+        Raises:
+            ValueError: if initialized x has incorrect shape
+
         """
         if x is not None:
-            self._x_history = [x]
+            if iop.shape(x) != self.cost.shape:
+                raise ValueError(f"Initialized x has shape {iop.shape(x)}, expected {self.cost.shape}")
+            self._x_history = [iop.copy(x)]
         if aux_vars:
-            self._auxiliary_variables = aux_vars
+            self._auxiliary_variables = {k: iop.copy(v) for k, v in aux_vars.items()}
         if received_msgs:
-            self._received_messages = received_msgs
+            self._received_messages = {k: iop.copy(v) for k, v in received_msgs.items()}
 
     def _call_counting_function(self, x: Array) -> float:
         self._n_function_calls += 1

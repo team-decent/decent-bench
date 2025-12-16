@@ -52,6 +52,7 @@ Tools can also be used directly (instead of via tox) after activating the dev en
 
 To verify that doc changes look good, use an html previewer such as
 `Live Preview <https://marketplace.visualstudio.com/items?itemName=ms-vscode.live-server>`_.
+If you are running :code:`pytest test` while using ``WSL`` on Windows and it starts to randomly fail (or if its really slow), restart your ``WSL`` instance.
 
 
 
