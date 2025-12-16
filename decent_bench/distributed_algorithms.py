@@ -63,7 +63,7 @@ class Algorithm(ABC):
                 i.aux_vars.clear()
 
     @final
-    def run(self, network: P2PNetwork, progress_callback: Callable[["Algorithm", int], None] | None = None) -> None:
+    def run(self, network: P2PNetwork, progress_callback: Callable[[int], None] | None = None) -> None:
         """
         Run the algorithm.
 
@@ -84,7 +84,7 @@ class Algorithm(ABC):
         for k in range(self.iterations):
             self.step(network, k)
             if progress_callback is not None:
-                progress_callback(self, k)
+                progress_callback(k)
         self.finalize(network)
 
 

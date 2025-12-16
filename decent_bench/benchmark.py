@@ -4,7 +4,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from logging.handlers import QueueListener
 from multiprocessing import Manager
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from rich.status import Status
 
@@ -19,6 +19,9 @@ from decent_bench.networks import P2PNetwork, create_distributed_network
 from decent_bench.utils import logger
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.progress_bar import ProgressBarController
+
+if TYPE_CHECKING:
+    from decent_bench.utils.progress_bar import ProgressBarHandle
 
 
 def benchmark(
@@ -95,35 +98,43 @@ def _run_trials(  # noqa: PLR0917
     log_listener: QueueListener,
     max_processes: int | None,
 ) -> dict[Algorithm, list[P2PNetwork]]:
+    progress_bar_handle = progress_bar_ctrl.get_handle()
     if max_processes == 1:
-        return {
-            alg: [_run_trial(alg, nw_init_state, progress_bar_ctrl, trial) for trial in range(n_trials)]
+        result = {
+            alg: [_run_trial(alg, nw_init_state, progress_bar_handle, trial) for trial in range(n_trials)]
             for alg in algorithms
         }
-    with ProcessPoolExecutor(
-        initializer=logger.start_queue_logger, initargs=(log_listener.queue,), max_workers=max_processes
-    ) as executor:
-        LOGGER.debug(f"Concurrent processes: {executor._max_workers}")  # type: ignore[attr-defined] # noqa: SLF001
-        all_futures = {
-            alg: [
-                executor.submit(_run_trial, alg, nw_init_state, progress_bar_ctrl, trial) for trial in range(n_trials)
-            ]
-            for alg in algorithms
-        }
-        return {alg: [f.result() for f in as_completed(futures)] for alg, futures in all_futures.items()}
+    else:
+        with ProcessPoolExecutor(
+            initializer=logger.start_queue_logger, initargs=(log_listener.queue,), max_workers=max_processes
+        ) as executor:
+            LOGGER.debug(f"Concurrent processes: {executor._max_workers}")  # type: ignore[attr-defined] # noqa: SLF001
+            all_futures = {
+                alg: [
+                    executor.submit(_run_trial, alg, nw_init_state, progress_bar_handle, trial)
+                    for trial in range(n_trials)
+                ]
+                for alg in algorithms
+            }
+            result = {alg: [f.result() for f in as_completed(futures)] for alg, futures in all_futures.items()}
+
+    progress_bar_ctrl.stop()
+    return result
 
 
 def _run_trial(
     algorithm: Algorithm,
     nw_init_state: P2PNetwork,
-    progress_bar_ctrl: ProgressBarController,
+    progress_bar_handle: "ProgressBarHandle",
     trial: int,
 ) -> P2PNetwork:
-    progress_bar_ctrl.start_progress_bar(algorithm, trial)
+    progress_bar_handle.start_progress_bar(algorithm, trial)
     network = deepcopy(nw_init_state)
+    alg = deepcopy(algorithm)
+
     with warnings.catch_warnings(action="error"):
         try:
-            algorithm.run(network, progress_bar_ctrl.advance_progress_bar)
+            alg.run(network, lambda iteration: progress_bar_handle.advance_progress_bar(algorithm, iteration))
         except Exception as e:
-            LOGGER.exception(f"An error or warning occurred when running {algorithm.name}: {type(e).__name__}: {e}")
+            LOGGER.exception(f"An error or warning occurred when running {alg.name}: {type(e).__name__}: {e}")
     return network

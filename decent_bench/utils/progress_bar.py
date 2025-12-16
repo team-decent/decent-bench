@@ -4,7 +4,7 @@ from math import ceil
 from multiprocessing.managers import SyncManager
 from queue import Queue
 from threading import Thread
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.progress import (
     BarColumn,
@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 
 @dataclass(eq=False)
 class _ProgressRecord:
+    """Record of progress bar update to be sent to the progress listener."""
+
     progress_bar_id: TaskID
     increment: int
     trial: int | None
@@ -115,6 +117,42 @@ class ProgressWithHeader(Progress):
         return table
 
 
+@dataclass
+class ProgressBarHandle:
+    """
+    A picklable handle for worker processes to update :class:`ProgressBarController`.
+
+    This class contains only the picklable parts needed by worker processes,
+    separating them from the unpicklable Thread components in ProgressBarController.
+    """
+
+    _progress_increment_queue: Queue[Any]
+    _progress_bar_ids: dict[Any, Any]
+    _progress_step: int | None
+
+    def start_progress_bar(self, algorithm: Algorithm, trial: int) -> None:
+        """
+        Start the clock of *algorithm*'s progress bar without incrementing it.
+
+        Internally, this is done through sending an increment of 0 to the progress listener. The progress listener
+        recognizes that the algorithm's execution just started and resets its clock, which started when the progress bar
+        was first rendered.
+        """
+        progress_bar_id = self._progress_bar_ids[algorithm]
+        self._progress_increment_queue.put(_ProgressRecord(progress_bar_id, 0, trial + 1))
+
+    def advance_progress_bar(self, algorithm: Algorithm, iteration: int) -> None:
+        """Advance *algorithm*'s progress bar by an amount (units)."""
+        if self._progress_step is None:
+            if (iteration + 1) < algorithm.iterations:
+                return
+        elif (iteration + 1) % self._progress_step != 0 and (iteration + 1) < algorithm.iterations:
+            return
+
+        progress_bar_id = self._progress_bar_ids[algorithm]
+        self._progress_increment_queue.put(_ProgressRecord(progress_bar_id, 1, None))
+
+
 class ProgressBarController:
     """
     Controller of progress bars showing how far each algorithm has progressed and the estimated time remaining.
@@ -144,7 +182,7 @@ class ProgressBarController:
         show_speed: bool = False,
         show_trial: bool = False,
     ):
-        self._progress_increment_queue: Queue[_ProgressRecord] = manager.Queue()
+        self._progress_increment_queue: Queue[_ProgressRecord | None] = manager.Queue()
         self.progress_step = progress_step
         p_cols = [
             (TextColumn("{task.description}"), Text("Algorithm", style="bold")),
@@ -175,36 +213,41 @@ class ProgressBarController:
             }
 
         orchestrator.start()
-        listener_thread = Thread(target=self._progress_listener, args=(orchestrator, self._progress_increment_queue))
-        listener_thread.start()
+        self.listener_thread = Thread(
+            target=self._progress_listener, args=(orchestrator, self._progress_increment_queue)
+        )
+        self.listener_thread.start()
+        self._handle = ProgressBarHandle(
+            _progress_increment_queue=self._progress_increment_queue,
+            _progress_bar_ids=self._progress_bar_ids,
+            _progress_step=self.progress_step,
+        )
 
-    def start_progress_bar(self, algorithm: Algorithm, trial: int) -> None:
+    def get_handle(self) -> ProgressBarHandle:
         """
-        Start the clock of *algorithm*'s progress bar without incrementing it.
+        Get a picklable handle for worker processes.
 
-        Internally, this is done through sending an increment of 0 to the progress listener. The progress listener
-        recognizes that the algorithm's execution just started and resets its clock, which started when the progress bar
-        was first rendered.
+        Returns a handle containing only the queue and metadata needed by worker
+        processes, without the unpicklable Thread component.
         """
-        progress_bar_id = self._progress_bar_ids[algorithm]
-        self._progress_increment_queue.put(_ProgressRecord(progress_bar_id, 0, trial + 1))
+        return self._handle
 
-    def advance_progress_bar(self, algorithm: Algorithm, iteration: int) -> None:
-        """Advance *algorithm*'s progress bar by an amount (units)."""
-        if self.progress_step is None:
-            if (iteration + 1) < algorithm.iterations:
-                return
-        elif (iteration + 1) % self.progress_step != 0 and (iteration + 1) < algorithm.iterations:
-            return
-
-        progress_bar_id = self._progress_bar_ids[algorithm]
-        self._progress_increment_queue.put(_ProgressRecord(progress_bar_id, 1, None))
+    def stop(self) -> None:
+        """Stop the progress bar and wait for the listener thread to finish."""
+        # Signal the listener thread to stop if it is still running
+        # because an exception occurred in one algorithm's execution.
+        self._progress_increment_queue.put(None)
+        if hasattr(self, "listener_thread"):
+            self.listener_thread.join(timeout=2.0)
 
     @staticmethod
-    def _progress_listener(orchestrator: Progress, queue: Queue[_ProgressRecord]) -> None:
+    def _progress_listener(orchestrator: Progress, queue: Queue[_ProgressRecord | None]) -> None:
         started_progress_bar_ids = set()
         while not orchestrator.finished:
             progress_record = queue.get()
+            if progress_record is None:
+                break
+
             if progress_record.progress_bar_id not in started_progress_bar_ids:
                 orchestrator.reset(progress_record.progress_bar_id)
                 started_progress_bar_ids.add(progress_record.progress_bar_id)
