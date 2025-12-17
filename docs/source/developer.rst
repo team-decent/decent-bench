@@ -158,3 +158,8 @@ Releases
 2. Merge the change into main with commit message :code:`meta: Bump version to <x>.<y>.<z> (#<pr-id>)`.
 3. Create a new release on GitHub.
 4. Publish to PyPI using :code:`hatch clean && hatch build && hatch publish`.
+
+Next Steps
+----------
+Continue to the :doc:`Advanced Developer Guide <advanced>` for more in-depth information on the architecture and design
+decisions behind :doc:`Decent Bench <index>`.
