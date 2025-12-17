@@ -225,12 +225,13 @@ Step 1: Define the Function Signature
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Create your function in ``decent_bench/utils/interoperability/_functions.py`` (for general operations) 
-or ``_operators.py`` (for arithmetic operations):
+or ``_operators.py`` (for arithmetic operations). The signature should accept :class:`~decent_bench.utils.array.Array` as input
+(for arithmetic operations in ``_operators.py`` also accept :class:`~decent_bench.utils.types.SupportedArrayTypes`) and return :class:`~decent_bench.utils.array.Array`.
 
 .. code-block:: python
 
     def my_operation(
-        array: Array, # or Array | SupportedArrayTypes for arithmetic operators
+        array: Array,
         parameter: int,
     ) -> Array:
         """
@@ -250,7 +251,7 @@ or ``_operators.py`` (for arithmetic operations):
 Step 2: Extract the Native Value
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Always extract the underlying native array first in case that the input array is not already unwrapped (happens on first use):
+Always extract the underlying native array first in case the input array is not already unwrapped (happens on first use):
 
 .. code-block:: python
 
@@ -344,8 +345,8 @@ Create comprehensive tests in ``test/utils/test_interoperability.py``:
     @pytest.mark.parametrize(
         "framework,device",
         [
-            ("numpy", "cpu"),
-            pytest.param("torch", "cpu", marks=pytest.mark.skipif(
+            (SupportedFrameworks.NUMPY, SupportedDevices.CPU),
+            pytest.param(SupportedFrameworks.TORCH, SupportedDevices.CPU, marks=pytest.mark.skipif(
                 not TORCH_AVAILABLE, reason="PyTorch not available"
             )),
             # ... other frameworks
@@ -627,12 +628,12 @@ Update tests and add test for `to_myframework` in ``test/utils/test_interoperabi
     @pytest.mark.parametrize(
         "framework,device",
         [
-            ("numpy", "cpu"),
+            (SupportedFrameworks.NUMPY, SupportedDevices.CPU),
             # ... existing frameworks ...
-            pytest.param("myframework", "cpu", marks=pytest.mark.skipif(
+            pytest.param(SupportedFrameworks.MYFRAMEWORK, SupportedDevices.CPU, marks=pytest.mark.skipif(
                 not MYFRAMEWORK_AVAILABLE, reason="MyFramework not available"
             )),
-            pytest.param("myframework", "gpu", marks=pytest.mark.skipif(
+            pytest.param(SupportedFrameworks.MYFRAMEWORK, SupportedDevices.GPU, marks=pytest.mark.skipif(
                 not MYFRAMEWORK_GPU_AVAILABLE, reason="MyFramework GPU not available"
             )),
         ],
@@ -667,7 +668,7 @@ Use this checklist when adding a new framework:
     ☐ Update all operators: add, sub, mul, div, matmul, power, etc.
     ☐ Update all in-place operators: iadd, isub, imul, idiv, ipow
     ☐ Update all functions: sum, mean, min, max, argmax, argmin, etc.
-    ☐ Update creation functions: zeros, ones, eye, randn, etc.
+    ☐ Update creation functions: zeros, eye, randn, etc.
     ☐ Update utility functions: shape, reshape, transpose, stack, etc.
     ☐ Update _get_converter in _decorators.py
     ☐ Export to_myframework in __init__.py
@@ -711,7 +712,7 @@ Different frameworks have different APIs. Pay attention to:
 
 **Main Goals:**
 
-- Mimic numpy behavior as closely as possible
+- Mimic NumPy behavior as closely as possible
 - Maintain consistent behavior across frameworks
 - Ensure performance is acceptable
 - Provide clear error messages for unsupported operations
@@ -804,7 +805,7 @@ Performance Considerations
     # Good: Create arrays with iop and use operators
     x = iop.randn((100,), SupportedFrameworks.TORCH, SupportedDevices.GPU)
     weight = iop.ones_like(x)
-    matrix = iop.eye((100,), SupportedFrameworks.TORCH, SupportedDevices.GPU)
+    matrix = iop.eye(100, SupportedFrameworks.TORCH, SupportedDevices.GPU)
     
     for i in range(1000):
         x = x + weight  # Efficient: uses runtime unwrapping
