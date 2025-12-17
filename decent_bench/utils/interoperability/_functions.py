@@ -792,28 +792,79 @@ def shape(array: Array) -> tuple[int, ...]:
     raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def zeros(
+def zeros(shape: tuple[int, ...], framework: SupportedFrameworks, device: SupportedDevices) -> Array:
+    """
+    Create a Array of zeros.
+
+    Args:
+        shape (tuple[int, ...]): Shape of the output array.
+        framework (SupportedFrameworks): The framework to use.
+        device (SupportedDevices): The device to place the tensor on.
+
+    Returns:
+        Array: Array of zeros.
+
+    Raises:
+        TypeError: If the framework type of `framework` is unsupported.
+
+    """
+    framework_device = _device_literal_to_framework_device(device, framework)
+
+    if framework == SupportedFrameworks.NUMPY:
+        return _return_array(np.zeros(shape))
+    if torch and framework == SupportedFrameworks.TORCH:
+        return _return_array(torch.zeros(shape, device=framework_device))
+    if tf and framework == SupportedFrameworks.TENSORFLOW:
+        with tf.device(framework_device):
+            return _return_array(tf.zeros(shape))
+    if jnp and framework == SupportedFrameworks.JAX:
+        return _return_array(jnp.zeros(shape, device=framework_device))
+
+    raise TypeError(f"Unsupported framework type: {framework}")
+
+
+def randn(
     shape: tuple[int, ...],
     framework: SupportedFrameworks,
     device: SupportedDevices,
-    dtype: Any | None = None,  # noqa: ANN401
+    mean: float = 0.0,
+    std: float = 1.0,
 ) -> Array:
     """
-    Create a tensor of zeros.
+    Create an array of random values with the specified shape and framework.
+
+    Values are drawn from a normal distribution with mean `mean` and standard deviation `std`.
 
     Args:
-        shape (tuple): The shape of the tensor.
-        framework (SupportedFrameworks): The framework to use ("numpy", "torch", "tensorflow", "jax").
-        device (SupportedDevices): The device to place the tensor on.
-        dtype (Any | None): The data type of the tensor. Defaults to None.
+        shape (tuple[int, ...]): Shape of the output array.
+        framework (SupportedFrameworks): Target framework type.
+        device (SupportedDevices): Target device.
+        mean (float): Mean of the normal distribution.
+        std (float): Standard deviation of the normal distribution.
 
     Returns:
-        Array: A tensor of zeros.
+        Array: Array of random values in the same framework type as the input.
+
+    Raises:
+        TypeError: if the framework type of `array` is unsupported.
 
     """
-    x = np.zeros(shape, dtype=dtype)
+    framework_device = _device_literal_to_framework_device(device, framework)
 
-    return to_array(x, framework=framework, device=device)
+    if framework == SupportedFrameworks.NUMPY:
+        random_array = _numpy_generator().normal(loc=mean, scale=std, size=shape)
+        return _return_array(random_array)
+    if torch and framework == SupportedFrameworks.TORCH:
+        return _return_array(torch.normal(mean=mean, std=std, size=shape, device=framework_device))
+    if tf and framework == SupportedFrameworks.TENSORFLOW:
+        with tf.device(framework_device):
+            return _return_array(tf.random.normal(shape=shape, mean=mean, stddev=std))
+    if jax and framework == SupportedFrameworks.JAX:
+        global _jax_key
+        _jax_key, sub_key = jax.random.split(_jax_key)  # pyright: ignore[reportArgumentType]
+        return _return_array(mean + std * jax.random.normal(sub_key, shape=shape).to_device(framework_device))
+
+    raise TypeError(f"Unsupported framework type: {framework}")
 
 
 def set_item(
