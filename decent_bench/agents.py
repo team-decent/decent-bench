@@ -11,13 +11,16 @@ from decent_bench.utils.array import Array
 
 
 class Agent:
-    """Agent with unique id, local cost function, and activation scheme."""
+    """Agent with unique id, local cost function, activation scheme and history period."""
 
-    def __init__(self, agent_id: int, cost: Cost, activation: AgentActivationScheme):
+    def __init__(self, agent_id: int, cost: Cost, activation: AgentActivationScheme, history_period: int):
         self._id = agent_id
         self._cost = cost
         self._activation = activation
-        self._x_history: list[Array] = []
+        self._history_period = history_period
+        self._x_step = 0
+        self._current_x: Array | None = None
+        self._x_history: dict[int, Array] = {}
         self._auxiliary_variables: dict[str, Array] = {}
         self._received_messages: dict[Agent, Array] = {}
         self._n_sent_messages = 0
@@ -55,24 +58,20 @@ class Agent:
         """
         Local optimization variable x.
 
-        Warning:
-            Do not use in-place operations (``+=``, ``-=``, ``*=``, etc.) on this property.
-            In-place operations will corrupt the optimization history by modifying all
-            historical values. Always use ``agent.x = agent.x + value`` instead of
-            ``agent.x += value``. Does not affect the outcome of the optimization, but
-            will affect logging and metrics that depend on the optimization history.
-
         Raises:
             RuntimeError: if x is retrieved before being set or initialized
 
         """
-        if not self._x_history:
+        if self._current_x is None:
             raise RuntimeError("x must be initialized before being accessed")
-        return self._x_history[-1]
+        return self._current_x
 
     @x.setter
     def x(self, x: Array) -> None:
-        self._x_history.append(x)
+        self._x_step += 1
+        self._current_x = x
+        if self._x_step % self._history_period == 0:
+            self._x_history[self._x_step] = iop.copy(x)
 
     @property
     def messages(self) -> Mapping[Agent, Array]:
@@ -106,7 +105,9 @@ class Agent:
         if x is not None:
             if iop.shape(x) != self.cost.shape:
                 raise ValueError(f"Initialized x has shape {iop.shape(x)}, expected {self.cost.shape}")
-            self._x_history = [iop.copy(x)]
+            self._x_history = {0: iop.copy(x)}
+            self._current_x = iop.copy(x)
+            self._x_step = 0
         if aux_vars:
             self._auxiliary_variables = {k: iop.copy(v) for k, v in aux_vars.items()}
         if received_msgs:
@@ -138,7 +139,8 @@ class AgentMetricsView:
     """Immutable view of agent that exposes useful properties for calculating metrics."""
 
     cost: Cost
-    x_history: list[Array]
+    x_history: dict[int, Array]
+    x_updates: int
     n_function_calls: int
     n_gradient_calls: int
     n_hessian_calls: int
@@ -150,9 +152,14 @@ class AgentMetricsView:
     @staticmethod
     def from_agent(agent: Agent) -> AgentMetricsView:
         """Create from agent."""
+        # Apppend the last x if not already recorded
+        if agent._current_x is not None and agent._x_step not in agent._x_history:  # noqa: SLF001
+            agent._x_history[agent._x_step] = agent._current_x  # noqa: SLF001
+
         return AgentMetricsView(
             cost=agent.cost,
             x_history=agent._x_history,  # noqa: SLF001
+            x_updates=agent._x_step,  # noqa: SLF001
             n_function_calls=agent._n_function_calls,  # noqa: SLF001
             n_gradient_calls=agent._n_gradient_calls,  # noqa: SLF001
             n_hessian_calls=agent._n_hessian_calls,  # noqa: SLF001

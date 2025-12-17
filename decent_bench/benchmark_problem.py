@@ -41,6 +41,7 @@ class BenchmarkProblem:
         network_structure: graph defining how agents are connected
         x_optimal: solution that minimizes the sum of the cost functions, used for calculating metrics
         costs: local cost functions, each one is given to one agent
+        history_period: period for recording agent history
         agent_activations: setting for agent activation/participation, each scheme is applied to one agent
         message_compression: message compression setting
         message_noise: message noise setting
@@ -51,6 +52,7 @@ class BenchmarkProblem:
     network_structure: AnyGraph
     x_optimal: Array
     costs: Sequence[Cost]
+    agent_history_period: int
     agent_activations: Sequence[AgentActivationScheme]
     message_compression: CompressionScheme
     message_noise: NoiseScheme
@@ -61,6 +63,7 @@ def create_regression_problem(
     cost_cls: type[LinearRegressionCost | LogisticRegressionCost],
     *,
     n_agents: int = 100,
+    agent_history_period: int = 1,
     n_neighbors_per_agent: int = 3,
     asynchrony: bool = False,
     compression: bool = False,
@@ -73,6 +76,7 @@ def create_regression_problem(
     Args:
         cost_cls: type of cost function
         n_agents: number of agents
+        agent_history_period: period for recording agent history
         n_neighbors_per_agent: number of neighbors per agent
         asynchrony: if true, agents only have a 50% probability of being active/participating at any given time
         compression: if true, messages are rounded to 4 significant digits
@@ -100,6 +104,7 @@ def create_regression_problem(
     return BenchmarkProblem(
         network_structure=network_structure,
         costs=costs,
+        agent_history_period=agent_history_period,
         x_optimal=x_optimal,
         agent_activations=agent_activations,
         message_compression=message_compression,

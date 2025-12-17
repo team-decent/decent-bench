@@ -6,11 +6,30 @@ from numpy import float64
 from numpy import linalg as la
 from numpy.linalg import LinAlgError
 from numpy.typing import NDArray
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.utils.array import Array
+
+
+class MetricProgressBar(Progress):
+    """
+    Progress bar for metric calculations.
+
+    Make sure to set the field *status* in the task to show custom status messages.
+
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn(elapsed_when_finished=True),
+            TextColumn("{task.fields[status]}"),
+        )
 
 
 def single(values: Sequence[float]) -> float:
@@ -37,7 +56,11 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
         ValueError: if no agent reached *iteration*
 
     """
-    all_x_at_iter = [a.x_history[iteration] for a in agents if len(a.x_history) > iteration]
+    if iteration == -1:
+        all_x_at_iter = [a.x_history[max(a.x_history)] for a in agents if len(a.x_history) > 0]
+    else:
+        all_x_at_iter = [a.x_history[iteration] for a in agents if iteration in a.x_history]
+
     if len(all_x_at_iter) == 0:
         raise ValueError(f"No agent reached iteration {iteration}")
 
@@ -83,7 +106,7 @@ def x_error(agent: AgentMetricsView, problem: BenchmarkProblem) -> NDArray[float
     where :math:`\mathbf{x}_k` is the agent's local x at iteration k,
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
     """
-    x_per_iteration = np.asarray([iop.to_numpy(x) for x in agent.x_history])
+    x_per_iteration = np.asarray([iop.to_numpy(x) for _, x in sorted(agent.x_history.items())])
     opt_x = problem.x_optimal
     errors: NDArray[float64] = la.norm(x_per_iteration - opt_x, axis=tuple(range(1, x_per_iteration.ndim)))
     return errors

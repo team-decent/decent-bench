@@ -26,11 +26,14 @@ class TableMetric(ABC):
         statistics: sequence of statistics such as :func:`min`, :func:`sum`, and :func:`~numpy.average` used for
             aggregating the data retrieved with :func:`get_data_from_trial` into a single value, each statistic gets its
             own row in the table
+        fmt: format string used to format the values in the table, defaults to ".2e". See :meth:`str.format`
+            documentation for details on the format string options.
 
     """
 
-    def __init__(self, statistics: list[Statistic]):
+    def __init__(self, statistics: list[Statistic], fmt: str = ".2e"):
         self.statistics = statistics
+        self.fmt = fmt
 
     @property
     @abstractmethod
@@ -88,7 +91,10 @@ class XError(TableMetric):
     description: str = "x error"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
-        return [float(la.norm(iop.to_numpy(problem.x_optimal) - iop.to_numpy(a.x_history[-1]))) for a in agents]
+        return [
+            float(la.norm(iop.to_numpy(problem.x_optimal) - iop.to_numpy(a.x_history[max(a.x_history)])))
+            for a in agents
+        ]
 
 
 class AsymptoticConvergenceOrder(TableMetric):
@@ -149,7 +155,7 @@ class XUpdates(TableMetric):
     description: str = "nr x updates"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
-        return [len(a.x_history) - 1 for a in agents]
+        return [a.x_updates for a in agents]
 
 
 class FunctionCalls(TableMetric):
@@ -283,30 +289,35 @@ def tabulate(
     headers = ["Metric (statistic)"] + [alg.name for alg in algs]
     rows: list[list[str]] = []
     statistics_abbr = {"average": "avg", "median": "mdn"}
-    for metric in metrics:
-        for statistic in metric.statistics:
-            row = [f"{metric.description} ({statistics_abbr.get(statistic.__name__) or statistic.__name__})"]
-            for alg in algs:
-                agent_states_per_trial = resulting_agent_states[alg]
-                with warnings.catch_warnings(action="ignore"):
-                    agg_data_per_trial = _aggregate_data_per_trial(agent_states_per_trial, problem, metric, statistic)
+    with warnings.catch_warnings(action="ignore"), utils.MetricProgressBar() as progress:
+        n_statistics = sum(len(metric.statistics) for metric in metrics)
+        table_task = progress.add_task("Generating table", total=n_statistics, status="")
+        for metric in metrics:
+            progress.update(table_task, status=f"Task: {metric.description}")
+            data_per_trial = [_data_per_trial(resulting_agent_states[a], problem, metric) for a in algs]
+            for statistic in metric.statistics:
+                row = [f"{metric.description} ({statistics_abbr.get(statistic.__name__) or statistic.__name__})"]
+                for i in range(len(algs)):
+                    agg_data_per_trial = [statistic(trial) for trial in data_per_trial[i]]
                     mean, margin_of_error = _calculate_mean_and_margin_of_error(agg_data_per_trial, confidence_level)
-                formatted_confidence_interval = _format_confidence_interval(mean, margin_of_error)
-                row.append(formatted_confidence_interval)
-            rows.append(row)
+                    formatted_confidence_interval = _format_confidence_interval(mean, margin_of_error, metric.fmt)
+                    row.append(formatted_confidence_interval)
+                rows.append(row)
+                progress.advance(table_task)
+        progress.update(table_task, status="Finalizing table")
     formatted_table = tb.tabulate(rows, headers, tablefmt=table_fmt)
     LOGGER.info("\n" + formatted_table)
 
 
-def _aggregate_data_per_trial(
-    agents_per_trial: list[list[AgentMetricsView]], problem: BenchmarkProblem, metric: TableMetric, statistic: Statistic
-) -> list[float]:
-    aggregated_data_per_trial: list[float] = []
+def _data_per_trial(
+    agents_per_trial: list[list[AgentMetricsView]], problem: BenchmarkProblem, metric: TableMetric
+) -> list[Sequence[float]]:
+    data_per_trial: list[Sequence[float]] = []
     for agents in agents_per_trial:
         trial_data = metric.get_data_from_trial(agents, problem)
-        aggregated_trial_data = statistic(trial_data)
-        aggregated_data_per_trial.append(aggregated_trial_data)
-    return aggregated_data_per_trial
+        data_per_trial.append(trial_data)
+
+    return data_per_trial
 
 
 def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: float) -> tuple[float, float]:
@@ -317,11 +328,18 @@ def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: flo
     )
     if np.isfinite(mean) and np.isfinite(raw_interval).all():
         return (float(mean), float(mean - raw_interval[0]))
+
     return np.nan, np.nan
 
 
-def _format_confidence_interval(mean: float, margin_of_error: float) -> str:
-    formatted_confidence_interval = f"{mean:.2e} \u00b1 {margin_of_error:.2e}"
+def _format_confidence_interval(mean: float, margin_of_error: float, fmt: str) -> str:
+    try:
+        formatted_confidence_interval = f"{mean:{fmt}} \u00b1 {margin_of_error:{fmt}}"
+    except ValueError:
+        LOGGER.warning(f"Invalid format string '{fmt}', defaulting to scientific notation")
+        formatted_confidence_interval = f"{mean:.2e} \u00b1 {margin_of_error:.2e}"
+
     if any(np.isnan([mean, margin_of_error])):
         formatted_confidence_interval += " (diverged?)"
+
     return formatted_confidence_interval

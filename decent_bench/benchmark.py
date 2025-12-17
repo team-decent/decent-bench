@@ -31,6 +31,7 @@ def benchmark(
     table_metrics: list[TableMetric] = DEFAULT_TABLE_METRICS,
     table_fmt: Literal["grid", "latex"] = "grid",
     *,
+    computational_cost: pm.ComputationalCost | None = None,
     n_trials: int = 30,
     confidence_level: float = 0.95,
     log_level: int = logging.INFO,
@@ -51,6 +52,8 @@ def benchmark(
         table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
             :const:`~decent_bench.metrics.table_metrics.DEFAULT_TABLE_METRICS`
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
+        computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
+            of computational cost
         n_trials: number of times to run each algorithm on the benchmark problem, running more trials improves the
             statistical results, at least 30 trials are recommended for the central limit theorem to apply
         confidence_level: confidence level of the confidence intervals
@@ -82,10 +85,8 @@ def benchmark(
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
     for alg, networks in resulting_nw_states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
-    with Status("Creating table"):
-        tm.tabulate(resulting_agent_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
-    with Status("Creating plot"):
-        pm.plot(resulting_agent_states, benchmark_problem, plot_metrics)
+    tm.tabulate(resulting_agent_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
+    pm.plot(resulting_agent_states, benchmark_problem, plot_metrics, computational_cost)
     LOGGER.info("Benchmark execution complete, thanks for using decent-bench")
     log_listener.stop()
 
