@@ -16,5 +16,4 @@ providing realistic algorithm comparisons in a user-friendly and highly configur
    user
    API Reference <api/decent_bench>
    developer
-   advanced
    author
