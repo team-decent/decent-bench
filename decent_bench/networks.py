@@ -1,7 +1,6 @@
-from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from abc import ABC
+from collections.abc import Iterable, Mapping
 from functools import cached_property
-from operator import itemgetter
 from typing import TYPE_CHECKING
 
 import networkx as nx
@@ -19,8 +18,8 @@ else:
     AgentGraph = nx.Graph
 
 
-class Network(ABC):
-    """Base network that defines the communication constraints shared by all network types."""
+class Network(ABC):  # noqa: B024
+    """Base network object defining communication logic shared by all network types."""
 
     def __init__(
         self,
@@ -36,28 +35,8 @@ class Network(ABC):
 
     @property
     def graph(self) -> AgentGraph:
-        """Underlying agent graph."""
+        """Underlying NetworkX graph; mutating it will change the network."""
         return self._graph
-
-    @property
-    def message_noise(self) -> NoiseScheme:
-        """Noise scheme applied to messages."""
-        return self._message_noise
-
-    @property
-    def message_compression(self) -> CompressionScheme:
-        """Compression scheme applied to messages."""
-        return self._message_compression
-
-    @property
-    def message_drop(self) -> DropScheme:
-        """Drop scheme applied to messages."""
-        return self._message_drop
-
-    @abstractmethod
-    def kind(self) -> type["Network"]:
-        """Concrete network class for type-based dispatch."""
-        ...
 
     def agents(self) -> list[Agent]:
         """Get all agents in the network."""
@@ -72,9 +51,13 @@ class Network(ABC):
         """
         return [a for a in self.agents() if a._activation.is_active(iteration)]  # noqa: SLF001
 
-    def send(self, sender: Agent, receiver: Agent, msg: Array) -> None:
+    def _adjacent_agents(self, agent: Agent) -> list[Agent]:
+        """Agents adjacent to ``agent`` in the underlying graph."""
+        return list(self.graph.neighbors(agent))
+
+    def _send_one(self, sender: Agent, receiver: Agent, msg: Array) -> None:
         """
-        Send message to a neighbor.
+        Send message to an agent.
 
         The message may be compressed, distorted by noise, and/or dropped depending on the network's
         :class:`~decent_bench.schemes.CompressionScheme`,
@@ -85,16 +68,47 @@ class Network(ABC):
         same receiver. After being received or replaced, the message is destroyed.
         """
         sender._n_sent_messages += 1  # noqa: SLF001
-        if self.message_drop.should_drop():
+        if self._message_drop.should_drop():
             sender._n_sent_messages_dropped += 1  # noqa: SLF001
             return
-        msg = self.message_compression.compress(msg)
-        msg = self.message_noise.make_noise(msg)
+        msg = self._message_compression.compress(msg)
+        msg = self._message_noise.make_noise(msg)
         self.graph.edges[sender, receiver][str(receiver.id)] = msg
 
-    def receive(self, receiver: Agent, sender: Agent) -> None:
+    def send(
+        self,
+        sender: Agent,
+        receiver: Agent | Iterable[Agent] | None = None,
+        msg: Array | None = None,
+    ) -> None:
         """
-        Receive message from a neighbor.
+        Send message to one or more agents.
+
+        Args:
+            sender: sender agent
+            receiver: receiver agent, iterable of receiver agents, or ``None`` to broadcast to adjacent agents.
+            msg: message to send
+
+        Raises:
+            ValueError: if ``msg`` is not provided.
+
+        """
+        if msg is None:
+            raise ValueError("msg must be provided")
+
+        if receiver is None:
+            receivers = self._adjacent_agents(sender)
+        elif isinstance(receiver, Agent):
+            receivers = [receiver]
+        else:
+            receivers = list(receiver)
+
+        for r in receivers:
+            self._send_one(sender=sender, receiver=r, msg=msg)
+
+    def _receive_one(self, receiver: Agent, sender: Agent) -> None:
+        """
+        Receive message from an agent.
 
         Received messages are stored in
         :attr:`Agent.messages <decent_bench.agents.Agent.messages>`.
@@ -105,9 +119,28 @@ class Network(ABC):
             receiver._received_messages[sender] = msg  # noqa: SLF001
             self.graph.edges[sender, receiver][str(receiver.id)] = None
 
+    def receive(self, receiver: Agent, sender: Agent | Iterable[Agent] | None = None) -> None:
+        """
+        Receive message(s) at an agent.
+
+        Args:
+            receiver: receiver agent
+            sender: sender agent, iterable of sender agents, or ``None`` to receive from all adjacent agents.
+
+        """
+        if sender is None:
+            senders = self._adjacent_agents(receiver)
+        elif isinstance(sender, Agent):
+            senders = [sender]
+        else:
+            senders = list(sender)
+
+        for s in senders:
+            self._receive_one(receiver=receiver, sender=s)
+
 
 class P2PNetwork(Network):
-    """Peer-to-peer network of agents that communicate by sending and receiving messages."""
+    """Peer-to-peer network architecture where agents communicate directly with each other."""
 
     def __init__(
         self,
@@ -123,10 +156,6 @@ class P2PNetwork(Network):
             message_drop=message_drop,
         )
         self.W: Array | None = None
-
-    def kind(self) -> type["Network"]:
-        """Concrete network class for type-based dispatch."""
-        return type(self)
 
     def set_weights(self, weights: Array) -> None:
         """
@@ -191,30 +220,16 @@ class P2PNetwork(Network):
         """Get all neighbors of an agent."""
         return list(self.graph[agent])
 
+    def _adjacent_agents(self, agent: Agent) -> list[Agent]:
+        return self.neighbors(agent)
+
     def broadcast(self, sender: Agent, msg: Array) -> None:
-        """
-        Send message to all neighbors.
-
-        The message may be compressed, distorted by noise, and/or dropped depending on the network's
-        :class:`~decent_bench.schemes.CompressionScheme`,
-        :class:`~decent_bench.schemes.NoiseScheme`,
-        and :class:`~decent_bench.schemes.DropScheme`.
-
-        The message will stay in-flight until it is received or replaced by a newer message from the same sender to the
-        same receiver. After being received or replaced, the message is destroyed.
-        """
-        for neighbor in self.neighbors(sender):
-            self.send(sender=sender, receiver=neighbor, msg=msg)
+        """Send to all neighbors (alias for :meth:`~decent_bench.networks.Network.send` with ``receiver=None``)."""
+        self.send(sender=sender, receiver=None, msg=msg)
 
     def receive_all(self, receiver: Agent) -> None:
-        """
-        Receive messages from all neighbors.
-
-        Received messages are stored in
-        :attr:`Agent.messages <decent_bench.agents.Agent.messages>`.
-        """
-        for neighbor in self.neighbors(receiver):
-            self.receive(receiver, neighbor)
+        """Receive from all neighbors (alias for Network.receive with sender=None)."""
+        self.receive(receiver=receiver, sender=None)
 
 
 class FedNetwork(Network):
@@ -239,15 +254,11 @@ class FedNetwork(Network):
         degrees = dict(self.graph.degree())
         if not degrees:
             raise ValueError("FedNetwork requires at least one agent")
-        server, max_degree = max(degrees.items(), key=itemgetter(1))
+        server, max_degree = max(degrees.items(), key=lambda item: item[1])  # noqa: FURB118
         n = len(degrees)
         if max_degree != n - 1 or any(deg != 1 for node, deg in degrees.items() if node != server):
             raise ValueError("FedNetwork expects a star topology with one server connected to all clients")
         return server
-
-    def kind(self) -> type["Network"]:
-        """Concrete network class for type-based dispatch."""
-        return type(self)
 
     @property
     def server(self) -> Agent:
@@ -255,17 +266,121 @@ class FedNetwork(Network):
         return self._server
 
     @property
-    def clients(self) -> list[Agent]:
-        """Agents acting as clients."""
+    def coordinator(self) -> Agent:
+        """Alias for :attr:`server`."""
+        return self.server
+
+    def agents(self) -> list[Agent]:
+        """Get all client agents (excludes the server/coordinator)."""
         return [agent for agent in self.graph if agent is not self.server]
 
-    def active_clients(self, iteration: int) -> list[Agent]:
-        """
-        Get all active clients (excludes the server).
+    def active_agents(self, iteration: int) -> list[Agent]:
+        """Get all active client agents (excludes the server/coordinator)."""
+        # Delegates to Network.active_agents(), which iterates over self.agents() (clients only for FedNetwork).
+        return super().active_agents(iteration)
 
-        Uses :meth:`Network.active_agents` to honor activation schemes and then filters out the server.
+    @property
+    def clients(self) -> list[Agent]:
+        """Alias for :meth:`agents`."""
+        return self.agents()
+
+    def active_clients(self, iteration: int) -> list[Agent]:
+        """Alias for :meth:`active_agents`."""
+        return self.active_agents(iteration)
+
+    def send(
+        self,
+        sender: Agent,
+        receiver: Agent | Iterable[Agent] | None = None,
+        msg: Array | None = None,
+    ) -> None:
         """
-        return [agent for agent in self.active_agents(iteration) if agent is not self.server]
+        Send message(s) in a federated learning network.
+
+        Only server <-> client communication is allowed. Client-to-client and server-to-server communication will
+        raise an error.
+
+        Raises:
+            ValueError: if msg is missing or if sender/receiver roles are invalid.
+
+        """
+        if msg is None:
+            raise ValueError("msg must be provided")
+
+        if sender not in self.graph:
+            raise ValueError("Sender must be an agent in the network")
+
+        if receiver is None:
+            if sender is self.server:
+                super().send(sender=sender, receiver=self.clients, msg=msg)  # server -> clients
+                return
+            super().send(sender=sender, receiver=self.server, msg=msg)  # client -> server
+            return
+
+        if isinstance(receiver, Agent):
+            if receiver not in self.graph:
+                raise ValueError("Receiver must be an agent in the network")
+
+            if sender is self.server:
+                if receiver is self.server:
+                    raise ValueError("Server-to-server communication is not supported")
+                super().send(sender=sender, receiver=receiver, msg=msg)  # server -> client
+                return
+
+            if receiver is not self.server:
+                raise ValueError("Client-to-client communication is not supported")
+            super().send(sender=sender, receiver=receiver, msg=msg)  # client -> server
+            return
+
+        receivers = list(receiver)
+        if sender is not self.server:
+            raise ValueError("Only the server can send to multiple receivers")
+        if any(r not in self.graph or r is self.server for r in receivers):
+            raise ValueError("All receivers must be clients")
+        super().send(sender=sender, receiver=receivers, msg=msg)
+
+    def receive(self, receiver: Agent, sender: Agent | Iterable[Agent] | None = None) -> None:
+        """
+        Receive message(s) in a federated learning network.
+
+        Only server <-> client communication is allowed. Client-to-client and server-to-server communication will
+        raise an error.
+
+        Raises:
+            ValueError: if sender/receiver roles are invalid.
+
+        """
+        if receiver not in self.graph:
+            raise ValueError("Receiver must be an agent in the network")
+
+        if sender is None:
+            if receiver is self.server:
+                super().receive(receiver=receiver, sender=self.clients)
+                return
+            super().receive(receiver=receiver, sender=self.server)
+            return
+
+        if isinstance(sender, Agent):
+            if sender not in self.graph:
+                raise ValueError("Sender must be an agent in the network")
+
+            if receiver is self.server:
+                if sender is self.server:
+                    raise ValueError("Server-to-server communication is not supported")
+                super().receive(receiver=receiver, sender=sender)  # server receives from a client
+                return
+
+            if sender is not self.server:
+                raise ValueError("Client-to-client communication is not supported")
+            super().receive(receiver=receiver, sender=sender)  # client receives from the server
+            return
+
+        senders = list(sender)
+        if receiver is not self.server:
+            raise ValueError("Only the server can receive from multiple senders")
+        if any(s not in self.graph or s is self.server for s in senders):
+            raise ValueError("All senders must be clients")
+        super().receive(receiver=receiver, sender=senders)
 
     def send_to_client(self, client: Agent, msg: Array) -> None:
         """
@@ -281,8 +396,7 @@ class FedNetwork(Network):
 
     def send_to_all_clients(self, msg: Array) -> None:
         """Send the same message from the server to every client (synchronous FL push)."""
-        for client in self.clients:
-            self.send_to_client(client, msg)
+        self.send(sender=self.server, receiver=None, msg=msg)
 
     def send_from_client(self, client: Agent, msg: Array) -> None:
         """
@@ -328,7 +442,7 @@ class FedNetwork(Network):
         """
         if client not in self.clients:
             raise ValueError("Receiver must be a client")
-        self.receive(receiver=client, sender=self.server)
+        self.receive(receiver=client, sender=None)  # or self.receive(receiver=client, sender=self.server)
 
     def receive_at_all_clients(self) -> None:
         """Receive messages at every client from the server (synchronous FL pull)."""
@@ -349,8 +463,7 @@ class FedNetwork(Network):
 
     def receive_from_all_clients(self) -> None:
         """Receive messages at the server from every client (synchronous FL pull)."""
-        for client in self.clients:
-            self.receive_from_client(client)
+        self.receive(receiver=self.server, sender=None)
 
 
 def create_distributed_network(problem: BenchmarkProblem) -> P2PNetwork:
@@ -405,7 +518,7 @@ def create_federated_network(problem: BenchmarkProblem) -> FedNetwork:
         raise NotImplementedError("Support for disconnected graphs has not been implemented yet")
     degrees = dict(problem.network_structure.degree())
     if n_agents:
-        server, max_degree = max(degrees.items(), key=itemgetter(1))
+        server, max_degree = max(degrees.items(), key=lambda item: item[1])  # noqa: FURB118
         if max_degree != n_agents - 1 or any(deg != 1 for node, deg in degrees.items() if node != server):
             raise ValueError("Federated network requires a star topology (one server connected to all clients)")
     agents = [Agent(i, problem.costs[i], problem.agent_activations[i]) for i in range(n_agents)]
