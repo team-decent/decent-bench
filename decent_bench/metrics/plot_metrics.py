@@ -20,7 +20,7 @@ X = float
 Y = float
 
 
-@dataclass(eq=False)
+@dataclass
 class ComputationalCost:
     """Computational costs associated with an algorithm for plot metrics."""
 
@@ -122,11 +122,12 @@ COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e3
 MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p"]
 
 
-def plot(  # noqa: PLR0914
+def plot(
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[PlotMetric],
     computational_cost: ComputationalCost | None,
+    computational_cost_scalar: float = 1e-4,
 ) -> None:
     """
     Plot the execution results with one subplot per metric.
@@ -140,6 +141,7 @@ def plot(  # noqa: PLR0914
         metrics: metrics to calculate and plot
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
             of computational cost
+        computational_cost_scalar: scalar to convert computational cost to more manageable units for plotting
 
     Raises:
         RuntimeError: if the figure manager can't be retrieved
@@ -148,7 +150,6 @@ def plot(  # noqa: PLR0914
     if not metrics:
         return
     LOGGER.info(f"Plot metric definitions can be found here: {PLOT_METRICS_DOC_LINK}")
-    max_iterations = max(alg.iterations for alg in resulting_agent_states)
     use_cost = computational_cost is not None
     metric_subplots: list[tuple[PlotMetric, SubPlot]] = _create_metric_subplots(metrics, use_cost)
     with utils.MetricProgressBar() as progress:
@@ -176,7 +177,7 @@ def plot(  # noqa: PLR0914
                 x, y_mean = zip(*mean_curve, strict=True)
                 if computational_cost is not None:
                     total_computational_cost = _calc_total_cost(agent_states, computational_cost)
-                    x = tuple(val * total_computational_cost / max_iterations for val in x)
+                    x = tuple(val * total_computational_cost * computational_cost_scalar for val in x)
                 subplot.plot(x, y_mean, label=alg.name, color=color, marker=marker, markevery=max(1, int(len(x) / 20)))
                 y_min, y_max = _calculate_envelope(data_per_trial)
                 subplot.fill_between(x, y_min, y_max, color=color, alpha=0.1)

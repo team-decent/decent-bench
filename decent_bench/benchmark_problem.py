@@ -41,7 +41,7 @@ class BenchmarkProblem:
         network_structure: graph defining how agents are connected
         x_optimal: solution that minimizes the sum of the cost functions, used for calculating metrics
         costs: local cost functions, each one is given to one agent
-        history_period: period for recording agent history
+        agent_history_period: period for recording agent history
         agent_activations: setting for agent activation/participation, each scheme is applied to one agent
         message_compression: message compression setting
         message_noise: message noise setting

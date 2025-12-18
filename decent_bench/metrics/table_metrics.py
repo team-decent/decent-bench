@@ -333,13 +333,27 @@ def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: flo
 
 
 def _format_confidence_interval(mean: float, margin_of_error: float, fmt: str) -> str:
-    try:
-        formatted_confidence_interval = f"{mean:{fmt}} \u00b1 {margin_of_error:{fmt}}"
-    except ValueError:
+    if not _is_valid_float_format_spec(fmt):
         LOGGER.warning(f"Invalid format string '{fmt}', defaulting to scientific notation")
-        formatted_confidence_interval = f"{mean:.2e} \u00b1 {margin_of_error:.2e}"
+        fmt = ".2e"
+
+    formatted_confidence_interval = f"{mean:{fmt}} \u00b1 {margin_of_error:{fmt}}"
 
     if any(np.isnan([mean, margin_of_error])):
         formatted_confidence_interval += " (diverged?)"
 
     return formatted_confidence_interval
+
+
+def _is_valid_float_format_spec(fmt: str) -> bool:
+    """
+    Validate that the given format spec can be used to format a float.
+
+    This avoids attempting to format real values with an invalid format string.
+
+    """
+    try:
+        f"{0.01:{fmt}}"
+    except (ValueError, TypeError):
+        return False
+    return True

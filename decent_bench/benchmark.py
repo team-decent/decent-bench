@@ -75,7 +75,7 @@ def benchmark(
     """
     manager = Manager()
     log_listener = logger.start_log_listener(manager, log_level)
-    LOGGER.info("Starting benchmark execution, progress bar increments with each completed trial ")
+    LOGGER.info("Starting benchmark execution ")
     with Status("Generating initial network state"):
         nw_init_state = create_distributed_network(benchmark_problem)
     LOGGER.debug(f"Nr of agents: {len(nw_init_state.agents())}")

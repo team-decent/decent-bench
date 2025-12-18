@@ -14,6 +14,9 @@ class Agent:
     """Agent with unique id, local cost function, activation scheme and history period."""
 
     def __init__(self, agent_id: int, cost: Cost, activation: AgentActivationScheme, history_period: int):
+        if history_period <= 0:
+            raise ValueError("history_period must be a positive integer")
+
         self._id = agent_id
         self._cost = cost
         self._activation = activation
@@ -152,9 +155,9 @@ class AgentMetricsView:
     @staticmethod
     def from_agent(agent: Agent) -> AgentMetricsView:
         """Create from agent."""
-        # Apppend the last x if not already recorded
+        # Append the last x if not already recorded
         if agent._current_x is not None and agent._x_step not in agent._x_history:  # noqa: SLF001
-            agent._x_history[agent._x_step] = agent._current_x  # noqa: SLF001
+            agent._x_history[agent._x_step] = iop.copy(agent._current_x)  # noqa: SLF001
 
         return AgentMetricsView(
             cost=agent.cost,
