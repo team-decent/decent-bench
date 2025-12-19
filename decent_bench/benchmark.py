@@ -32,6 +32,7 @@ def benchmark(
     table_fmt: Literal["grid", "latex"] = "grid",
     *,
     computational_cost: pm.ComputationalCost | None = None,
+    x_axis_scaling: float = 1e-4,
     n_trials: int = 30,
     confidence_level: float = 0.95,
     log_level: int = logging.INFO,
@@ -54,6 +55,8 @@ def benchmark(
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
             of computational cost
+        x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
+            manageable units for plotting. Only used if ``computational_cost`` is provided.
         n_trials: number of times to run each algorithm on the benchmark problem, running more trials improves the
             statistical results, at least 30 trials are recommended for the central limit theorem to apply
         confidence_level: confidence level of the confidence intervals
@@ -72,6 +75,12 @@ def benchmark(
         If ``progress_step`` is too small performance may degrade due to the
         overhead of updating the progress bar too often.
 
+        Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
+        Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
+        weighted by the time or energy it takes to perform them on the specific hardware.
+
+        .. include:: snippets/computational_cost.rst
+
     """
     manager = Manager()
     log_listener = logger.start_log_listener(manager, log_level)
@@ -86,7 +95,7 @@ def benchmark(
     for alg, networks in resulting_nw_states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
     tm.tabulate(resulting_agent_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
-    pm.plot(resulting_agent_states, benchmark_problem, plot_metrics, computational_cost)
+    pm.plot(resulting_agent_states, benchmark_problem, plot_metrics, computational_cost, x_axis_scaling)
     LOGGER.info("Benchmark execution complete, thanks for using decent-bench")
     log_listener.stop()
 

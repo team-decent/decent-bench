@@ -1,5 +1,4 @@
 import math
-import random
 import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -78,9 +77,7 @@ class RegretPerIteration(PlotMetric):
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
         # Determine the set of recorded iterations common to all agents and use those
-        common_iters = set.intersection(*(set(a.x_history.keys()) for a in agents)) if agents else set()
-        sorted_iters = sorted(common_iters)
-        return [(i, utils.regret(agents, problem, i)) for i in sorted_iters]
+        return [(i, utils.regret(agents, problem, i)) for i in utils.common_sorted_iterations(agents)]
 
 
 class GradientNormPerIteration(PlotMetric):
@@ -101,9 +98,7 @@ class GradientNormPerIteration(PlotMetric):
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
         # Determine the set of recorded iterations common to all agents and use those
-        common_iters = set.intersection(*(set(a.x_history.keys()) for a in agents)) if agents else set()
-        sorted_iters = sorted(common_iters)
-        return [(i, utils.gradient_norm(agents, i)) for i in sorted_iters]
+        return [(i, utils.gradient_norm(agents, i)) for i in utils.common_sorted_iterations(agents)]
 
 
 DEFAULT_PLOT_METRICS = [
@@ -118,16 +113,31 @@ DEFAULT_PLOT_METRICS = [
 """
 
 PLOT_METRICS_DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/api/decent_bench.metrics.plot_metrics.html"
-COLORS = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
-MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p"]
+COLORS = [
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#7f7f7f",
+    "#bcbd22",
+    "#17becf",
+    "#34495e",
+    "#16a085",
+    "#686901",
+]
+MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p", "P", "X"]
+STYLES = ["-", ":", "--", "-.", (5, (10, 3)), (0, (5, 10)), (0, (3, 1, 1, 1))]
 
 
-def plot(
+def plot(  # noqa: PLR0914
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[PlotMetric],
     computational_cost: ComputationalCost | None,
-    computational_cost_scalar: float = 1e-4,
+    x_axis_scaling: float = 1e-4,
 ) -> None:
     """
     Plot the execution results with one subplot per metric.
@@ -141,7 +151,15 @@ def plot(
         metrics: metrics to calculate and plot
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
             of computational cost
-        computational_cost_scalar: scalar to convert computational cost to more manageable units for plotting
+        x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
+            manageable units for plotting. Only used if ``computational_cost`` is provided.
+
+    Note:
+        Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
+        Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
+        weighted by the time or energy it takes to perform them on the specific hardware.
+
+        .. include:: snippets/computational_cost.rst
 
     Raises:
         RuntimeError: if the figure manager can't be retrieved
@@ -162,8 +180,7 @@ def plot(
                 status=f"Task: {metric.y_label} vs {_get_formatted_x_label(metric.x_label, use_cost)}",
             )
             for i, (alg, agent_states) in enumerate(resulting_agent_states.items()):
-                color = COLORS[i] if i < len(COLORS) else [random.random() for _ in range(3)]
-                marker = MARKERS[i] if i < len(MARKERS) else random.choice(MARKERS)
+                marker, linestyle, color = _get_marker_style_color(i)
                 data_per_trial: list[Sequence[tuple[X, Y]]] = _get_data_per_trial(agent_states, problem, metric)
                 flattened_data: list[tuple[X, Y]] = [d for trial in data_per_trial for d in trial]
                 if not np.isfinite(flattened_data).all():
@@ -177,8 +194,16 @@ def plot(
                 x, y_mean = zip(*mean_curve, strict=True)
                 if computational_cost is not None:
                     total_computational_cost = _calc_total_cost(agent_states, computational_cost)
-                    x = tuple(val * total_computational_cost * computational_cost_scalar for val in x)
-                subplot.plot(x, y_mean, label=alg.name, color=color, marker=marker, markevery=max(1, int(len(x) / 20)))
+                    x = tuple(val * total_computational_cost * x_axis_scaling for val in x)
+                subplot.plot(
+                    x,
+                    y_mean,
+                    label=alg.name,
+                    color=color,
+                    marker=marker,
+                    linestyle=linestyle,
+                    markevery=max(1, int(len(x) / 20)),
+                )
                 y_min, y_max = _calculate_envelope(data_per_trial)
                 subplot.fill_between(x, y_min, y_max, color=color, alpha=0.1)
                 progress.advance(plot_task)
@@ -208,6 +233,29 @@ def _create_metric_subplots(metrics: list[PlotMetric], use_cost: bool) -> list[t
         if metric.y_log:
             sp.set_yscale("log")
     return metric_subplots
+
+
+def _get_marker_style_color(
+    index: int,
+) -> tuple[str, Sequence[int | tuple[int, int, int, int] | str | tuple[int, int]], str]:
+    """
+    Get deterministic unique marker, line style, and color for a given index.
+
+    Cycles through all combinations to ensure the first n indices (where n =
+    len(MARKERS) * len(STYLES)) are unique. Colors cycle based on index,
+    markers cycle first, then styles to maximize marker distinctiveness for B&W printing.
+    """
+    # Calculate total unique combinations
+    n_combinations = len(MARKERS) * len(STYLES)
+
+    # Reduce index to valid range
+    idx = index % n_combinations
+
+    color_idx = index % len(COLORS)
+    marker_idx = idx % len(MARKERS)
+    style_idx = (idx // len(MARKERS)) % len(STYLES)
+
+    return MARKERS[marker_idx], STYLES[style_idx], COLORS[color_idx]
 
 
 def _get_formatted_x_label(x_label: str, use_cost: bool) -> str:

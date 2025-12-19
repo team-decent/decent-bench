@@ -79,7 +79,7 @@ def regret(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration:
     mean_x = x_mean(tuple(agents), iteration)
     optimal_cost = sum(a.cost.function(x_opt) for a in agents)
     actual_cost = sum(a.cost.function(mean_x) for a in agents)
-    return abs(optimal_cost - actual_cost)
+    return actual_cost - optimal_cost
 
 
 def gradient_norm(agents: list[AgentMetricsView], iteration: int = -1) -> float:
@@ -154,3 +154,18 @@ def iterative_convergence_rate_and_order(agent: AgentMetricsView, problem: Bench
     except LinAlgError:
         rate, order = np.nan, np.nan
     return rate, order
+
+
+def common_sorted_iterations(agents: Sequence[AgentMetricsView]) -> list[int]:
+    """
+    Get a sorted list of all common iterations reached by agents in *agents*.
+
+    Args:
+        agents: sequence of agents to get the common iterations from
+
+    Returns:
+        sorted list of iterations reached by all agents
+
+    """
+    common_iters = set.intersection(*(set(a.x_history.keys()) for a in agents)) if agents else set()
+    return sorted(common_iters)

@@ -89,7 +89,7 @@ Configure communication constraints and other settings for out-of-the-box regres
     problem = benchmark_problem.create_regression_problem(
         LinearRegressionCost,
         n_agents=100,
-        agent_history_period=10, # Record metrics every 10 iterations
+        agent_state_snapshot_period=10, # Record metrics every 10 iterations
         n_neighbors_per_agent=3,
         asynchrony=True,
         compression=True,

@@ -196,7 +196,8 @@ def create_distributed_network(problem: BenchmarkProblem) -> P2PNetwork:
     if not nx.is_connected(problem.network_structure):
         raise NotImplementedError("Support for disconnected graphs has not been implemented yet")
     agents = [
-        Agent(i, problem.costs[i], problem.agent_activations[i], problem.agent_history_period) for i in range(n_agents)
+        Agent(i, problem.costs[i], problem.agent_activations[i], problem.agent_state_snapshot_period)
+        for i in range(n_agents)
     ]
     agent_node_map = {node: agents[i] for i, node in enumerate(problem.network_structure.nodes())}
     graph = nx.relabel_nodes(problem.network_structure, agent_node_map)

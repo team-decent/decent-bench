@@ -9,6 +9,8 @@ Welcome to decent-bench!
 decent-bench allows you to benchmark decentralized optimization algorithms under various communication constraints,
 providing realistic algorithm comparisons in a user-friendly and highly configurable setting.
 
+Contributions are very welcome, see developer guide on how to get started. Please contact `Dr. Nicola Bastianello <https://bastianello.me/>`_ 
+for discussions or start an open discussion at `GitHub <https://github.com/team-decent/decent-bench/issues>`_.
 Report any bugs you *may find* to `GitHub <https://github.com/team-decent/decent-bench/issues>`_.
 
 .. toctree::

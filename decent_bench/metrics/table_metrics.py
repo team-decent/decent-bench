@@ -26,8 +26,14 @@ class TableMetric(ABC):
         statistics: sequence of statistics such as :func:`min`, :func:`sum`, and :func:`~numpy.average` used for
             aggregating the data retrieved with :func:`get_data_from_trial` into a single value, each statistic gets its
             own row in the table
-        fmt: format string used to format the values in the table, defaults to ".2e". See :meth:`str.format`
-            documentation for details on the format string options.
+        fmt: format string used to format the values in the table, defaults to ".2e". Common formats include:
+            - ".2e": scientific notation with 2 decimal places
+            - ".3f": fixed-point notation with 3 decimal places
+            - ".4g": general format with 4 significant digits
+            - ".1%": percentage format with 1 decimal place
+
+            Where the integer specifies the precision.
+            See :meth:`str.format` documentation for details on the format string options.
 
     """
 
@@ -155,7 +161,7 @@ class XUpdates(TableMetric):
     description: str = "nr x updates"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
-        return [a.x_updates for a in agents]
+        return [a.n_x_updates for a in agents]
 
 
 class FunctionCalls(TableMetric):

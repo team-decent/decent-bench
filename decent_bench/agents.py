@@ -21,11 +21,11 @@ class Agent:
         self._cost = cost
         self._activation = activation
         self._history_period = history_period
-        self._x_step = 0
         self._current_x: Array | None = None
         self._x_history: dict[int, Array] = {}
         self._auxiliary_variables: dict[str, Array] = {}
         self._received_messages: dict[Agent, Array] = {}
+        self._n_x_updates = 0
         self._n_sent_messages = 0
         self._n_received_messages = 0
         self._n_sent_messages_dropped = 0
@@ -71,10 +71,10 @@ class Agent:
 
     @x.setter
     def x(self, x: Array) -> None:
-        self._x_step += 1
+        self._n_x_updates += 1
         self._current_x = x
-        if self._x_step % self._history_period == 0:
-            self._x_history[self._x_step] = iop.copy(x)
+        if self._n_x_updates % self._history_period == 0:
+            self._x_history[self._n_x_updates] = iop.copy(x)
 
     @property
     def messages(self) -> Mapping[Agent, Array]:
@@ -110,7 +110,7 @@ class Agent:
                 raise ValueError(f"Initialized x has shape {iop.shape(x)}, expected {self.cost.shape}")
             self._x_history = {0: iop.copy(x)}
             self._current_x = iop.copy(x)
-            self._x_step = 0
+            self._n_x_updates = 0
         if aux_vars:
             self._auxiliary_variables = {k: iop.copy(v) for k, v in aux_vars.items()}
         if received_msgs:
@@ -143,7 +143,7 @@ class AgentMetricsView:
 
     cost: Cost
     x_history: dict[int, Array]
-    x_updates: int
+    n_x_updates: int
     n_function_calls: int
     n_gradient_calls: int
     n_hessian_calls: int
@@ -156,13 +156,13 @@ class AgentMetricsView:
     def from_agent(agent: Agent) -> AgentMetricsView:
         """Create from agent."""
         # Append the last x if not already recorded
-        if agent._current_x is not None and agent._x_step not in agent._x_history:  # noqa: SLF001
-            agent._x_history[agent._x_step] = iop.copy(agent._current_x)  # noqa: SLF001
+        if agent._current_x is not None and agent._n_x_updates not in agent._x_history:  # noqa: SLF001
+            agent._x_history[agent._n_x_updates] = iop.copy(agent._current_x)  # noqa: SLF001
 
         return AgentMetricsView(
             cost=agent.cost,
             x_history=agent._x_history,  # noqa: SLF001
-            x_updates=agent._x_step,  # noqa: SLF001
+            n_x_updates=agent._n_x_updates,  # noqa: SLF001
             n_function_calls=agent._n_function_calls,  # noqa: SLF001
             n_gradient_calls=agent._n_gradient_calls,  # noqa: SLF001
             n_hessian_calls=agent._n_hessian_calls,  # noqa: SLF001

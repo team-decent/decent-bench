@@ -211,7 +211,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
     ],
 )
 @pytest.mark.parametrize("history_period", [1, 5, 10])
-def test_agent_history_period(framework: SupportedFrameworks, device: SupportedDevices, history_period: int):
+def test_agent_state_snapshot_period(framework: SupportedFrameworks, device: SupportedDevices, history_period: int):
     """Test that agent history is recorded according to the specified history period."""
     agent = Agent(
         0,
@@ -235,6 +235,10 @@ def test_agent_history_period(framework: SupportedFrameworks, device: SupportedD
             f"Expected history length: {len(expected_history)}, but got: {len(agent._x_history)}"
         )
         steps = sorted(agent._x_history.keys())
+        assert steps == list(range(0, history_period * (len(expected_history)), history_period)), (
+            f"Expected history steps: {list(range(0, history_period * (len(expecteded_history)), history_period))}, "
+            f"but got: {steps}"
+        )
         for i, expected in zip(steps, expected_history, strict=True):
             np.testing.assert_array_almost_equal(
                 iop.to_numpy(agent._x_history[i]),
