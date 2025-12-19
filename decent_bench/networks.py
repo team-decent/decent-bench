@@ -38,6 +38,11 @@ class Network(ABC):  # noqa: B024
         """Underlying NetworkX graph; mutating it will change the network."""
         return self._graph
 
+    @property
+    def G(self) -> AgentGraph:  # noqa: N802
+        """Alias for the underlying graph."""
+        return self.graph
+
     def agents(self) -> list[Agent]:
         """Get all agents in the network."""
         return list(self.graph)
@@ -51,8 +56,8 @@ class Network(ABC):  # noqa: B024
         """
         return [a for a in self.agents() if a._activation.is_active(iteration)]  # noqa: SLF001
 
-    def _adjacent_agents(self, agent: Agent) -> list[Agent]:
-        """Agents adjacent to ``agent`` in the underlying graph."""
+    def connected_agents(self, agent: Agent) -> list[Agent]:
+        """Agents directly connected to ``agent`` in the underlying graph."""
         return list(self.graph.neighbors(agent))
 
     def _send_one(self, sender: Agent, receiver: Agent, msg: Array) -> None:
@@ -86,23 +91,31 @@ class Network(ABC):  # noqa: B024
 
         Args:
             sender: sender agent
-            receiver: receiver agent, iterable of receiver agents, or ``None`` to broadcast to adjacent agents.
+            receiver: receiver agent, iterable of receiver agents, or ``None`` to broadcast to connected agents.
             msg: message to send
 
         Raises:
-            ValueError: if ``msg`` is not provided.
+            ValueError: if ``msg`` is not provided, if agents are not part of the network, or if sender/receiver are not
+                connected.
 
         """
         if msg is None:
             raise ValueError("msg must be provided")
 
-        receivers: Iterable[Agent]
+        if sender not in self.graph:
+            raise ValueError("Sender must be an agent in the network")
+
+        receivers: Iterable[Agent] | list[Agent]
         if receiver is None:
-            receivers = self._adjacent_agents(sender)
+            receivers = self.connected_agents(sender)
         elif isinstance(receiver, Agent):
             receivers = [receiver]
         else:
             receivers = receiver
+
+        receivers = list(receivers)
+        if any(r not in self.connected_agents(sender) for r in receivers):
+            raise ValueError("Sender and receiver must be connected in the network")
 
         for r in receivers:
             self._send_one(sender=sender, receiver=r, msg=msg)
@@ -126,16 +139,26 @@ class Network(ABC):  # noqa: B024
 
         Args:
             receiver: receiver agent
-            sender: sender agent, iterable of sender agents, or ``None`` to receive from all adjacent agents.
+            sender: sender agent, iterable of sender agents, or ``None`` to receive from all connected agents.
+
+        Raises:
+            ValueError: if sender/receiver are not part of the network or not connected.
 
         """
-        senders: Iterable[Agent]
+        if receiver not in self.graph:
+            raise ValueError("Receiver must be an agent in the network")
+
+        senders: Iterable[Agent] | list[Agent]
         if sender is None:
-            senders = self._adjacent_agents(receiver)
+            senders = self.connected_agents(receiver)
         elif isinstance(sender, Agent):
             senders = [sender]
         else:
             senders = sender
+
+        senders = list(senders)
+        if any(s not in self.connected_agents(receiver) for s in senders):
+            raise ValueError("Sender and receiver must be connected in the network")
 
         for s in senders:
             self._receive_one(receiver=receiver, sender=s)
@@ -222,7 +245,8 @@ class P2PNetwork(Network):
         """Get all neighbors of an agent."""
         return list(self.graph[agent])
 
-    def _adjacent_agents(self, agent: Agent) -> list[Agent]:
+    def connected_agents(self, agent: Agent) -> list[Agent]:
+        """Agents directly connected to ``agent`` (alias for :meth:`neighbors`)."""
         return self.neighbors(agent)
 
     def broadcast(self, sender: Agent, msg: Array) -> None:
@@ -303,41 +327,26 @@ class FedNetwork(Network):
         raise an error.
 
         Raises:
-            ValueError: if msg is missing or if sender/receiver roles are invalid.
+            ValueError: if server-to-server or client-to-client communication is attempted, or if a non-server tries to
+                send to multiple receivers. Also see :meth:`Network.send` for generic validation.
 
         """
-        if msg is None:
-            raise ValueError("msg must be provided")
-
-        if sender not in self.graph:
-            raise ValueError("Sender must be an agent in the network")
-
-        if receiver is None:
-            if sender is self.server:
-                super().send(sender=sender, receiver=self.clients, msg=msg)  # server -> clients
-                return
-            super().send(sender=sender, receiver=self.server, msg=msg)  # client -> server
+        if isinstance(receiver, Agent):
+            if sender is self.server and receiver is self.server:
+                raise ValueError("Server-to-server communication is not supported")
+            if sender is not self.server and receiver is not self.server:
+                raise ValueError("Client-to-client communication is not supported")
+            super().send(sender=sender, receiver=receiver, msg=msg)
             return
 
-        if isinstance(receiver, Agent):
-            if receiver not in self.graph:
-                raise ValueError("Receiver must be an agent in the network")
-
-            if sender is self.server:
-                if receiver is self.server:
-                    raise ValueError("Server-to-server communication is not supported")
-                super().send(sender=sender, receiver=receiver, msg=msg)  # server -> client
-                return
-
-            if receiver is not self.server:
-                raise ValueError("Client-to-client communication is not supported")
-            super().send(sender=sender, receiver=receiver, msg=msg)  # client -> server
+        if receiver is None:
+            super().send(sender=sender, receiver=receiver, msg=msg)
             return
 
         receivers = list(receiver)
         if sender is not self.server:
             raise ValueError("Only the server can send to multiple receivers")
-        if any(r not in self.graph or r is self.server for r in receivers):
+        if any(r is self.server for r in receivers):
             raise ValueError("All receivers must be clients")
         super().send(sender=sender, receiver=receivers, msg=msg)
 
@@ -349,38 +358,25 @@ class FedNetwork(Network):
         raise an error.
 
         Raises:
-            ValueError: if sender/receiver roles are invalid.
+            ValueError: if sender/receiver roles are invalid. Also see :meth:`Network.receive` for generic validation.
 
         """
-        if receiver not in self.graph:
-            raise ValueError("Receiver must be an agent in the network")
-
-        if sender is None:
-            if receiver is self.server:
-                super().receive(receiver=receiver, sender=self.clients)
-                return
-            super().receive(receiver=receiver, sender=self.server)
+        if isinstance(sender, Agent):
+            if receiver is self.server and sender is self.server:
+                raise ValueError("Server-to-server communication is not supported")
+            if receiver is not self.server and sender is not self.server:
+                raise ValueError("Client-to-client communication is not supported")
+            super().receive(receiver=receiver, sender=sender)
             return
 
-        if isinstance(sender, Agent):
-            if sender not in self.graph:
-                raise ValueError("Sender must be an agent in the network")
-
-            if receiver is self.server:
-                if sender is self.server:
-                    raise ValueError("Server-to-server communication is not supported")
-                super().receive(receiver=receiver, sender=sender)  # server receives from a client
-                return
-
-            if sender is not self.server:
-                raise ValueError("Client-to-client communication is not supported")
-            super().receive(receiver=receiver, sender=sender)  # client receives from the server
+        if sender is None:
+            super().receive(receiver=receiver, sender=sender)
             return
 
         senders = list(sender)
         if receiver is not self.server:
             raise ValueError("Only the server can receive from multiple senders")
-        if any(s not in self.graph or s is self.server for s in senders):
+        if any(s is self.server for s in senders):
             raise ValueError("All senders must be clients")
         super().receive(receiver=receiver, sender=senders)
 
