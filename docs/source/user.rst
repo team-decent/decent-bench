@@ -94,6 +94,9 @@ Configure communication constraints and other settings for out-of-the-box regres
         compression=True,
         noise=True,
         drops=True,
+        # Optional: plot the network when it is created
+        plot_network=False,
+        plot_network_kwargs=None,
     )
 
     if __name__ == "__main__":
@@ -130,6 +133,8 @@ Change the settings of an already created benchmark problem, for example, the ne
         compression=True,
         noise=True,
         drops=True,
+        plot_network=True,
+        plot_network_kwargs={"layout": "circular", "with_labels": True},
     )
 
     problem.network_structure = nx.random_regular_graph(n_agents, n_neighbors_per_agent)
