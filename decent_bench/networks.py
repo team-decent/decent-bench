@@ -96,12 +96,13 @@ class Network(ABC):  # noqa: B024
         if msg is None:
             raise ValueError("msg must be provided")
 
+        receivers: Iterable[Agent]
         if receiver is None:
             receivers = self._adjacent_agents(sender)
         elif isinstance(receiver, Agent):
             receivers = [receiver]
         else:
-            receivers = list(receiver)
+            receivers = receiver
 
         for r in receivers:
             self._send_one(sender=sender, receiver=r, msg=msg)
@@ -128,12 +129,13 @@ class Network(ABC):  # noqa: B024
             sender: sender agent, iterable of sender agents, or ``None`` to receive from all adjacent agents.
 
         """
+        senders: Iterable[Agent]
         if sender is None:
             senders = self._adjacent_agents(receiver)
         elif isinstance(sender, Agent):
             senders = [sender]
         else:
-            senders = list(sender)
+            senders = sender
 
         for s in senders:
             self._receive_one(receiver=receiver, sender=s)
@@ -442,7 +444,7 @@ class FedNetwork(Network):
         """
         if client not in self.clients:
             raise ValueError("Receiver must be a client")
-        self.receive(receiver=client, sender=None)  # or self.receive(receiver=client, sender=self.server)
+        self.receive(receiver=client, sender=None)
 
     def receive_at_all_clients(self) -> None:
         """Receive messages at every client from the server (synchronous FL pull)."""
