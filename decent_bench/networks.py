@@ -242,12 +242,8 @@ class P2PNetwork(Network):
         return iop.to_array(A, agents[0].cost.framework, agents[0].cost.device)
 
     def neighbors(self, agent: Agent) -> list[Agent]:
-        """Get all neighbors of an agent."""
-        return list(self.graph[agent])
-
-    def connected_agents(self, agent: Agent) -> list[Agent]:
-        """Agents directly connected to ``agent`` (alias for :meth:`neighbors`)."""
-        return self.neighbors(agent)
+        """Alias for :meth:`~decent_bench.networks.Network.connected_agents`."""
+        return super().connected_agents(agent)
 
     def broadcast(self, sender: Agent, msg: Array) -> None:
         """Send to all neighbors (alias for :meth:`~decent_bench.networks.Network.send` with ``receiver=None``)."""
