@@ -1579,6 +1579,60 @@ def test_zeros_frameworks(framework: str, device: str, shape: tuple[int, ...]) -
 
 
 # ============================================================================
+# Tests for randn
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    ("framework", "device"),
+    [
+        ("numpy", "cpu"),
+        pytest.param(
+            "torch",
+            "cpu",
+            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+        ),
+        pytest.param(
+            "torch",
+            "gpu",
+            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "cpu",
+            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "gpu",
+            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+        ),
+        pytest.param(
+            "jax",
+            "cpu",
+            marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
+        ),
+        pytest.param(
+            "jax",
+            "gpu",
+            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "shape",
+    [(2, 3), (5,)],
+)
+def test_randn_frameworks(framework: str, device: str, shape: tuple[int, ...]) -> None:
+    """Test randn function for all frameworks and devices."""
+    randn_arr = iop.randn(framework=SupportedFrameworks(framework), shape=shape, device=SupportedDevices(device))
+    expected = np.random.default_rng().normal(size=shape)
+
+    assert_shapes_equal(randn_arr, expected, framework)
+    assert_same_type(randn_arr, framework)
+
+
+# ============================================================================
 # Tests for get_item and set_item
 # ============================================================================
 
