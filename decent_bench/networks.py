@@ -1,5 +1,5 @@
 from abc import ABC
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping, Sequence
 from functools import cached_property
 from typing import TYPE_CHECKING
 
@@ -83,7 +83,7 @@ class Network(ABC):  # noqa: B024
     def send(
         self,
         sender: Agent,
-        receiver: Agent | Iterable[Agent] | None = None,
+        receiver: Agent | Sequence[Agent] | None = None,
         msg: Array | None = None,
     ) -> None:
         """
@@ -91,7 +91,7 @@ class Network(ABC):  # noqa: B024
 
         Args:
             sender: sender agent
-            receiver: receiver agent, iterable of receiver agents, or ``None`` to broadcast to connected agents.
+            receiver: receiver agent, sequence of receiver agents, or ``None`` to broadcast to connected agents.
             msg: message to send
 
         Raises:
@@ -105,19 +105,20 @@ class Network(ABC):  # noqa: B024
         if sender not in self.graph:
             raise ValueError("Sender must be an agent in the network")
 
-        receivers: Iterable[Agent] | list[Agent]
         if receiver is None:
-            receivers = self.connected_agents(sender)
+            receiver = self.connected_agents(sender)
         elif isinstance(receiver, Agent):
-            receivers = [receiver]
-        else:
-            receivers = receiver
+            if receiver not in self.connected_agents(sender):
+                raise ValueError("Sender and receiver must be connected in the network")
+            self._send_one(sender=sender, receiver=receiver, msg=msg)
+            return
+        neighbors = set(self.connected_agents(sender))
+        invalid_receivers = [r for r in receiver if r not in neighbors]
+        if invalid_receivers:
+            ids = [r.id for r in invalid_receivers]
+            raise ValueError(f"Sender and receiver must be connected in the network; not connected receivers: {ids}")
 
-        receivers = list(receivers)
-        if any(r not in self.connected_agents(sender) for r in receivers):
-            raise ValueError("Sender and receiver must be connected in the network")
-
-        for r in receivers:
+        for r in receiver:
             self._send_one(sender=sender, receiver=r, msg=msg)
 
     def _receive_one(self, receiver: Agent, sender: Agent) -> None:
@@ -133,13 +134,13 @@ class Network(ABC):  # noqa: B024
             receiver._received_messages[sender] = msg  # noqa: SLF001
             self.graph.edges[sender, receiver][str(receiver.id)] = None
 
-    def receive(self, receiver: Agent, sender: Agent | Iterable[Agent] | None = None) -> None:
+    def receive(self, receiver: Agent, sender: Agent | Sequence[Agent] | None = None) -> None:
         """
         Receive message(s) at an agent.
 
         Args:
             receiver: receiver agent
-            sender: sender agent, iterable of sender agents, or ``None`` to receive from all connected agents.
+            sender: sender agent, sequence of sender agents, or ``None`` to receive from all connected agents.
 
         Raises:
             ValueError: if sender/receiver are not part of the network or not connected.
@@ -148,19 +149,20 @@ class Network(ABC):  # noqa: B024
         if receiver not in self.graph:
             raise ValueError("Receiver must be an agent in the network")
 
-        senders: Iterable[Agent] | list[Agent]
         if sender is None:
-            senders = self.connected_agents(receiver)
+            sender = self.connected_agents(receiver)
         elif isinstance(sender, Agent):
-            senders = [sender]
-        else:
-            senders = sender
+            if sender not in self.connected_agents(receiver):
+                raise ValueError("Sender and receiver must be connected in the network")
+            self._receive_one(receiver=receiver, sender=sender)
+            return
+        neighbors = set(self.connected_agents(receiver))
+        invalid_senders = [s for s in sender if s not in neighbors]
+        if invalid_senders:
+            ids = [s.id for s in invalid_senders]
+            raise ValueError(f"Sender and receiver must be connected in the network; not connected senders: {ids}")
 
-        senders = list(senders)
-        if any(s not in self.connected_agents(receiver) for s in senders):
-            raise ValueError("Sender and receiver must be connected in the network")
-
-        for s in senders:
+        for s in sender:
             self._receive_one(receiver=receiver, sender=s)
 
 
@@ -313,7 +315,7 @@ class FedNetwork(Network):
     def send(
         self,
         sender: Agent,
-        receiver: Agent | Iterable[Agent] | None = None,
+        receiver: Agent | Sequence[Agent] | None = None,
         msg: Array | None = None,
     ) -> None:
         """
@@ -339,14 +341,13 @@ class FedNetwork(Network):
             super().send(sender=sender, receiver=receiver, msg=msg)
             return
 
-        receivers = list(receiver)
         if sender is not self.server:
             raise ValueError("Only the server can send to multiple receivers")
-        if any(r is self.server for r in receivers):
+        if any(r is self.server for r in receiver):
             raise ValueError("All receivers must be clients")
-        super().send(sender=sender, receiver=receivers, msg=msg)
+        super().send(sender=sender, receiver=receiver, msg=msg)
 
-    def receive(self, receiver: Agent, sender: Agent | Iterable[Agent] | None = None) -> None:
+    def receive(self, receiver: Agent, sender: Agent | Sequence[Agent] | None = None) -> None:
         """
         Receive message(s) in a federated learning network.
 
@@ -369,12 +370,11 @@ class FedNetwork(Network):
             super().receive(receiver=receiver, sender=sender)
             return
 
-        senders = list(sender)
         if receiver is not self.server:
             raise ValueError("Only the server can receive from multiple senders")
-        if any(s is self.server for s in senders):
+        if any(s is self.server for s in sender):
             raise ValueError("All senders must be clients")
-        super().receive(receiver=receiver, sender=senders)
+        super().receive(receiver=receiver, sender=sender)
 
     def send_to_client(self, client: Agent, msg: Array) -> None:
         """
