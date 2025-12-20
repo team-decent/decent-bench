@@ -150,6 +150,11 @@ Change the settings of an already created benchmark problem, for example, the ne
         )
 
 
+Notes on plotting
+~~~~~~~~~~~~~~~~~
+``plot_network_kwargs`` are passed directly to ``networkx.draw_networkx``. Supported ``layout`` values are ``spring``, ``kamada_kawai``, ``circular``, ``random``, and ``shell``. Common kwargs include ``with_labels`` (``True``/``False``), ``labels`` (e.g. ``{agent: agent.id}``), ``node_color``, ``node_size``, and ``font_size``. Use ``plot_network=True`` to draw automatically at creation, or call ``net.plot(...)`` later with the same kwargs.
+
+
 Create problems using existing resources
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Create a custom benchmark problem using existing resources.
