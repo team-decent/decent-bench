@@ -40,6 +40,7 @@ def benchmark(
     progress_step: int | None = None,
     show_speed: bool = False,
     show_trial: bool = False,
+    compare_iterations_and_computational_cost: bool = False,
 ) -> None:
     """
     Benchmark distributed algorithms.
@@ -70,6 +71,8 @@ def benchmark(
             If `None`, the progress bar uses 1 unit per trial.
         show_speed: whether to show speed (iterations/second) in the progress bar.
         show_trial: whether to show which trials are currently running in the progress bar.
+        compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
+            metric vs iterations. Only used if ``computational_cost`` is provided.
 
     Note:
         If ``progress_step`` is too small performance may degrade due to the
@@ -80,6 +83,10 @@ def benchmark(
         weighted by the time or energy it takes to perform them on the specific hardware.
 
         .. include:: snippets/computational_cost.rst
+
+        If ``computational_cost`` is provided and ``compare_iterations_and_computational_cost`` is ``True``, each metric
+        will be plotted twice: once against computational cost and once against iterations.
+        Computational cost plots will be shown on the left and iteration plots on the right.
 
     """
     manager = Manager()
@@ -95,7 +102,14 @@ def benchmark(
     for alg, networks in resulting_nw_states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
     tm.tabulate(resulting_agent_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
-    pm.plot(resulting_agent_states, benchmark_problem, plot_metrics, computational_cost, x_axis_scaling)
+    pm.plot(
+        resulting_agent_states,
+        benchmark_problem,
+        plot_metrics,
+        computational_cost,
+        x_axis_scaling,
+        compare_iterations_and_computational_cost,
+    )
     LOGGER.info("Benchmark execution complete, thanks for using decent-bench")
     log_listener.stop()
 

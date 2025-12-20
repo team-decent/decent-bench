@@ -236,7 +236,7 @@ def test_agent_state_snapshot_period(framework: SupportedFrameworks, device: Sup
         )
         steps = sorted(agent._x_history.keys())
         assert steps == list(range(0, history_period * (len(expected_history)), history_period)), (
-            f"Expected history steps: {list(range(0, history_period * (len(expecteded_history)), history_period))}, "
+            f"Expected history steps: {list(range(0, history_period * (len(expected_history)), history_period))}, "
             f"but got: {steps}"
         )
         for i, expected in zip(steps, expected_history, strict=True):

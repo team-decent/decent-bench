@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes as SubPlot
+from matplotlib.figure import Figure
 
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
@@ -46,11 +47,6 @@ class PlotMetric(ABC):
 
     @property
     @abstractmethod
-    def x_label(self) -> str:
-        """Label for the x-axis."""
-
-    @property
-    @abstractmethod
     def y_label(self) -> str:
         """Label for the y-axis."""
 
@@ -72,7 +68,6 @@ class RegretPerIteration(PlotMetric):
     its calculation.
     """
 
-    x_label: str = "iteration"
     y_label: str = "regret"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
@@ -93,7 +88,6 @@ class GradientNormPerIteration(PlotMetric):
     included in the calculation.
     """
 
-    x_label: str = "iteration"
     y_label: str = "gradient norm"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
@@ -113,6 +107,10 @@ DEFAULT_PLOT_METRICS = [
 """
 
 PLOT_METRICS_DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/api/decent_bench.metrics.plot_metrics.html"
+X_LABELS = {
+    "iterations": "iterations",
+    "computational_cost": "time (computational cost units)",
+}
 COLORS = [
     "#1f77b4",
     "#ff7f0e",
@@ -132,12 +130,13 @@ MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p", "P", "X"]
 STYLES = ["-", ":", "--", "-.", (5, (10, 3)), (0, (5, 10)), (0, (3, 1, 1, 1))]
 
 
-def plot(  # noqa: PLR0914
+def plot(  # noqa: PLR0917
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[PlotMetric],
     computational_cost: ComputationalCost | None,
     x_axis_scaling: float = 1e-4,
+    compare_iterations_and_computational_cost: bool = False,
 ) -> None:
     """
     Plot the execution results with one subplot per metric.
@@ -153,6 +152,8 @@ def plot(  # noqa: PLR0914
             of computational cost
         x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
             manageable units for plotting. Only used if ``computational_cost`` is provided.
+        compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
+            metric vs iterations. Only used if ``computational_cost`` is provided.
 
     Note:
         Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
@@ -168,71 +169,165 @@ def plot(  # noqa: PLR0914
     if not metrics:
         return
     LOGGER.info(f"Plot metric definitions can be found here: {PLOT_METRICS_DOC_LINK}")
+
+    if len(metrics) > 4:
+        LOGGER.warning(
+            f"Plotting {len(metrics)} (> 4) metrics may result in a cluttered figure. "
+            "Consider reducing the number of metrics for better readability."
+        )
+
     use_cost = computational_cost is not None
-    metric_subplots: list[tuple[PlotMetric, SubPlot]] = _create_metric_subplots(metrics, use_cost)
+    fig, metric_subplots = _create_metric_subplots(metrics, use_cost, compare_iterations_and_computational_cost)
     with utils.MetricProgressBar() as progress:
         plot_task = progress.add_task(
-            "Generating plots", total=len(metric_subplots) * len(resulting_agent_states), status=""
+            "Generating plots",
+            total=len(metric_subplots)
+            * len(resulting_agent_states)
+            // (2 if use_cost and compare_iterations_and_computational_cost else 1),
+            status="",
         )
-        for metric, subplot in metric_subplots:
+        x_label = X_LABELS["computational_cost" if use_cost else "iterations"]
+        for metric_index in range(len(metrics)):
             progress.update(
                 plot_task,
-                status=f"Task: {metric.y_label} vs {_get_formatted_x_label(metric.x_label, use_cost)}",
+                status=f"Task: {metrics[metric_index].y_label} vs {x_label}",
             )
             for i, (alg, agent_states) in enumerate(resulting_agent_states.items()):
-                marker, linestyle, color = _get_marker_style_color(i)
-                data_per_trial: list[Sequence[tuple[X, Y]]] = _get_data_per_trial(agent_states, problem, metric)
-                flattened_data: list[tuple[X, Y]] = [d for trial in data_per_trial for d in trial]
-                if not np.isfinite(flattened_data).all():
+                data_per_trial: list[Sequence[tuple[X, Y]]] = _get_data_per_trial(
+                    agent_states, problem, metrics[metric_index]
+                )
+                if not _is_finite(data_per_trial):
                     msg = (
-                        f"Skipping plot {metric.y_label}/{metric.x_label} for {alg.name}: "
-                        "found nan or inf in datapoints."
+                        f"Skipping plot {metrics[metric_index].y_label}/{x_label} "
+                        f"for {alg.name}: found nan or inf in datapoints."
                     )
                     LOGGER.warning(msg)
                     continue
-                mean_curve: Sequence[tuple[X, Y]] = _calculate_mean_curve(data_per_trial)
-                x, y_mean = zip(*mean_curve, strict=True)
-                if computational_cost is not None:
-                    total_computational_cost = _calc_total_cost(agent_states, computational_cost)
-                    x = tuple(val * total_computational_cost * x_axis_scaling for val in x)
-                subplot.plot(
-                    x,
-                    y_mean,
-                    label=alg.name,
-                    color=color,
-                    marker=marker,
-                    linestyle=linestyle,
-                    markevery=max(1, int(len(x) / 20)),
+                _plot(
+                    metric_subplots,
+                    data_per_trial,
+                    computational_cost,
+                    compare_iterations_and_computational_cost,
+                    x_axis_scaling,
+                    agent_states,
+                    alg,
+                    metric_index,
+                    i,
                 )
-                y_min, y_max = _calculate_envelope(data_per_trial)
-                subplot.fill_between(x, y_min, y_max, color=color, alpha=0.1)
                 progress.advance(plot_task)
-            subplot.legend()
         progress.update(plot_task, status="Finalizing plots")
+
+    # Create a single legend at the top of the figure
+    handles, labels = metric_subplots[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=min(len(labels), 4), bbox_to_anchor=(0.5, 1.0), frameon=True)
+
     manager = plt.get_current_fig_manager()
     if not manager:
         raise RuntimeError("Something went wrong, did not receive a FigureManager...")
-    plt.tight_layout(pad=1.2)
+    plt.tight_layout(rect=(0, 0, 1, 0.92))  # Leave space at the top for the legend
     plt.show()
 
 
-def _create_metric_subplots(metrics: list[PlotMetric], use_cost: bool) -> list[tuple[PlotMetric, SubPlot]]:
-    subplots_per_row = 2
-    n_metrics = len(metrics)
-    n_rows = math.ceil(n_metrics / subplots_per_row)
-    fig, subplots = plt.subplots(nrows=n_rows, ncols=subplots_per_row)
-    subplots = subplots.flatten()
-    for sp in subplots[n_metrics:]:
+def _create_metric_subplots(
+    metrics: list[PlotMetric], use_cost: bool, compare_iterations_and_computational_cost: bool
+) -> tuple[Figure, list[SubPlot]]:
+    subplots_per_row = 2 if use_cost and compare_iterations_and_computational_cost else 1
+    n_plots = len(metrics) * (2 if use_cost and compare_iterations_and_computational_cost else 1)
+    n_rows = math.ceil(n_plots / subplots_per_row)
+    # Calculate figure size: width per column + height per row, with extra height for legend
+    fig_width = 6 * subplots_per_row
+    fig_height = 4 * n_rows + 2  # +2 for legend space
+    fig, subplot_axes = plt.subplots(
+        nrows=n_rows,
+        ncols=subplots_per_row,
+        figsize=(fig_width, fig_height),
+        sharex="col",
+        sharey="row",
+    )
+    subplots: list[SubPlot] = subplot_axes.flatten()
+    for sp in subplots[n_plots:]:
         fig.delaxes(sp)
-    metric_subplots = list(zip(metrics, subplots[:n_metrics], strict=True))
-    for metric, sp in metric_subplots:
-        sp.set_xlabel(_get_formatted_x_label(metric.x_label, use_cost))
-        sp.set_ylabel(metric.y_label)
+
+    x_label = X_LABELS["computational_cost" if use_cost else "iterations"]
+    for i in range(n_plots):
+        metric = metrics[i // (2 if use_cost and compare_iterations_and_computational_cost else 1)]
+        sp = subplots[i]
+
+        # Only set x label for subplots in the last row
+        row = i // subplots_per_row
+        if row == n_rows - 1:
+            if use_cost and compare_iterations_and_computational_cost and i % 2 == 1:
+                sp.set_xlabel(X_LABELS["iterations"])
+            else:
+                sp.set_xlabel(x_label)
+
+        # Only set y label for left column subplots
+        if use_cost and compare_iterations_and_computational_cost and i % 2 == 0:
+            sp.set_ylabel(metric.y_label)
+
         if metric.x_log:
             sp.set_xscale("log")
         if metric.y_log:
             sp.set_yscale("log")
-    return metric_subplots
+
+        sp.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.7)  # noqa: FBT003
+
+    return fig, subplots[:n_plots]
+
+
+def _is_finite(data_per_trial: list[Sequence[tuple[X, Y]]]) -> bool:
+    flattened_data: list[tuple[X, Y]] = [d for trial in data_per_trial for d in trial]
+    return np.isfinite(flattened_data).all().item()
+
+
+def _plot(  # noqa: PLR0917
+    metric_subplots: list[SubPlot],
+    data_per_trial: list[Sequence[tuple[X, Y]]],
+    computational_cost: ComputationalCost | None,
+    compare_iterations_and_computational_cost: bool,
+    x_axis_scaling: float,
+    agent_states: list[list[AgentMetricsView]],
+    alg: Algorithm,
+    metric_index: int,
+    iteration: int,
+) -> None:
+    use_cost = computational_cost is not None
+    subplot_idx = metric_index * (2 if use_cost and compare_iterations_and_computational_cost else 1)
+
+    mean_curve: Sequence[tuple[X, Y]] = _calculate_mean_curve(data_per_trial)
+    x, y_mean = zip(*mean_curve, strict=True)
+    y_min, y_max = _calculate_envelope(data_per_trial)
+    if computational_cost is not None:
+        total_computational_cost = _calc_total_cost(agent_states, computational_cost)
+        x_computational = tuple(val * total_computational_cost * x_axis_scaling for val in x)
+        if compare_iterations_and_computational_cost:
+            # Plot value vs iterations subplot first
+            iter_idx = metric_index * 2 + 1
+            _plot_subplot(metric_subplots[iter_idx], x, y_mean, y_min, y_max, alg.name, iteration)
+        x = x_computational
+    _plot_subplot(metric_subplots[subplot_idx], x, y_mean, y_min, y_max, alg.name, iteration)
+
+
+def _plot_subplot(  # noqa: PLR0917
+    subplot: SubPlot,
+    x: Sequence[float],
+    y_mean: Sequence[float],
+    y_min: Sequence[float],
+    y_max: Sequence[float],
+    label: str,
+    iteration: int,
+) -> None:
+    marker, linestyle, color = _get_marker_style_color(iteration)
+    subplot.plot(
+        x,
+        y_mean,
+        label=label,
+        color=color,
+        marker=marker,
+        linestyle=linestyle,
+        markevery=max(1, int(len(x) / 10)),
+    )
+    subplot.fill_between(x, y_min, y_max, color=color, alpha=0.1)
 
 
 def _get_marker_style_color(
@@ -256,10 +351,6 @@ def _get_marker_style_color(
     style_idx = (idx // len(MARKERS)) % len(STYLES)
 
     return MARKERS[marker_idx], STYLES[style_idx], COLORS[color_idx]
-
-
-def _get_formatted_x_label(x_label: str, use_cost: bool) -> str:
-    return f"{x_label} (computational cost units)" if use_cost else x_label
 
 
 def _calc_total_cost(agent_states: list[list[AgentMetricsView]], computational_cost: ComputationalCost) -> float:

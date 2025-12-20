@@ -41,7 +41,7 @@ class BenchmarkProblem:
         network_structure: graph defining how agents are connected
         x_optimal: solution that minimizes the sum of the cost functions, used for calculating metrics
         costs: local cost functions, each one is given to one agent
-        agent_state_snapshot_period: period for recording agent state snapshots
+        agent_state_snapshot_period: period for recording agent state snapshots, used for plot metrics
         agent_activations: setting for agent activation/participation, each scheme is applied to one agent
         message_compression: message compression setting
         message_noise: message noise setting
@@ -76,7 +76,7 @@ def create_regression_problem(
     Args:
         cost_cls: type of cost function
         n_agents: number of agents
-        agent_state_snapshot_period: period for recording agent state snapshots
+        agent_state_snapshot_period: period for recording agent state snapshots, used for plot metrics
         n_neighbors_per_agent: number of neighbors per agent
         asynchrony: if true, agents only have a 50% probability of being active/participating at any given time
         compression: if true, messages are rounded to 4 significant digits
