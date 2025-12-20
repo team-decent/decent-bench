@@ -85,7 +85,8 @@ def create_regression_problem(
         noise: if true, messages are distorted by Gaussian noise
         drops: if true, messages have a 50% probability of being dropped
         plot_network: if true, plot the network when it is created
-        plot_network_kwargs: kwargs forwarded to :meth:`decent_bench.networks.Network.plot` when ``plot_network`` is true
+        plot_network_kwargs: kwargs forwarded to :meth:`decent_bench.networks.Network.plot` when
+            ``plot_network`` is true
 
     """
     network_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)

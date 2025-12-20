@@ -30,7 +30,9 @@ extensions = [
 autodoc_default_options = {}
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True
-autodoc_type_aliases = {}
+autodoc_type_aliases = {
+    "Axes": "matplotlib.axes.Axes",
+}
 
 nitpicky = True
 nitpick_ignore = [
@@ -42,6 +44,7 @@ nitpick_ignore = [
     ("py:class", "TorchTensor"),
     ("py:class", "TensorFlowTensor"),
     ("py:class", "JaxArray"),
+    ("py:class", "TypeAliasForwardRef"),
 ]
 
 intersphinx_mapping = {
@@ -49,6 +52,7 @@ intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable/", None),
     "python": ("https://docs.python.org/3", None),
     "torch": ("https://pytorch.org/docs/stable/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
     "tensorflow": (
         "https://www.tensorflow.org/api_docs/python",
         "https://github.com/GPflow/tensorflow-intersphinx/raw/master/tf2_py_objects.inv",

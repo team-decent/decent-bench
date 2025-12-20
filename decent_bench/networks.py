@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from abc import ABC
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import networkx as nx
 import numpy as np
@@ -13,6 +15,8 @@ from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme
 from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+
     AgentGraph = nx.Graph[Agent]
 else:
     AgentGraph = nx.Graph
@@ -78,20 +82,26 @@ class Network(ABC):  # noqa: B024
         """Agents directly connected to ``agent`` in the underlying graph."""
         return list(self.graph.neighbors(agent))
 
-    def plot(self, ax: Any = None, layout: str = "spring", **draw_kwargs: Any) -> Any:
+    def plot(self, ax: Axes | None = None, layout: str = "spring", **draw_kwargs: Mapping[str, object]) -> Axes:
         """
         Plot the network using NetworkX drawing utilities.
 
         Args:
             ax: optional matplotlib Axes to draw on. If ``None`` a new figure is created.
-            layout: layout algorithm to position nodes (e.g. ``spring``, ``kamada_kawai``, ``circular``, ``random``, ``shell``).
-            draw_kwargs: forwarded to :func:`networkx.draw_networkx`.
+            layout: layout algorithm to position nodes (e.g. ``spring``, ``kamada_kawai``, ``circular``,
+                ``random``, ``shell``).
+            draw_kwargs: forwarded to ``networkx.draw_networkx``.
 
         Returns:
             The matplotlib Axes containing the plot.
+
+        Raises:
+            RuntimeError: if matplotlib is not available.
+            ValueError: if an unsupported layout is requested.
+
         """
         try:
-            import matplotlib.pyplot as plt
+            import matplotlib.pyplot as plt  # noqa: PLC0415
         except Exception as exc:  # pragma: no cover - runtime dependency guard
             raise RuntimeError("matplotlib is required for plotting the network") from exc
 
@@ -104,7 +114,13 @@ class Network(ABC):  # noqa: B024
         if ax is None:
             _, ax = plt.subplots()
 
-        nx.draw_networkx(self.graph, pos=pos, ax=ax, **draw_kwargs)
+        draw_kwargs_dict: dict[str, Any] = dict(draw_kwargs)
+        nx.draw_networkx(
+            self.graph,
+            pos=pos,
+            ax=ax,
+            **draw_kwargs_dict,
+        )
         return ax
 
     def _send_one(self, sender: Agent, receiver: Agent, msg: Array) -> None:
@@ -280,7 +296,11 @@ class P2PNetwork(Network):
         Use ``adjacency[i, j]`` or ``adjacency[i.id, j.id]`` to get the adjacency between agent i and j.
         """
         agents = self.agents()
-        adjacency_matrix = nx.to_numpy_array(self.graph, nodelist=agents, dtype=float)
+        adjacency_matrix = nx.to_numpy_array(
+            cast("nx.Graph[Any]", self.graph),
+            nodelist=cast("Collection[Any]", agents),
+            dtype=float,
+        )  # type: ignore[call-overload]
         return iop.to_array(
             adjacency_matrix,
             agents[0].cost.framework,
