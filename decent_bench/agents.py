@@ -11,16 +11,16 @@ from decent_bench.utils.array import Array
 
 
 class Agent:
-    """Agent with unique id, local cost function, activation scheme and history period."""
+    """Agent with unique id, local cost function, activation scheme and state snapshot period."""
 
-    def __init__(self, agent_id: int, cost: Cost, activation: AgentActivationScheme, history_period: int):
-        if history_period <= 0:
-            raise ValueError("history_period must be a positive integer")
+    def __init__(self, agent_id: int, cost: Cost, activation: AgentActivationScheme, state_snapshot_period: int):
+        if state_snapshot_period <= 0:
+            raise ValueError("state_snapshot_period must be a positive integer")
 
         self._id = agent_id
         self._cost = cost
         self._activation = activation
-        self._history_period = history_period
+        self._state_snapshot_period = state_snapshot_period
         self._current_x: Array | None = None
         self._x_history: dict[int, Array] = {}
         self._auxiliary_variables: dict[str, Array] = {}
@@ -73,7 +73,7 @@ class Agent:
     def x(self, x: Array) -> None:
         self._n_x_updates += 1
         self._current_x = x
-        if self._n_x_updates % self._history_period == 0:
+        if self._n_x_updates % self._state_snapshot_period == 0:
             self._x_history[self._n_x_updates] = iop.copy(x)
 
     @property
