@@ -78,7 +78,7 @@ except RuntimeError:
 )
 def test_in_place_operations_history(framework: SupportedFrameworks, device: SupportedDevices):
     """Test that in-place operations on agent.x properly update the history."""
-    agent = Agent(0, LinearRegressionCost(np.array([[1.0, 1.0, 1.0]]), np.array([1.0])), None, history_period=1)  # type: ignore  # noqa: PGH003
+    agent = Agent(0, LinearRegressionCost(np.array([[1.0, 1.0, 1.0]]), np.array([1.0])), None, state_snapshot_period=1)  # type: ignore  # noqa: PGH003
 
     initial = iop.zeros((3,), framework=framework, device=device)
     agent.initialize(x=initial)
@@ -210,14 +210,14 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
         ),
     ],
 )
-@pytest.mark.parametrize("history_period", [1, 5, 10])
-def test_agent_state_snapshot_period(framework: SupportedFrameworks, device: SupportedDevices, history_period: int):
+@pytest.mark.parametrize("state_snapshot_period", [1, 5, 10])
+def test_agent_state_snapshot_period(framework: SupportedFrameworks, device: SupportedDevices, state_snapshot_period: int):
     """Test that agent history is recorded according to the specified history period."""
     agent = Agent(
         0,
         LinearRegressionCost(np.array([[1.0, 1.0, 1.0]]), np.array([1.0])),
         None,
-        history_period=history_period,
+        state_snapshot_period=state_snapshot_period,
     )
 
     initial = iop.zeros((3,), framework=framework, device=device)
@@ -235,8 +235,8 @@ def test_agent_state_snapshot_period(framework: SupportedFrameworks, device: Sup
             f"Expected history length: {len(expected_history)}, but got: {len(agent._x_history)}"
         )
         steps = sorted(agent._x_history.keys())
-        assert steps == list(range(0, history_period * (len(expected_history)), history_period)), (
-            f"Expected history steps: {list(range(0, history_period * (len(expected_history)), history_period))}, "
+        assert steps == list(range(0, state_snapshot_period * (len(expected_history)), state_snapshot_period)), (
+            f"Expected history steps: {list(range(0, state_snapshot_period * (len(expected_history)), state_snapshot_period))}, "
             f"but got: {steps}"
         )
         for i, expected in zip(steps, expected_history, strict=True):
@@ -248,7 +248,7 @@ def test_agent_state_snapshot_period(framework: SupportedFrameworks, device: Sup
             )
 
     expected_history_length = 5  # Excluding the initial state, so +1 later
-    n_updates = expected_history_length * history_period
+    n_updates = expected_history_length * state_snapshot_period
     for _ in range(n_updates):
         agent.x += 1.0
 
@@ -258,7 +258,7 @@ def test_agent_state_snapshot_period(framework: SupportedFrameworks, device: Sup
             np.array([0.0, 0.0, 0.0]),
         ]
         + [
-            np.array([i * history_period, i * history_period, i * history_period])
+            np.array([i * state_snapshot_period, i * state_snapshot_period, i * state_snapshot_period])
             for i in range(1, expected_history_length + 1)
         ],
     )
