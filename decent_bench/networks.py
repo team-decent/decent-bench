@@ -518,7 +518,10 @@ def create_federated_network(problem: BenchmarkProblem) -> FedNetwork:
         server, max_degree = max(degrees.items(), key=lambda item: item[1])  # noqa: FURB118
         if max_degree != n_agents - 1 or any(deg != 1 for node, deg in degrees.items() if node != server):
             raise ValueError("Federated network requires a star topology (one server connected to all clients)")
-    agents = [Agent(i, problem.costs[i], problem.agent_activations[i]) for i in range(n_agents)]
+    agents = [
+        Agent(i, problem.costs[i], problem.agent_activations[i], problem.agent_state_snapshot_period)
+        for i in range(n_agents)
+    ]
     agent_node_map = {node: agents[i] for i, node in enumerate(problem.network_structure.nodes())}
     graph = nx.relabel_nodes(problem.network_structure, agent_node_map)
     return FedNetwork(
