@@ -31,6 +31,8 @@ def benchmark(
     table_metrics: list[TableMetric] = DEFAULT_TABLE_METRICS,
     table_fmt: Literal["grid", "latex"] = "grid",
     *,
+    plot_grid: bool = True,
+    plot_path: str | None = None,
     computational_cost: pm.ComputationalCost | None = None,
     x_axis_scaling: float = 1e-4,
     n_trials: int = 30,
@@ -54,6 +56,9 @@ def benchmark(
         table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
             :const:`~decent_bench.metrics.table_metrics.DEFAULT_TABLE_METRICS`
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
+        plot_grid: whether to show grid lines on the plots
+        plot_path: optional file path to save the generated plot as an image file. If ``None``, the plot will
+            only be displayed
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
             of computational cost
         x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
@@ -109,6 +114,8 @@ def benchmark(
         computational_cost,
         x_axis_scaling,
         compare_iterations_and_computational_cost,
+        plot_path,
+        plot_grid,
     )
     LOGGER.info("Benchmark execution complete, thanks for using decent-bench")
     log_listener.stop()

@@ -47,7 +47,7 @@ class PlotMetric(ABC):
 
     @property
     @abstractmethod
-    def y_label(self) -> str:
+    def plot_description(self) -> str:
         """Label for the y-axis."""
 
     @abstractmethod
@@ -68,7 +68,7 @@ class RegretPerIteration(PlotMetric):
     its calculation.
     """
 
-    y_label: str = "regret"
+    plot_description: str = "regret"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
         # Determine the set of recorded iterations common to all agents and use those
@@ -88,7 +88,7 @@ class GradientNormPerIteration(PlotMetric):
     included in the calculation.
     """
 
-    y_label: str = "gradient norm"
+    plot_description: str = "gradient norm"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
         # Determine the set of recorded iterations common to all agents and use those
@@ -137,6 +137,8 @@ def plot(  # noqa: PLR0917
     computational_cost: ComputationalCost | None,
     x_axis_scaling: float = 1e-4,
     compare_iterations_and_computational_cost: bool = False,
+    plot_path: str | None = None,
+    plot_grid: bool = True,
 ) -> None:
     """
     Plot the execution results with one subplot per metric.
@@ -151,9 +153,12 @@ def plot(  # noqa: PLR0917
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
             of computational cost
         x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
-            manageable units for plotting. Only used if ``computational_cost`` is provided.
+            manageable units for plotting. Only used if ``computational_cost`` is provided
         compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
-            metric vs iterations. Only used if ``computational_cost`` is provided.
+            metric vs iterations. Only used if ``computational_cost`` is provided
+        plot_path: optional file path to save the generated plot as an image file. If ``None``, the plot will
+            only be displayed
+        plot_grid: whether to show grid lines on the plots
 
     Note:
         Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
@@ -161,9 +166,6 @@ def plot(  # noqa: PLR0917
         weighted by the time or energy it takes to perform them on the specific hardware.
 
         .. include:: snippets/computational_cost.rst
-
-    Raises:
-        RuntimeError: if the figure manager can't be retrieved
 
     """
     if not metrics:
@@ -176,21 +178,29 @@ def plot(  # noqa: PLR0917
             "Consider reducing the number of metrics for better readability."
         )
 
+    did_plot = False
     use_cost = computational_cost is not None
-    fig, metric_subplots = _create_metric_subplots(metrics, use_cost, compare_iterations_and_computational_cost)
+    two_columns = use_cost and compare_iterations_and_computational_cost
+    fig, subplots, n_cols = _create_metric_subplots(
+        metrics,
+        list(resulting_agent_states.keys()),
+        use_cost,
+        compare_iterations_and_computational_cost,
+        plot_grid,
+    )
+    metric_subplots = subplots[n_cols:]
+    legend_subplots = subplots[:n_cols]
     with utils.MetricProgressBar() as progress:
         plot_task = progress.add_task(
             "Generating plots",
-            total=len(metric_subplots)
-            * len(resulting_agent_states)
-            // (2 if use_cost and compare_iterations_and_computational_cost else 1),
+            total=len(metric_subplots) * len(resulting_agent_states) // (2 if two_columns else 1),
             status="",
         )
         x_label = X_LABELS["computational_cost" if use_cost else "iterations"]
         for metric_index in range(len(metrics)):
             progress.update(
                 plot_task,
-                status=f"Task: {metrics[metric_index].y_label} vs {x_label}",
+                status=f"Task: {metrics[metric_index].plot_description} vs {x_label}",
             )
             for i, (alg, agent_states) in enumerate(resulting_agent_states.items()):
                 data_per_trial: list[Sequence[tuple[X, Y]]] = _get_data_per_trial(
@@ -198,10 +208,11 @@ def plot(  # noqa: PLR0917
                 )
                 if not _is_finite(data_per_trial):
                     msg = (
-                        f"Skipping plot {metrics[metric_index].y_label}/{x_label} "
+                        f"Skipping plot {metrics[metric_index].plot_description}/{x_label} "
                         f"for {alg.name}: found nan or inf in datapoints."
                     )
                     LOGGER.warning(msg)
+                    progress.advance(plot_task)
                     continue
                 _plot(
                     metric_subplots,
@@ -214,65 +225,130 @@ def plot(  # noqa: PLR0917
                     metric_index,
                     i,
                 )
+                did_plot = True
                 progress.advance(plot_task)
         progress.update(plot_task, status="Finalizing plots")
 
-    # Create a single legend at the top of the figure
-    handles, labels = metric_subplots[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=min(len(labels), 4), bbox_to_anchor=(0.5, 1.0), frameon=True)
+    if not did_plot:
+        LOGGER.warning("No plots were generated due to invalid data.")
+        return
 
+    _show_figure(fig, metric_subplots, legend_subplots, plot_path)
+
+
+def _show_figure(
+    fig: Figure,
+    metric_subplots: list[SubPlot],
+    legend_subplots: list[SubPlot],
+    plot_path: str | None = None,
+) -> None:
     manager = plt.get_current_fig_manager()
     if not manager:
         raise RuntimeError("Something went wrong, did not receive a FigureManager...")
-    plt.tight_layout(rect=(0, 0, 1, 0.92))  # Leave space at the top for the legend
+
+    # Create a single legend at the top of the figure
+    handles, labels = metric_subplots[0].get_legend_handles_labels()
+    label_cols = min(len(labels), 4 if len(legend_subplots) > 1 else 3)
+
+    # Draw the canvas to calculate bounding boxes and layout
+    fig.canvas.draw()
+
+    # Get the bounding box of the leftmost and rightmost subplots to align legend with plot area
+    left_plot = legend_subplots[0].get_position()
+    right_plot = legend_subplots[-1].get_position()
+    plot_center = (left_plot.x0 + right_plot.x1) / 2
+
+    # Create the legend to get the height of the legend box
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        ncol=label_cols,
+        bbox_to_anchor=(plot_center, 1.0),
+        frameon=True,
+    )
+
+    if plot_path is not None:
+        fig.savefig(plot_path)
+        LOGGER.info(f"Saved plot to: {plot_path}")
+
     plt.show()
 
 
-def _create_metric_subplots(
-    metrics: list[PlotMetric], use_cost: bool, compare_iterations_and_computational_cost: bool
-) -> tuple[Figure, list[SubPlot]]:
-    subplots_per_row = 2 if use_cost and compare_iterations_and_computational_cost else 1
+def _create_metric_subplots(  # noqa: PLR0912
+    metrics: list[PlotMetric],
+    algs: list[Algorithm],
+    use_cost: bool,
+    compare_iterations_and_computational_cost: bool,
+    plot_grid: bool,
+) -> tuple[Figure, list[SubPlot], int]:
+    n_cols = 2 if use_cost and compare_iterations_and_computational_cost else 1
     n_plots = len(metrics) * (2 if use_cost and compare_iterations_and_computational_cost else 1)
-    n_rows = math.ceil(n_plots / subplots_per_row)
-    # Calculate figure size: width per column + height per row, with extra height for legend
-    fig_width = 6 * subplots_per_row
-    fig_height = 4 * n_rows + 2  # +2 for legend space
+    n_rows = math.ceil(n_plots / n_cols)
+
+    # Calculate space needed for legend in inches. From empirical measurements:
+    # One row requires 0.2511 inches of space, two rows 0.4606 inches, four rows 0.8794 inches
+    # and five rows 1.0899 inches. This gives us the formula: legend_space_inches = 0.2094 * label_rows + 0.0417
+    label_cols = min(len(algs), 4 if n_cols == 2 else 3)
+    label_rows = math.ceil(len(algs) / label_cols)
+    legend_space_inches = 0.2094 * label_rows + 0.0417
+
+    # Allocate fixed space per plot (4.0 inches) plus spacing
+    # matplotlib's constrained layout adds ~0.5 inches of padding per row and ~0.8 inches for overall margins
+    fig_width = 4.0 * n_cols + 1.0
+    spacing_per_row = 0.5  # space between rows and margins
+    fig_height = legend_space_inches + (4.0 + spacing_per_row) * n_rows + 0.3
+
     fig, subplot_axes = plt.subplots(
-        nrows=n_rows,
-        ncols=subplots_per_row,
+        nrows=n_rows + 1,  # +1 to leave space for legend
+        ncols=n_cols,
         figsize=(fig_width, fig_height),
+        height_ratios=[legend_space_inches] + [4.0] * n_rows,
         sharex="col",
         sharey="row",
+        layout="constrained",
+        gridspec_kw={"hspace": 0.01},
     )
-    subplots: list[SubPlot] = subplot_axes.flatten()
-    for sp in subplots[n_plots:]:
+    if isinstance(subplot_axes, SubPlot):
+        subplots: list[SubPlot] = [subplot_axes]
+    else:
+        subplots = subplot_axes.flatten()
+
+    if subplots is None:
+        raise RuntimeError("Something went wrong, did not receive subplot axes...")
+
+    for i in range(n_cols):
+        subplots[i].axis("off")  # Hide the top-left subplot reserved for legend
+
+    for sp in subplots[n_plots + n_cols :]:
         fig.delaxes(sp)
 
-    x_label = X_LABELS["computational_cost" if use_cost else "iterations"]
     for i in range(n_plots):
-        metric = metrics[i // (2 if use_cost and compare_iterations_and_computational_cost else 1)]
-        sp = subplots[i]
+        metric = metrics[i // (2 if n_cols == 2 else 1)]
+        sp = subplots[i + n_cols]
 
         # Only set x label for subplots in the last row
-        row = i // subplots_per_row
-        if row == n_rows - 1:
-            if use_cost and compare_iterations_and_computational_cost and i % 2 == 1:
-                sp.set_xlabel(X_LABELS["iterations"])
+        if i // n_cols == n_rows - 1:
+            # For comparison mode, right column shows iterations, left shows cost
+            if n_cols == 2:
+                sp.set_xlabel(X_LABELS["iterations"] if i % 2 == 1 else X_LABELS["computational_cost"])
             else:
-                sp.set_xlabel(x_label)
+                # Single column mode: show cost if enabled, otherwise iterations
+                sp.set_xlabel(X_LABELS["computational_cost" if use_cost else "iterations"])
 
         # Only set y label for left column subplots
-        if use_cost and compare_iterations_and_computational_cost and i % 2 == 0:
-            sp.set_ylabel(metric.y_label)
+        if i % n_cols == 0:
+            sp.set_ylabel(metric.plot_description)
 
         if metric.x_log:
             sp.set_xscale("log")
         if metric.y_log:
             sp.set_yscale("log")
 
-        sp.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.7)  # noqa: FBT003
+        if plot_grid:
+            sp.grid(True, which="major", linestyle="--", linewidth=0.5, alpha=0.7)  # noqa: FBT003
 
-    return fig, subplots[:n_plots]
+    return fig, subplots[: n_plots + n_cols], n_cols
 
 
 def _is_finite(data_per_trial: list[Sequence[tuple[X, Y]]]) -> bool:

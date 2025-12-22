@@ -378,7 +378,7 @@ Create your own metrics to tabulate and/or plot.
         return float(la.norm(iop.to_numpy(problem.optimal_x) - iop.to_numpy(agent.x_per_iteration[i])))
 
     class XError(TableMetric):
-        description: str = "x error"
+        table_description: str = "x error"
 
         def get_data_from_trial(
             self, agents: list[AgentMetricsView], problem: BenchmarkProblem
@@ -386,8 +386,7 @@ Create your own metrics to tabulate and/or plot.
             return [x_error_at_iter(a, problem) for a in agents]
 
     class MaxXErrorPerIteration(PlotMetric):
-        x_label: str = "iteration"
-        y_label: str = "max x error"
+        plot_description: str = "max x error"
 
         def get_data_from_trial(
             self, agents: list[AgentMetricsView], problem: BenchmarkProblem

@@ -160,6 +160,10 @@ def common_sorted_iterations(agents: Sequence[AgentMetricsView]) -> list[int]:
     """
     Get a sorted list of all common iterations reached by agents in *agents*.
 
+    Since the agents can sample their states periodically, and may sample at different iterations,
+    this function returns only the iterations that are common to all agents. These iterations can then be used
+    to compute metrics that require synchronized iterations.
+
     Args:
         agents: sequence of agents to get the common iterations from
 
