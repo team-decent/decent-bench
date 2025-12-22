@@ -57,8 +57,8 @@ def benchmark(
             :const:`~decent_bench.metrics.table_metrics.DEFAULT_TABLE_METRICS`
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         plot_grid: whether to show grid lines on the plots
-        plot_path: optional file path to save the generated plot as an image file. If ``None``, the plot will
-            only be displayed
+        plot_path: optional file path to save the generated plot as an image file (e.g., "plots.png"). If ``None``,
+            the plot will only be displayed
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
             of computational cost
         x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more

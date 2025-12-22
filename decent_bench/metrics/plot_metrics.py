@@ -156,8 +156,8 @@ def plot(  # noqa: PLR0917
             manageable units for plotting. Only used if ``computational_cost`` is provided
         compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
             metric vs iterations. Only used if ``computational_cost`` is provided
-        plot_path: optional file path to save the generated plot as an image file. If ``None``, the plot will
-            only be displayed
+        plot_path: optional file path to save the generated plot as an image file (e.g., "plots.png"). If ``None``,
+            the plot will only be displayed
         plot_grid: whether to show grid lines on the plots
 
     Note:
@@ -345,7 +345,7 @@ def _show_figure(
     )
 
     if plot_path is not None:
-        fig.savefig(plot_path)
+        fig.savefig(plot_path, dpi=300)
         LOGGER.info(f"Saved plot to: {plot_path}")
 
     plt.show()
