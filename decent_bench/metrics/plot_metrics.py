@@ -236,45 +236,6 @@ def plot(  # noqa: PLR0917
     _show_figure(fig, metric_subplots, legend_subplots, plot_path)
 
 
-def _show_figure(
-    fig: Figure,
-    metric_subplots: list[SubPlot],
-    legend_subplots: list[SubPlot],
-    plot_path: str | None = None,
-) -> None:
-    manager = plt.get_current_fig_manager()
-    if not manager:
-        raise RuntimeError("Something went wrong, did not receive a FigureManager...")
-
-    # Create a single legend at the top of the figure
-    handles, labels = metric_subplots[0].get_legend_handles_labels()
-    label_cols = min(len(labels), 4 if len(legend_subplots) > 1 else 3)
-
-    # Draw the canvas to calculate bounding boxes and layout
-    fig.canvas.draw()
-
-    # Get the bounding box of the leftmost and rightmost subplots to align legend with plot area
-    left_plot = legend_subplots[0].get_position()
-    right_plot = legend_subplots[-1].get_position()
-    plot_center = (left_plot.x0 + right_plot.x1) / 2
-
-    # Create the legend to get the height of the legend box
-    fig.legend(
-        handles,
-        labels,
-        loc="upper center",
-        ncol=label_cols,
-        bbox_to_anchor=(plot_center, 1.0),
-        frameon=True,
-    )
-
-    if plot_path is not None:
-        fig.savefig(plot_path)
-        LOGGER.info(f"Saved plot to: {plot_path}")
-
-    plt.show()
-
-
 def _create_metric_subplots(  # noqa: PLR0912
     metrics: list[PlotMetric],
     algs: list[Algorithm],
@@ -349,6 +310,45 @@ def _create_metric_subplots(  # noqa: PLR0912
             sp.grid(True, which="major", linestyle="--", linewidth=0.5, alpha=0.7)  # noqa: FBT003
 
     return fig, subplots[: n_plots + n_cols], n_cols
+
+
+def _show_figure(
+    fig: Figure,
+    metric_subplots: list[SubPlot],
+    legend_subplots: list[SubPlot],
+    plot_path: str | None = None,
+) -> None:
+    manager = plt.get_current_fig_manager()
+    if not manager:
+        raise RuntimeError("Something went wrong, did not receive a FigureManager...")
+
+    # Create a single legend at the top of the figure
+    handles, labels = metric_subplots[0].get_legend_handles_labels()
+    label_cols = min(len(labels), 4 if len(legend_subplots) > 1 else 3)
+
+    # Draw the canvas to calculate bounding boxes and layout
+    fig.canvas.draw()
+
+    # Get the bounding box of the leftmost and rightmost subplots to align legend with plot area
+    left_plot = legend_subplots[0].get_position()
+    right_plot = legend_subplots[-1].get_position()
+    plot_center = (left_plot.x0 + right_plot.x1) / 2
+
+    # Create the legend to get the height of the legend box
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        ncol=label_cols,
+        bbox_to_anchor=(plot_center, 1.0),
+        frameon=True,
+    )
+
+    if plot_path is not None:
+        fig.savefig(plot_path)
+        LOGGER.info(f"Saved plot to: {plot_path}")
+
+    plt.show()
 
 
 def _is_finite(data_per_trial: list[Sequence[tuple[X, Y]]]) -> bool:
