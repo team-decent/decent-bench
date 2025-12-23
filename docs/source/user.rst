@@ -20,13 +20,12 @@ Benchmark algorithms on a regression problem without any communication constrain
 
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import ADMM, DGD, ED
+    from decent_bench.distributed_algorithms import ADMM, DGD
 
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
                 DGD(iterations=1000, step_size=0.001),
-                ED(iterations=1000, step_size=0.001),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
@@ -39,8 +38,10 @@ Benchmark executions will have outputs like these:
 
    * - .. image:: _static/table.png
           :align: center
+          :height: 350px
      - .. image:: _static/plot.png
           :align: center
+          :height: 350px
 
 
 Execution settings
@@ -64,6 +65,10 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
             table_metrics=[GradientCalls([min, max])],
             plot_metrics=[RegretPerIteration()],
             table_fmt="latex",
+            computational_cost=pm.ComputationalCost(proximal=2.0, communication=0.1),
+            compare_iterations_and_computational_cost=True,
+            plot_grid=False,
+            plot_path="plots.png",
             n_trials=10,
             confidence_level=0.9,
             log_level=DEBUG,
