@@ -181,19 +181,16 @@ def plot(  # noqa: PLR0917
     did_plot = False
     use_cost = computational_cost is not None
     two_columns = use_cost and compare_iterations_and_computational_cost
-    fig, subplots, n_cols = _create_metric_subplots(
+    fig, metric_subplots = _create_metric_subplots(
         metrics,
-        list(resulting_agent_states.keys()),
         use_cost,
         compare_iterations_and_computational_cost,
         plot_grid,
     )
-    metric_subplots = subplots[n_cols:]
-    legend_subplots = subplots[:n_cols]
     with utils.MetricProgressBar() as progress:
         plot_task = progress.add_task(
             "Generating plots",
-            total=len(metric_subplots) * len(resulting_agent_states) // (2 if two_columns else 1),
+            total=len(metric_subplots) * len(resulting_agent_states),
             status="",
         )
         x_label = X_LABELS["computational_cost" if use_cost else "iterations"]
@@ -212,7 +209,7 @@ def plot(  # noqa: PLR0917
                         f"for {alg.name}: found nan or inf in datapoints."
                     )
                     LOGGER.warning(msg)
-                    progress.advance(plot_task)
+                    progress.advance(plot_task, 2 if two_columns else 1)
                     continue
                 _plot(
                     metric_subplots,
@@ -226,49 +223,32 @@ def plot(  # noqa: PLR0917
                     i,
                 )
                 did_plot = True
-                progress.advance(plot_task)
+                progress.advance(plot_task, 2 if two_columns else 1)
         progress.update(plot_task, status="Finalizing plots")
 
     if not did_plot:
         LOGGER.warning("No plots were generated due to invalid data.")
         return
 
-    _show_figure(fig, metric_subplots, legend_subplots, plot_path)
+    _show_figure(fig, metric_subplots, two_columns, plot_path)
 
 
-def _create_metric_subplots(  # noqa: PLR0912
+def _create_metric_subplots(
     metrics: list[PlotMetric],
-    algs: list[Algorithm],
     use_cost: bool,
     compare_iterations_and_computational_cost: bool,
     plot_grid: bool,
-) -> tuple[Figure, list[SubPlot], int]:
+) -> tuple[Figure, list[SubPlot]]:
     n_cols = 2 if use_cost and compare_iterations_and_computational_cost else 1
-    n_plots = len(metrics) * (2 if use_cost and compare_iterations_and_computational_cost else 1)
+    n_plots = len(metrics) * n_cols
     n_rows = math.ceil(n_plots / n_cols)
 
-    # Calculate space needed for legend in inches. From empirical measurements:
-    # One row requires 0.2511 inches of space, two rows 0.4606 inches, four rows 0.8794 inches
-    # and five rows 1.0899 inches. This gives us the formula: legend_space_inches = 0.2094 * label_rows + 0.0417
-    label_cols = min(len(algs), 4 if n_cols == 2 else 3)
-    label_rows = math.ceil(len(algs) / label_cols)
-    legend_space_inches = 0.2094 * label_rows + 0.0417
-
-    # Allocate fixed space per plot (4.0 inches) plus spacing
-    # matplotlib's constrained layout adds ~0.5 inches of padding per row and ~0.8 inches for overall margins
-    fig_width = 4.0 * n_cols + 1.0
-    spacing_per_row = 0.5  # space between rows and margins
-    fig_height = legend_space_inches + (4.0 + spacing_per_row) * n_rows + 0.3
-
     fig, subplot_axes = plt.subplots(
-        nrows=n_rows + 1,  # +1 to leave space for legend
+        nrows=n_rows,
         ncols=n_cols,
-        figsize=(fig_width, fig_height),
-        height_ratios=[legend_space_inches] + [4.0] * n_rows,
         sharex="col",
         sharey="row",
         layout="constrained",
-        gridspec_kw={"hspace": 0.01},
     )
     if isinstance(subplot_axes, SubPlot):
         subplots: list[SubPlot] = [subplot_axes]
@@ -278,15 +258,12 @@ def _create_metric_subplots(  # noqa: PLR0912
     if subplots is None:
         raise RuntimeError("Something went wrong, did not receive subplot axes...")
 
-    for i in range(n_cols):
-        subplots[i].axis("off")  # Hide the top-left subplot reserved for legend
-
     for sp in subplots[n_plots + n_cols :]:
         fig.delaxes(sp)
 
     for i in range(n_plots):
         metric = metrics[i // (2 if n_cols == 2 else 1)]
-        sp = subplots[i + n_cols]
+        sp = subplots[i]
 
         # Only set x label for subplots in the last row
         if i // n_cols == n_rows - 1:
@@ -309,13 +286,13 @@ def _create_metric_subplots(  # noqa: PLR0912
         if plot_grid:
             sp.grid(True, which="major", linestyle="--", linewidth=0.5, alpha=0.7)  # noqa: FBT003
 
-    return fig, subplots[: n_plots + n_cols], n_cols
+    return fig, subplots[:n_plots]
 
 
 def _show_figure(
     fig: Figure,
     metric_subplots: list[SubPlot],
-    legend_subplots: list[SubPlot],
+    two_columns: bool,
     plot_path: str | None = None,
 ) -> None:
     manager = plt.get_current_fig_manager()
@@ -324,23 +301,14 @@ def _show_figure(
 
     # Create a single legend at the top of the figure
     handles, labels = metric_subplots[0].get_legend_handles_labels()
-    label_cols = min(len(labels), 4 if len(legend_subplots) > 1 else 3)
-
-    # Draw the canvas to calculate bounding boxes and layout
-    fig.canvas.draw()
-
-    # Get the bounding box of the leftmost and rightmost subplots to align legend with plot area
-    left_plot = legend_subplots[0].get_position()
-    right_plot = legend_subplots[-1].get_position()
-    plot_center = (left_plot.x0 + right_plot.x1) / 2
+    label_cols = min(len(labels), 4 if two_columns else 3)
 
     # Create the legend to get the height of the legend box
     fig.legend(
         handles,
         labels,
-        loc="upper center",
+        loc="outside upper center",
         ncol=label_cols,
-        bbox_to_anchor=(plot_center, 1.0),
         frameon=True,
     )
 
