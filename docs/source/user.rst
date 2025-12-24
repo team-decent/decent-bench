@@ -20,13 +20,12 @@ Benchmark algorithms on a regression problem without any communication constrain
 
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import ADMM, DGD, ED
+    from decent_bench.distributed_algorithms import ADMM, DGD
 
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
                 DGD(iterations=1000, step_size=0.001),
-                ED(iterations=1000, step_size=0.001),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
@@ -39,8 +38,10 @@ Benchmark executions will have outputs like these:
 
    * - .. image:: _static/table.png
           :align: center
+          :height: 350px
      - .. image:: _static/plot.png
           :align: center
+          :height: 350px
 
 
 Execution settings
@@ -64,6 +65,10 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
             table_metrics=[GradientCalls([min, max])],
             plot_metrics=[RegretPerIteration()],
             table_fmt="latex",
+            computational_cost=pm.ComputationalCost(proximal=2.0, communication=0.1),
+            compare_iterations_and_computational_cost=True,
+            plot_grid=False,
+            plot_path="plots.png",
             n_trials=10,
             confidence_level=0.9,
             log_level=DEBUG,
@@ -89,6 +94,7 @@ Configure communication constraints and other settings for out-of-the-box regres
     problem = benchmark_problem.create_regression_problem(
         LinearRegressionCost,
         n_agents=100,
+        agent_state_snapshot_period=10, # Record metrics every 10 iterations
         n_neighbors_per_agent=3,
         asynchrony=True,
         compression=True,
@@ -160,6 +166,7 @@ Create a custom benchmark problem using existing resources.
     from decent_bench.datasets import SyntheticClassificationData
     from decent_bench.distributed_algorithms import ADMM, DGD, ED
     from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
+    from decent_bench.utils.types import SupportedFrameworks
     from decent_bench.utils.types import SupportedFrameworks
 
     n_agents = 100
@@ -291,8 +298,10 @@ When implementing a custom algorithm by subclassing :class:`~decent_bench.distri
 **Note**: In order for metrics to work, use :attr:`Agent.x <decent_bench.agents.Agent.x>` to update the local primal
 variable **once** every iteration. If you need to perform multiple updates within an iteration, consider accumulating them and applying a single update at the end of the iteration. 
 Similarly, in order for the benchmark problem's communication schemes to be applied, use the
-:attr:`~decent_bench.networks.P2PNetwork` object to retrieve agents and to send and receive messages. 
-Be sure to use :meth:`~decent_bench.networks.P2PNetwork.active_agents` during algorithm runtime so that asynchrony is properly handled.
+:attr:`~decent_bench.networks.P2PNetwork`/ :attr:`~decent_bench.networks.FedNetwork` object to retrieve agents and to send and receive messages. 
+Be sure to use :meth:`~decent_bench.networks.Network.active_agents` during algorithm runtime so that asynchrony is properly handled.
+You can also inspect :attr:`~decent_bench.networks.Network.graph` to use NetworkX utilities (e.g., plotting or listing edges); mutating this graph changes the network topology.
+In :class:`~decent_bench.networks.FedNetwork`, :meth:`~decent_bench.networks.Network.agents` and :meth:`~decent_bench.networks.Network.active_agents` refer to clients (the server is available via :attr:`~decent_bench.networks.FedNetwork.server`/ :attr:`~decent_bench.networks.FedNetwork.coordinator`).
 
 .. code-block:: python
 
@@ -375,9 +384,9 @@ Create your own metrics to tabulate and/or plot.
     def x_error_at_iter(agent: AgentMetricsView, problem: BenchmarkProblem, i: int = -1) -> float:
         # Convert Array values to numpy for custom metric computation
         return float(la.norm(iop.to_numpy(problem.optimal_x) - iop.to_numpy(agent.x_per_iteration[i])))
-
+        
     class XError(TableMetric):
-        description: str = "x error"
+        table_description: str = "x error"
 
         def get_data_from_trial(
             self, agents: list[AgentMetricsView], problem: BenchmarkProblem
@@ -385,8 +394,7 @@ Create your own metrics to tabulate and/or plot.
             return [x_error_at_iter(a, problem) for a in agents]
 
     class MaxXErrorPerIteration(PlotMetric):
-        x_label: str = "iteration"
-        y_label: str = "max x error"
+        plot_description: str = "max x error"
 
         def get_data_from_trial(
             self, agents: list[AgentMetricsView], problem: BenchmarkProblem

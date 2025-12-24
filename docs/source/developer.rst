@@ -23,7 +23,15 @@ Installation for Development
    source .tox/dev/bin/activate         # activate dev env on Mac/Linux
    .\.tox\dev\Scripts\activate          # activate dev env on Windows
 
+Optionally install development dependencies with proper gpu support, e.g. for PyTorch and TensorFlow:
 
+.. code-block::
+
+   tox -e dev-gpu
+
+It is not recommended to use the development environments for regular usage of decent-bench, as they
+contain additional packages that are not needed for that purpose. This may cause performance degradation
+due to multiple packages competing for resources (e.g. GPU resources).
 
 Tooling
 -------

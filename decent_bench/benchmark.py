@@ -31,6 +31,10 @@ def benchmark(
     table_metrics: list[TableMetric] = DEFAULT_TABLE_METRICS,
     table_fmt: Literal["grid", "latex"] = "grid",
     *,
+    plot_grid: bool = True,
+    plot_path: str | None = None,
+    computational_cost: pm.ComputationalCost | None = None,
+    x_axis_scaling: float = 1e-4,
     n_trials: int = 30,
     confidence_level: float = 0.95,
     log_level: int = logging.INFO,
@@ -38,6 +42,7 @@ def benchmark(
     progress_step: int | None = None,
     show_speed: bool = False,
     show_trial: bool = False,
+    compare_iterations_and_computational_cost: bool = False,
 ) -> None:
     """
     Benchmark distributed algorithms.
@@ -51,6 +56,13 @@ def benchmark(
         table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
             :const:`~decent_bench.metrics.table_metrics.DEFAULT_TABLE_METRICS`
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
+        plot_grid: whether to show grid lines on the plots
+        plot_path: optional file path to save the generated plot as an image file (e.g., "plots.png"). If ``None``,
+            the plot will only be displayed
+        computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
+            of computational cost
+        x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
+            manageable units for plotting. Only used if ``computational_cost`` is provided.
         n_trials: number of times to run each algorithm on the benchmark problem, running more trials improves the
             statistical results, at least 30 trials are recommended for the central limit theorem to apply
         confidence_level: confidence level of the confidence intervals
@@ -64,15 +76,27 @@ def benchmark(
             If `None`, the progress bar uses 1 unit per trial.
         show_speed: whether to show speed (iterations/second) in the progress bar.
         show_trial: whether to show which trials are currently running in the progress bar.
+        compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
+            metric vs iterations. Only used if ``computational_cost`` is provided.
 
     Note:
         If ``progress_step`` is too small performance may degrade due to the
         overhead of updating the progress bar too often.
 
+        Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
+        Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
+        weighted by the time or energy it takes to perform them on the specific hardware.
+
+        .. include:: snippets/computational_cost.rst
+
+        If ``computational_cost`` is provided and ``compare_iterations_and_computational_cost`` is ``True``, each metric
+        will be plotted twice: once against computational cost and once against iterations.
+        Computational cost plots will be shown on the left and iteration plots on the right.
+
     """
     manager = Manager()
     log_listener = logger.start_log_listener(manager, log_level)
-    LOGGER.info("Starting benchmark execution, progress bar increments with each completed trial ")
+    LOGGER.info("Starting benchmark execution ")
     with Status("Generating initial network state"):
         nw_init_state = create_distributed_network(benchmark_problem)
     LOGGER.debug(f"Nr of agents: {len(nw_init_state.agents())}")
@@ -82,10 +106,17 @@ def benchmark(
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
     for alg, networks in resulting_nw_states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
-    with Status("Creating table"):
-        tm.tabulate(resulting_agent_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
-    with Status("Creating plot"):
-        pm.plot(resulting_agent_states, benchmark_problem, plot_metrics)
+    tm.tabulate(resulting_agent_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
+    pm.plot(
+        resulting_agent_states,
+        benchmark_problem,
+        plot_metrics,
+        computational_cost,
+        x_axis_scaling,
+        compare_iterations_and_computational_cost,
+        plot_path,
+        plot_grid,
+    )
     LOGGER.info("Benchmark execution complete, thanks for using decent-bench")
     log_listener.stop()
 
