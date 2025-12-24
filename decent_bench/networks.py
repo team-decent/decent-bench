@@ -3,10 +3,11 @@ from __future__ import annotations
 from abc import ABC
 from collections.abc import Collection, Mapping, Sequence
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import networkx as nx
 import numpy as np
+from matplotlib.axes import Axes
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
@@ -15,13 +16,13 @@ from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme
 from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
-    from matplotlib.axes import Axes
-
     AgentGraph = nx.Graph[Agent]
 else:
     AgentGraph = nx.Graph
 
-_LAYOUT_FUNCS: dict[str, Any] = {
+Layout = Literal["spring", "kamada_kawai", "circular", "random", "shell"]
+
+_LAYOUT_FUNCS: dict[Layout, Any] = {
     "spring": nx.spring_layout,
     "kamada_kawai": nx.kamada_kawai_layout,
     "circular": nx.circular_layout,
@@ -82,15 +83,16 @@ class Network(ABC):  # noqa: B024
         """Agents directly connected to ``agent`` in the underlying graph."""
         return list(self.graph.neighbors(agent))
 
-    def plot(self, ax: Axes | None = None, layout: str = "spring", **draw_kwargs: Mapping[str, object]) -> Axes:
+    def plot(self, ax: Axes | None = None, layout: Layout = "spring", **draw_kwargs: Mapping[str, object]) -> Axes:
         """
         Plot the network using NetworkX drawing utilities.
 
         Args:
             ax: optional matplotlib Axes to draw on. If ``None`` a new figure is created.
-            layout: layout algorithm to position nodes (e.g. ``spring``, ``kamada_kawai``, ``circular``,
-                ``random``, ``shell``).
-            draw_kwargs: forwarded to ``networkx.draw_networkx``.
+            layout: layout algorithm to position nodes (e.g. :func:`networkx.spring_layout`,
+                :func:`networkx.kamada_kawai_layout`, :func:`networkx.circular_layout`,
+                :func:`networkx.random_layout`, :func:`networkx.shell_layout`).
+            draw_kwargs: forwarded to :func:`networkx.draw_networkx`.
 
         Returns:
             The matplotlib Axes containing the plot.
@@ -278,11 +280,12 @@ class P2PNetwork(Network):
 
         n = len(agents)
         W = np.zeros((n, n))  # noqa: N806
+        degrees = self.degrees
         for i in agents:
             neighbors = self.neighbors(i)
-            d_i = len(neighbors)
+            d_i = degrees[i]
             for j in neighbors:
-                d_j = len(self.neighbors(j))
+                d_j = degrees[j]
                 W[i, j] = 1 / (1 + max(d_i, d_j))
         for i in agents:
             W[i, i] = 1 - sum(W[i])

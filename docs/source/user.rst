@@ -152,7 +152,7 @@ Change the settings of an already created benchmark problem, for example, the ne
 
 Notes on plotting
 ~~~~~~~~~~~~~~~~~
-``plot_network_kwargs`` are passed directly to ``networkx.draw_networkx``. Supported ``layout`` values are ``spring``, ``kamada_kawai``, ``circular``, ``random``, and ``shell``. Common kwargs include ``with_labels`` (``True``/``False``), ``labels`` (e.g. ``{agent: agent.id}``), ``node_color``, ``node_size``, and ``font_size``. Use ``plot_network=True`` to draw automatically at creation, or call ``net.plot(...)`` later with the same kwargs.
+``plot_network_kwargs`` are passed directly to :func:`networkx.draw_networkx`. Supported ``layout`` values are :func:`networkx.spring_layout`, :func:`networkx.kamada_kawai_layout`, :func:`networkx.circular_layout`, :func:`networkx.random_layout`, and :func:`networkx.shell_layout`. Common kwargs include ``with_labels`` (``True``/``False``), ``labels`` (e.g. ``{agent: agent.id}``), ``node_color``, ``node_size``, and ``font_size``. Use ``plot_network=True`` to draw automatically at creation, or call ``net.plot(...)`` later with the same kwargs.
 
 
 Create problems using existing resources

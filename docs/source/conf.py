@@ -30,9 +30,7 @@ extensions = [
 autodoc_default_options = {}
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True
-autodoc_type_aliases = {
-    "Axes": "matplotlib.axes.Axes",
-}
+autodoc_type_aliases = {}
 
 nitpicky = True
 nitpick_ignore = [
@@ -44,7 +42,6 @@ nitpick_ignore = [
     ("py:class", "TorchTensor"),
     ("py:class", "TensorFlowTensor"),
     ("py:class", "JaxArray"),
-    ("py:class", "TypeAliasForwardRef"),
 ]
 
 intersphinx_mapping = {
