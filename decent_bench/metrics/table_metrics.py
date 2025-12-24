@@ -26,15 +26,24 @@ class TableMetric(ABC):
         statistics: sequence of statistics such as :func:`min`, :func:`sum`, and :func:`~numpy.average` used for
             aggregating the data retrieved with :func:`get_data_from_trial` into a single value, each statistic gets its
             own row in the table
+        fmt: format string used to format the values in the table, defaults to ".2e". Common formats include:
+            - ".2e": scientific notation with 2 decimal places
+            - ".3f": fixed-point notation with 3 decimal places
+            - ".4g": general format with 4 significant digits
+            - ".1%": percentage format with 1 decimal place
+
+            Where the integer specifies the precision.
+            See :meth:`str.format` documentation for details on the format string options.
 
     """
 
-    def __init__(self, statistics: list[Statistic]):
+    def __init__(self, statistics: list[Statistic], fmt: str = ".2e"):
         self.statistics = statistics
+        self.fmt = fmt
 
     @property
     @abstractmethod
-    def description(self) -> str:
+    def table_description(self) -> str:
         """Metric description to display in the table."""
 
     @abstractmethod
@@ -51,7 +60,7 @@ class Regret(TableMetric):
     .. include:: snippets/global_cost_error.rst
     """
 
-    description: str = "regret \n[<1e-9 = exact conv.]"
+    table_description: str = "regret \n[<1e-9 = exact conv.]"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> tuple[float]:  # noqa: D102
         return (utils.regret(agents, problem, iteration=-1),)
@@ -66,7 +75,7 @@ class GradientNorm(TableMetric):
     .. include:: snippets/global_gradient_optimality.rst
     """
 
-    description: str = "gradient norm"
+    table_description: str = "gradient norm"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> tuple[float]:  # noqa: D102
         return (utils.gradient_norm(agents, iteration=-1),)
@@ -85,10 +94,13 @@ class XError(TableMetric):
 
     """
 
-    description: str = "x error"
+    table_description: str = "x error"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
-        return [float(la.norm(iop.to_numpy(problem.x_optimal) - iop.to_numpy(a.x_history[-1]))) for a in agents]
+        return [
+            float(la.norm(iop.to_numpy(problem.x_optimal) - iop.to_numpy(a.x_history[max(a.x_history)])))
+            for a in agents
+        ]
 
 
 class AsymptoticConvergenceOrder(TableMetric):
@@ -98,7 +110,7 @@ class AsymptoticConvergenceOrder(TableMetric):
     .. include:: snippets/asymptotic_convergence_rate_and_order.rst
     """
 
-    description: str = "asymptotic convergence order"
+    table_description: str = "asymptotic convergence order"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
         return [utils.asymptotic_convergence_rate_and_order(a, problem)[1] for a in agents]
@@ -111,7 +123,7 @@ class AsymptoticConvergenceRate(TableMetric):
     .. include:: snippets/asymptotic_convergence_rate_and_order.rst
     """
 
-    description: str = "asymptotic convergence rate"
+    table_description: str = "asymptotic convergence rate"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
         return [utils.asymptotic_convergence_rate_and_order(a, problem)[0] for a in agents]
@@ -124,7 +136,7 @@ class IterativeConvergenceOrder(TableMetric):
     .. include:: snippets/iterative_convergence_rate_and_order.rst
     """
 
-    description: str = "iterative convergence order"
+    table_description: str = "iterative convergence order"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
         return [utils.iterative_convergence_rate_and_order(a, problem)[1] for a in agents]
@@ -137,7 +149,7 @@ class IterativeConvergenceRate(TableMetric):
     .. include:: snippets/iterative_convergence_rate_and_order.rst
     """
 
-    description: str = "iterative convergence rate"
+    table_description: str = "iterative convergence rate"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
         return [utils.iterative_convergence_rate_and_order(a, problem)[0] for a in agents]
@@ -146,16 +158,16 @@ class IterativeConvergenceRate(TableMetric):
 class XUpdates(TableMetric):
     """Number of iterations/updates of x per agent."""
 
-    description: str = "nr x updates"
+    table_description: str = "nr x updates"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
-        return [len(a.x_history) - 1 for a in agents]
+        return [a.n_x_updates for a in agents]
 
 
 class FunctionCalls(TableMetric):
     """Number of cost function evaluate calls per agent."""
 
-    description: str = "nr function calls"
+    table_description: str = "nr function calls"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
         return [a.n_function_calls for a in agents]
@@ -164,7 +176,7 @@ class FunctionCalls(TableMetric):
 class GradientCalls(TableMetric):
     """Number of cost function gradient calls per agent."""
 
-    description: str = "nr gradient calls"
+    table_description: str = "nr gradient calls"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
         return [a.n_gradient_calls for a in agents]
@@ -173,7 +185,7 @@ class GradientCalls(TableMetric):
 class HessianCalls(TableMetric):
     """Number of cost function hessian calls per agent."""
 
-    description: str = "nr hessian calls"
+    table_description: str = "nr hessian calls"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
         return [a.n_hessian_calls for a in agents]
@@ -182,7 +194,7 @@ class HessianCalls(TableMetric):
 class ProximalCalls(TableMetric):
     """Number of cost function proximal calls per agent."""
 
-    description: str = "nr proximal calls"
+    table_description: str = "nr proximal calls"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
         return [a.n_proximal_calls for a in agents]
@@ -191,7 +203,7 @@ class ProximalCalls(TableMetric):
 class SentMessages(TableMetric):
     """Number of sent messages per agent."""
 
-    description: str = "nr sent messages"
+    table_description: str = "nr sent messages"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
         return [a.n_sent_messages for a in agents]
@@ -200,7 +212,7 @@ class SentMessages(TableMetric):
 class ReceivedMessages(TableMetric):
     """Number of received messages per agent."""
 
-    description: str = "nr received messages"
+    table_description: str = "nr received messages"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
         return [a.n_received_messages for a in agents]
@@ -209,7 +221,7 @@ class ReceivedMessages(TableMetric):
 class SentMessagesDropped(TableMetric):
     """Number of sent messages that were dropped per agent."""
 
-    description: str = "nr sent messages dropped"
+    table_description: str = "nr sent messages dropped"
 
     def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[float]:  # noqa: D102
         return [a.n_sent_messages_dropped for a in agents]
@@ -283,30 +295,35 @@ def tabulate(
     headers = ["Metric (statistic)"] + [alg.name for alg in algs]
     rows: list[list[str]] = []
     statistics_abbr = {"average": "avg", "median": "mdn"}
-    for metric in metrics:
-        for statistic in metric.statistics:
-            row = [f"{metric.description} ({statistics_abbr.get(statistic.__name__) or statistic.__name__})"]
-            for alg in algs:
-                agent_states_per_trial = resulting_agent_states[alg]
-                with warnings.catch_warnings(action="ignore"):
-                    agg_data_per_trial = _aggregate_data_per_trial(agent_states_per_trial, problem, metric, statistic)
+    with warnings.catch_warnings(action="ignore"), utils.MetricProgressBar() as progress:
+        n_statistics = sum(len(metric.statistics) for metric in metrics)
+        table_task = progress.add_task("Generating table", total=n_statistics, status="")
+        for metric in metrics:
+            progress.update(table_task, status=f"Task: {metric.table_description}")
+            data_per_trial = [_data_per_trial(resulting_agent_states[a], problem, metric) for a in algs]
+            for statistic in metric.statistics:
+                row = [f"{metric.table_description} ({statistics_abbr.get(statistic.__name__) or statistic.__name__})"]
+                for i in range(len(algs)):
+                    agg_data_per_trial = [statistic(trial) for trial in data_per_trial[i]]
                     mean, margin_of_error = _calculate_mean_and_margin_of_error(agg_data_per_trial, confidence_level)
-                formatted_confidence_interval = _format_confidence_interval(mean, margin_of_error)
-                row.append(formatted_confidence_interval)
-            rows.append(row)
+                    formatted_confidence_interval = _format_confidence_interval(mean, margin_of_error, metric.fmt)
+                    row.append(formatted_confidence_interval)
+                rows.append(row)
+                progress.advance(table_task)
+        progress.update(table_task, status="Finalizing table")
     formatted_table = tb.tabulate(rows, headers, tablefmt=table_fmt)
     LOGGER.info("\n" + formatted_table)
 
 
-def _aggregate_data_per_trial(
-    agents_per_trial: list[list[AgentMetricsView]], problem: BenchmarkProblem, metric: TableMetric, statistic: Statistic
-) -> list[float]:
-    aggregated_data_per_trial: list[float] = []
+def _data_per_trial(
+    agents_per_trial: list[list[AgentMetricsView]], problem: BenchmarkProblem, metric: TableMetric
+) -> list[Sequence[float]]:
+    data_per_trial: list[Sequence[float]] = []
     for agents in agents_per_trial:
         trial_data = metric.get_data_from_trial(agents, problem)
-        aggregated_trial_data = statistic(trial_data)
-        aggregated_data_per_trial.append(aggregated_trial_data)
-    return aggregated_data_per_trial
+        data_per_trial.append(trial_data)
+
+    return data_per_trial
 
 
 def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: float) -> tuple[float, float]:
@@ -317,11 +334,32 @@ def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: flo
     )
     if np.isfinite(mean) and np.isfinite(raw_interval).all():
         return (float(mean), float(mean - raw_interval[0]))
+
     return np.nan, np.nan
 
 
-def _format_confidence_interval(mean: float, margin_of_error: float) -> str:
-    formatted_confidence_interval = f"{mean:.2e} \u00b1 {margin_of_error:.2e}"
+def _format_confidence_interval(mean: float, margin_of_error: float, fmt: str) -> str:
+    if not _is_valid_float_format_spec(fmt):
+        LOGGER.warning(f"Invalid format string '{fmt}', defaulting to scientific notation")
+        fmt = ".2e"
+
+    formatted_confidence_interval = f"{mean:{fmt}} \u00b1 {margin_of_error:{fmt}}"
+
     if any(np.isnan([mean, margin_of_error])):
         formatted_confidence_interval += " (diverged?)"
+
     return formatted_confidence_interval
+
+
+def _is_valid_float_format_spec(fmt: str) -> bool:
+    """
+    Validate that the given format spec can be used to format a float.
+
+    This avoids attempting to format real values with an invalid format string.
+
+    """
+    try:
+        f"{0.01:{fmt}}"
+    except (ValueError, TypeError):
+        return False
+    return True

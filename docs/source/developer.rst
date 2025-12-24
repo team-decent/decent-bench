@@ -23,7 +23,15 @@ Installation for Development
    source .tox/dev/bin/activate         # activate dev env on Mac/Linux
    .\.tox\dev\Scripts\activate          # activate dev env on Windows
 
+Optionally install development dependencies with proper gpu support, e.g. for PyTorch and TensorFlow:
 
+.. code-block::
+
+   tox -e dev-gpu
+
+It is not recommended to use the development environments for regular usage of decent-bench, as they
+contain additional packages that are not needed for that purpose. This may cause performance degradation
+due to multiple packages competing for resources (e.g. GPU resources).
 
 Tooling
 -------
@@ -158,3 +166,8 @@ Releases
 2. Merge the change into main with commit message :code:`meta: Bump version to <x>.<y>.<z> (#<pr-id>)`.
 3. Create a new release on GitHub.
 4. Publish to PyPI using :code:`hatch clean && hatch build && hatch publish`.
+
+Next Steps
+----------
+Continue to the :doc:`Advanced Developer Guide <advanced>` for more in-depth information on the architecture and design
+decisions behind :doc:`Decent Bench <index>`.
