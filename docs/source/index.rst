@@ -20,4 +20,5 @@ Report any bugs you *may find* to `GitHub <https://github.com/team-decent/decent
    user
    API Reference <api/decent_bench>
    developer
+   advanced
    author
