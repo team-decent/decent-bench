@@ -3,11 +3,10 @@ from __future__ import annotations
 from abc import ABC
 from collections.abc import Collection, Mapping, Sequence
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import networkx as nx
 import numpy as np
-from matplotlib.axes import Axes
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
@@ -19,16 +18,6 @@ if TYPE_CHECKING:
     AgentGraph = nx.Graph[Agent]
 else:
     AgentGraph = nx.Graph
-
-Layout = Literal["spring", "kamada_kawai", "circular", "random", "shell"]
-
-_LAYOUT_FUNCS: dict[Layout, Any] = {
-    "spring": nx.spring_layout,
-    "kamada_kawai": nx.kamada_kawai_layout,
-    "circular": nx.circular_layout,
-    "random": nx.random_layout,
-    "shell": nx.shell_layout,
-}
 
 
 class Network(ABC):  # noqa: B024
@@ -82,48 +71,6 @@ class Network(ABC):  # noqa: B024
     def connected_agents(self, agent: Agent) -> list[Agent]:
         """Agents directly connected to ``agent`` in the underlying graph."""
         return list(self.graph.neighbors(agent))
-
-    def plot(self, ax: Axes | None = None, layout: Layout = "spring", **draw_kwargs: Mapping[str, object]) -> Axes:
-        """
-        Plot the network using NetworkX drawing utilities.
-
-        Args:
-            ax: optional matplotlib Axes to draw on. If ``None`` a new figure is created.
-            layout: layout algorithm to position nodes (e.g. :func:`networkx.spring_layout`,
-                :func:`networkx.kamada_kawai_layout`, :func:`networkx.circular_layout`,
-                :func:`networkx.random_layout`, :func:`networkx.shell_layout`).
-            draw_kwargs: forwarded to :func:`networkx.draw_networkx`.
-
-        Returns:
-            The matplotlib Axes containing the plot.
-
-        Raises:
-            RuntimeError: if matplotlib is not available.
-            ValueError: if an unsupported layout is requested.
-
-        """
-        try:
-            import matplotlib.pyplot as plt  # noqa: PLC0415
-        except Exception as exc:  # pragma: no cover - runtime dependency guard
-            raise RuntimeError("matplotlib is required for plotting the network") from exc
-
-        layout_func = _LAYOUT_FUNCS.get(layout)
-        if layout_func is None:
-            supported = ", ".join(sorted(_LAYOUT_FUNCS))
-            raise ValueError(f"Unsupported layout '{layout}'. Supported layouts: {supported}")
-
-        pos = layout_func(self.graph)
-        if ax is None:
-            _, ax = plt.subplots()
-
-        draw_kwargs_dict: dict[str, Any] = dict(draw_kwargs)
-        nx.draw_networkx(
-            self.graph,
-            pos=pos,
-            ax=ax,
-            **draw_kwargs_dict,
-        )
-        return ax
 
     def _send_one(self, sender: Agent, receiver: Agent, msg: Array) -> None:
         """
@@ -302,7 +249,7 @@ class P2PNetwork(Network):
         """
         agents = self.agents()
         adjacency_matrix = nx.to_numpy_array(
-            cast("nx.Graph[Any]", self.graph),
+            self.graph,
             nodelist=cast("Collection[Any]", agents),
             dtype=float,
         )  # type: ignore[call-overload]
@@ -551,16 +498,12 @@ def create_distributed_network(problem: BenchmarkProblem) -> P2PNetwork:
     agents = [Agent(i, problem.costs[i], problem.agent_activations[i]) for i in range(n_agents)]
     agent_node_map = {node: agents[i] for i, node in enumerate(problem.network_structure.nodes())}
     graph = nx.relabel_nodes(problem.network_structure, agent_node_map)
-    network = P2PNetwork(
+    return P2PNetwork(
         graph=graph,
         message_noise=problem.message_noise,
         message_compression=problem.message_compression,
         message_drop=problem.message_drop,
     )
-    if getattr(problem, "plot_network", False):
-        plot_kwargs = getattr(problem, "plot_network_kwargs", None) or {}
-        network.plot(**plot_kwargs)
-    return network
 
 
 def create_federated_network(problem: BenchmarkProblem) -> FedNetwork:
@@ -591,13 +534,9 @@ def create_federated_network(problem: BenchmarkProblem) -> FedNetwork:
     agents = [Agent(i, problem.costs[i], problem.agent_activations[i]) for i in range(n_agents)]
     agent_node_map = {node: agents[i] for i, node in enumerate(problem.network_structure.nodes())}
     graph = nx.relabel_nodes(problem.network_structure, agent_node_map)
-    network = FedNetwork(
+    return FedNetwork(
         graph=graph,
         message_noise=problem.message_noise,
         message_compression=problem.message_compression,
         message_drop=problem.message_drop,
     )
-    if getattr(problem, "plot_network", False):
-        plot_kwargs = getattr(problem, "plot_network_kwargs", None) or {}
-        network.plot(**plot_kwargs)
-    return network

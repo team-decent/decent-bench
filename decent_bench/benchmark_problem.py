@@ -45,8 +45,6 @@ class BenchmarkProblem:
         message_compression: message compression setting
         message_noise: message noise setting
         message_drop: message drops setting
-        plot_network: plot the network when it is created (optional)
-        plot_network_kwargs: kwargs forwarded to :meth:`decent_bench.networks.Network.plot`
 
     """
 
@@ -57,8 +55,6 @@ class BenchmarkProblem:
     message_compression: CompressionScheme
     message_noise: NoiseScheme
     message_drop: DropScheme
-    plot_network: bool = False
-    plot_network_kwargs: dict[str, Any] | None = None
 
 
 def create_regression_problem(
@@ -70,8 +66,6 @@ def create_regression_problem(
     compression: bool = False,
     noise: bool = False,
     drops: bool = False,
-    plot_network: bool = False,
-    plot_network_kwargs: dict[str, Any] | None = None,
 ) -> BenchmarkProblem:
     """
     Create out-of-the-box regression problems.
@@ -84,9 +78,6 @@ def create_regression_problem(
         compression: if true, messages are rounded to 4 significant digits
         noise: if true, messages are distorted by Gaussian noise
         drops: if true, messages have a 50% probability of being dropped
-        plot_network: if true, plot the network when it is created
-        plot_network_kwargs: kwargs forwarded to :meth:`decent_bench.networks.Network.plot` when
-            ``plot_network`` is true
 
     """
     network_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
@@ -114,6 +105,4 @@ def create_regression_problem(
         message_compression=message_compression,
         message_noise=message_noise,
         message_drop=message_drop,
-        plot_network=plot_network,
-        plot_network_kwargs=plot_network_kwargs,
     )

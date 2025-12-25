@@ -94,9 +94,6 @@ Configure communication constraints and other settings for out-of-the-box regres
         compression=True,
         noise=True,
         drops=True,
-        # Optional: plot the network when it is created
-        plot_network=False,
-        plot_network_kwargs=None,
     )
 
     if __name__ == "__main__":
@@ -133,8 +130,6 @@ Change the settings of an already created benchmark problem, for example, the ne
         compression=True,
         noise=True,
         drops=True,
-        plot_network=True,
-        plot_network_kwargs={"layout": "circular", "with_labels": True},
     )
 
     problem.network_structure = nx.random_regular_graph(n_agents, n_neighbors_per_agent)
@@ -149,10 +144,27 @@ Change the settings of an already created benchmark problem, for example, the ne
             benchmark_problem=problem,
         )
 
+Network utilities
+-----------------
+Plot a network explicitly when you need it:
 
-Notes on plotting
-~~~~~~~~~~~~~~~~~
-``plot_network_kwargs`` are passed directly to :func:`networkx.draw_networkx`. Supported ``layout`` values are :func:`networkx.spring_layout`, :func:`networkx.kamada_kawai_layout`, :func:`networkx.circular_layout`, :func:`networkx.random_layout`, and :func:`networkx.shell_layout`. Common kwargs include ``with_labels`` (``True``/``False``), ``labels`` (e.g. ``{agent: agent.id}``), ``node_color``, ``node_size``, and ``font_size``. Use ``plot_network=True`` to draw automatically at creation, or call ``net.plot(...)`` later with the same kwargs.
+.. code-block:: python
+
+    import networkx as nx
+    from decent_bench import benchmark, benchmark_problem, network_utils
+    from decent_bench.costs import LinearRegressionCost
+    from decent_bench.distributed_algorithms import ADMM, DGD, ED
+
+    problem = benchmark_problem.create_regression_problem(LinearRegressionCost, n_agents=25, n_neighbors_per_agent=3)
+
+    # Plot using decent-bench helper (wraps :func:`networkx.drawing.nx_pylab.draw_networkx`)
+    network_utils.plot_network(problem.network_structure, layout="circular", with_labels=True)
+
+    # Or call NetworkX directly on the graph
+    pos = nx.drawing.layout.spring_layout(problem.network_structure)
+    nx.drawing.nx_pylab.draw_networkx(problem.network_structure, pos=pos, with_labels=True)
+
+For more options, see the `NetworkX drawing guide <https://networkx.org/documentation/stable/reference/drawing.html>`_.
 
 
 Create problems using existing resources
