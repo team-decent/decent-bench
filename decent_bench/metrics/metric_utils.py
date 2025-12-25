@@ -6,11 +6,30 @@ from numpy import float64
 from numpy import linalg as la
 from numpy.linalg import LinAlgError
 from numpy.typing import NDArray
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.utils.array import Array
+
+
+class MetricProgressBar(Progress):
+    """
+    Progress bar for metric calculations.
+
+    Make sure to set the field *status* in the task to show custom status messages.
+
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn(elapsed_when_finished=True),
+            TextColumn("{task.fields[status]}"),
+        )
 
 
 def single(values: Sequence[float]) -> float:
@@ -37,7 +56,11 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
         ValueError: if no agent reached *iteration*
 
     """
-    all_x_at_iter = [a.x_history[iteration] for a in agents if len(a.x_history) > iteration]
+    if iteration == -1:
+        all_x_at_iter = [a.x_history[max(a.x_history)] for a in agents if len(a.x_history) > 0]
+    else:
+        all_x_at_iter = [a.x_history[iteration] for a in agents if iteration in a.x_history]
+
     if len(all_x_at_iter) == 0:
         raise ValueError(f"No agent reached iteration {iteration}")
 
@@ -56,7 +79,7 @@ def regret(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration:
     mean_x = x_mean(tuple(agents), iteration)
     optimal_cost = sum(a.cost.function(x_opt) for a in agents)
     actual_cost = sum(a.cost.function(mean_x) for a in agents)
-    return abs(optimal_cost - actual_cost)
+    return actual_cost - optimal_cost
 
 
 def gradient_norm(agents: list[AgentMetricsView], iteration: int = -1) -> float:
@@ -83,7 +106,7 @@ def x_error(agent: AgentMetricsView, problem: BenchmarkProblem) -> NDArray[float
     where :math:`\mathbf{x}_k` is the agent's local x at iteration k,
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
     """
-    x_per_iteration = np.asarray([iop.to_numpy(x) for x in agent.x_history])
+    x_per_iteration = np.asarray([iop.to_numpy(x) for _, x in sorted(agent.x_history.items())])
     opt_x = problem.x_optimal
     errors: NDArray[float64] = la.norm(x_per_iteration - opt_x, axis=tuple(range(1, x_per_iteration.ndim)))
     return errors
@@ -131,3 +154,22 @@ def iterative_convergence_rate_and_order(agent: AgentMetricsView, problem: Bench
     except LinAlgError:
         rate, order = np.nan, np.nan
     return rate, order
+
+
+def common_sorted_iterations(agents: Sequence[AgentMetricsView]) -> list[int]:
+    """
+    Get a sorted list of all common iterations reached by agents in *agents*.
+
+    Since the agents can sample their states periodically, and may sample at different iterations,
+    this function returns only the iterations that are common to all agents. These iterations can then be used
+    to compute metrics that require synchronized iterations.
+
+    Args:
+        agents: sequence of agents to get the common iterations from
+
+    Returns:
+        sorted list of iterations reached by all agents
+
+    """
+    common_iters = set.intersection(*(set(a.x_history.keys()) for a in agents)) if agents else set()
+    return sorted(common_iters)
