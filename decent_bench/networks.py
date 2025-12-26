@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Sequence
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, cast
 
@@ -392,86 +392,11 @@ class FedNetwork(Network):
             raise ValueError("All senders must be clients")
         super().receive(receiver=receiver, sender=sender)
 
-    def send_to_client(self, client: Agent, msg: Array) -> None:
-        """
-        Send a message from the server to a specific client.
-
-        Raises:
-            ValueError: if the receiver is not a client.
-
-        """
-        if client not in self.clients:
-            raise ValueError("Receiver must be a client")
-        self.send(sender=self.server, receiver=client, msg=msg)
-
-    def send_to_all_clients(self, msg: Array) -> None:
+    def broadcast(self, msg: Array) -> None:
         """Send the same message from the server to every client (synchronous FL push)."""
         self.send(sender=self.server, receiver=None, msg=msg)
 
-    def send_from_client(self, client: Agent, msg: Array) -> None:
-        """
-        Send a message from a client to the server.
-
-        Raises:
-            ValueError: if the sender is not a client.
-
-        """
-        if client not in self.clients:
-            raise ValueError("Sender must be a client")
-        self.send(sender=client, receiver=self.server, msg=msg)
-
-    def send_from_all_clients(self, msgs: Mapping[Agent, Array]) -> None:
-        """
-        Send messages from each client to the server (synchronous FL push).
-
-        Args:
-            msgs: mapping from client Agent to the message that client should send. Must include all clients.
-
-        Raises:
-            ValueError: if any sender is not a client or if any client is missing.
-
-        """
-        clients = set(self.clients)
-        senders = set(msgs)
-        invalid = senders - clients
-        if invalid:
-            raise ValueError("All senders must be clients")
-        missing = clients - senders
-        if missing:
-            raise ValueError("Messages must be provided for all clients")
-        for client, msg in msgs.items():
-            self.send_from_client(client, msg)
-
-    def receive_at_client(self, client: Agent) -> None:
-        """
-        Receive a message at a client from the server.
-
-        Raises:
-            ValueError: if the receiver is not a client.
-
-        """
-        if client not in self.clients:
-            raise ValueError("Receiver must be a client")
-        self.receive(receiver=client, sender=None)
-
-    def receive_at_all_clients(self) -> None:
-        """Receive messages at every client from the server (synchronous FL pull)."""
-        for client in self.clients:
-            self.receive_at_client(client)
-
-    def receive_from_client(self, client: Agent) -> None:
-        """
-        Receive a message at the server from a specific client.
-
-        Raises:
-            ValueError: if the sender is not a client.
-
-        """
-        if client not in self.clients:
-            raise ValueError("Sender must be a client")
-        self.receive(receiver=self.server, sender=client)
-
-    def receive_from_all_clients(self) -> None:
+    def receive_all(self) -> None:
         """Receive messages at the server from every client (synchronous FL pull)."""
         self.receive(receiver=self.server, sender=None)
 

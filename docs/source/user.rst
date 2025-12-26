@@ -157,7 +157,8 @@ Plot a network explicitly when you need it:
 .. code-block:: python
 
     import networkx as nx
-    from decent_bench import benchmark, benchmark_problem, network_utils
+    from decent_bench import benchmark, benchmark_problem
+    from decent_bench.utils import network_utils
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD, ED
 

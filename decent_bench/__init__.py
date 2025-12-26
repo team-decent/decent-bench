@@ -7,7 +7,6 @@ from decent_bench import (
     datasets,
     distributed_algorithms,
     metrics,
-    network_utils,
     networks,
     schemes,
 )
@@ -21,7 +20,6 @@ __all__ = [
     "datasets",
     "distributed_algorithms",
     "metrics",
-    "network_utils",
     "networks",
     "schemes",
 ]
