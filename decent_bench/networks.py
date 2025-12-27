@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from abc import ABC
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Sequence
 from functools import cached_property
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import networkx as nx
 import numpy as np
@@ -46,6 +48,16 @@ class Network(ABC):  # noqa: B024
     def agents(self) -> list[Agent]:
         """Get all agents in the network."""
         return list(self.graph)
+
+    @property
+    def degrees(self) -> dict[Agent, int]:
+        """Degree of each agent in the network."""
+        return dict(self.graph.degree())
+
+    @property
+    def edges(self) -> list[tuple[Agent, Agent]]:
+        """Edges of the network as (agent, agent) tuples."""
+        return list(self.graph.edges())
 
     def active_agents(self, iteration: int) -> list[Agent]:
         """
@@ -215,11 +227,12 @@ class P2PNetwork(Network):
 
         n = len(agents)
         W = np.zeros((n, n))  # noqa: N806
+        degrees = self.degrees
         for i in agents:
             neighbors = self.neighbors(i)
-            d_i = len(neighbors)
+            d_i = degrees[i]
             for j in neighbors:
-                d_j = len(self.neighbors(j))
+                d_j = degrees[j]
                 W[i, j] = 1 / (1 + max(d_i, d_j))
         for i in agents:
             W[i, i] = 1 - sum(W[i])
@@ -235,13 +248,16 @@ class P2PNetwork(Network):
         Use ``adjacency[i, j]`` or ``adjacency[i.id, j.id]`` to get the adjacency between agent i and j.
         """
         agents = self.agents()
-        n = len(agents)
-        A = np.zeros((n, n))  # noqa: N806
-        for i in agents:
-            for j in self.neighbors(i):
-                A[i, j] = 1
-
-        return iop.to_array(A, agents[0].cost.framework, agents[0].cost.device)
+        adjacency_matrix = nx.to_numpy_array(
+            self.graph,
+            nodelist=cast("Collection[Any]", agents),
+            dtype=float,
+        )  # type: ignore[call-overload]
+        return iop.to_array(
+            adjacency_matrix,
+            agents[0].cost.framework,
+            agents[0].cost.device,
+        )
 
     def neighbors(self, agent: Agent) -> list[Agent]:
         """Alias for :meth:`~decent_bench.networks.Network.connected_agents`."""
@@ -376,86 +392,11 @@ class FedNetwork(Network):
             raise ValueError("All senders must be clients")
         super().receive(receiver=receiver, sender=sender)
 
-    def send_to_client(self, client: Agent, msg: Array) -> None:
-        """
-        Send a message from the server to a specific client.
-
-        Raises:
-            ValueError: if the receiver is not a client.
-
-        """
-        if client not in self.clients:
-            raise ValueError("Receiver must be a client")
-        self.send(sender=self.server, receiver=client, msg=msg)
-
-    def send_to_all_clients(self, msg: Array) -> None:
+    def broadcast(self, msg: Array) -> None:
         """Send the same message from the server to every client (synchronous FL push)."""
         self.send(sender=self.server, receiver=None, msg=msg)
 
-    def send_from_client(self, client: Agent, msg: Array) -> None:
-        """
-        Send a message from a client to the server.
-
-        Raises:
-            ValueError: if the sender is not a client.
-
-        """
-        if client not in self.clients:
-            raise ValueError("Sender must be a client")
-        self.send(sender=client, receiver=self.server, msg=msg)
-
-    def send_from_all_clients(self, msgs: Mapping[Agent, Array]) -> None:
-        """
-        Send messages from each client to the server (synchronous FL push).
-
-        Args:
-            msgs: mapping from client Agent to the message that client should send. Must include all clients.
-
-        Raises:
-            ValueError: if any sender is not a client or if any client is missing.
-
-        """
-        clients = set(self.clients)
-        senders = set(msgs)
-        invalid = senders - clients
-        if invalid:
-            raise ValueError("All senders must be clients")
-        missing = clients - senders
-        if missing:
-            raise ValueError("Messages must be provided for all clients")
-        for client, msg in msgs.items():
-            self.send_from_client(client, msg)
-
-    def receive_at_client(self, client: Agent) -> None:
-        """
-        Receive a message at a client from the server.
-
-        Raises:
-            ValueError: if the receiver is not a client.
-
-        """
-        if client not in self.clients:
-            raise ValueError("Receiver must be a client")
-        self.receive(receiver=client, sender=None)
-
-    def receive_at_all_clients(self) -> None:
-        """Receive messages at every client from the server (synchronous FL pull)."""
-        for client in self.clients:
-            self.receive_at_client(client)
-
-    def receive_from_client(self, client: Agent) -> None:
-        """
-        Receive a message at the server from a specific client.
-
-        Raises:
-            ValueError: if the sender is not a client.
-
-        """
-        if client not in self.clients:
-            raise ValueError("Sender must be a client")
-        self.receive(receiver=self.server, sender=client)
-
-    def receive_from_all_clients(self) -> None:
+    def receive_all(self) -> None:
         """Receive messages at the server from every client (synchronous FL pull)."""
         self.receive(receiver=self.server, sender=None)
 
