@@ -1,5 +1,5 @@
-Author
-======
+Contributors
+============
 
 decent-bench is developed by `Elias Ram <https://github.com/elramen/>`_, 
 `Simon Granström <https://github.com/Simpag/>`_, 
