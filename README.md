@@ -17,6 +17,6 @@ pip install decent-bench
 ```
 
 
-## Author
-decent-bench was created by [Elias Ram](https://github.com/elramen/) under the supervision of 
+## Contributors
+decent-bench is developed by [Elias Ram](https://github.com/elramen/), [Simon Granström](https://github.com/Simpag/), [Adriana Rodriguez](https://github.com/adrianardv/) under the supervision of 
 [Dr. Nicola Bastianello](https://bastianello.me/).
