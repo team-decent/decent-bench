@@ -112,7 +112,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
             Predictions as a binary array.
 
         """
-        pred_data = np.stack(data)
+        pred_data = np.stack(data) if isinstance(data, list) else data
         logits = pred_data.dot(x)
         sig = special.expit(logits)
         return (sig >= 0.5).astype(float)

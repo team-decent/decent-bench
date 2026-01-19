@@ -119,7 +119,7 @@ class QuadraticCost(EmpiricalRiskCost):
             Predictions as an array.
 
         """
-        pred_data = np.stack(data)
+        pred_data = np.stack(data) if isinstance(data, list) else data
         return pred_data.dot(x)
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.function)
