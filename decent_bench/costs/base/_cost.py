@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Unpack
+from typing import Any
 
-from decent_bench.costs._kwarg_types import CostKwargs
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
@@ -81,31 +80,31 @@ class Cost(ABC):
         """
 
     @abstractmethod
-    def function(self, x: Array, **kwargs: Unpack[CostKwargs]) -> float:
+    def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ANN401
         """Evaluate function at x."""
 
-    def evaluate(self, x: Array, **kwargs: Unpack[CostKwargs]) -> float:
+    def evaluate(self, x: Array, **kwargs: Any) -> float:  # noqa: ANN401
         """Alias for :meth:`function`."""
         return self.function(x, **kwargs)
 
-    def loss(self, x: Array, **kwargs: Unpack[CostKwargs]) -> float:
+    def loss(self, x: Array, **kwargs: Any) -> float:  # noqa: ANN401
         """Alias for :meth:`function`."""
         return self.function(x, **kwargs)
 
-    def f(self, x: Array, **kwargs: Unpack[CostKwargs]) -> float:
+    def f(self, x: Array, **kwargs: Any) -> float:  # noqa: ANN401
         """Alias for :meth:`function`."""
         return self.function(x, **kwargs)
 
     @abstractmethod
-    def gradient(self, x: Array, **kwargs: Unpack[CostKwargs]) -> Array:
+    def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ANN401
         """Gradient at x."""
 
     @abstractmethod
-    def hessian(self, x: Array, **kwargs: Unpack[CostKwargs]) -> Array:
+    def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ANN401
         """Hessian at x."""
 
     @abstractmethod
-    def proximal(self, x: Array, rho: float, **kwargs: Unpack[CostKwargs]) -> Array:
+    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
         r"""
         Proximal at x.
 
@@ -122,10 +121,11 @@ class Cost(ABC):
         """
         Add another cost function to create a new one.
 
-        :class:`~SumCost` can be used as the result of :meth:`__add__` by returning
+        :class:`~decent_bench.costs.base.SumCost` can be used as the result of :meth:`__add__` by returning
         ``SumCost([self, other])``. However, it's often more efficient to preserve the cost function type if possible.
-        For example, the addition of two :class:`~QuadraticCost` objects benefits from returning a new
-        :class:`~QuadraticCost` instead of a :class:`~SumCost` as this preserves the closed
+        For example, the addition of two :class:`~decent_bench.costs.empirical_risk.QuadraticCost` objects benefits
+        from returning a new :class:`~decent_bench.costs.empirical_risk.QuadraticCost` instead of a
+        :class:`~decent_bench.costs.base.SumCost` as this preserves the closed
         form proximal solution and only requires one evaluation instead of two when calling :meth:`evaluate`,
         :meth:`gradient`, and :meth:`hessian`.
         """

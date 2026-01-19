@@ -3,10 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Unpack
+from typing import Any
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.costs import Cost, CostKwargs
+from decent_bench.costs.base import Cost
 from decent_bench.schemes import AgentActivationScheme
 from decent_bench.utils.array import Array
 
@@ -117,21 +117,21 @@ class Agent:
         if received_msgs:
             self._received_messages = {k: iop.copy(v) for k, v in received_msgs.items()}
 
-    def _call_counting_function(self, x: Array, **kwargs: Unpack[CostKwargs]) -> float:
+    def _call_counting_function(self, x: Array, *args: Any, **kwargs: Any) -> float:  # noqa: ANN401
         self._n_function_calls += 1
-        return self._cost.__class__.function(self.cost, x, **kwargs)
+        return self._cost.__class__.function(self.cost, x, *args, **kwargs)
 
-    def _call_counting_gradient(self, x: Array, **kwargs: Unpack[CostKwargs]) -> Array:
+    def _call_counting_gradient(self, x: Array, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         self._n_gradient_calls += 1
-        return self._cost.__class__.gradient(self.cost, x, **kwargs)
+        return self._cost.__class__.gradient(self.cost, x, *args, **kwargs)
 
-    def _call_counting_hessian(self, x: Array, **kwargs: Unpack[CostKwargs]) -> Array:
+    def _call_counting_hessian(self, x: Array, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         self._n_hessian_calls += 1
-        return self._cost.__class__.hessian(self.cost, x, **kwargs)
+        return self._cost.__class__.hessian(self.cost, x, *args, **kwargs)
 
-    def _call_counting_proximal(self, x: Array, rho: float, **kwargs: Unpack[CostKwargs]) -> Array:
+    def _call_counting_proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         self._n_proximal_calls += 1
-        return self._cost.__class__.proximal(self.cost, x, rho, **kwargs)
+        return self._cost.__class__.proximal(self.cost, x, rho, *args, **kwargs)
 
     def __index__(self) -> int:
         """Enable using agent as index, for example ``W[a1, a2]`` instead of ``W[a1.id, a2.id]``."""

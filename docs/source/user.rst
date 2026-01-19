@@ -295,8 +295,8 @@ algorithms framework-agnostic, always use the interoperability layer :class:`~de
     Other examples are :meth:`~decent_bench.utils.interoperability.ones_like`, :meth:`~decent_bench.utils.interoperability.rand_like`, :meth:`~decent_bench.utils.interoperability.randn_like`, etc.
     See :mod:`~decent_bench.utils.interoperability` for a full list of available methods and :mod:`~decent_bench.distributed_algorithms` for examples of usage.
 - Avoid calling any framework-specific functions directly within your algorithm. 
-    Let the :class:`~decent_bench.costs.Cost` implementations handle framework-specific details for 
-    :func:`~decent_bench.costs.Cost.function`, :func:`~decent_bench.costs.Cost.gradient`, :func:`~decent_bench.costs.Cost.hessian`, and :func:`~decent_bench.costs.Cost.proximal`.
+    Let the :class:`~decent_bench.costs.base.Cost` implementations handle framework-specific details for 
+    :func:`~decent_bench.costs.base.Cost.function`, :func:`~decent_bench.costs.base.Cost.gradient`, :func:`~decent_bench.costs.base.Cost.hessian`, and :func:`~decent_bench.costs.base.Cost.proximal`.
 - When you need to create a new array/tensor, use the interoperability layer to ensure compatibility with the agent's cost function framework and device.
     If a method to create your specific array/tensor is not available, see the implementation of :attr:`~decent_bench.networks.P2PNetwork.weights` as en example.
 
@@ -444,7 +444,7 @@ Create your own metrics to tabulate and/or plot.
 
 Cost Functions
 --------------
-Create new cost functions by subclassing :class:`~decent_bench.costs.Cost` and using interoperability decorators to keep
+Create new cost functions by subclassing :class:`~decent_bench.costs.base.Cost` and using interoperability decorators to keep
 your implementation framework-agnostic. The decorators automatically wrap inputs/outputs as `Array` and ensure
 compatibility with the selected framework and device of your custom cost.
 

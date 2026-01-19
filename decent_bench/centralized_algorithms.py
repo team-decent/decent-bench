@@ -6,7 +6,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
-    from decent_bench.costs import Cost
+    from decent_bench.costs.base import Cost
 
 
 def gradient_descent(
@@ -131,7 +131,7 @@ def proximal_solver(cost: "Cost", y: Array, rho: float) -> Array:
         raise ValueError("Cost function domain and y need to have the same shape")
     if rho <= 0:
         raise ValueError("Penalty term `rho` must be greater than 0")
-    from decent_bench.costs import QuadraticCost  # noqa: PLC0415
+    from decent_bench.costs.empirical_risk import QuadraticCost  # noqa: PLC0415
 
     proximal_cost = QuadraticCost(A=iop.eye_like(y) / rho, b=-y / rho, c=float(iop.dot(y, y)) / (2 * rho)) + cost
     return accelerated_gradient_descent(proximal_cost, y, max_iter=100, stop_tol=1e-10, max_tol=None)

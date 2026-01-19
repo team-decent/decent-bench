@@ -738,7 +738,7 @@ class ADMM(Algorithm):
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
     :math:`\operatorname{prox}` is the proximal operator described in :meth:`Cost.proximal()
-    <decent_bench.costs.Cost.proximal>`,
+    <decent_bench.costs.base.Cost.proximal>`,
     :math:`\rho > 0` is the Lagrangian penalty parameter,
     :math:`N_i` is the number of neighbors of i,
     :math:`f_i` is i's local cost function,
@@ -746,8 +746,8 @@ class ADMM(Algorithm):
     and :math:`\alpha \in (0, 1)` is the relaxation parameter.
 
     Note:
-        ``z0`` is of shape :attr:`agent.cost.shape <decent_bench.costs.Cost.shape>` which is then stacked for all agents
-        to form ``z`` of shape ``(num_agents, *agent.cost.shape)``.
+        ``z0`` is of shape :attr:`agent.cost.shape <decent_bench.costs.base.Cost.shape>` which is then stacked for all
+        agents to form ``z`` of shape ``(num_agents, *agent.cost.shape)``.
 
     """
 
