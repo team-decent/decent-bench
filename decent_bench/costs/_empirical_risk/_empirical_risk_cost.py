@@ -116,7 +116,9 @@ class EmpiricalRiskCost(Cost, ABC):
         """
         if self.batch_size is not None and self.batch_size < self.n_samples:
             # Sample a random batch
-            self._last_batch_used = self._rand.choice(self.n_samples, size=self.batch_size, replace=False).tolist()
+            self._last_batch_used: list[int] = self._rand.choice(
+                self.n_samples, size=self.batch_size, replace=False
+            ).tolist()
         else:
             # Use full dataset
             self._last_batch_used = list(range(self.n_samples))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import cached_property
+from typing import Any
 
 import numpy as np
 
@@ -72,19 +73,19 @@ class SumCost(Cost):
         m_cvx_vals = [cf.m_cvx for cf in self.costs]
         return np.nan if any(np.isnan(v) for v in m_cvx_vals) else sum(m_cvx_vals)
 
-    def function(self, x: Array, *args, **kwargs) -> float:
+    def function(self, x: Array, *args: Any, **kwargs: Any) -> float:  # noqa: ANN401
         """Sum the :meth:`function` of each cost function."""
         return sum(cf.function(x, *args, **kwargs) for cf in self.costs)
 
-    def gradient(self, x: Array, *args, **kwargs) -> Array:
+    def gradient(self, x: Array, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         """Sum the :meth:`gradient` of each cost function."""
         return iop.sum(iop.stack([cf.gradient(x, *args, **kwargs) for cf in self.costs]), dim=0)
 
-    def hessian(self, x: Array, *args, **kwargs) -> Array:
+    def hessian(self, x: Array, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         """Sum the :meth:`hessian` of each cost function."""
         return iop.sum(iop.stack([cf.hessian(x, *args, **kwargs) for cf in self.costs]), dim=0)
 
-    def proximal(self, x: Array, rho: float, *args, **kwargs) -> Array:
+    def proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         """
         Proximal at x solved using an iterative method.
 

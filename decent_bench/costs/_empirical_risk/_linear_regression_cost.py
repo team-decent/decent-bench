@@ -40,11 +40,9 @@ class LinearRegressionCost(EmpiricalRiskCost):
         self.A: NDArray[float64] = iop.to_numpy(A)
         self.b: NDArray[float64] = iop.to_numpy(iop.copy(b))  # Copy b to avoid modifying original array pointer
         class_labels = np.unique(self.b)
-        (
-            self.b[np.where(self.b == class_labels[0])],
-            self.b[np.where(self.b == class_labels[1])],
-        ) = (0, 1)
-        self._label_mapping = {0: class_labels[0], 1: class_labels[1]}
+        self._label_mapping = {i: class_labels[i] for i in range(len(class_labels))}
+        for i, label in self._label_mapping.items():
+            self.b[np.where(self.b == label)] = i
         self.ATA: NDArray[float64] = self.A.T @ self.A
         self._batch_size = batch_size
 
@@ -62,7 +60,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
 
     @property
     def n_samples(self) -> int:
-        return self.A.shape[0]
+        return int(self.A.shape[0])
 
     @property
     def batch_size(self) -> int | None:

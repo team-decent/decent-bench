@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any
 
 import numpy as np
 import numpy.linalg as la
@@ -63,7 +62,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
 
     @property
     def n_samples(self) -> int:
-        return self.A.shape[0]
+        return int(self.A.shape[0])
 
     @property
     def batch_size(self) -> int | None:
