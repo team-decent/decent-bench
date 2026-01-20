@@ -6,7 +6,7 @@ from types import MappingProxyType
 from typing import Any
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.costs.base import Cost
+from decent_bench.costs import Cost
 from decent_bench.schemes import AgentActivationScheme
 from decent_bench.utils.array import Array
 

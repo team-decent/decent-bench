@@ -121,11 +121,11 @@ class Cost(ABC):
         """
         Add another cost function to create a new one.
 
-        :class:`~decent_bench.costs.base.SumCost` can be used as the result of :meth:`__add__` by returning
+        :class:`~decent_bench.costs.SumCost` can be used as the result of :meth:`__add__` by returning
         ``SumCost([self, other])``. However, it's often more efficient to preserve the cost function type if possible.
-        For example, the addition of two :class:`~decent_bench.costs.empirical_risk.QuadraticCost` objects benefits
-        from returning a new :class:`~decent_bench.costs.empirical_risk.QuadraticCost` instead of a
-        :class:`~decent_bench.costs.base.SumCost` as this preserves the closed
+        For example, the addition of two :class:`~decent_bench.costs.QuadraticCost` objects benefits
+        from returning a new :class:`~decent_bench.costs.QuadraticCost` instead of a
+        :class:`~decent_bench.costs.SumCost` as this preserves the closed
         form proximal solution and only requires one evaluation instead of two when calling :meth:`evaluate`,
         :meth:`gradient`, and :meth:`hessian`.
         """

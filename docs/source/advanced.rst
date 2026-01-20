@@ -725,7 +725,7 @@ Purpose
 ~~~~~~~
 
 The :func:`~decent_bench.utils.interoperability.autodecorate_cost_method` decorator is a specialized 
-decorator that automatically handles type conversion for :class:`~decent_bench.costs.base.Cost` subclass methods. 
+decorator that automatically handles type conversion for :class:`~decent_bench.costs.Cost` subclass methods. 
 It enables users to implement cost functions in their preferred framework while the decorator handles 
 conversion automatically.
 

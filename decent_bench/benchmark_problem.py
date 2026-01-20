@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Any
 import networkx as nx
 
 import decent_bench.centralized_algorithms as ca
-from decent_bench.costs.base import Cost
-from decent_bench.costs.empirical_risk import LinearRegressionCost, LogisticRegressionCost
+from decent_bench.costs import Cost
+from decent_bench.costs._empirical_risk import LinearRegressionCost, LogisticRegressionCost
 from decent_bench.datasets import SyntheticClassificationData
 from decent_bench.schemes import (
     AgentActivationScheme,

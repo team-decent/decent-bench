@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Unpack
 
 import numpy as np
 
 import decent_bench.centralized_algorithms as ca
 import decent_bench.utils.interoperability as iop
-from decent_bench.costs.base._cost import Cost
+from decent_bench.costs._base._cost import Cost
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
@@ -50,7 +49,7 @@ class SumCost(Cost):
         the result is :math:`\text{NaN}`.
 
         For the general definition, see
-        :attr:`Cost.m_smooth <decent_bench.costs.base.Cost.m_smooth>`.
+        :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
         """
         m_smooth_vals = [cf.m_smooth for cf in self.costs]
         return np.nan if any(np.isnan(v) for v in m_smooth_vals) else sum(m_smooth_vals)
@@ -68,7 +67,7 @@ class SumCost(Cost):
         the result is :math:`\text{NaN}`.
 
         For the general definition, see
-        :attr:`Cost.m_cvx <decent_bench.costs.base.Cost.m_cvx>`.
+        :attr:`Cost.m_cvx <decent_bench.costs.Cost.m_cvx>`.
         """
         m_cvx_vals = [cf.m_cvx for cf in self.costs]
         return np.nan if any(np.isnan(v) for v in m_cvx_vals) else sum(m_cvx_vals)
@@ -90,7 +89,7 @@ class SumCost(Cost):
         Proximal at x solved using an iterative method.
 
         See
-        :meth:`Cost.proximal() <decent_bench.costs.base.Cost.proximal>`
+        :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>`
         for the general proximal definition.
         """
         return ca.proximal_solver(self, x, rho, *args, **kwargs)
