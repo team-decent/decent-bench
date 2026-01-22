@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, SupportsIndex, TypeAlias, Union
+from typing import TYPE_CHECKING, Literal, SupportsIndex, TypeAlias, Union
 
 if TYPE_CHECKING:
     import jax
@@ -28,6 +28,8 @@ ArrayKey: TypeAlias = SupportsIndex | slice | tuple[SupportsIndex | slice, ...] 
 Type alias for valid keys used to index into supported array types.
 Includes single indices, tuples of indices, slices, and tuples of slices.
 """
+
+type EmpiricalRiskIndices = list[int] | Literal["all", "batch"] | int
 
 
 class SupportedFrameworks(Enum):
