@@ -49,8 +49,11 @@ class Cost(ABC):
         Lipschitz constant of the cost function's gradient.
 
         The gradient's Lipschitz constant m_smooth is the smallest value such that
-        :math:`\| \nabla f(\mathbf{x_1}) - \nabla f(\mathbf{x_2}) \| \leq \text{m_smooth}
-        \cdot \|\mathbf{x_1} - \mathbf{x_2}\|`
+
+        .. math::
+            \| \nabla f(\mathbf{x_1}) - \nabla f(\mathbf{x_2}) \| \leq m_{\text{smooth}}
+            \cdot \|\mathbf{x_1} - \mathbf{x_2}\|
+
         for all :math:`\mathbf{x_1}` and :math:`\mathbf{x_2}`.
 
         Returns:
@@ -67,9 +70,12 @@ class Cost(ABC):
         Convexity constant of the cost function.
 
         The convexity constant m_cvx is the largest value such that
-        :math:`f(\mathbf{x_1}) \geq f(\mathbf{x_2})
-        + \nabla f(\mathbf{x_2})^T (\mathbf{x_1} - \mathbf{x_2})
-        + \frac{\text{m_cvx}}{2} \|\mathbf{x_1} - \mathbf{x_2}\|^2`
+
+        .. math::
+            `f(\mathbf{x_1}) \geq f(\mathbf{x_2})
+            + \nabla f(\mathbf{x_2})^T (\mathbf{x_1} - \mathbf{x_2})
+            + \frac{m_{\text{cvx}}}{2} \|\mathbf{x_1} - \mathbf{x_2}\|^2`
+
         for all :math:`\mathbf{x_1}` and :math:`\mathbf{x_2}`.
 
         Returns:

@@ -43,10 +43,10 @@ class SumCost(Cost):
         The cost function's smoothness constant.
 
         .. math::
-            \sum f_{k_\text{m_smooth}}
+            \sum f_{k_m_{\text{smooth}}}
 
-        provided all :math:`f_{k_\text{m_smooth}}` are finite.
-        If any :math:`f_{k_\text{m_smooth}} = \text{NaN}`,
+        provided all :math:`f_{k_m_{\text{smooth}}}` are finite.
+        If any :math:`f_{k_m_{\text{smooth}}} = \text{NaN}`,
         the result is :math:`\text{NaN}`.
 
         For the general definition, see
@@ -61,10 +61,10 @@ class SumCost(Cost):
         The cost function's convexity constant.
 
         .. math::
-            \sum f_{k_\text{m_cvx}}
+            \sum f_{k_m_{\text{cvx}}}
 
-        provided all :math:`f_{k_\text{m_cvx}}` are finite.
-        If any :math:`f_{k_\text{m_cvx}} = \text{NaN}`,
+        provided all :math:`f_{k_m_{\text{cvx}}}` are finite.
+        If any :math:`f_{k_m_{\text{cvx}}} = \text{NaN}`,
         the result is :math:`\text{NaN}`.
 
         For the general definition, see

@@ -63,7 +63,7 @@ deps = [
   ".[dev]",
   ".[dev-cpu]",
   "git+https://github.com/microsoft/python-type-stubs.git@main",
-  "git+https://github.com/pydata/pydata-sphinx-theme.git@main"
+  "pydata-sphinx-theme"
 ]
 
 [tool.tox.env.dev-gpu]
@@ -72,12 +72,12 @@ deps = [
   ".[dev]",
   ".[dev-gpu]",
   "git+https://github.com/microsoft/python-type-stubs.git@main",
-  "git+https://github.com/pydata/pydata-sphinx-theme.git@main"
+  "pydata-sphinx-theme"
 ]
 
 [tool.tox.env.sphinx]
 description = "Generate rst and html files using sphinx"
-deps = ["sphinx", "git+https://github.com/pydata/pydata-sphinx-theme.git@main"]
+deps = ["sphinx", "pydata-sphinx-theme"]
 commands = [
   ["sphinx-apidoc", "-o", "docs/source/api", "decent_bench", "--separate", "--no-toc", "--templatedir=docs/source/_templates"],
   ["sphinx-build", "-W", "-E", "-b", "html", "docs/source", "docs/build/html"]
