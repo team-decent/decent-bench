@@ -30,6 +30,11 @@ Includes single indices, tuples of indices, slices, and tuples of slices.
 """
 
 type EmpiricalRiskIndices = list[int] | Literal["all", "batch"] | int
+"""
+Type alias for specifying indices in empirical risk computations.
+Can be a list of integers, the string "all" for full dataset, the string "batch" for a mini-batch,
+or an integer specifying a single datapoint.
+"""
 
 
 class SupportedFrameworks(Enum):

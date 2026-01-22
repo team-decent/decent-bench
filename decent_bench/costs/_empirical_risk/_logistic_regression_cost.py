@@ -163,6 +163,12 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         r"""
         Evaluate function at x using datapoints at the given indices.
 
+        Supported values for `indices` are:
+            - int: the corresponding datapoint is used.
+            - list[int]: corresponding datapoints are used.
+            - "all": the full dataset is used.
+            - "batch": a batch is drawn with :attr:`batch_size` samples.
+
         If no batching is used, this is:
 
         .. math::
@@ -191,6 +197,12 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         r"""
         Gradient at x using datapoints at the given indices.
 
+        Supported values for `indices` are:
+            - int: the corresponding datapoint is used.
+            - list[int]: corresponding datapoints are used.
+            - "all": the full dataset is used.
+            - "batch": a batch is drawn with :attr:`batch_size` samples.
+
         If no batching is used, this is:
 
         .. math::
@@ -212,6 +224,12 @@ class LogisticRegressionCost(EmpiricalRiskCost):
     def hessian(self, x: NDArray[float64], indices: EmpiricalRiskIndices = "batch") -> NDArray[float64]:
         r"""
         Hessian at x using datapoints at the given indices.
+
+        Supported values for `indices` are:
+            - int: the corresponding datapoint is used.
+            - list[int]: corresponding datapoints are used.
+            - "all": the full dataset is used.
+            - "batch": a batch is drawn with :attr:`batch_size` samples.
 
         If no batching is used, this is:
 
