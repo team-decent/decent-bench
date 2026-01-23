@@ -159,7 +159,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
         r"""
         Evaluate function at x using datapoints at the given indices.
 
-        Supported values for `indices` are:
+        Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
@@ -186,7 +186,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
         r"""
         Gradient at x using datapoints at the given indices.
 
-        Supported values for `indices` are:
+        Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
@@ -215,7 +215,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
         r"""
         Hessian at x using datapoints at the given indices.
 
-        Supported values for `indices` are:
+        Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
@@ -238,33 +238,19 @@ class LinearRegressionCost(EmpiricalRiskCost):
         return res
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.proximal)
-    def proximal(self, x: NDArray[float64], rho: float, indices: EmpiricalRiskIndices = "batch") -> NDArray[float64]:
+    def proximal(self, x: NDArray[float64], rho: float) -> NDArray[float64]:
         r"""
-        Proximal at x using datapoints at the given indices.
+        Proximal at x using the full dataset.
 
-        Supported values for `indices` are:
-            - int: the corresponding datapoint is used.
-            - list[int]: corresponding datapoints are used.
-            - "all": the full dataset is used.
-            - "batch": a batch is drawn with :attr:`batch_size` samples.
-
-        If no batching is used, this is:
+        The proximal operator for the linear regression cost function is given by:
 
         .. math::
             (\rho \mathbf{A}^T \mathbf{A} + \mathbf{I})^{-1} (\mathbf{x} + \rho \mathbf{A}^T\mathbf{b})
 
-        where :math:`\rho > 0` is the penalty. This is a closed form solution, see
-        :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>` for the general proximal definition.
-
-        If indices is "batch", a random batch :math:`\mathcal{B}` is drawn with :attr:`batch_size` samples.
-
-        .. math::
-            (\rho \mathbf{A}_B^T \mathbf{A}_B + \mathbf{I})^{-1} (\mathbf{x} + \rho \mathbf{A}_B^T\mathbf{b}_B)
-
-        where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
+        where :math:`\rho > 0` is the penalty. This is a closed form solution.
 
         """
-        A, ATA, b = self._get_batch_data(indices)  # noqa: N806
+        A, ATA, b = self._get_batch_data("all")  # noqa: N806
         lhs = rho * ATA + np.eye(A.shape[1])
         rhs = x + rho * A.T @ b
         return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)

@@ -163,7 +163,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         r"""
         Evaluate function at x using datapoints at the given indices.
 
-        Supported values for `indices` are:
+        Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
@@ -197,7 +197,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         r"""
         Gradient at x using datapoints at the given indices.
 
-        Supported values for `indices` are:
+        Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
@@ -225,7 +225,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         r"""
         Hessian at x using datapoints at the given indices.
 
-        Supported values for `indices` are:
+        Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
@@ -252,13 +252,13 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         res: NDArray[float64] = A.T.dot(D).dot(A)
         return res
 
-    def proximal(self, x: Array, rho: float) -> Array:  # type: ignore[override]
+    @iop.autodecorate_cost_method(EmpiricalRiskCost.proximal)
+    def proximal(self, x: Array, rho: float) -> Array:
         """
         Proximal at x solved using an iterative method.
 
-        Note:
-            The proximal for logistic regression does not have support for indices, will use
-            the full dataset when approximating the proximal.
+        The proximal for logistic regression does not have closed form solution, will use
+        a gradient based approximation method over the entire dataset.
 
         See
         :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>`

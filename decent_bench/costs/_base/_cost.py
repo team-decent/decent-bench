@@ -72,9 +72,9 @@ class Cost(ABC):
         The convexity constant m_cvx is the largest value such that
 
         .. math::
-            `f(\mathbf{x_1}) \geq f(\mathbf{x_2})
+            f(\mathbf{x_1}) \geq f(\mathbf{x_2})
             + \nabla f(\mathbf{x_2})^T (\mathbf{x_1} - \mathbf{x_2})
-            + \frac{m_{\text{cvx}}}{2} \|\mathbf{x_1} - \mathbf{x_2}\|^2`
+            + \frac{m_{\text{cvx}}}{2} \|\mathbf{x_1} - \mathbf{x_2}\|^2
 
         for all :math:`\mathbf{x_1}` and :math:`\mathbf{x_2}`.
 

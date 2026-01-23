@@ -5,7 +5,6 @@ from typing import Any
 
 import numpy as np
 
-import decent_bench.centralized_algorithms as ca
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.utils.array import Array
@@ -43,11 +42,10 @@ class SumCost(Cost):
         The cost function's smoothness constant.
 
         .. math::
-            \sum f_{k_m_{\text{smooth}}}
+            \sum m_{\text{smooth}, k}
 
-        provided all :math:`f_{k_m_{\text{smooth}}}` are finite.
-        If any :math:`f_{k_m_{\text{smooth}}} = \text{NaN}`,
-        the result is :math:`\text{NaN}`.
+        where :math:`m_{\text{smooth}, k}` is the smoothness constant of each individual cost function :math:`f_k`.
+        If any :math:`m_{\text{smooth}, k} = \text{NaN}`, the result is :math:`\text{NaN}`.
 
         For the general definition, see
         :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
@@ -61,11 +59,10 @@ class SumCost(Cost):
         The cost function's convexity constant.
 
         .. math::
-            \sum f_{k_m_{\text{cvx}}}
+            \sum m_{\text{cvx}, k}
 
-        provided all :math:`f_{k_m_{\text{cvx}}}` are finite.
-        If any :math:`f_{k_m_{\text{cvx}}} = \text{NaN}`,
-        the result is :math:`\text{NaN}`.
+        where :math:`m_{\text{cvx}, k}` is the convexity constant of each individual cost function :math:`f_k`.
+        If any :math:`m_{\text{cvx}, k} = \text{NaN}`, the result is :math:`\text{NaN}`.
 
         For the general definition, see
         :attr:`Cost.m_cvx <decent_bench.costs.Cost.m_cvx>`.
@@ -74,26 +71,20 @@ class SumCost(Cost):
         return np.nan if any(np.isnan(v) for v in m_cvx_vals) else sum(m_cvx_vals)
 
     def function(self, x: Array, *args: Any, **kwargs: Any) -> float:  # noqa: ANN401
-        """Sum the :meth:`function` of each cost function."""
+        """Sum the :meth:`Cost.function <decent_bench.costs.Cost.function>` of each cost function."""
         return sum(cf.function(x, *args, **kwargs) for cf in self.costs)
 
     def gradient(self, x: Array, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        """Sum the :meth:`gradient` of each cost function."""
+        """Sum the :meth:`Cost.gradient <decent_bench.costs.Cost.gradient>` of each cost function."""
         return iop.sum(iop.stack([cf.gradient(x, *args, **kwargs) for cf in self.costs]), dim=0)
 
     def hessian(self, x: Array, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        """Sum the :meth:`hessian` of each cost function."""
+        """Sum the :meth:`Cost.hessian <decent_bench.costs.Cost.hessian>` of each cost function."""
         return iop.sum(iop.stack([cf.hessian(x, *args, **kwargs) for cf in self.costs]), dim=0)
 
     def proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        """
-        Proximal at x solved using an iterative method.
-
-        See
-        :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>`
-        for the general proximal definition.
-        """
-        return ca.proximal_solver(self, x, rho, *args, **kwargs)
+        """Sum the :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>` of each cost function."""
+        return iop.sum(iop.stack([cf.proximal(x, rho, *args, **kwargs) for cf in self.costs]), dim=0)
 
     def __add__(self, other: Cost) -> SumCost:
         """Add another cost function."""

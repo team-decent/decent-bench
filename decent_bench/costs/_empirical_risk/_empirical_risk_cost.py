@@ -20,7 +20,7 @@ class EmpiricalRiskCost(Cost, ABC):
 
     Mathematical Definition
     -----------------------
-    Given a dataset with $m$ samples $\{d_i\}_{i=1}^{m}$, the empirical risk is defined as:
+    Given a dataset with :math:`m` samples :math:`\{d_i\}_{i=1}^{m}`, the empirical risk is defined as:
 
     .. math::
         \mathcal{f}(x) = \frac{1}{m} \sum_{i=1}^{m} \ell(x, d_i)
@@ -82,7 +82,7 @@ class EmpiricalRiskCost(Cost, ABC):
         """
         Evaluate function at x using datapoints at the given indices.
 
-        Supported values for `indices` are:
+        Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
@@ -106,7 +106,7 @@ class EmpiricalRiskCost(Cost, ABC):
         """
         Gradient at x using datapoints at the given indices.
 
-        Supported values for `indices` are:
+        Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
@@ -118,22 +118,16 @@ class EmpiricalRiskCost(Cost, ABC):
         """
         Hessian at x using datapoints at the given indices.
 
-        Supported values for `indices` are:
+        Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
             - "batch": a batch is drawn with :attr:`batch_size` samples.
         """
 
-    def proximal(self, x: Array, rho: float, indices: EmpiricalRiskIndices = "batch", **kwargs: Any) -> Array:  # noqa: ANN401
-        r"""
-        Proximal at x using datapoints at the given indices.
-
-        Supported values for `indices` are:
-            - int: the corresponding datapoint is used.
-            - list[int]: corresponding datapoints are used.
-            - "all": the full dataset is used.
-            - "batch": a batch is drawn with :attr:`batch_size` samples.
+    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
+        """
+        Proximal at x using the full dataset.
 
         The proximal operator is defined as:
 
@@ -151,7 +145,7 @@ class EmpiricalRiskCost(Cost, ABC):
         """
         Sample a batch of indices uniformly without replacement if indices is "batch", otherwise use the given indices.
 
-        Supported values for `indices` are:
+        Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
@@ -204,7 +198,7 @@ class EmpiricalRiskCost(Cost, ABC):
         """
         Get training data corresponding to the given batch indices.
 
-        Supported values for `indices` are:
+        Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
