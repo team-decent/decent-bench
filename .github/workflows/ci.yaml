@@ -6,7 +6,7 @@ on:
 
 jobs:
   mypy:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out code
@@ -78,7 +78,7 @@ jobs:
         run: tox -e pytest
 
   ruff:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out code
@@ -96,7 +96,7 @@ jobs:
         run: tox -e ruff
 
   sphinx:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out code
