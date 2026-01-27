@@ -39,6 +39,9 @@ dev = [
   "torch",
   "torchvision",
   "types-tensorflow",
+  "pandas",
+  "pandas-stubs",
+  "kagglehub",
 ]
 dev-cpu = [
   "tensorflow",

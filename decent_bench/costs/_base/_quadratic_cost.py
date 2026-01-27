@@ -9,6 +9,7 @@ from numpy.typing import NDArray
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
+from decent_bench.datasets import DatasetPartition
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
@@ -20,18 +21,37 @@ class QuadraticCost(Cost):
     .. math:: f(\mathbf{x}) = \frac{1}{2} \mathbf{x}^T \mathbf{Ax} + \mathbf{b}^T \mathbf{x} + c
     """
 
-    def __init__(self, A: Array, b: Array, c: float):  # noqa: N803
-        self.A: NDArray[float64] = iop.to_numpy(A)
-        self.b: NDArray[float64] = iop.to_numpy(b)
+    def __init__(
+        self,
+        c: float,
+        A: Array | None = None,  # noqa: N803
+        b: Array | None = None,
+        dataset: DatasetPartition | None = None,
+    ):
+        if dataset is None and (A is None or b is None):
+            raise ValueError("Either dataset or both A and b must be provided")
+
+        if dataset is not None and (A is not None or b is not None):
+            raise ValueError("Either dataset or both A and b must be provided, not both")
+
+        if dataset is not None:
+            self.A: NDArray[float64] = iop.to_numpy(iop.stack([x for x, _ in dataset]))
+            self.b: NDArray[float64] = iop.to_numpy(iop.stack([y for _, y in dataset])).squeeze()
+        elif A is not None and b is not None:
+            self.A = iop.to_numpy(A)
+            self.b = iop.to_numpy(b)
 
         if self.A.ndim != 2:
-            raise ValueError("Matrix A must be 2D")
+            raise ValueError("Matrix A (features) must be 2D")
         if self.A.shape[0] != self.A.shape[1]:
-            raise ValueError("Matrix A must be square")
+            raise ValueError("Matrix A (features) must be square")
         if self.b.ndim != 1:
-            raise ValueError("Vector b must be 1D")
+            raise ValueError("Vector b (targets) must be 1D")
         if self.A.shape[0] != self.b.shape[0]:
-            raise ValueError(f"Dimension mismatch: A has shape {self.A.shape} but b has length {self.b.shape[0]}")
+            raise ValueError(
+                f"Dimension mismatch: A (features) has shape {self.A.shape}"
+                f" but b (targets) has length {self.b.shape[0]}"
+            )
 
         self.A_sym = 0.5 * (self.A + self.A.T)
         self.c = c
@@ -149,9 +169,9 @@ class QuadraticCost(Cost):
             raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
         if isinstance(other, QuadraticCost):
             return QuadraticCost(
-                iop.to_array(self.A + other.A, self.framework, self.device),
-                iop.to_array(self.b + other.b, self.framework, self.device),
-                self.c + other.c,
+                A=iop.to_array(self.A + other.A, self.framework, self.device),
+                b=iop.to_array(self.b + other.b, self.framework, self.device),
+                c=self.c + other.c,
             )
 
         return SumCost([self, other])

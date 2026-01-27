@@ -10,6 +10,7 @@ import decent_bench.centralized_algorithms as ca
 from decent_bench.costs import Cost
 from decent_bench.costs._empirical_risk import LinearRegressionCost, LogisticRegressionCost
 from decent_bench.datasets import SyntheticClassificationData
+from decent_bench.datasets._dataset import DatasetPartition
 from decent_bench.schemes import (
     AgentActivationScheme,
     AlwaysActive,
@@ -47,6 +48,7 @@ class BenchmarkProblem:
         message_compression: message compression setting
         message_noise: message noise setting
         message_drop: message drops setting
+        test_data: optional test data partition for evaluating generalization performance
 
     """
 
@@ -58,6 +60,7 @@ class BenchmarkProblem:
     message_compression: CompressionScheme
     message_noise: NoiseScheme
     message_drop: DropScheme
+    test_data: DatasetPartition | None = None
 
 
 def create_regression_problem(
@@ -95,7 +98,7 @@ def create_regression_problem(
         device=SupportedDevices.CPU,
         seed=0,
     )
-    costs = [cost_cls(*p) for p in dataset.training_partitions()]
+    costs = [cost_cls(p) for p in dataset.training_partitions()]
     sum_cost = reduce(add, costs)
     x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
     agent_activations = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
