@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-import kagglehub  # type: ignore[import-untyped]
-import pandas as pd
+try:
+    import kagglehub  # type: ignore[import-untyped]
+    import pandas as pd
+
+    KAGGLE_AVAILABLE = True
+except ImportError:
+    KAGGLE_AVAILABLE = False
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
@@ -39,12 +44,20 @@ class KaggleDataset(Dataset):
             samples_per_partition: Number of samples per partition
             seed: Random seed for shuffling the dataset
 
+        Raises:
+            ImportError: If kagglehub or pandas is not installed
+
         Note:
             If you need to authenticate with Kaggle, ensure that your Kaggle API credentials
             are set up correctly. Easiest solution is to set your api token in the environment variable
             ``KAGGLE_API_TOKEN``. Refer to https://www.kaggle.com/docs/api for more information.
 
         """
+        if not KAGGLE_AVAILABLE:
+            raise ImportError(
+                "kagglehub and pandas are required to use KaggleDataset. "
+                "Install them with: pip install kagglehub pandas"
+            )
         self.kaggle_handle = kaggle_handle
         self.path = path
         self.feature_columns = feature_columns
@@ -60,7 +73,7 @@ class KaggleDataset(Dataset):
         if self.res is not None:
             return self.res
 
-        df: pd.DataFrame = kagglehub.dataset_load(kagglehub.KaggleDatasetAdapter.PANDAS, self.kaggle_handle, self.path)
+        df: pd.DataFrame = kagglehub.dataset_load(kagglehub.KaggleDatasetAdapter.PANDAS, self.kaggle_handle, self.path)  # pyright: ignore[reportPossiblyUnboundVariable]
         self.res = self._random_split(df)
         return self.res
 

@@ -3,20 +3,27 @@ from __future__ import annotations
 import random
 from collections import defaultdict
 from collections.abc import Sequence
-from typing import Any, cast
-
-from torch import Generator
-from torch.utils.data import Dataset as TorchDataset
-from torch.utils.data import Subset as TorchSubset
-from torch.utils.data import random_split as torch_random_split
+from typing import TYPE_CHECKING, Any, cast
 
 from ._dataset import Dataset, DatasetPartition
+
+if TYPE_CHECKING:
+    import torch
+
+try:
+    from torch import Generator
+    from torch.utils.data import Subset as TorchSubset
+    from torch.utils.data import random_split as torch_random_split
+
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
 
 
 class PyTorchWrapper(Dataset):
     def __init__(
         self,
-        torch_dataset: TorchDataset[Any],
+        torch_dataset: torch.utils.data.Dataset[Any],
         features: int,
         targets: int,
         partitions: int,
@@ -44,6 +51,7 @@ class PyTorchWrapper(Dataset):
             seed: Random seed for shuffling the dataset
 
         Raises:
+            ImportError: If PyTorch is not installed
             ValueError: If heterogeneity is True and partitions * targets_per_partition > targets
 
         Note:
@@ -53,6 +61,8 @@ class PyTorchWrapper(Dataset):
             and the self.targets attribute will be updated accordingly.
 
         """
+        if not TORCH_AVAILABLE:
+            raise ImportError("PyTorch is required to use PyTorchWrapper. Install it with: pip install torch")
         self.torch_dataset = torch_dataset
         self.targets = targets
         self.features = features
@@ -95,11 +105,11 @@ class PyTorchWrapper(Dataset):
 
         generator = None
         if self.seed is not None:
-            generator = Generator().manual_seed(self.seed)
+            generator = Generator().manual_seed(self.seed)  # pyright: ignore[reportPossiblyUnboundVariable]
 
         partitions = cast(
             "Sequence[DatasetPartition]",
-            torch_random_split(self.torch_dataset, parts, generator=generator),
+            torch_random_split(self.torch_dataset, parts, generator=generator),  # pyright: ignore[reportPossiblyUnboundVariable]
         )
 
         return partitions[: self.partitions]
@@ -138,6 +148,6 @@ class PyTorchWrapper(Dataset):
             if self.samples_per_partition is not None:
                 indices = indices[: self.samples_per_partition]
 
-            partitions.append(TorchSubset(self.torch_dataset, indices))
+            partitions.append(TorchSubset(self.torch_dataset, indices))  # pyright: ignore[reportPossiblyUnboundVariable]
 
         return cast("Sequence[DatasetPartition]", partitions)
