@@ -56,9 +56,9 @@ class LinearRegressionCost(EmpiricalRiskCost):
 
         """
         if len(iop.shape(dataset[0][0])) != 1:
-            raise ValueError("Dataset features must be vectors")
-        if not isinstance(iop.to_numpy(dataset[0][1]), np.number):
-            raise TypeError("Dataset targets must be a singular number")
+            raise ValueError(f"Dataset features must be vectors, got: {dataset[0][0]}")
+        if iop.to_numpy(dataset[0][1]).shape != ():
+            raise TypeError(f"Dataset targets must be a singular number, got: {dataset[0][1]}")
         if isinstance(batch_size, int) and (batch_size <= 0 or batch_size > len(dataset)):
             raise ValueError(
                 f"Batch size must be positive and at most the number of samples, "

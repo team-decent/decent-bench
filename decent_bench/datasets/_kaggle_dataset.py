@@ -85,19 +85,3 @@ class KaggleDataset(Dataset):
             partitions.append(partition)
 
         return partitions
-
-
-if __name__ == "__main__":
-    kaggle_link = "endofnight17j03/iris-classification"
-    dataset = KaggleDataset(
-        kaggle_handle=kaggle_link,
-        path="IRIS.csv",
-        feature_columns=["sepal_length", "sepal_width", "petal_length", "petal_width"],
-        target_columns=["species"],
-        partitions=3,
-        samples_per_partition=30,
-        seed=42,
-    )
-    print(len(dataset.training_partitions()))
-    for p in dataset.training_partitions():
-        print(len(p))

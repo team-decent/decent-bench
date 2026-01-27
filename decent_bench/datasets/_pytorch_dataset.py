@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from collections import defaultdict
 import random
+from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, cast
 
 from torch import Generator
-from torch import Tensor as TorchTensor
 from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import Subset as TorchSubset
 from torch.utils.data import random_split as torch_random_split
@@ -76,7 +75,7 @@ class PyTorchWrapper(Dataset):
                 raise ValueError(
                     "samples_per_partition must be set if the dataset length is not known, len() not implemented."
                 )
-            self.dataset_len = len(self.torch_dataset)
+            self.dataset_len = len(self.torch_dataset)  # pyright: ignore[reportArgumentType]
             self.samples_per_partition = self.dataset_len // self.partitions
 
     def training_partitions(self) -> Sequence[DatasetPartition]:
