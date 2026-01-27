@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import random
 from collections import defaultdict
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, cast
 
 from ._dataset import Dataset, DatasetPartition
@@ -88,13 +87,13 @@ class PyTorchWrapper(Dataset):
             self.dataset_len = len(self.torch_dataset)  # pyright: ignore[reportArgumentType]
             self.samples_per_partition = self.dataset_len // self.partitions
 
-    def training_partitions(self) -> Sequence[DatasetPartition]:
+    def training_partitions(self) -> list[DatasetPartition]:
         if self.heterogeneity:
             return self._heterogeneous_split()
 
         return self._random_split()
 
-    def _random_split(self) -> Sequence[DatasetPartition]:
+    def _random_split(self) -> list[DatasetPartition]:
         if self.samples_per_partition is None:
             parts = [1 / self.partitions] * self.partitions
         else:
@@ -108,13 +107,13 @@ class PyTorchWrapper(Dataset):
             generator = Generator().manual_seed(self.seed)  # pyright: ignore[reportPossiblyUnboundVariable]
 
         partitions = cast(
-            "Sequence[DatasetPartition]",
+            "list[DatasetPartition]",
             torch_random_split(self.torch_dataset, parts, generator=generator),  # pyright: ignore[reportPossiblyUnboundVariable]
         )
 
         return partitions[: self.partitions]
 
-    def _heterogeneous_split(self) -> Sequence[DatasetPartition]:
+    def _heterogeneous_split(self) -> list[DatasetPartition]:
         """
         Split dataset so each partition contains unique classes.
 
@@ -150,4 +149,4 @@ class PyTorchWrapper(Dataset):
 
             partitions.append(TorchSubset(self.torch_dataset, indices))  # pyright: ignore[reportPossiblyUnboundVariable]
 
-        return cast("Sequence[DatasetPartition]", partitions)
+        return cast("list[DatasetPartition]", partitions)

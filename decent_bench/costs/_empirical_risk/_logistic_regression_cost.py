@@ -79,13 +79,12 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         if isinstance(batch_size, str) and batch_size != "all":
             raise ValueError(f"Invalid batch size string. Supported value is 'all', got {batch_size}.")
 
-        class_labels = {y for _, y in dataset}
+        class_labels = {iop.to_numpy(y).item() for _, y in dataset}
         if len(class_labels) != 2:
             raise ValueError("Dataset must contain exactly two classes")
 
         self.dataset = dataset
         self._label_mapping = dict(enumerate(class_labels))
-        self._inv_label_mapping = {v: k for k, v in self._label_mapping.items()}
         self._batch_size = self.n_samples if batch_size == "all" else batch_size
         # Cache data matrices for efficiency when using full dataset
         self.A: NDArray[float64] | None = None
@@ -279,6 +278,8 @@ class LogisticRegressionCost(EmpiricalRiskCost):
             if self.A is None or self.b is None:
                 self.A = np.stack([iop.to_numpy(x) for x, _ in self.dataset])
                 self.b = np.stack([iop.to_numpy(y) for _, y in self.dataset]).squeeze()
+                for k in self._label_mapping:
+                    self.b[np.where(self.b == self._label_mapping[k])] = k
             return self.A, self.b
 
         A_list, b_list = [], []  # noqa: N806
@@ -288,6 +289,8 @@ class LogisticRegressionCost(EmpiricalRiskCost):
             b_list.append(iop.to_numpy(y_i))
         A = np.stack(A_list)  # noqa: N806
         b = np.stack(b_list).squeeze()
+        for k in self._label_mapping:
+            b[np.where(b == self._label_mapping[k])] = k
         return A, b
 
     def __add__(self, other: Cost) -> Cost:
