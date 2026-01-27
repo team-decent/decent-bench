@@ -90,7 +90,6 @@ def setup(app):
 
 html_theme = "pydata_sphinx_theme"
 html_theme_options = {
-    "search_as_you_type": True,
     "logo": {
         "text": project,
     },

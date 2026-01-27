@@ -746,8 +746,8 @@ class ADMM(Algorithm):
     and :math:`\alpha \in (0, 1)` is the relaxation parameter.
 
     Note:
-        ``z0`` is of shape :attr:`agent.cost.shape <decent_bench.costs.Cost.shape>` which is then stacked for all agents
-        to form ``z`` of shape ``(num_agents, *agent.cost.shape)``.
+        ``z0`` is of shape :attr:`agent.cost.shape <decent_bench.costs.Cost.shape>` which is then stacked for all
+        agents to form ``z`` of shape ``(num_agents, *agent.cost.shape)``.
 
     """
 
