@@ -118,9 +118,8 @@ class KaggleDataset(Dataset):
         Each partition is sampled uniformly at random from the dataset without replacement.
 
         Returns:
-            Sequence of DatasetPartition objects, where each partition is a list of
-            (features, target) tuples. The number of partitions typically corresponds
-            to the number of agents in the network.
+            Sequence[DatasetPartition]: Sequence of DatasetPartition objects, where each partition is a list of
+            (features, targets) tuples.
 
         """
         if self._partitions is None:

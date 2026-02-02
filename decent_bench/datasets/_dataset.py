@@ -12,8 +12,8 @@ class Dataset(ABC):
 
     This class provides an interface for accessing datasets in a partitioned format
     for distributed optimization scenarios. Rather than storing the data directly,
-    Dataset implementations act as wrappers that return data in the required format
-    when queried.
+    :class:`Dataset` implementations act as wrappers that return data in the required
+    format when queried.
 
     In distributed optimization, the dataset is typically divided among multiple
     agents in a network, where each agent has access to only a subset (partition)
@@ -25,11 +25,11 @@ class Dataset(ABC):
     - Define the overall optimization problem (e.g., empirical risk minimization)
     - Serve as a test set for evaluating distributed algorithms on the full dataset
       (e.g. via :meth:`get_datapoints`) by assigning a :class:`~decent_bench.utils.types.DatasetPartition`
-      to the test data of the benchmark problem.
+      to the test data of the :class:`~decent_bench.benchmark_problem.BenchmarkProblem`.
 
     Data Structure:
         The dataset consists of datapoints, where each datapoint is a tuple of
-        (features, target). Features and targets are represented as Array objects or
+        (features, targets). Features and targets are represented as Array objects or
         framework-specific tensor objects in special cases. Partitions are sequences
         of such datapoints, allowing users to easily distribute local datasets among
         agents.
@@ -62,7 +62,7 @@ class Dataset(ABC):
 
     @abstractmethod
     def get_datapoints(self) -> DatasetPartition:
-        """All datapoints in the dataset."""
+        """Return all datapoints in the dataset."""
 
     @abstractmethod
     def get_partitions(self) -> Sequence[DatasetPartition]:
@@ -74,9 +74,8 @@ class Dataset(ABC):
         the network.
 
         Returns:
-            Sequence of DatasetPartition objects, where each partition is a list of
-            (features, target) tuples. The number of partitions typically corresponds
-            to the number of agents in the network.
+            Sequence[DatasetPartition]: Sequence of DatasetPartition objects, where each partition is a list of
+            (features, targets) tuples.
 
         """
 

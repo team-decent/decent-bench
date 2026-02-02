@@ -123,9 +123,8 @@ class PyTorchDataset(Dataset):
         min(samples_per_partition, number of available datapoints for the selected classes).
 
         Returns:
-            Sequence of DatasetPartition objects, where each partition is a list of
-            (features, target) tuples. The number of partitions typically corresponds
-            to the number of agents in the network.
+            Sequence[DatasetPartition]: Sequence of DatasetPartition objects, where each partition is a list of
+            (features, targets) tuples.
 
         """
         if self._partitions is None:
