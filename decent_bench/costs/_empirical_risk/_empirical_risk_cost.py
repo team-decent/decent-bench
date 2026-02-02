@@ -8,7 +8,7 @@ import numpy as np
 
 from decent_bench.costs._base._cost import Cost
 from decent_bench.utils.array import Array
-from decent_bench.utils.types import EmpiricalRiskIndices
+from decent_bench.utils.types import DatasetPartition, EmpiricalRiskIndices
 
 
 class EmpiricalRiskCost(Cost, ABC):
@@ -16,7 +16,9 @@ class EmpiricalRiskCost(Cost, ABC):
     Base class for empirical risk cost functions.
 
     This class provides an interface for implementing various empirical risk minimization
-    problems, supporting both full-batch and mini-batch computations.
+    problems, supporting both full-batch and mini-batch computations. This cost function class
+    is designed to work with :class:`~decent_bench.utils.types.DatasetPartition` where each
+    datapoint is a tuple of (features, target) or (features, None) for unsupervised learning.
 
     Mathematical Definition
     -----------------------
@@ -62,6 +64,11 @@ class EmpiricalRiskCost(Cost, ABC):
         if not hasattr(self, "_last_batch_used"):
             raise ValueError("No batch has been used yet.")
         return self._last_batch_used
+
+    @property
+    @abstractmethod
+    def dataset(self) -> DatasetPartition:
+        """Dataset used in the empirical risk cost."""
 
     @cached_property
     def _rand(self) -> np.random.Generator:

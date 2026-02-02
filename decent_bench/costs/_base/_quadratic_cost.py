@@ -9,7 +9,6 @@ from numpy.typing import NDArray
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
-from decent_bench.datasets import DatasetPartition
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
@@ -23,23 +22,12 @@ class QuadraticCost(Cost):
 
     def __init__(
         self,
+        A: Array,  # noqa: N803
+        b: Array,
         c: float,
-        A: Array | None = None,  # noqa: N803
-        b: Array | None = None,
-        dataset: DatasetPartition | None = None,
     ):
-        if dataset is None and (A is None or b is None):
-            raise ValueError("Either dataset or both A and b must be provided")
-
-        if dataset is not None and (A is not None or b is not None):
-            raise ValueError("Either dataset or both A and b must be provided, not both")
-
-        if dataset is not None:
-            self.A: NDArray[float64] = iop.to_numpy(iop.stack([x for x, _ in dataset]))
-            self.b: NDArray[float64] = iop.to_numpy(iop.stack([y for _, y in dataset])).squeeze()
-        elif A is not None and b is not None:
-            self.A = iop.to_numpy(A)
-            self.b = iop.to_numpy(b)
+        self.A: NDArray[float64] = iop.to_numpy(A)
+        self.b: NDArray[float64] = iop.to_numpy(b)
 
         if self.A.ndim != 2:
             raise ValueError("Matrix A (features) must be 2D")

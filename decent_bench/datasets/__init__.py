@@ -1,12 +1,11 @@
-from ._dataset import Dataset, DatasetPartition
+from ._dataset import Dataset
 from ._kaggle_dataset import KaggleDataset
-from ._pytorch_dataset import PyTorchWrapper
+from ._pytorch_dataset import PyTorchDataset
 from ._synthetic_classification import SyntheticClassificationData
 
 __all__ = [
     "Dataset",
-    "DatasetPartition",
     "KaggleDataset",
-    "PyTorchWrapper",
+    "PyTorchDataset",
     "SyntheticClassificationData",
 ]

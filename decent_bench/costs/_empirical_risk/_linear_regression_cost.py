@@ -11,8 +11,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
 from decent_bench.costs._empirical_risk._empirical_risk_cost import EmpiricalRiskCost
-from decent_bench.datasets import DatasetPartition
-from decent_bench.utils.types import EmpiricalRiskIndices, SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import DatasetPartition, EmpiricalRiskIndices, SupportedDevices, SupportedFrameworks
 
 
 class LinearRegressionCost(EmpiricalRiskCost):
@@ -47,18 +46,20 @@ class LinearRegressionCost(EmpiricalRiskCost):
         Initialize a LinearRegressionCost instance.
 
         Args:
-            dataset (DatasetPartition): Dataset partition containing features and targets.
+            dataset (DatasetPartition): Dataset partition containing features and targets. The expected shapes are:
+                - Features: (n_features,)
+                - Targets: scalars
             batch_size (int | Literal["all"]): Size of mini-batches for stochastic methods, or "all" for full-batch.
 
         Raises:
             ValueError: If input dimensions are inconsistent or batch_size is invalid.
-            TypeError: If dataset targets are not singular numbers.
+            TypeError: If dataset targets are not singular scalars.
 
         """
         if len(iop.shape(dataset[0][0])) != 1:
             raise ValueError(f"Dataset features must be vectors, got: {dataset[0][0]}")
         if iop.to_numpy(dataset[0][1]).shape != ():
-            raise TypeError(f"Dataset targets must be a singular number, got: {dataset[0][1]}")
+            raise TypeError(f"Dataset targets must be a singular scalar, got: {dataset[0][1]}")
         if isinstance(batch_size, int) and (batch_size <= 0 or batch_size > len(dataset)):
             raise ValueError(
                 f"Batch size must be positive and at most the number of samples, "
@@ -67,7 +68,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
         if isinstance(batch_size, str) and batch_size != "all":
             raise ValueError(f"Invalid batch size string. Supported value is 'all', got {batch_size}.")
 
-        self.dataset = dataset
+        self._dataset = dataset
         self._batch_size = self.n_samples if batch_size == "all" else batch_size
         # Cache data matrices for efficiency when using full dataset
         self.A: NDArray[float64] | None = None
@@ -76,7 +77,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return iop.shape(self.dataset[0][0])
+        return iop.shape(self._dataset[0][0])
 
     @property
     def framework(self) -> SupportedFrameworks:
@@ -88,11 +89,15 @@ class LinearRegressionCost(EmpiricalRiskCost):
 
     @property
     def n_samples(self) -> int:
-        return len(self.dataset)
+        return len(self._dataset)
 
     @property
     def batch_size(self) -> int:
         return self._batch_size
+
+    @property
+    def dataset(self) -> DatasetPartition:
+        return self._dataset
 
     @cached_property
     def m_smooth(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -266,14 +271,14 @@ class LinearRegressionCost(EmpiricalRiskCost):
 
         if len(indices) == self.n_samples:
             if self.A is None or self.b is None or self.ATA is None:
-                self.A = np.stack([iop.to_numpy(x) for x, _ in self.dataset])
-                self.b = np.stack([iop.to_numpy(y) for _, y in self.dataset]).squeeze()
+                self.A = np.stack([iop.to_numpy(x) for x, _ in self._dataset])
+                self.b = np.stack([iop.to_numpy(y) for _, y in self._dataset]).squeeze()
                 self.ATA = self.A.T @ self.A
             return self.A, self.ATA, self.b
 
         A_list, b_list = [], []  # noqa: N806
         for idx in indices:
-            x_i, y_i = self.dataset[idx]
+            x_i, y_i = self._dataset[idx]
             A_list.append(iop.to_numpy(x_i))
             b_list.append(iop.to_numpy(y_i))
         A = np.stack(A_list)  # noqa: N806

@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     import tensorflow as tf
     import torch
 
+    from decent_bench.utils.array import Array
+
 ArrayLike: TypeAlias = Union["numpy.ndarray", "torch.Tensor", "tf.Tensor", "jax.Array"]  # noqa: UP040
 """
 Type alias for array-like types supported in decent-bench, including NumPy arrays,
@@ -35,6 +37,12 @@ Type alias for specifying indices in empirical risk computations.
 Can be a list of integers, the string "all" for full dataset, the string "batch" for a mini-batch,
 or an integer specifying a single datapoint.
 """
+
+type Datapoint = tuple["Array", "Array"]  # noqa: TC008
+"""Tuple of (x, y) representing one datapoint where x are features and y is the target."""
+
+type DatasetPartition = list[Datapoint]
+"""List of datapoints representing one dataset partition."""
 
 
 class SupportedFrameworks(Enum):

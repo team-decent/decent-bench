@@ -1,7 +1,7 @@
 [project]
 name = "decent-bench"
 version = "0.2.2"
-authors = [{name = "Elias Ram"}, {name = "Nicola Bastianello"}]
+authors = [{name = "Elias Ram"}, {name = "Simon Granström"}, {name = "Adriana Rodriguez"}, {name = "Nicola Bastianello"}]
 maintainers = [{name = "Team Decent"}]
 description = "A benchmarking framework for decentralized optimization"
 readme = "README.md"

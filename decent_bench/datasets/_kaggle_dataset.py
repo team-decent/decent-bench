@@ -11,9 +11,9 @@ except ImportError:
     KAGGLE_AVAILABLE = False
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import DatasetPartition, SupportedDevices, SupportedFrameworks
 
-from ._dataset import Dataset, DatasetPartition
+from ._dataset import Dataset
 
 
 class KaggleDataset(Dataset):
@@ -23,7 +23,7 @@ class KaggleDataset(Dataset):
         path: str,
         feature_columns: list[str],
         target_columns: list[str],
-        partitions: int,
+        n_partitions: int,
         *,
         framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
         device: SupportedDevices = SupportedDevices.CPU,
@@ -34,11 +34,11 @@ class KaggleDataset(Dataset):
         Dataset wrapper for Kaggle datasets.
 
         Args:
-            kaggle_handle: Kaggle dataset handle, e.g. "endofnight17j03/iris-classification"
+            kaggle_handle: Kaggle dataset handle, e.g. "user_name/dataset_name"
             path: Path to the dataset file within the Kaggle dataset
             feature_columns: List of feature column names
             target_columns: List of target column names
-            partitions: Number of partitions to split the dataset into
+            n_partitions: Number of partitions to split the dataset into
             framework: Framework to use for data representation
             device: Device to use for data representation
             samples_per_partition: Number of samples per partition
@@ -46,6 +46,8 @@ class KaggleDataset(Dataset):
 
         Raises:
             ImportError: If kagglehub or pandas is not installed
+            RuntimeError: If the dataset fails to load from Kaggle
+            ValueError: If there are not enough samples to create the requested partitions
 
         Note:
             If you need to authenticate with Kaggle, ensure that your Kaggle API credentials
@@ -62,39 +64,89 @@ class KaggleDataset(Dataset):
         self.path = path
         self.feature_columns = feature_columns
         self.target_columns = target_columns
-        self.partitions = partitions
+        self._n_partitions = n_partitions
         self.framework = framework
         self.device = device
-        self.samples_per_partition = samples_per_partition
         self.seed = seed
-        self.res: Sequence[DatasetPartition] | None = None
+        self._partitions: Sequence[DatasetPartition] | None = None
 
-    def training_partitions(self) -> Sequence[DatasetPartition]:
-        if self.res is not None:
-            return self.res
+        self._df: pd.DataFrame = kagglehub.dataset_load(  # pyright: ignore[reportPossiblyUnboundVariable]
+            kagglehub.KaggleDatasetAdapter.PANDAS,  # pyright: ignore[reportPossiblyUnboundVariable]
+            self.kaggle_handle,
+            self.path,
+        )
+        if self._df is None:
+            raise RuntimeError(f"Failed to load dataset from Kaggle handle: {self.kaggle_handle}, path: {self.path}")
 
-        df: pd.DataFrame = kagglehub.dataset_load(kagglehub.KaggleDatasetAdapter.PANDAS, self.kaggle_handle, self.path)  # pyright: ignore[reportPossiblyUnboundVariable]
-        self.res = self._random_split(df)
-        return self.res
+        self.samples_per_partition = (
+            len(self._df) // self.n_partitions if samples_per_partition is None else samples_per_partition
+        )
+        if self.samples_per_partition * self.n_partitions > len(self._df):
+            raise ValueError(
+                f"Not enough samples in dataset ({len(self._df)}) to create "
+                f"{self.n_partitions} partitions with {self.samples_per_partition} "
+                f"samples each ({self.samples_per_partition * self.n_partitions} total)."
+            )
+
+    @property
+    def n_samples(self) -> int:
+        return len(self._df)
+
+    @property
+    def n_partitions(self) -> int:
+        return self._n_partitions
+
+    @property
+    def n_features(self) -> int:
+        return len(self.feature_columns)
+
+    @property
+    def n_targets(self) -> int:
+        return len(self.target_columns)
+
+    def get_datapoints(self) -> DatasetPartition:
+        return self._create_partition(self._df)
+
+    def get_partitions(self) -> Sequence[DatasetPartition]:
+        """
+        Return the dataset divided into partitions for distribution among agents.
+
+        This method provides the core partitioning functionality for distributed
+        optimization. Each partition represents the local dataset of an agent in
+        the network.
+
+        Each partition is sampled uniformly at random from the dataset without replacement.
+
+        Returns:
+            Sequence of DatasetPartition objects, where each partition is a list of
+            (features, target) tuples. The number of partitions typically corresponds
+            to the number of agents in the network.
+
+        """
+        if self._partitions is None:
+            self._partitions = self._random_split(self._df)
+        return self._partitions
 
     def _random_split(self, df: pd.DataFrame) -> Sequence[DatasetPartition]:
-        if self.samples_per_partition is None:
-            self.samples_per_partition = len(df) // self.partitions
-
         # Shuffle the dataframe
-        df = df.sample(frac=1, random_state=self.seed).reset_index(drop=True)
+        df = df.sample(frac=1, random_state=self.seed, replace=False).reset_index(drop=True)
 
         partitions: list[DatasetPartition] = []
-        for i in range(self.partitions):
+        for i in range(self.n_partitions):
             start_idx = i * self.samples_per_partition
             end_idx = start_idx + self.samples_per_partition
             partition_df = df.iloc[start_idx:end_idx]
-
-            partition = []
-            for _, row in partition_df.iterrows():
-                x = iop.to_array(row[self.feature_columns].to_numpy(), framework=self.framework, device=self.device)
-                y = iop.to_array(row[self.target_columns].to_numpy(), framework=self.framework, device=self.device)
-                partition.append((x, y))
-            partitions.append(partition)
+            partitions.append(self._create_partition(partition_df))
 
         return partitions
+
+    def _create_partition(self, df_partition: pd.DataFrame) -> DatasetPartition:
+        partition: DatasetPartition = []
+        for _, row in df_partition.iterrows():
+            x = iop.to_array(row[self.feature_columns].to_numpy(), framework=self.framework, device=self.device)
+            y = iop.to_array(row[self.target_columns].to_numpy(), framework=self.framework, device=self.device)
+            partition.append((x, y))
+        return partition
+
+    def __len__(self) -> int:
+        return self.n_samples

@@ -4,7 +4,10 @@ import random
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, cast
 
-from ._dataset import Dataset, DatasetPartition
+from decent_bench.utils.logger import LOGGER
+from decent_bench.utils.types import DatasetPartition
+
+from ._dataset import Dataset
 
 if TYPE_CHECKING:
     import torch
@@ -19,13 +22,13 @@ except ImportError:
     TORCH_AVAILABLE = False
 
 
-class PyTorchWrapper(Dataset):
+class PyTorchDataset(Dataset):
     def __init__(
         self,
         torch_dataset: torch.utils.data.Dataset[Any],
-        features: int,
-        targets: int,
-        partitions: int,
+        n_features: int,
+        n_targets: int,
+        n_partitions: int,
         *,
         samples_per_partition: int | None = None,
         heterogeneity: bool = False,
@@ -35,15 +38,17 @@ class PyTorchWrapper(Dataset):
         """
         Dataset wrapper for PyTorch datasets which represents datapoints as tuples (features, targets).
 
-        This class can create either random partitions or heterogeneous partitions where each partition
-        contains unique classes. This class will preserve the properties of the underlying PyTorch dataset
-        such as transforms and lazy-loading.
+        This class will preserve the properties of the underlying PyTorch dataset
+        such as transforms and lazy-loading. This class can create either random partitions where
+        each partition is drawn uniformly at random from the dataset without replacement (heterogeneity=False),
+        or heterogeneous partitions (heterogeneity=True) where each partition contains unique classes.
+        Heterogeneity only works for datasets where the targets are categorical.
 
         Args:
             torch_dataset: PyTorch dataset to wrap
-            features: Number of feature dimensions
-            targets: Number of target dimensions
-            partitions: Number of partitions to split the dataset into
+            n_features: Number of feature dimensions
+            n_targets: Number of target dimensions
+            n_partitions: Number of partitions to split the dataset into
             samples_per_partition: Number of samples per partition, if None, will split evenly
             heterogeneity: Whether to create heterogeneous partitions with unique classes
             targets_per_partition: Number of unique classes per partition (only if heterogeneity is True)
@@ -51,56 +56,99 @@ class PyTorchWrapper(Dataset):
 
         Raises:
             ImportError: If PyTorch is not installed
-            ValueError: If heterogeneity is True and partitions * targets_per_partition > targets
+            ValueError: If heterogeneity is True and n_partitions * targets_per_partition > n_targets
 
         Note:
             If heterogeneity is True, each partition will contain unique classes.
-            Ensure that partitions * targets_per_partition <= targets. Be aware that
-            this may lead to some classes being unused if the condition is not tight
-            and the self.targets attribute will be updated accordingly.
+            Ensure that n_partitions * targets_per_partition <= n_targets. Be aware that
+            this may lead to some classes being unused if the condition is not tight,
+            the :meth:`n_targets` attribute will be updated accordingly.
+
+            If the underlying PyTorch dataset has not implemented __len__, set samples_per_partition
+            to specify the number of samples per partition or set heterogeneity to True. Otherwise,
+            the length of the dataset cannot be determined and an error will be raised.
 
         """
         if not TORCH_AVAILABLE:
             raise ImportError("PyTorch is required to use PyTorchWrapper. Install it with: pip install torch")
         self.torch_dataset = torch_dataset
-        self.targets = targets
-        self.features = features
-        self.partitions = partitions
+        self._n_targets = n_targets
+        self._n_features = n_features
+        self._n_partitions = n_partitions
         self.samples_per_partition = samples_per_partition
         self.heterogeneity = heterogeneity
         self.targets_per_partition = targets_per_partition
         self.seed = seed
+        self._partitions: list[DatasetPartition] | None = None
 
         if self.heterogeneity:
-            if (self.partitions * self.targets_per_partition) > self.targets:
+            if (self.n_partitions * self.targets_per_partition) > self.n_targets:
                 raise ValueError(
-                    f"Number of partitions ({self.partitions}) * targets per partition ({self.targets_per_partition})"
-                    f" must be <= targets ({self.targets})"
+                    f"n_partitions ({self.n_partitions}) * n_targets per partition ({self.targets_per_partition})"
+                    f" must be <= n_targets ({self.n_targets})"
                 )
             # Set the new number of used targets
-            self.targets = self.partitions * self.targets_per_partition
-        elif self.samples_per_partition is None:
-            if not hasattr(self.torch_dataset, "__len__"):
-                raise ValueError(
-                    "samples_per_partition must be set if the dataset length is not known, len() not implemented."
-                )
-            self.dataset_len = len(self.torch_dataset)  # pyright: ignore[reportArgumentType]
-            self.samples_per_partition = self.dataset_len // self.partitions
+            self._n_targets = self.n_partitions * self.targets_per_partition
 
-    def training_partitions(self) -> list[DatasetPartition]:
-        if self.heterogeneity:
-            return self._heterogeneous_split()
+    @property
+    def n_samples(self) -> int:
+        return len(self.torch_dataset)  # type: ignore[arg-type]
 
-        return self._random_split()
+    @property
+    def n_partitions(self) -> int:
+        return self._n_partitions
+
+    @property
+    def n_features(self) -> int:
+        return self._n_features
+
+    @property
+    def n_targets(self) -> int:
+        return self._n_targets
+
+    def get_datapoints(self) -> DatasetPartition:
+        return cast("DatasetPartition", self.torch_dataset)
+
+    def get_partitions(self) -> list[DatasetPartition]:
+        """
+        Return the dataset divided into partitions for distribution among agents.
+
+        This method provides the core partitioning functionality for distributed
+        optimization. Each partition represents the local dataset of an agent in
+        the network.
+
+        Each partition is sampled uniformly at random from the dataset without replacement
+        if heterogeneity is False, otherwise each partition contains unique classes (targets_per_partition)
+        with number of datapoints per partition equal to
+        min(samples_per_partition, number of available datapoints for the selected classes).
+
+        Returns:
+            Sequence of DatasetPartition objects, where each partition is a list of
+            (features, target) tuples. The number of partitions typically corresponds
+            to the number of agents in the network.
+
+        """
+        if self._partitions is None:
+            if self.heterogeneity:
+                self._partitions = self._heterogeneous_split()
+            else:
+                self._partitions = self._random_split()
+
+        return self._partitions
 
     def _random_split(self) -> list[DatasetPartition]:
         if self.samples_per_partition is None:
-            parts = [1 / self.partitions] * self.partitions
-        else:
-            parts = [self.samples_per_partition] * self.partitions
+            parts = [1 / self.n_partitions] * self.n_partitions
+        elif self.samples_per_partition * self.n_partitions <= self.n_samples:
+            parts = [self.samples_per_partition] * self.n_partitions
             # Add the remaining samples to the last partition and remove it
             # to ensure the sum is equal to the total number of samples for random_split
-            parts.append(self.dataset_len - sum(parts))
+            parts.append(self.n_samples - sum(parts))
+        else:
+            raise ValueError(
+                f"samples_per_partition ({self.samples_per_partition}) * n_partitions ({self.n_partitions}) "
+                f"must be <= n_datapoints ({self.n_samples})"
+            )
 
         generator = None
         if self.seed is not None:
@@ -111,7 +159,7 @@ class PyTorchWrapper(Dataset):
             torch_random_split(self.torch_dataset, parts, generator=generator),  # pyright: ignore[reportPossiblyUnboundVariable]
         )
 
-        return partitions[: self.partitions]
+        return partitions[: self.n_partitions]
 
     def _heterogeneous_split(self) -> list[DatasetPartition]:
         """
@@ -122,7 +170,7 @@ class PyTorchWrapper(Dataset):
         # Group indices by class in a single pass
         class_to_indices: dict[int, list[int]] = defaultdict(list)
         for idx, (_, label) in enumerate(self.torch_dataset):  # type: ignore[misc, arg-type]
-            if label in class_to_indices or len(class_to_indices) < (self.partitions * self.targets_per_partition):  # type: ignore[has-type]
+            if label in class_to_indices or len(class_to_indices) < (self.n_partitions * self.targets_per_partition):  # type: ignore[has-type]
                 class_to_indices[label].append(idx)  # type: ignore[has-type]
 
         # Set random seed if specified for reproducibility
@@ -130,7 +178,8 @@ class PyTorchWrapper(Dataset):
             random.seed(self.seed)
 
         # Create partitions from class-grouped indices
-        partitions = []
+        idx_partitions = []
+        min_n_datapoints = int("inf")
         class_idxs = sorted(class_to_indices.keys())
         # Group classes for each partition
         class_idxs_groups = [
@@ -147,6 +196,18 @@ class PyTorchWrapper(Dataset):
             if self.samples_per_partition is not None:
                 indices = indices[: self.samples_per_partition]
 
-            partitions.append(TorchSubset(self.torch_dataset, indices))  # pyright: ignore[reportPossiblyUnboundVariable]
+            min_n_datapoints = min(min_n_datapoints, len(indices))
+            idx_partitions.append(indices)
+
+        if self.samples_per_partition is not None and min_n_datapoints < self.samples_per_partition:
+            LOGGER.warning(
+                f"Warning: Some partitions have less datapoints ({min_n_datapoints}) than "
+                f"samples_per_partition ({self.samples_per_partition}) due to class distribution. "
+                f"All partitions will be truncated to {min_n_datapoints} datapoints."
+            )
+        partitions = [TorchSubset(self.torch_dataset, idx[:min_n_datapoints]) for idx in idx_partitions]  # pyright: ignore[reportPossiblyUnboundVariable]
 
         return cast("list[DatasetPartition]", partitions)
+
+    def __len__(self) -> int:
+        return self.n_samples
