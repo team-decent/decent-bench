@@ -10,7 +10,6 @@ import decent_bench.centralized_algorithms as ca
 from decent_bench.costs import Cost
 from decent_bench.costs._empirical_risk import LinearRegressionCost, LogisticRegressionCost
 from decent_bench.datasets import SyntheticClassificationData
-from decent_bench.datasets._dataset import DatasetPartition
 from decent_bench.schemes import (
     AgentActivationScheme,
     AlwaysActive,
@@ -26,7 +25,7 @@ from decent_bench.schemes import (
     UniformDropRate,
 )
 from decent_bench.utils.array import Array
-from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import DatasetPartition, SupportedDevices, SupportedFrameworks
 
 if TYPE_CHECKING:
     AnyGraph = nx.Graph[Any]
