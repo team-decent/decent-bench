@@ -27,6 +27,7 @@ from ._functions import (
     reshape,
     set_item,
     shape,
+    squeeze,
     stack,
     sum,  # noqa: A004
     to_array,
@@ -73,6 +74,7 @@ __all__ = [  # noqa: RUF022
     "reshape",
     "set_item",
     "shape",
+    "squeeze",
     "stack",
     "sum",
     "to_array",
