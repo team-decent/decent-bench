@@ -41,8 +41,26 @@ or an integer specifying a single datapoint.
 type Datapoint = tuple["Array", "Array"]  # noqa: TC008
 """Tuple of (x, y) representing one datapoint where x are features and y is the target."""
 
-type DatasetPartition = list[Datapoint]
-"""List of datapoints representing one dataset partition."""
+type Dataset = list[Datapoint]
+"""
+List of datapoints, where each datapoint is a tuple of (features, targets).
+
+In decentralized optimization each agent has their own local dataset. This
+type alias represents such datasets. This local dataset can be a subset of a larger
+global dataset or the entire dataset itself. These subsets can be obtained
+by using the :class:`~decent_bench.datasets.DatasetHandler` class, specifically the
+:meth:`~decent_bench.datasets.DatasetHandler.get_partitions` method.
+
+Features and targets are represented as :class:`~decent_bench.utils.array.Array`
+objects or framework-specific tensor objects in special cases. For unsupervised learning,
+targets are usually None.
+
+The expected shapes depend on the specific dataset and cost function requirements,
+but typically it is:
+
+- Features: 1-dimensional vector (n_features,)
+- Targets: 1-dimensional vector (n_targets,), or None for unsupervised learning.
+"""
 
 
 class SupportedFrameworks(Enum):

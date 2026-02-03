@@ -11,7 +11,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
 from decent_bench.costs._empirical_risk._empirical_risk_cost import EmpiricalRiskCost
-from decent_bench.utils.types import DatasetPartition, EmpiricalRiskIndices, SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import Dataset, EmpiricalRiskIndices, SupportedDevices, SupportedFrameworks
 
 
 class LinearRegressionCost(EmpiricalRiskCost):
@@ -41,25 +41,28 @@ class LinearRegressionCost(EmpiricalRiskCost):
     :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
     """
 
-    def __init__(self, dataset: DatasetPartition, batch_size: int | Literal["all"] = "all"):
+    def __init__(self, dataset: Dataset, batch_size: int | Literal["all"] = "all"):
         """
         Initialize a LinearRegressionCost instance.
 
         Args:
-            dataset (DatasetPartition): Dataset partition containing features and targets. The expected shapes are:
+            dataset (Dataset): Dataset containing features and targets. The expected shapes are:
                 - Features: (n_features,)
-                - Targets: scalars
+                - Targets: single dimensional values
             batch_size (int | Literal["all"]): Size of mini-batches for stochastic methods, or "all" for full-batch.
 
         Raises:
             ValueError: If input dimensions are inconsistent or batch_size is invalid.
-            TypeError: If dataset targets are not singular scalars.
+            TypeError: If dataset targets are not single dimensional values.
 
         """
         if len(iop.shape(dataset[0][0])) != 1:
             raise ValueError(f"Dataset features must be vectors, got: {dataset[0][0]}")
         if iop.to_numpy(dataset[0][1]).shape != ():
-            raise TypeError(f"Dataset targets must be a singular scalar, got: {dataset[0][1]}")
+            raise TypeError(
+                f"Dataset targets must be single dimensional values, got: {dataset[0][1]} "
+                f"with shape {iop.to_numpy(dataset[0][1]).shape}, expected shape is ()."
+            )
         if isinstance(batch_size, int) and (batch_size <= 0 or batch_size > len(dataset)):
             raise ValueError(
                 f"Batch size must be positive and at most the number of samples, "
@@ -96,7 +99,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
         return self._batch_size
 
     @property
-    def dataset(self) -> DatasetPartition:
+    def dataset(self) -> Dataset:
         return self._dataset
 
     @cached_property

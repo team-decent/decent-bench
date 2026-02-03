@@ -5,9 +5,9 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Any, cast
 
 from decent_bench.utils.logger import LOGGER
-from decent_bench.utils.types import DatasetPartition
+from decent_bench.utils.types import Dataset
 
-from ._dataset import Dataset
+from ._dataset_handler import DatasetHandler
 
 if TYPE_CHECKING:
     import torch
@@ -22,13 +22,13 @@ except ImportError:
     TORCH_AVAILABLE = False
 
 
-class PyTorchDataset(Dataset):
+class PyTorchDatasetHandler(DatasetHandler):
     def __init__(
         self,
         torch_dataset: torch.utils.data.Dataset[Any],
         n_features: int,
         n_targets: int,
-        n_partitions: int,
+        n_partitions: int = 1,
         *,
         samples_per_partition: int | None = None,
         heterogeneity: bool = False,
@@ -79,7 +79,7 @@ class PyTorchDataset(Dataset):
         self.heterogeneity = heterogeneity
         self.targets_per_partition = targets_per_partition
         self.seed = seed
-        self._partitions: list[DatasetPartition] | None = None
+        self._partitions: list[Dataset] | None = None
 
         if self.heterogeneity:
             if (self.n_partitions * self.targets_per_partition) > self.n_targets:
@@ -106,10 +106,10 @@ class PyTorchDataset(Dataset):
     def n_targets(self) -> int:
         return self._n_targets
 
-    def get_datapoints(self) -> DatasetPartition:
-        return cast("DatasetPartition", self.torch_dataset)
+    def get_datapoints(self) -> Dataset:
+        return cast("Dataset", self.torch_dataset)
 
-    def get_partitions(self) -> list[DatasetPartition]:
+    def get_partitions(self) -> list[Dataset]:
         """
         Return the dataset divided into partitions for distribution among agents.
 
@@ -123,7 +123,7 @@ class PyTorchDataset(Dataset):
         min(samples_per_partition, number of available datapoints for the selected classes).
 
         Returns:
-            Sequence[DatasetPartition]: Sequence of DatasetPartition objects, where each partition is a list of
+            Sequence[Dataset]: Sequence of Dataset objects, where each partition is a list of
             (features, targets) tuples.
 
         """
@@ -135,7 +135,7 @@ class PyTorchDataset(Dataset):
 
         return self._partitions
 
-    def _random_split(self) -> list[DatasetPartition]:
+    def _random_split(self) -> list[Dataset]:
         if self.samples_per_partition is None:
             parts = [1 / self.n_partitions] * self.n_partitions
         elif self.samples_per_partition * self.n_partitions <= self.n_samples:
@@ -154,13 +154,13 @@ class PyTorchDataset(Dataset):
             generator = Generator().manual_seed(self.seed)  # pyright: ignore[reportPossiblyUnboundVariable]
 
         partitions = cast(
-            "list[DatasetPartition]",
+            "list[Dataset]",
             torch_random_split(self.torch_dataset, parts, generator=generator),  # pyright: ignore[reportPossiblyUnboundVariable]
         )
 
         return partitions[: self.n_partitions]
 
-    def _heterogeneous_split(self) -> list[DatasetPartition]:
+    def _heterogeneous_split(self) -> list[Dataset]:
         """
         Split dataset so each partition contains unique classes.
 
@@ -206,7 +206,4 @@ class PyTorchDataset(Dataset):
             )
         partitions = [TorchSubset(self.torch_dataset, idx[:min_n_datapoints]) for idx in idx_partitions]  # pyright: ignore[reportPossiblyUnboundVariable]
 
-        return cast("list[DatasetPartition]", partitions)
-
-    def __len__(self) -> int:
-        return self.n_samples
+        return cast("list[Dataset]", partitions)

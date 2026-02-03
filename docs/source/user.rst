@@ -220,11 +220,11 @@ corresponding abstracts.
     from decent_bench import centralized_algorithms as ca
     from decent_bench.benchmark_problem import BenchmarkProblem
     from decent_bench.costs import Cost
-    from decent_bench.datasets import Dataset
+    from decent_bench.datasets import DatasetHandler
     from decent_bench.distributed_algorithms import DGD, SimpleGT
     from decent_bench.schemes import AgentActivationScheme, CompressionScheme, DropScheme, NoiseScheme
 
-    class MyDataset(Dataset): ...
+    class MyDataset(DatasetHandler): ... # Optional but convienient to manage partitions
 
     class MyCost(Cost): ...
 

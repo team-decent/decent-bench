@@ -1,18 +1,18 @@
 from sklearn import datasets
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.utils.types import DatasetPartition, SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import Dataset, SupportedDevices, SupportedFrameworks
 
-from ._dataset import Dataset
+from ._dataset_handler import DatasetHandler
 
 
-class SyntheticClassificationData(Dataset):
+class SyntheticClassificationDatasetHandler(DatasetHandler):
     def __init__(
         self,
-        n_partitions: int,
         n_targets: int,
         n_features: int,
         n_samples_per_partition: int,
+        n_partitions: int = 1,
         *,
         framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
         device: SupportedDevices = SupportedDevices.CPU,
@@ -39,7 +39,7 @@ class SyntheticClassificationData(Dataset):
         self.framework = framework
         self.device = device
         self.seed = seed
-        self._partitions: list[DatasetPartition] | None = None
+        self._partitions: list[Dataset] | None = None
 
     @property
     def n_samples(self) -> int:
@@ -57,12 +57,12 @@ class SyntheticClassificationData(Dataset):
     def n_targets(self) -> int:
         return self._n_targets
 
-    def get_datapoints(self) -> DatasetPartition:
+    def get_datapoints(self) -> Dataset:
         return [sample for partition in self.get_partitions() for sample in partition]
 
-    def get_partitions(self) -> list[DatasetPartition]:
+    def get_partitions(self) -> list[Dataset]:
         if self._partitions is None:
-            res: list[DatasetPartition] = []
+            res: list[Dataset] = []
             for i in range(self.n_partitions):
                 seed = self.seed + i if self.seed is not None else None
                 partition = datasets.make_classification(
@@ -84,6 +84,3 @@ class SyntheticClassificationData(Dataset):
             self._partitions = res
 
         return self._partitions
-
-    def __len__(self) -> int:
-        return self.n_samples

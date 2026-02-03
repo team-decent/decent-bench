@@ -1,11 +1,11 @@
-from ._dataset import Dataset
-from ._kaggle_dataset import KaggleDataset
-from ._pytorch_dataset import PyTorchDataset
-from ._synthetic_classification import SyntheticClassificationData
+from ._dataset_handler import DatasetHandler
+from ._kaggle_handler import KaggleDatasetHandler
+from ._pytorch_handler import PyTorchDatasetHandler
+from ._synthetic_classification_handler import SyntheticClassificationDatasetHandler
 
 __all__ = [
-    "Dataset",
-    "KaggleDataset",
-    "PyTorchDataset",
-    "SyntheticClassificationData",
+    "DatasetHandler",
+    "KaggleDatasetHandler",
+    "PyTorchDatasetHandler",
+    "SyntheticClassificationDatasetHandler",
 ]

@@ -11,19 +11,19 @@ except ImportError:
     KAGGLE_AVAILABLE = False
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.utils.types import DatasetPartition, SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import Dataset, SupportedDevices, SupportedFrameworks
 
-from ._dataset import Dataset
+from ._dataset_handler import DatasetHandler
 
 
-class KaggleDataset(Dataset):
+class KaggleDatasetHandler(DatasetHandler):
     def __init__(
         self,
         kaggle_handle: str,
         path: str,
         feature_columns: list[str],
         target_columns: list[str],
-        n_partitions: int,
+        n_partitions: int = 1,
         *,
         framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
         device: SupportedDevices = SupportedDevices.CPU,
@@ -68,7 +68,7 @@ class KaggleDataset(Dataset):
         self.framework = framework
         self.device = device
         self.seed = seed
-        self._partitions: Sequence[DatasetPartition] | None = None
+        self._partitions: Sequence[Dataset] | None = None
 
         self._df: pd.DataFrame = kagglehub.dataset_load(  # pyright: ignore[reportPossiblyUnboundVariable]
             kagglehub.KaggleDatasetAdapter.PANDAS,  # pyright: ignore[reportPossiblyUnboundVariable]
@@ -104,10 +104,10 @@ class KaggleDataset(Dataset):
     def n_targets(self) -> int:
         return len(self.target_columns)
 
-    def get_datapoints(self) -> DatasetPartition:
+    def get_datapoints(self) -> Dataset:
         return self._create_partition(self._df)
 
-    def get_partitions(self) -> Sequence[DatasetPartition]:
+    def get_partitions(self) -> Sequence[Dataset]:
         """
         Return the dataset divided into partitions for distribution among agents.
 
@@ -118,7 +118,7 @@ class KaggleDataset(Dataset):
         Each partition is sampled uniformly at random from the dataset without replacement.
 
         Returns:
-            Sequence[DatasetPartition]: Sequence of DatasetPartition objects, where each partition is a list of
+            Sequence[Dataset]: Sequence of Dataset objects, where each partition is a list of
             (features, targets) tuples.
 
         """
@@ -126,11 +126,11 @@ class KaggleDataset(Dataset):
             self._partitions = self._random_split(self._df)
         return self._partitions
 
-    def _random_split(self, df: pd.DataFrame) -> Sequence[DatasetPartition]:
+    def _random_split(self, df: pd.DataFrame) -> Sequence[Dataset]:
         # Shuffle the dataframe
         df = df.sample(frac=1, random_state=self.seed, replace=False).reset_index(drop=True)
 
-        partitions: list[DatasetPartition] = []
+        partitions: list[Dataset] = []
         for i in range(self.n_partitions):
             start_idx = i * self.samples_per_partition
             end_idx = start_idx + self.samples_per_partition
@@ -139,13 +139,10 @@ class KaggleDataset(Dataset):
 
         return partitions
 
-    def _create_partition(self, df_partition: pd.DataFrame) -> DatasetPartition:
-        partition: DatasetPartition = []
+    def _create_partition(self, df_partition: pd.DataFrame) -> Dataset:
+        partition: Dataset = []
         for _, row in df_partition.iterrows():
             x = iop.to_array(row[self.feature_columns].to_numpy(), framework=self.framework, device=self.device)
             y = iop.to_array(row[self.target_columns].to_numpy(), framework=self.framework, device=self.device)
             partition.append((x, y))
         return partition
-
-    def __len__(self) -> int:
-        return self.n_samples

@@ -30,16 +30,13 @@ class QuadraticCost(Cost):
         self.b: NDArray[float64] = iop.to_numpy(b)
 
         if self.A.ndim != 2:
-            raise ValueError("Matrix A (features) must be 2D")
+            raise ValueError("Matrix A must be 2D")
         if self.A.shape[0] != self.A.shape[1]:
-            raise ValueError("Matrix A (features) must be square")
+            raise ValueError("Matrix A must be square")
         if self.b.ndim != 1:
-            raise ValueError("Vector b (targets) must be 1D")
+            raise ValueError("Vector b must be 1D")
         if self.A.shape[0] != self.b.shape[0]:
-            raise ValueError(
-                f"Dimension mismatch: A (features) has shape {self.A.shape}"
-                f" but b (targets) has length {self.b.shape[0]}"
-            )
+            raise ValueError(f"Dimension mismatch: A has shape {self.A.shape} but b has length {self.b.shape[0]}")
 
         self.A_sym = 0.5 * (self.A + self.A.T)
         self.c = c
