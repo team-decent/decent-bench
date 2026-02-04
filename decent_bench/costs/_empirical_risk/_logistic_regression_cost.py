@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Literal
 
 import numpy as np
 import numpy.linalg as la
@@ -14,7 +13,14 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
 from decent_bench.utils.array import Array
-from decent_bench.utils.types import Dataset, EmpiricalRiskIndices, SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import (
+    Dataset,
+    EmpiricalRiskBatchSize,
+    EmpiricalRiskIndices,
+    EmpiricalRiskReduction,
+    SupportedDevices,
+    SupportedFrameworks,
+)
 
 from ._empirical_risk_cost import EmpiricalRiskCost
 
@@ -52,7 +58,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
     :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
     """
 
-    def __init__(self, dataset: Dataset, batch_size: int | Literal["all"] = "all"):
+    def __init__(self, dataset: Dataset, batch_size: EmpiricalRiskBatchSize = "all"):
         """
         Initialize logistic regression cost function.
 
@@ -60,7 +66,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
             dataset (Dataset): Dataset containing features and targets. The expected shapes are:
                 - Features: (n_features,)
                 - Targets: single dimensional values
-            batch_size (int | Literal["all"]): Size of mini-batch to use for stochastic methods.
+            batch_size (EmpiricalRiskBatchSize): Size of mini-batch to use for stochastic methods.
                 If "all", full-batch methods are used.
 
         Raises:
@@ -199,7 +205,12 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         return float(cost)
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.gradient)
-    def gradient(self, x: NDArray[float64], indices: EmpiricalRiskIndices = "batch") -> NDArray[float64]:
+    def gradient(
+        self,
+        x: NDArray[float64],
+        indices: EmpiricalRiskIndices = "batch",
+        reduction: EmpiricalRiskReduction = "mean",
+    ) -> NDArray[float64]:
         r"""
         Gradient at x using datapoints at the given indices.
 
@@ -208,6 +219,10 @@ class LogisticRegressionCost(EmpiricalRiskCost):
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
             - "batch": a batch is drawn with :attr:`batch_size` samples.
+
+        Supported values for reduction are:
+            - "mean": average the gradients over the samples.
+            - None: return the gradients for each sample as a list.
 
         If no batching is used, this is:
 
@@ -220,11 +235,30 @@ class LogisticRegressionCost(EmpiricalRiskCost):
             \mathbf{A}_{\mathcal{B}}^T (\sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) - \mathbf{b}_{\mathcal{B}})
 
         where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
+
+        Note:
+            When reduction is None, the returned array will have an additional leading dimension
+            corresponding to the number of samples used. Indexing into this dimension will give the gradient
+            for the respective sample in :attr:`batch_used <decent_bench.costs.EmpiricalRiskCost.batch_used>`.
+
         """
+        if reduction is None:
+            return self._per_sample_gradients(x, indices)
+
         A, b = self._get_batch_data(indices)  # noqa: N806
         sig = special.expit(A.dot(x))
         res: NDArray[float64] = A.T.dot(sig - b)
         return res
+
+    def _per_sample_gradients(
+        self,
+        x: NDArray[float64],
+        indices: EmpiricalRiskIndices = "batch",
+    ) -> NDArray[float64]:
+        A, b = self._get_batch_data(indices)  # noqa: N806
+        sig = special.expit(A.dot(x))
+        res = [A[i, :].reshape(-1, 1) * (sig[i] - b[i]) for i in range(A.shape[0])]
+        return np.asarray(res)
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.hessian)
     def hessian(self, x: NDArray[float64], indices: EmpiricalRiskIndices = "batch") -> NDArray[float64]:

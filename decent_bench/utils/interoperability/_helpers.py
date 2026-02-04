@@ -8,7 +8,7 @@ from decent_bench.utils.types import SupportedArrayTypes, SupportedDevices, Supp
 from ._imports_types import _jnp_types, _np_types, _tf_types, _torch_types, jax, jnp, tf, torch
 
 
-def _device_literal_to_framework_device(device: SupportedDevices, framework: SupportedFrameworks) -> Any:  # noqa: ANN401
+def device_to_framework_device(device: SupportedDevices, framework: SupportedFrameworks) -> Any:  # noqa: ANN401
     """
     Convert SupportedDevices literal to framework-specific device representation.
 

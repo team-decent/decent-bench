@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import ArrayKey, SupportedArrayTypes, SupportedDevices, SupportedFrameworks
 
-from ._helpers import _device_literal_to_framework_device, _return_array, framework_device_of_array
+from ._helpers import _return_array, device_to_framework_device, framework_device_of_array
 from ._imports_types import (
     _jax_key,
     _jnp_types,
@@ -99,7 +99,7 @@ def to_torch(array: Array | SupportedArrayTypes, device: SupportedDevices) -> To
         raise ImportError("PyTorch is not installed.")
 
     value = array.value if isinstance(array, Array) else array
-    framework_device = _device_literal_to_framework_device(device, SupportedFrameworks.TORCH)
+    framework_device = device_to_framework_device(device, SupportedFrameworks.TORCH)
 
     if isinstance(value, torch.Tensor):
         return cast("TorchTensor", value)
@@ -131,7 +131,7 @@ def to_tensorflow(array: Array | SupportedArrayTypes, device: SupportedDevices) 
         raise ImportError("TensorFlow is not installed.")
 
     value = array.value if isinstance(array, Array) else array
-    framework_device = _device_literal_to_framework_device(device, SupportedFrameworks.TENSORFLOW)
+    framework_device = device_to_framework_device(device, SupportedFrameworks.TENSORFLOW)
 
     if isinstance(value, tf.Tensor):
         with tf.device(framework_device):
@@ -168,7 +168,7 @@ def to_jax(array: Array | SupportedArrayTypes, device: SupportedDevices) -> JaxA
         raise ImportError("JAX is not installed.")
 
     value = array.value if isinstance(array, Array) else array
-    framework_device = _device_literal_to_framework_device(device, SupportedFrameworks.JAX)
+    framework_device = device_to_framework_device(device, SupportedFrameworks.JAX)
 
     if isinstance(value, jnp.ndarray | jnp.generic):
         return cast("JaxArray", value.to_device(framework_device))
@@ -716,7 +716,7 @@ def eye(n: int, framework: SupportedFrameworks, device: SupportedDevices) -> Arr
     if framework == SupportedFrameworks.NUMPY:
         return _return_array(np.eye(n))
 
-    framework_device = _device_literal_to_framework_device(device, framework)
+    framework_device = device_to_framework_device(device, framework)
 
     if torch and framework == SupportedFrameworks.TORCH:
         return _return_array(torch.eye(n, device=framework_device))
@@ -808,7 +808,7 @@ def zeros(shape: tuple[int, ...], framework: SupportedFrameworks, device: Suppor
         TypeError: If the framework type of `framework` is unsupported.
 
     """
-    framework_device = _device_literal_to_framework_device(device, framework)
+    framework_device = device_to_framework_device(device, framework)
 
     if framework == SupportedFrameworks.NUMPY:
         return _return_array(np.zeros(shape))
@@ -849,7 +849,7 @@ def randn(
         TypeError: if the framework type of `array` is unsupported.
 
     """
-    framework_device = _device_literal_to_framework_device(device, framework)
+    framework_device = device_to_framework_device(device, framework)
 
     if framework == SupportedFrameworks.NUMPY:
         random_array = _numpy_generator().normal(loc=mean, scale=std, size=shape)

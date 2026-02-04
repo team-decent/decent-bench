@@ -311,7 +311,7 @@ For operations that create new arrays, use the framework and device parameter:
         device: SupportedDevices,
     ) -> Array:
         # Convert device literal to framework-specific representation
-        framework_device = _device_literal_to_framework_device(device, framework)
+        framework_device = device_to_framework_device(device, framework)
         
         if framework == SupportedFrameworks.TORCH:
             result = torch.my_function(shape, device=framework_device)
@@ -421,7 +421,7 @@ Update ``decent_bench/utils/interoperability/_helpers.py`` to handle device conv
 
 .. code-block:: python
 
-    def _device_literal_to_framework_device(
+    def device_to_framework_device(
         device: SupportedDevices, 
         framework: SupportedFrameworks
     ) -> Any:
@@ -490,7 +490,7 @@ Add a conversion function in ``decent_bench/utils/interoperability/_functions.py
             raise ImportError("MyFramework is not installed.")
         
         value = array.value if isinstance(array, Array) else array
-        framework_device = _device_literal_to_framework_device(
+        framework_device = device_to_framework_device(
             device, SupportedFrameworks.MYFRAMEWORK
         )
         
@@ -660,7 +660,7 @@ Use this checklist when adding a new framework:
     ☐ Add conditional import to _imports_types.py
     ☐ Define type tuple (_myframework_types)
     ☐ Add to SupportedFrameworks enum in types.py
-    ☐ Implement _device_literal_to_framework_device
+    ☐ Implement device_to_framework_device
     ☐ Implement framework_device_of_array detection
     ☐ Implement to_myframework conversion
     ☐ Update to_array function

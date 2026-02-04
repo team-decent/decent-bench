@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Literal
 
 import numpy as np
 from numpy import float64
@@ -11,7 +10,14 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
 from decent_bench.costs._empirical_risk._empirical_risk_cost import EmpiricalRiskCost
-from decent_bench.utils.types import Dataset, EmpiricalRiskIndices, SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import (
+    Dataset,
+    EmpiricalRiskBatchSize,
+    EmpiricalRiskIndices,
+    EmpiricalRiskReduction,
+    SupportedDevices,
+    SupportedFrameworks,
+)
 
 
 class LinearRegressionCost(EmpiricalRiskCost):
@@ -41,7 +47,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
     :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
     """
 
-    def __init__(self, dataset: Dataset, batch_size: int | Literal["all"] = "all"):
+    def __init__(self, dataset: Dataset, batch_size: EmpiricalRiskBatchSize = "all"):
         """
         Initialize a LinearRegressionCost instance.
 
@@ -49,7 +55,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
             dataset (Dataset): Dataset containing features and targets. The expected shapes are:
                 - Features: (n_features,)
                 - Targets: single dimensional values
-            batch_size (int | Literal["all"]): Size of mini-batches for stochastic methods, or "all" for full-batch.
+            batch_size (EmpiricalRiskBatchSize): Size of mini-batches for stochastic methods, or "all" for full-batch.
 
         Raises:
             ValueError: If input dimensions are inconsistent or batch_size is invalid.
@@ -192,7 +198,12 @@ class LinearRegressionCost(EmpiricalRiskCost):
         return float(0.5 * residual.dot(residual))
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.gradient)
-    def gradient(self, x: NDArray[float64], indices: EmpiricalRiskIndices = "batch") -> NDArray[float64]:
+    def gradient(
+        self,
+        x: NDArray[float64],
+        indices: EmpiricalRiskIndices = "batch",
+        reduction: EmpiricalRiskReduction = "mean",
+    ) -> NDArray[float64]:
         r"""
         Gradient at x using datapoints at the given indices.
 
@@ -201,6 +212,10 @@ class LinearRegressionCost(EmpiricalRiskCost):
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
             - "batch": a batch is drawn with :attr:`batch_size` samples.
+
+        Supported values for reduction are:
+            - "mean": average the gradients over the samples.
+            - None: return the gradients for each sample as a list.
 
         If no batching is used, this is:
 
@@ -215,10 +230,27 @@ class LinearRegressionCost(EmpiricalRiskCost):
 
         where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
 
+        Note:
+            When reduction is None, the returned array will have an additional leading dimension
+            corresponding to the number of samples used. Indexing into this dimension will give the gradient
+            for the respective sample in :attr:`batch_used <decent_bench.costs.EmpiricalRiskCost.batch_used>`.
+
         """
+        if reduction is None:
+            return self._per_sample_gradients(x, indices)
+
         A, ATA, b = self._get_batch_data(indices)  # noqa: N806
         res: NDArray[float64] = ATA.dot(x) - A.T.dot(b)
         return res
+
+    def _per_sample_gradients(
+        self,
+        x: NDArray[float64],
+        indices: EmpiricalRiskIndices = "batch",
+    ) -> NDArray[float64]:
+        A, ATA, b = self._get_batch_data(indices)  # noqa: N806
+        res = [ATA[i, :].reshape(-1, 1) * x - A[i, :].reshape(-1, 1) * b[i] for i in range(A.shape[0])]
+        return np.asarray(res)
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.hessian)
     def hessian(self, x: NDArray[float64], indices: EmpiricalRiskIndices = "batch") -> NDArray[float64]:  # noqa: ARG002
