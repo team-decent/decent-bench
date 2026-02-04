@@ -20,7 +20,12 @@ class QuadraticCost(Cost):
     .. math:: f(\mathbf{x}) = \frac{1}{2} \mathbf{x}^T \mathbf{Ax} + \mathbf{b}^T \mathbf{x} + c
     """
 
-    def __init__(self, A: Array, b: Array, c: float):  # noqa: N803
+    def __init__(
+        self,
+        A: Array,  # noqa: N803
+        b: Array,
+        c: float,
+    ):
         self.A: NDArray[float64] = iop.to_numpy(A)
         self.b: NDArray[float64] = iop.to_numpy(b)
 
@@ -149,9 +154,9 @@ class QuadraticCost(Cost):
             raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
         if isinstance(other, QuadraticCost):
             return QuadraticCost(
-                iop.to_array(self.A + other.A, self.framework, self.device),
-                iop.to_array(self.b + other.b, self.framework, self.device),
-                self.c + other.c,
+                A=iop.to_array(self.A + other.A, self.framework, self.device),
+                b=iop.to_array(self.b + other.b, self.framework, self.device),
+                c=self.c + other.c,
             )
 
         return SumCost([self, other])

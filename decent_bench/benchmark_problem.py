@@ -9,7 +9,7 @@ import networkx as nx
 import decent_bench.centralized_algorithms as ca
 from decent_bench.costs import Cost
 from decent_bench.costs._empirical_risk import LinearRegressionCost, LogisticRegressionCost
-from decent_bench.datasets import SyntheticClassificationData
+from decent_bench.datasets import SyntheticClassificationDatasetHandler
 from decent_bench.schemes import (
     AgentActivationScheme,
     AlwaysActive,
@@ -25,7 +25,7 @@ from decent_bench.schemes import (
     UniformDropRate,
 )
 from decent_bench.utils.array import Array
-from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import Dataset, SupportedDevices, SupportedFrameworks
 
 if TYPE_CHECKING:
     AnyGraph = nx.Graph[Any]
@@ -47,6 +47,7 @@ class BenchmarkProblem:
         message_compression: message compression setting
         message_noise: message noise setting
         message_drop: message drops setting
+        test_data: optional test dataset for evaluating generalization performance
 
     """
 
@@ -58,6 +59,7 @@ class BenchmarkProblem:
     message_compression: CompressionScheme
     message_noise: NoiseScheme
     message_drop: DropScheme
+    test_data: Dataset | None = None
 
 
 def create_regression_problem(
@@ -86,8 +88,8 @@ def create_regression_problem(
 
     """
     network_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
-    dataset = SyntheticClassificationData(
-        n_classes=2,
+    dataset = SyntheticClassificationDatasetHandler(
+        n_targets=2,
         n_partitions=n_agents,
         n_samples_per_partition=10,
         n_features=3,
@@ -95,7 +97,7 @@ def create_regression_problem(
         device=SupportedDevices.CPU,
         seed=0,
     )
-    costs = [cost_cls(*p) for p in dataset.training_partitions()]
+    costs = [cost_cls(p) for p in dataset.get_partitions()]
     sum_cost = reduce(add, costs)
     x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
     agent_activations = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
@@ -111,4 +113,5 @@ def create_regression_problem(
         message_compression=message_compression,
         message_noise=message_noise,
         message_drop=message_drop,
+        test_data=None,
     )

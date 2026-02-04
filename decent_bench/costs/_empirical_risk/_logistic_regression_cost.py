@@ -14,7 +14,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
 from decent_bench.utils.array import Array
-from decent_bench.utils.types import EmpiricalRiskIndices, SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import Dataset, EmpiricalRiskIndices, SupportedDevices, SupportedFrameworks
 
 from ._empirical_risk_cost import EmpiricalRiskCost
 
@@ -52,50 +52,51 @@ class LogisticRegressionCost(EmpiricalRiskCost):
     :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
     """
 
-    def __init__(self, A: Array, b: Array, batch_size: int | Literal["all"] = "all"):  # noqa: N803
+    def __init__(self, dataset: Dataset, batch_size: int | Literal["all"] = "all"):
         """
         Initialize logistic regression cost function.
 
         Args:
-            A (Array): Data matrix of shape (n_samples, shape).
-            b (Array): Target vector of shape (n_samples,).
+            dataset (Dataset): Dataset containing features and targets. The expected shapes are:
+                - Features: (n_features,)
+                - Targets: single dimensional values
             batch_size (int | Literal["all"]): Size of mini-batch to use for stochastic methods.
                 If "all", full-batch methods are used.
 
         Raises:
             ValueError: If input dimensions are incorrect or batch_size is invalid.
+            TypeError: If dataset targets are not single dimensional values.
 
         """
-        if len(iop.shape(A)) != 2:
-            raise ValueError("Matrix A must be 2D")
-        if len(iop.shape(b)) != 1:
-            raise ValueError("Vector b must be 1D")
-        if iop.shape(A)[0] != iop.shape(b)[0]:
-            raise ValueError(f"Dimension mismatch: A has shape {iop.shape(A)} but b has length {iop.shape(b)[0]}")
-        if isinstance(batch_size, int) and (batch_size <= 0 or batch_size > iop.shape(A)[0]):
+        if len(iop.shape(dataset[0][0])) != 1:
+            raise ValueError(f"Dataset features must be vectors, got: {dataset[0][0]}")
+        if iop.to_numpy(dataset[0][1]).shape != ():
+            raise TypeError(
+                f"Dataset targets must be single dimensional values, got: {dataset[0][1]} "
+                f"with shape {iop.to_numpy(dataset[0][1]).shape}, expected shape is ()."
+            )
+        if isinstance(batch_size, int) and (batch_size <= 0 or batch_size > len(dataset)):
             raise ValueError(
                 f"Batch size must be positive and at most the number of samples, "
-                f"got: {batch_size} and number of samples is: {iop.shape(A)[0]}."
+                f"got: {batch_size} and number of samples is: {len(dataset)}."
             )
         if isinstance(batch_size, str) and batch_size != "all":
             raise ValueError(f"Invalid batch size string. Supported value is 'all', got {batch_size}.")
 
-        class_labels = np.unique(iop.to_numpy(b))
-        if class_labels.shape != (2,):
-            raise ValueError("Vector b must contain exactly two classes")
+        class_labels = {iop.to_numpy(y).item() for _, y in dataset}
+        if len(class_labels) != 2:
+            raise ValueError("Dataset must contain exactly two classes")
 
-        self.A: NDArray[float64] = iop.to_numpy(A)
-        self.b: NDArray[float64] = iop.to_numpy(iop.copy(b))  # Copy b to avoid modifying original array pointer
-        (
-            self.b[np.where(self.b == class_labels[0])],
-            self.b[np.where(self.b == class_labels[1])],
-        ) = (0, 1)
-        self._label_mapping = {0: class_labels[0], 1: class_labels[1]}
+        self._dataset = dataset
+        self._label_mapping = dict(enumerate(class_labels))
         self._batch_size = self.n_samples if batch_size == "all" else batch_size
+        # Cache data matrices for efficiency when using full dataset
+        self.A: NDArray[float64] | None = None
+        self.b: NDArray[float64] | None = None
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return (self.A.shape[1],)
+        return iop.shape(self._dataset[0][0])
 
     @property
     def framework(self) -> SupportedFrameworks:
@@ -107,11 +108,15 @@ class LogisticRegressionCost(EmpiricalRiskCost):
 
     @property
     def n_samples(self) -> int:
-        return int(self.A.shape[0])
+        return len(self._dataset)
 
     @property
     def batch_size(self) -> int:
         return self._batch_size
+
+    @property
+    def dataset(self) -> Dataset:
+        return self._dataset
 
     @cached_property
     def m_smooth(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -126,7 +131,8 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         For the general definition, see
         :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
         """
-        return float(max(pow(la.norm(row), 2) for row in self.A) * self.A.shape[0] / 4)
+        A, _ = self._get_batch_data("all")  # noqa: N806
+        return float(max(pow(la.norm(row), 2) for row in A) * A.shape[0] / 4)
 
     @property
     def m_cvx(self) -> float:
@@ -277,9 +283,23 @@ class LogisticRegressionCost(EmpiricalRiskCost):
 
         if len(indices) == self.n_samples:
             # Use full dataset
+            if self.A is None or self.b is None:
+                self.A = np.stack([iop.to_numpy(x) for x, _ in self._dataset])
+                self.b = np.stack([iop.to_numpy(y) for _, y in self._dataset]).squeeze()
+                for k in self._label_mapping:
+                    self.b[np.where(self.b == self._label_mapping[k])] = k
             return self.A, self.b
 
-        return self.A[indices, :], self.b[indices]
+        A_list, b_list = [], []  # noqa: N806
+        for idx in indices:
+            x_i, y_i = self._dataset[idx]
+            A_list.append(iop.to_numpy(x_i))
+            b_list.append(iop.to_numpy(y_i))
+        A = np.stack(A_list)  # noqa: N806
+        b = np.stack(b_list).squeeze()
+        for k in self._label_mapping:
+            b[np.where(b == self._label_mapping[k])] = k
+        return A, b
 
     def __add__(self, other: Cost) -> Cost:
         """
@@ -302,8 +322,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
                 combined_batch_size = max(self.batch_size, other.batch_size)
 
             return LogisticRegressionCost(
-                iop.to_array(np.vstack([self.A, other.A]), self.framework, self.device),
-                iop.to_array(np.concatenate([self.b, other.b]), self.framework, self.device),
+                dataset=self._dataset + other._dataset,
                 batch_size=combined_batch_size,
             )
         return SumCost([self, other])

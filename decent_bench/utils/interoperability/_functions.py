@@ -985,3 +985,35 @@ def norm(
         return _return_array(jnp.linalg.norm(value, ord=p, axis=dim, keepdims=keepdims))
 
     raise TypeError(f"Unsupported type: {type(value)}")
+
+
+def squeeze(array: Array, dim: int | tuple[int, ...] | None = None) -> Array:
+    """
+    Remove single-dimensional entries from the shape of an array.
+
+    Args:
+        array (Array): Input array.
+        dim (int | tuple[int, ...] | None): Dimension or dimensions to squeeze.
+            If None, squeezes all single-dimensional entries.
+
+    Returns:
+        Array: Squeezed array in the same framework type as the input.
+
+    Raises:
+        TypeError: if the framework type of `array` is unsupported.
+
+    """
+    value = array.value if isinstance(array, Array) else array
+
+    if isinstance(value, np.ndarray | np.generic):
+        return _return_array(np.squeeze(value, axis=dim))
+    if torch and isinstance(value, torch.Tensor):
+        if dim is None:  # Bug where dim=None is not supported in torch.squeeze
+            return _return_array(torch.squeeze(value))
+        return _return_array(torch.squeeze(value, dim=dim))
+    if tf and isinstance(value, tf.Tensor):
+        return _return_array(tf.squeeze(value, axis=dim))
+    if jnp and isinstance(value, jnp.ndarray | jnp.generic):
+        return _return_array(jnp.squeeze(value, axis=dim))
+
+    raise TypeError(f"Unsupported framework type: {type(value)}")

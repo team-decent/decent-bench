@@ -1827,3 +1827,61 @@ def test_framework_device_of_array(framework: str, device: str) -> None:
 
     assert fw == SupportedFrameworks(framework), f"Expected framework {framework}, got {fw}"
     assert dev == SupportedDevices(device), f"Expected device {device}, got {dev}"
+
+
+# ============================================================================
+# Tests for Squeeze
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    ("framework", "device"),
+    [
+        ("numpy", "cpu"),
+        pytest.param(
+            "torch",
+            "cpu",
+            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+        ),
+        pytest.param(
+            "torch",
+            "gpu",
+            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "cpu",
+            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "gpu",
+            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+        ),
+        pytest.param(
+            "jax",
+            "cpu",
+            marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
+        ),
+        pytest.param(
+            "jax",
+            "gpu",
+            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    ("dim"),
+    [None, 0, 1, (0, 1)],
+)
+def test_squeeze(framework: str, device: str, dim: int | tuple[int, ...] | None) -> None:
+    """Test norm function for all frameworks and devices."""
+    data = [[[[1.0, 2.0], [3.0, 4.0]]]]
+    arr = create_array(data, framework, device)
+    squeezed = iop.squeeze(arr, dim=dim)
+
+    np_arr = create_array(data, "numpy")
+    expected = np.squeeze(np_arr, axis=dim)
+
+    assert_arrays_equal(squeezed, expected, framework)
+    assert_same_type(squeezed, framework)

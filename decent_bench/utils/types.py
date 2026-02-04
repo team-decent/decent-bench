@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     import tensorflow as tf
     import torch
 
+    from decent_bench.utils.array import Array
+
 ArrayLike: TypeAlias = Union["numpy.ndarray", "torch.Tensor", "tf.Tensor", "jax.Array"]  # noqa: UP040
 """
 Type alias for array-like types supported in decent-bench, including NumPy arrays,
@@ -34,6 +36,30 @@ type EmpiricalRiskIndices = list[int] | Literal["all", "batch"] | int
 Type alias for specifying indices in empirical risk computations.
 Can be a list of integers, the string "all" for full dataset, the string "batch" for a mini-batch,
 or an integer specifying a single datapoint.
+"""
+
+type Datapoint = tuple["Array", "Array"]  # noqa: TC008
+"""Tuple of (x, y) representing one datapoint where x are features and y is the target."""
+
+type Dataset = list[Datapoint]
+"""
+List of datapoints, where each datapoint is a tuple of (features, targets).
+
+In decentralized optimization each agent has their own local dataset. This
+type alias represents such datasets. This local dataset can be a subset of a larger
+global dataset or the entire dataset itself. These subsets can be obtained
+by using the :class:`~decent_bench.datasets.DatasetHandler` class, specifically the
+:meth:`~decent_bench.datasets.DatasetHandler.get_partitions` method.
+
+Features and targets are represented as :class:`~decent_bench.utils.array.Array`
+objects or framework-specific tensor objects in special cases. For unsupervised learning,
+targets are usually None.
+
+The expected shapes depend on the specific dataset and cost function requirements,
+but typically it is:
+
+- Features: 1-dimensional vector (n_features,)
+- Targets: 1-dimensional vector (n_targets,), or None for unsupervised learning.
 """
 
 

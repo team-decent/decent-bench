@@ -11,8 +11,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
 from decent_bench.costs._empirical_risk._empirical_risk_cost import EmpiricalRiskCost
-from decent_bench.utils.array import Array
-from decent_bench.utils.types import EmpiricalRiskIndices, SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import Dataset, EmpiricalRiskIndices, SupportedDevices, SupportedFrameworks
 
 
 class LinearRegressionCost(EmpiricalRiskCost):
@@ -42,41 +41,46 @@ class LinearRegressionCost(EmpiricalRiskCost):
     :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
     """
 
-    def __init__(self, A: Array, b: Array, batch_size: int | Literal["all"] = "all"):  # noqa: N803
+    def __init__(self, dataset: Dataset, batch_size: int | Literal["all"] = "all"):
         """
         Initialize a LinearRegressionCost instance.
 
         Args:
-            A (Array): Data matrix of shape (n_samples, shape).
-            b (Array): Target vector of shape (n_samples,).
+            dataset (Dataset): Dataset containing features and targets. The expected shapes are:
+                - Features: (n_features,)
+                - Targets: single dimensional values
             batch_size (int | Literal["all"]): Size of mini-batches for stochastic methods, or "all" for full-batch.
 
         Raises:
             ValueError: If input dimensions are inconsistent or batch_size is invalid.
+            TypeError: If dataset targets are not single dimensional values.
 
         """
-        if len(iop.shape(A)) != 2:
-            raise ValueError("Matrix A must be 2D")
-        if len(iop.shape(b)) != 1:
-            raise ValueError("Vector b must be 1D")
-        if iop.shape(A)[0] != iop.shape(b)[0]:
-            raise ValueError(f"Dimension mismatch: A has {iop.shape(A)[0]} rows but b has {iop.shape(b)[0]} elements")
-        if isinstance(batch_size, int) and (batch_size <= 0 or batch_size > iop.shape(A)[0]):
+        if len(iop.shape(dataset[0][0])) != 1:
+            raise ValueError(f"Dataset features must be vectors, got: {dataset[0][0]}")
+        if iop.to_numpy(dataset[0][1]).shape != ():
+            raise TypeError(
+                f"Dataset targets must be single dimensional values, got: {dataset[0][1]} "
+                f"with shape {iop.to_numpy(dataset[0][1]).shape}, expected shape is ()."
+            )
+        if isinstance(batch_size, int) and (batch_size <= 0 or batch_size > len(dataset)):
             raise ValueError(
                 f"Batch size must be positive and at most the number of samples, "
-                f"got: {batch_size} and number of samples is: {iop.shape(A)[0]}."
+                f"got: {batch_size} and number of samples is: {len(dataset)}."
             )
         if isinstance(batch_size, str) and batch_size != "all":
             raise ValueError(f"Invalid batch size string. Supported value is 'all', got {batch_size}.")
 
-        self.A: NDArray[float64] = iop.to_numpy(A)
-        self.b: NDArray[float64] = iop.to_numpy(b)
-        self.ATA: NDArray[float64] = self.A.T @ self.A
+        self._dataset = dataset
         self._batch_size = self.n_samples if batch_size == "all" else batch_size
+        # Cache data matrices for efficiency when using full dataset
+        self.A: NDArray[float64] | None = None
+        self.b: NDArray[float64] | None = None
+        self.ATA: NDArray[float64] | None = None
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return (self.A.shape[1],)
+        return iop.shape(self._dataset[0][0])
 
     @property
     def framework(self) -> SupportedFrameworks:
@@ -88,11 +92,15 @@ class LinearRegressionCost(EmpiricalRiskCost):
 
     @property
     def n_samples(self) -> int:
-        return int(self.A.shape[0])
+        return len(self._dataset)
 
     @property
     def batch_size(self) -> int:
         return self._batch_size
+
+    @property
+    def dataset(self) -> Dataset:
+        return self._dataset
 
     @cached_property
     def m_smooth(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -107,7 +115,8 @@ class LinearRegressionCost(EmpiricalRiskCost):
         For the general definition, see
         :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
         """
-        eigs = np.linalg.eigvalsh(self.ATA)
+        _, ATA, _ = self._get_batch_data(indices="all")  # noqa: N806
+        eigs = np.linalg.eigvalsh(ATA)
         return float(np.max(np.abs(eigs)))
 
     @cached_property
@@ -127,7 +136,8 @@ class LinearRegressionCost(EmpiricalRiskCost):
         For the general definition, see
         :attr:`Cost.m_cvx <decent_bench.costs.Cost.m_cvx>`.
         """
-        l_min = float(np.min(np.linalg.eigvalsh(self.ATA)))
+        _, ATA, _ = self._get_batch_data(indices="all")  # noqa: N806
+        l_min = float(np.min(np.linalg.eigvalsh(ATA)))
         tol = 1e-12
         if l_min > tol:
             return l_min
@@ -263,9 +273,19 @@ class LinearRegressionCost(EmpiricalRiskCost):
         indices = self._sample_batch_indices(indices)
 
         if len(indices) == self.n_samples:
+            if self.A is None or self.b is None or self.ATA is None:
+                self.A = np.stack([iop.to_numpy(x) for x, _ in self._dataset])
+                self.b = np.stack([iop.to_numpy(y) for _, y in self._dataset]).squeeze()
+                self.ATA = self.A.T @ self.A
             return self.A, self.ATA, self.b
 
-        A, b = self.A[indices, :], self.b[indices]  # noqa: N806
+        A_list, b_list = [], []  # noqa: N806
+        for idx in indices:
+            x_i, y_i = self._dataset[idx]
+            A_list.append(iop.to_numpy(x_i))
+            b_list.append(iop.to_numpy(y_i))
+        A = np.stack(A_list)  # noqa: N806
+        b = np.stack(b_list).squeeze()
         return A, A.T @ A, b
 
     def __add__(self, other: Cost) -> Cost:
@@ -289,8 +309,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
                 combined_batch_size = max(self.batch_size, other.batch_size)
 
             return LinearRegressionCost(
-                iop.to_array(np.vstack([self.A, other.A]), self.framework, self.device),
-                iop.to_array(np.hstack([self.b, other.b]), self.framework, self.device),
+                dataset=self.dataset + other.dataset,
                 batch_size=combined_batch_size,
             )
         return SumCost([self, other])
