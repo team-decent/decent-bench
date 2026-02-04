@@ -80,7 +80,7 @@ class SupportedFrameworks(Enum):
     """Enum for supported frameworks in decent-bench."""
 
     NUMPY = "numpy"
-    TORCH = "torch"
+    PYTORCH = "pytorch"
     TENSORFLOW = "tensorflow"
     JAX = "jax"
 

@@ -45,12 +45,12 @@ except RuntimeError:
             SupportedDevices.CPU,
         ),
         pytest.param(
-            SupportedFrameworks.TORCH,
+            SupportedFrameworks.PYTORCH,
             SupportedDevices.CPU,
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            SupportedFrameworks.TORCH,
+            SupportedFrameworks.PYTORCH,
             SupportedDevices.GPU,
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -184,12 +184,12 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
             SupportedDevices.CPU,
         ),
         pytest.param(
-            SupportedFrameworks.TORCH,
+            SupportedFrameworks.PYTORCH,
             SupportedDevices.CPU,
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            SupportedFrameworks.TORCH,
+            SupportedFrameworks.PYTORCH,
             SupportedDevices.GPU,
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),

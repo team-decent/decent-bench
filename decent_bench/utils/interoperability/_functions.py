@@ -99,16 +99,16 @@ def to_torch(array: Array | SupportedArrayTypes, device: SupportedDevices) -> To
         raise ImportError("PyTorch is not installed.")
 
     value = array.value if isinstance(array, Array) else array
-    framework_device = device_to_framework_device(device, SupportedFrameworks.TORCH)
+    framework_device = device_to_framework_device(device, SupportedFrameworks.PYTORCH)
 
     if isinstance(value, torch.Tensor):
         return cast("TorchTensor", value)
     if isinstance(value, np.ndarray | np.generic):
-        return cast("TorchTensor", torch.from_numpy(value).to(framework_device))
+        return cast("TorchTensor", torch.tensor(value).to(framework_device))
     if tf and isinstance(value, tf.Tensor):
         return cast("TorchTensor", torch.tensor(value.cpu(), device=framework_device))
     if jnp and isinstance(value, jnp.ndarray | jnp.generic):
-        return cast("TorchTensor", torch.from_numpy(np.array(value)).to(framework_device))
+        return cast("TorchTensor", torch.tensor(np.array(value)).to(framework_device))
     return cast("TorchTensor", torch.tensor(value, device=framework_device))
 
 
@@ -206,7 +206,7 @@ def to_array(
     """
     if framework == SupportedFrameworks.NUMPY:
         return _return_array(to_numpy(array, device))
-    if torch and framework == SupportedFrameworks.TORCH:
+    if torch and framework == SupportedFrameworks.PYTORCH:
         return _return_array(to_torch(array, device))
     if tf and framework == SupportedFrameworks.TENSORFLOW:
         return _return_array(to_tensorflow(array, device))
@@ -718,7 +718,7 @@ def eye(n: int, framework: SupportedFrameworks, device: SupportedDevices) -> Arr
 
     framework_device = device_to_framework_device(device, framework)
 
-    if torch and framework == SupportedFrameworks.TORCH:
+    if torch and framework == SupportedFrameworks.PYTORCH:
         return _return_array(torch.eye(n, device=framework_device))
     if tf and framework == SupportedFrameworks.TENSORFLOW:
         with tf.device(framework_device):
@@ -812,7 +812,7 @@ def zeros(shape: tuple[int, ...], framework: SupportedFrameworks, device: Suppor
 
     if framework == SupportedFrameworks.NUMPY:
         return _return_array(np.zeros(shape))
-    if torch and framework == SupportedFrameworks.TORCH:
+    if torch and framework == SupportedFrameworks.PYTORCH:
         return _return_array(torch.zeros(shape, device=framework_device))
     if tf and framework == SupportedFrameworks.TENSORFLOW:
         with tf.device(framework_device):
@@ -854,7 +854,7 @@ def randn(
     if framework == SupportedFrameworks.NUMPY:
         random_array = _numpy_generator().normal(loc=mean, scale=std, size=shape)
         return _return_array(random_array)
-    if torch and framework == SupportedFrameworks.TORCH:
+    if torch and framework == SupportedFrameworks.PYTORCH:
         return _return_array(torch.normal(mean=mean, std=std, size=shape, device=framework_device))
     if tf and framework == SupportedFrameworks.TENSORFLOW:
         with tf.device(framework_device):

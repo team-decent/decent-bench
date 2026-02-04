@@ -21,7 +21,7 @@ T = TypeVar("T", bound=Callable[..., Any])
 def _get_converter(framework: SupportedFrameworks) -> Callable[[Array | Any, SupportedDevices], Any]:
     if framework == SupportedFrameworks.NUMPY:
         return to_numpy
-    if framework == SupportedFrameworks.TORCH:
+    if framework == SupportedFrameworks.PYTORCH:
         return to_torch
     if framework == SupportedFrameworks.TENSORFLOW:
         return to_tensorflow

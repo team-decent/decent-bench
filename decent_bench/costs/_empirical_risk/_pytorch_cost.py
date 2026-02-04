@@ -47,9 +47,15 @@ class _IndexDataset:
 
 class PyTorchCost(EmpiricalRiskCost):
     """
-    A cost function wrapper for PyTorch neural networks that integrates with the distributed optimization framework.
+    Cost function wrapper for PyTorch neural networks that integrates with the distributed optimization framework.
 
     Supports batch-based training and gradient computation for distributed learning scenarios.
+
+    Note:
+        It is generally recommended to set :attr:`agent_state_snapshot_period <decent_bench.benchmark_problem
+        .BenchmarkProblem.agent_state_snapshot_period>` to a value greater than 1 when using PyTorchCost,
+        as recording the full model parameters at every iteration can be expensive.
+
     """
 
     def __init__(
@@ -68,7 +74,7 @@ class PyTorchCost(EmpiricalRiskCost):
         compile_kwargs: dict[str, Any] | None = None,
     ):
         """
-        Initialize the neural network cost function.
+        Initialize the PyTorch cost function.
 
         Args:
             dataset (Dataset):
@@ -110,6 +116,12 @@ class PyTorchCost(EmpiricalRiskCost):
         if isinstance(batch_size, str) and batch_size != "all":
             raise ValueError(f"Invalid batch size string. Supported value is 'all', got {batch_size}.")
 
+        if load_dataset:
+            # Loads the dataset into memory in case it is lazily loaded
+            self._dataset = _IndexDataset([(x, y) for x, y in dataset])
+        else:
+            self._dataset = _IndexDataset(dataset)
+
         self.model = model
         self.loss_fn = loss_fn
         self.final_activation = final_activation if final_activation is not None else torch.nn.Identity()
@@ -120,12 +132,6 @@ class PyTorchCost(EmpiricalRiskCost):
         self._load_dataset = load_dataset
         self._compile_model = compile_model
         self._compile_kwargs = compile_kwargs if compile_kwargs is not None else {}
-
-        if self._load_dataset:
-            # Loads the dataset into memory in case it is lazily loaded
-            self._dataset = _IndexDataset([(x, y) for x, y in dataset])
-        else:
-            self._dataset = _IndexDataset(dataset)
 
         self._pytorch_device: str = iop.device_to_framework_device(device, framework=self.framework)
         self.model = self.model.to(self._pytorch_device)
@@ -151,7 +157,7 @@ class PyTorchCost(EmpiricalRiskCost):
 
     @property
     def framework(self) -> SupportedFrameworks:
-        return SupportedFrameworks.TORCH
+        return SupportedFrameworks.PYTORCH
 
     @property
     def device(self) -> SupportedDevices:

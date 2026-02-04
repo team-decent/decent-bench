@@ -8,7 +8,7 @@ from decent_bench.utils.types import Dataset, SupportedDevices, SupportedFramewo
 from ._dataset_handler import DatasetHandler
 
 
-class SyntheticClassificationDatasetHandler(DatasetHandler):
+class SyntheticRegressionDatasetHandler(DatasetHandler):
     def __init__(
         self,
         n_targets: int,
@@ -24,12 +24,12 @@ class SyntheticClassificationDatasetHandler(DatasetHandler):
         seed: int | None = None,
     ):
         """
-        Dataset with synthetic classification data.
+        Dataset with synthetic regression data.
 
         Args:
             n_partitions: Number of training partitions to generate, i.e. the length of the sequence returned by
                 :meth:`get_partitions`
-            n_targets: Number of target dimensions (i.e. number of classes), returned as integers from 0 to n_targets-1
+            n_targets: Number of target dimensions
             n_features: Number of feature dimensions
             n_samples_per_partition: Number of samples per partition
             framework: Framework of the returned arrays
@@ -76,12 +76,13 @@ class SyntheticClassificationDatasetHandler(DatasetHandler):
             res: list[Dataset] = []
             for i in range(self.n_partitions):
                 seed = self.seed + i if self.seed is not None else None
-                partition = sk_datasets.make_classification(
+                partition = sk_datasets.make_regression(
                     n_samples=self._n_samples_per_partition,
                     n_features=self.n_features,
-                    n_redundant=0,
-                    n_classes=self.n_targets,
+                    n_informative=self.n_features,
+                    n_targets=self.n_targets,
                     random_state=seed,
+                    tail_strength=0.0,
                 )
                 A = partition[0].astype(self.feature_dtype)  # noqa: N806
                 b = partition[1].astype(self.target_dtype)

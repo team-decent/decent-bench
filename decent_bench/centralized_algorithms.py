@@ -1,12 +1,15 @@
+from collections.abc import Sequence
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.utils.array import Array
+from decent_bench.utils.types import EmpiricalRiskBatchSize
 
 if TYPE_CHECKING:
-    from decent_bench.costs import Cost
+    from decent_bench.costs import Cost, PyTorchCost
 
 
 def gradient_descent(
@@ -135,3 +138,74 @@ def proximal_solver(cost: "Cost", y: Array, rho: float) -> Array:
 
     proximal_cost = QuadraticCost(A=iop.eye_like(y) / rho, b=-y / rho, c=float(iop.dot(y, y)) / (2 * rho)) + cost
     return accelerated_gradient_descent(proximal_cost, y, max_iter=100, stop_tol=1e-10, max_tol=None)
+
+
+def pytorch_gradient_descent(
+    costs: "Sequence[PyTorchCost]",
+    lr: float,
+    epochs: int,
+    batch_size: EmpiricalRiskBatchSize = "all",
+    conv_tol: float | None = None,
+) -> Array:
+    """
+    Train a PyTorch model in a centralized manner using SGD.
+
+    This function concatenates all datasets from the provided costs and performs
+    stochastic gradient descent on the full dataset using the PyTorch model and
+    loss function from the first cost in the sequence.
+
+    Args:
+        costs: sequence of PyTorchCost instances containing datasets, models, and loss functions
+        lr: learning rate for the optimizer
+        epochs: number of epochs to train the model
+        batch_size: size of each mini-batch for SGD; if "all", uses the full concatenated dataset
+        conv_tol: optional convergence tolerance; if provided, training stops early if the change
+            in loss between epochs is less than this value
+
+    Returns:
+        The optimized model parameters.
+
+    """
+    import torch  # noqa: PLC0415
+
+    model = deepcopy(costs[0].model)
+    loss_fn = deepcopy(costs[0].loss_fn)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+
+    full_dataset = torch.utils.data.ConcatDataset([cost.dataset for cost in costs])
+    dataloader = torch.utils.data.DataLoader(
+        full_dataset,
+        batch_size=batch_size if isinstance(batch_size, int) else len(full_dataset),
+        shuffle=True,
+        pin_memory=True,
+    )
+
+    model.train()
+    loss_history = []
+    for _ in range(epochs):
+        epoch_loss = 0.0
+        for inputs, targets in dataloader:
+            if not isinstance(inputs, torch.Tensor):
+                inp = torch.tensor(inputs, dtype=torch.float32).to(costs[0]._pytorch_device)  # noqa: SLF001
+                tar = torch.tensor(targets, dtype=torch.float32).to(costs[0]._pytorch_device)  # noqa: SLF001
+            else:
+                inp = inputs
+                tar = targets
+
+            optimizer.zero_grad()
+            outputs = model(inp)
+            loss = loss_fn(outputs, tar)
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item() * inp.size(0)
+
+        loss_history.append(epoch_loss / len(full_dataset))
+
+        if conv_tol is not None and len(loss_history) >= 2:
+            loss_delta = abs(loss_history[-1] - loss_history[-2])
+            if loss_delta < conv_tol:
+                break
+
+    params = [p.detach().cpu().flatten() for p in model.parameters()]
+    return iop.to_array(torch.cat(params), framework=costs[0].framework, device=costs[0].device)

@@ -76,10 +76,10 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         """
         if len(iop.shape(dataset[0][0])) != 1:
             raise ValueError(f"Dataset features must be vectors, got: {dataset[0][0]}")
-        if iop.to_numpy(dataset[0][1]).shape != ():
+        if iop.to_numpy(dataset[0][1]).shape != (1,):
             raise TypeError(
                 f"Dataset targets must be single dimensional values, got: {dataset[0][1]} "
-                f"with shape {iop.to_numpy(dataset[0][1]).shape}, expected shape is ()."
+                f"with shape {iop.to_numpy(dataset[0][1]).shape}, expected shape is (1,)."
             )
         if isinstance(batch_size, int) and (batch_size <= 0 or batch_size > len(dataset)):
             raise ValueError(

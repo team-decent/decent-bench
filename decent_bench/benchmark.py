@@ -3,7 +3,8 @@ import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from logging.handlers import QueueListener
-from multiprocessing import Manager
+from multiprocessing import Manager, get_context
+from multiprocessing.context import BaseContext
 from typing import TYPE_CHECKING, Literal
 
 from rich.status import Status
@@ -94,14 +95,26 @@ def benchmark(
         Computational cost plots will be shown on the left and iteration plots on the right.
 
     """
-    manager = Manager()
+    # Detect if PyTorch costs are being used to determine multiprocessing context
+    if max_processes != 1:
+        use_spawn = _should_use_spawn_context(benchmark_problem)
+        mp_context = get_context("spawn") if use_spawn else None
+    else:
+        use_spawn = False
+        mp_context = None
+
+    manager = Manager() if not use_spawn else get_context("spawn").Manager()
     log_listener = logger.start_log_listener(manager, log_level)
     LOGGER.info("Starting benchmark execution ")
+    if use_spawn:
+        LOGGER.debug("Using spawn multiprocessing context for PyTorch compatibility")
     with Status("Generating initial network state"):
         nw_init_state = create_distributed_network(benchmark_problem)
     LOGGER.debug(f"Nr of agents: {len(nw_init_state.agents())}")
     prog_ctrl = ProgressBarController(manager, algorithms, n_trials, progress_step, show_speed, show_trial)
-    resulting_nw_states = _run_trials(algorithms, n_trials, nw_init_state, prog_ctrl, log_listener, max_processes)
+    resulting_nw_states = _run_trials(
+        algorithms, n_trials, nw_init_state, prog_ctrl, log_listener, max_processes, mp_context
+    )
     LOGGER.info("All trials complete")
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
     for alg, networks in resulting_nw_states.items():
@@ -128,6 +141,7 @@ def _run_trials(  # noqa: PLR0917
     progress_bar_ctrl: ProgressBarController,
     log_listener: QueueListener,
     max_processes: int | None,
+    mp_context: BaseContext | None = None,
 ) -> dict[Algorithm, list[P2PNetwork]]:
     progress_bar_handle = progress_bar_ctrl.get_handle()
     if max_processes == 1:
@@ -137,7 +151,10 @@ def _run_trials(  # noqa: PLR0917
         }
     else:
         with ProcessPoolExecutor(
-            initializer=logger.start_queue_logger, initargs=(log_listener.queue,), max_workers=max_processes
+            initializer=logger.start_queue_logger,
+            initargs=(log_listener.queue,),
+            max_workers=max_processes,
+            mp_context=mp_context,
         ) as executor:
             LOGGER.debug(f"Concurrent processes: {executor._max_workers}")  # type: ignore[attr-defined] # noqa: SLF001
             all_futures = {
@@ -169,3 +186,29 @@ def _run_trial(
         except Exception as e:
             LOGGER.exception(f"An error or warning occurred when running {alg.name}: {type(e).__name__}: {e}")
     return network
+
+
+def _should_use_spawn_context(benchmark_problem: BenchmarkProblem) -> bool:
+    """
+    Check if any cost function is a PyTorchCost, which requires spawn context.
+
+    Raises:
+        RuntimeError: if user chooses not to continue when PyTorchCost is detected.
+
+    """
+    try:
+        from decent_bench.costs import PyTorchCost  # noqa: PLC0415
+
+        if any(isinstance(cost, PyTorchCost) for cost in benchmark_problem.costs):
+            LOGGER.warning(
+                "It is not recommended to use use multiprocessing with PyTorchCost, "
+                "may cause unexpected behavior. Consider setting max_processes=1 to disable multiprocessing."
+            )
+            ans = input("Are you sure you want to continue? (y/n): ")
+            if ans.lower() != "y":
+                raise RuntimeError("Benchmarking aborted by user.")
+
+            return True
+    except ImportError:
+        return False
+    return False

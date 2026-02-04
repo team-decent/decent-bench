@@ -107,7 +107,7 @@ def x_error(agent: AgentMetricsView, problem: BenchmarkProblem) -> NDArray[float
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
     """
     x_per_iteration = np.asarray([iop.to_numpy(x) for _, x in sorted(agent.x_history.items())])
-    opt_x = problem.x_optimal
+    opt_x = iop.to_numpy(problem.x_optimal)
     errors: NDArray[float64] = la.norm(x_per_iteration - opt_x, axis=tuple(range(1, x_per_iteration.ndim)))
     return errors
 

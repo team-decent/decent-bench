@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import numpy as np
+from numpy.typing import DTypeLike
+
 try:
     import kagglehub  # type: ignore[import-untyped]
     import pandas as pd
@@ -27,6 +30,7 @@ class KaggleDatasetHandler(DatasetHandler):
         *,
         framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
         device: SupportedDevices = SupportedDevices.CPU,
+        dtype: DTypeLike = np.float64,
         samples_per_partition: int | None = None,
         seed: int | None = None,
     ) -> None:
@@ -41,6 +45,7 @@ class KaggleDatasetHandler(DatasetHandler):
             n_partitions: Number of partitions to split the dataset into
             framework: Framework to use for data representation
             device: Device to use for data representation
+            dtype: Data type of the returned arrays
             samples_per_partition: Number of samples per partition
             seed: Random seed for shuffling the dataset
 
@@ -67,6 +72,7 @@ class KaggleDatasetHandler(DatasetHandler):
         self._n_partitions = n_partitions
         self.framework = framework
         self.device = device
+        self.dtype = dtype
         self.seed = seed
         self._partitions: Sequence[Dataset] | None = None
 
@@ -142,7 +148,15 @@ class KaggleDatasetHandler(DatasetHandler):
     def _create_partition(self, df_partition: pd.DataFrame) -> Dataset:
         partition: Dataset = []
         for _, row in df_partition.iterrows():
-            x = iop.to_array(row[self.feature_columns].to_numpy(), framework=self.framework, device=self.device)
-            y = iop.to_array(row[self.target_columns].to_numpy(), framework=self.framework, device=self.device)
+            x = iop.to_array(
+                row[self.feature_columns].to_numpy().astype(self.dtype),
+                framework=self.framework,
+                device=self.device,
+            )
+            y = iop.to_array(
+                row[self.target_columns].to_numpy().astype(self.dtype),
+                framework=self.framework,
+                device=self.device,
+            )
             partition.append((x, y))
         return partition
