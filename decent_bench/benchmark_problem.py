@@ -120,11 +120,12 @@ def create_classification_problem(
             squeeze_targets=True,
             seed=0,
         )
+        # Mypy cannot infer that cost_cls is PyTorchCost here
         costs = [
-            cost_cls(p, model_gen(), torch.nn.CrossEntropyLoss(), final_activation=ArgmaxActivation())
+            cost_cls(p, model_gen(), torch.nn.CrossEntropyLoss(), final_activation=ArgmaxActivation())  # type: ignore[call-arg, arg-type]
             for p in dataset.get_partitions()
         ]
-        x_optimal = ca.pytorch_gradient_descent(costs, lr=0.01, epochs=10000, conv_tol=1e-6)
+        x_optimal = ca.pytorch_gradient_descent(costs, lr=0.01, epochs=10000, conv_tol=1e-6)  # type: ignore[arg-type]
     elif cost_cls is LogisticRegressionCost:
         dataset = SyntheticClassificationDatasetHandler(
             n_targets=2,
@@ -135,7 +136,7 @@ def create_classification_problem(
             device=SupportedDevices.CPU,
             seed=0,
         )
-        costs = [cost_cls(p) for p in dataset.get_partitions()]
+        costs = [cost_cls(p) for p in dataset.get_partitions()]  # type: ignore[call-arg]
         sum_cost = reduce(add, costs)
         x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
     else:
@@ -215,8 +216,8 @@ def create_regression_problem(
             target_dtype=np.float32,
             seed=0,
         )
-        costs = [cost_cls(p, model_gen(), torch.nn.MSELoss()) for p in dataset.get_partitions()]
-        x_optimal = ca.pytorch_gradient_descent(costs, lr=0.01, epochs=15000, conv_tol=1e-6)
+        costs = [cost_cls(p, model_gen(), torch.nn.MSELoss()) for p in dataset.get_partitions()]  # type: ignore[call-arg, arg-type]
+        x_optimal = ca.pytorch_gradient_descent(costs, lr=0.01, epochs=15000, conv_tol=1e-6)  # type: ignore[arg-type]
     elif cost_cls is LinearRegressionCost:
         dataset = SyntheticRegressionDatasetHandler(
             n_targets=1,
@@ -227,7 +228,7 @@ def create_regression_problem(
             device=SupportedDevices.CPU,
             seed=0,
         )
-        costs = [cost_cls(p) for p in dataset.get_partitions()]
+        costs = [cost_cls(p) for p in dataset.get_partitions()]  # type: ignore[call-arg]
         sum_cost = reduce(add, costs)
         x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
     else:

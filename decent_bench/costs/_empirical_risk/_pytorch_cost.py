@@ -52,9 +52,9 @@ class PyTorchCost(EmpiricalRiskCost):
     Supports batch-based training and gradient computation for distributed learning scenarios.
 
     Note:
-        It is generally recommended to set :attr:`agent_state_snapshot_period <decent_bench.benchmark_problem
-        .BenchmarkProblem.agent_state_snapshot_period>` to a value greater than 1 when using PyTorchCost,
-        as recording the full model parameters at every iteration can be expensive.
+        It is generally recommended to set `agent_state_snapshot_period` in
+        :class:`~decent_bench.benchmark_problem.BenchmarkProblem` to a value greater than 1
+        when using PyTorchCost, as recording the full model parameters at every iteration can be expensive.
 
     """
 
@@ -415,9 +415,7 @@ class PyTorchCost(EmpiricalRiskCost):
                 if len(indices) == len(self._dataset) and self._load_dataset
                 else [self._dataset[i] for i in indices]
             )
-            list_batch_x, list_batch_y, batch_idx = cast(
-                "tuple[list[torch.Tensor], list[torch.Tensor], list[int]]", zip(*batch, strict=True)
-            )
+            list_batch_x, list_batch_y, batch_idx = zip(*batch, strict=True)  # type: ignore[misc, assignment]
             batch_x = torch.stack(list_batch_x)
             batch_y = torch.stack(list_batch_y)
 

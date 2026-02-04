@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from copy import deepcopy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -172,7 +172,8 @@ def pytorch_gradient_descent(
     loss_fn = deepcopy(costs[0].loss_fn)
     optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 
-    full_dataset = torch.utils.data.ConcatDataset([cost.dataset for cost in costs])
+    data: list[Any] = [cost.dataset for cost in costs]
+    full_dataset: torch.utils.data.ConcatDataset[Any] = torch.utils.data.ConcatDataset(data)
     dataloader = torch.utils.data.DataLoader(
         full_dataset,
         batch_size=batch_size if isinstance(batch_size, int) else len(full_dataset),
