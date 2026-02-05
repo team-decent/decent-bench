@@ -56,6 +56,7 @@ intersphinx_mapping = {
     ),
     "jax": ("https://jax.readthedocs.io/en/latest/", None),
     "rich": ("https://rich.readthedocs.io/en/latest/", None),
+    "sklearn": ("https://scikit-learn.org/stable/", None),
 }
 
 

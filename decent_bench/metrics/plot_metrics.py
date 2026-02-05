@@ -103,8 +103,7 @@ class AccuracyPerIteration(PlotMetric):
     recorded x at that iteration. Only iterations that are recorded for all agents are taken into account, subsequent
     iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
-    returns NaN otherwise.
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
 
     See :func:`~decent_bench.metrics.metric_utils.accuracy` for the specific accuracy calculation used.
     """
@@ -140,8 +139,7 @@ class PrecisionPerIteration(PlotMetric):
     recorded x at that iteration. Only iterations that are recorded for all agents are taken into account, subsequent
     iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
-    returns NaN otherwise.
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
 
     See :func:`~decent_bench.metrics.metric_utils.precision` for the specific precision calculation used.
     """
@@ -162,8 +160,7 @@ class RecallPerIteration(PlotMetric):
     recorded x at that iteration. Only iterations that are recorded for all agents are taken into account, subsequent
     iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
-    returns NaN otherwise.
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
 
     See :func:`~decent_bench.metrics.metric_utils.recall` for the specific recall calculation used.
     """

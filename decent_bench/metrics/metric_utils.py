@@ -198,22 +198,29 @@ def accuracy(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteratio
         )
         return [np.nan for _ in agents]
 
-    ret: list[float] = []
+    if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
+        LOGGER.warning(
+            "Accuracy metric is only applicable for EmpiricalRiskCost, but at least one agent has a different cost, "
+            "returning NaN for accuracy"
+        )
+        return [np.nan for _ in agents]
+
     test_x, test_y = split_dataset(problem.test_data)
+
+    if test_y.dtype.kind not in {"i", "u"}:
+        LOGGER.warning(
+            "Accuracy calculation is only applicable for integer targets, but "
+            f"targets have values of dtype {test_y.dtype}, returning NaN for accuracy"
+        )
+        return [np.nan for _ in agents]
+
+    ret: list[float] = []
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
             iteration = max(agent.x_history) if iteration == -1 else iteration
             preds = iop.to_numpy(agent.cost.predict(agent.x_history[iteration], test_x))
-            try:
-                ret.append(float(sk_metrics.accuracy_score(test_y, preds)))
-            except ValueError as e:
-                LOGGER.warning(
-                    "Accuracy calculation failed, make sure your predictions and true labels are one-dimensional, "
-                    f"returning NaN for accuracy.\nError caught: {e}"
-                )
-                ret.append(np.nan)
+            ret.append(float(sk_metrics.accuracy_score(test_y, preds)))
         else:
-            LOGGER.warning("Accuracy metric is only applicable for EmpiricalRiskCost, returning NaN for accuracy")
             ret.append(np.nan)
     return ret
 
@@ -267,6 +274,13 @@ def mse(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: in
         )
         return [np.nan for _ in agents]
 
+    if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
+        LOGGER.warning(
+            "MSE metric is only applicable for EmpiricalRiskCost, but at least one agent has a different cost, "
+            "returning NaN for MSE"
+        )
+        return [np.nan for _ in agents]
+
     ret: list[float] = []
     test_x, test_y = split_dataset(problem.test_data)
     for agent in agents:
@@ -275,7 +289,6 @@ def mse(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: in
             preds = iop.to_numpy(agent.cost.predict(agent.x_history[iteration], test_x))
             ret.append(sk_metrics.mean_squared_error(test_y, preds))
         else:
-            LOGGER.warning("Accuracy metric is only applicable for EmpiricalRiskCost, returning NaN for accuracy")
             ret.append(np.nan)
     return ret
 
@@ -331,22 +344,29 @@ def precision(agents: list[AgentMetricsView], problem: BenchmarkProblem, iterati
         )
         return [np.nan for _ in agents]
 
-    ret: list[float] = []
+    if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
+        LOGGER.warning(
+            "Precision metric is only applicable for EmpiricalRiskCost, but at least one agent has a different cost, "
+            "returning NaN for precision"
+        )
+        return [np.nan for _ in agents]
+
     test_x, test_y = split_dataset(problem.test_data)
+
+    if test_y.dtype.kind not in {"i", "u"}:
+        LOGGER.warning(
+            "Precision calculation is only applicable for integer targets, but "
+            f"targets have values of dtype {test_y.dtype}, returning NaN for precision"
+        )
+        return [np.nan for _ in agents]
+
+    ret: list[float] = []
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
             iteration = max(agent.x_history) if iteration == -1 else iteration
             preds = iop.to_numpy(agent.cost.predict(agent.x_history[iteration], test_x))
-            try:
-                ret.append(float(sk_metrics.precision_score(test_y, preds, average="micro")))
-            except ValueError as e:
-                LOGGER.warning(
-                    "Precision calculation failed, make sure your predictions and true labels are one-dimensional, "
-                    f"returning NaN for precision.\nError caught: {e}"
-                )
-                ret.append(np.nan)
+            ret.append(float(sk_metrics.precision_score(test_y, preds, average="micro")))
         else:
-            LOGGER.warning("Precision metric is only applicable for EmpiricalRiskCost, returning NaN for precision")
             ret.append(np.nan)
     return ret
 
@@ -402,22 +422,29 @@ def recall(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration:
         )
         return [np.nan for _ in agents]
 
-    ret: list[float] = []
+    if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
+        LOGGER.warning(
+            "Recall metric is only applicable for EmpiricalRiskCost, but at least one agent has a different cost, "
+            "returning NaN for recall"
+        )
+        return [np.nan for _ in agents]
+
     test_x, test_y = split_dataset(problem.test_data)
+
+    if test_y.dtype.kind not in {"i", "u"}:
+        LOGGER.warning(
+            "Recall calculation is only applicable for integer targets, but "
+            f"targets have values of dtype {test_y.dtype}, returning NaN for recall"
+        )
+        return [np.nan for _ in agents]
+
+    ret: list[float] = []
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
             iteration = max(agent.x_history) if iteration == -1 else iteration
             preds = iop.to_numpy(agent.cost.predict(agent.x_history[iteration], test_x))
-            try:
-                ret.append(float(sk_metrics.recall_score(test_y, preds, average="micro")))
-            except ValueError as e:
-                LOGGER.warning(
-                    "Recall calculation failed, make sure your predictions and true labels are one-dimensional, "
-                    f"returning NaN for recall.\nError caught: {e}"
-                )
-                ret.append(np.nan)
+            ret.append(float(sk_metrics.recall_score(test_y, preds, average="micro")))
         else:
-            LOGGER.warning("Recall metric is only applicable for EmpiricalRiskCost, returning NaN for recall")
             ret.append(np.nan)
     return ret
 

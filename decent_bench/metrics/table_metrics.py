@@ -241,8 +241,7 @@ class Accuracy(TableMetric):
     """
     Final accuracy per agent.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
-    returns NaN otherwise.
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
 
     See :func:`~decent_bench.metrics.metric_utils.accuracy` for the specific accuracy calculation used.
     """
@@ -258,10 +257,10 @@ class OptimalAccuracy(TableMetric):
     """
     Accuracy calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
-    returns NaN otherwise.
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
 
-    See :func:`~decent_bench.metrics.metric_utils.optimal_accuracy` for the specific optimal accuracy calculation used.
+    See :func:`~decent_bench.metrics.metric_utils.optimal_x_accuracy` for the specific optimal
+    accuracy calculation used.
     """
 
     table_description: str = "optimal accuracy"
@@ -305,8 +304,7 @@ class Precision(TableMetric):
     """
     Final precision per agent.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
-    returns NaN otherwise.
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
 
     See :func:`~decent_bench.metrics.metric_utils.precision` for the specific precision calculation used.
     """
@@ -322,10 +320,10 @@ class OptimalPrecision(TableMetric):
     """
     Precision calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
-    returns NaN otherwise.
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
 
-    See :func:`~decent_bench.metrics.metric_utils.optimal_x_precision` for the specific optimal precision calculation used.
+    See :func:`~decent_bench.metrics.metric_utils.optimal_x_precision` for the specific
+    optimal precision calculation used.
     """
 
     table_description: str = "optimal precision"
@@ -339,8 +337,7 @@ class Recall(TableMetric):
     """
     Final recall per agent.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
-    returns NaN otherwise.
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
 
     See :func:`~decent_bench.metrics.metric_utils.recall` for the specific recall calculation used.
     """
@@ -356,8 +353,7 @@ class OptimalRecall(TableMetric):
     """
     Recall calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
-    returns NaN otherwise.
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
 
     See :func:`~decent_bench.metrics.metric_utils.optimal_x_recall` for the specific optimal recall calculation used.
     """
@@ -487,6 +483,7 @@ def tabulate(
     formatted_table = tb.tabulate(rows, headers, tablefmt=table_fmt)
     LOGGER.info("\n" + formatted_table)
     if table_path:
+        pathlib.Path(table_path).parent.mkdir(parents=True, exist_ok=True)
         pathlib.Path(table_path).write_text(formatted_table, encoding="utf-8")
 
 
