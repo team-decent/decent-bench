@@ -137,7 +137,7 @@ class Cost(ABC):  # noqa: PLR0904
         :meth:`gradient`, and :meth:`hessian`.
         """
 
-    def __mul__(self, other: Real) -> Cost:
+    def __mul__(self, other: float) -> Cost:
         """
         Multiply by a scalar to create a weighted cost.
 
@@ -151,11 +151,11 @@ class Cost(ABC):  # noqa: PLR0904
 
         return ScaledCost(self, float(other))
 
-    def __rmul__(self, other: Real) -> Cost:
+    def __rmul__(self, other: float) -> Cost:
         """Right-side scalar multiplication."""
         return self.__mul__(other)
 
-    def __truediv__(self, other: Real) -> Cost:
+    def __truediv__(self, other: float) -> Cost:
         """
         Divide by a scalar.
 
@@ -170,7 +170,7 @@ class Cost(ABC):  # noqa: PLR0904
             raise ZeroDivisionError("Division by zero is not allowed for Cost objects.")
         return self.__mul__(1.0 / float(other))
 
-    def __rtruediv__(self, other: Real) -> Cost:
+    def __rtruediv__(self, other: float) -> Cost:
         """Right-side scalar division, equivalent to dividing this cost by the scalar."""
         return self.__truediv__(other)
 
