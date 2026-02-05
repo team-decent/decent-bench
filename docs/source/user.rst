@@ -51,19 +51,21 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
 .. code-block:: python
 
     from logging import DEBUG
+    import numpy as np
 
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
-    from decent_bench.metrics.plot_metrics import RegretPerIteration
-    from decent_bench.metrics.table_metrics import GradientCalls
+    from decent_bench.metrics.metric_collection import GradientCalls, Regret
 
     if __name__ == "__main__":
+        regret = Regret([utils.single], x_log=False, y_log=True)
+        gradient_calls = GradientCalls([min, np.average, max, sum])
         benchmark.benchmark(
             algorithms=[DGD(iterations=1000, step_size=0.001), ADMM(iterations=1000, rho=10, alpha=0.3)],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
-            table_metrics=[GradientCalls([min, max])],
-            plot_metrics=[RegretPerIteration()],
+            table_metrics=[regret, gradient_calls],
+            plot_metrics=[regret],
             table_fmt="latex",
             computational_cost=pm.ComputationalCost(proximal=2.0, communication=0.1),
             compare_iterations_and_computational_cost=True,
@@ -393,6 +395,8 @@ Metrics
 Create your own metrics to tabulate and/or plot.
 
 .. code-block:: python
+    
+    from collections.abc import Sequence
 
     import numpy.linalg as la
     import decent_bench.utils.interoperability as iop
@@ -402,33 +406,26 @@ Create your own metrics to tabulate and/or plot.
     from decent_bench.benchmark_problem import BenchmarkProblem
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
-    from decent_bench.metrics.plot_metrics import DEFAULT_PLOT_METRICS, PlotMetric, X, Y
-    from decent_bench.metrics.table_metrics import DEFAULT_TABLE_METRICS, TableMetric
+    from decent_bench.metrics.metric import Metric
 
-    def x_error_at_iter(agent: AgentMetricsView, problem: BenchmarkProblem, i: int = -1) -> float:
-        # Convert Array values to numpy for custom metric computation
-        return float(la.norm(iop.to_numpy(problem.optimal_x) - iop.to_numpy(agent.x_per_iteration[i])))
-        
-    class XError(TableMetric):
+    class XError(Metric):
+
+        plot_description: str = "x error"
         table_description: str = "x error"
 
-        def get_data_from_trial(
-            self, agents: list[AgentMetricsView], problem: BenchmarkProblem
+        def get_data_from_trial(  # noqa: D102
+            self,
+            agents: Sequence[AgentMetricsView],
+            problem: BenchmarkProblem,
+            iteration: int,
         ) -> list[float]:
-            return [x_error_at_iter(a, problem) for a in agents]
-
-    class MaxXErrorPerIteration(PlotMetric):
-        plot_description: str = "max x error"
-
-        def get_data_from_trial(
-            self, agents: list[AgentMetricsView], problem: BenchmarkProblem
-        ) -> list[tuple[X, Y]]:
-            iter_reached_by_all = min(len(a.x_per_iteration) for a in agents)
-            res: list[tuple[X, Y]] = []
-            for i in range(iter_reached_by_all):
-                y = max([x_error_at_iter(a, problem, i) for a in agents])
-                res.append((i, y))
-            return res
+            if iteration == -1:
+                # agent.x_history is a dict of {iteration: x_value}, so we get the max iteration to retrieve the final x value for each agent
+                return [
+                    float(la.norm(iop.to_numpy(problem.x_optimal) - iop.to_numpy(a.x_history[max(a.x_history)])))
+                    for a in agents
+                ]
+            return [float(la.norm(iop.to_numpy(problem.x_optimal) - iop.to_numpy(a.x_history[iteration]))) for a in agents]
 
     if __name__ == "__main__":
         benchmark.benchmark(

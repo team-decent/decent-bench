@@ -71,7 +71,7 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
     return iop.mean(iop.stack(all_x_at_iter), dim=0)
 
 
-def regret(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int = -1) -> float:
+def regret(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int = -1) -> float:
     r"""
     Calculate the global regret at *iteration* (or using the agents' final x if *iteration* is -1).
 
@@ -86,7 +86,7 @@ def regret(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration:
     return actual_cost - optimal_cost
 
 
-def gradient_norm(agents: list[AgentMetricsView], iteration: int = -1) -> float:
+def gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> float:
     r"""
     Calculate the global gradient norm at *iteration* (or using the agents' final x if *iteration* is -1).
 
@@ -100,9 +100,12 @@ def gradient_norm(agents: list[AgentMetricsView], iteration: int = -1) -> float:
 
 
 @cache
-def x_error(agent: AgentMetricsView, problem: BenchmarkProblem) -> NDArray[float64]:
+def x_error(agent: AgentMetricsView, problem: BenchmarkProblem, up_to_iteration: int) -> NDArray[float64]:
     r"""
-    Calculate the x error per iteration as defined below.
+    Calculate the x error per iteration as defined below (until up_to_iteration iteration).
+
+    If *up_to_iteration* is -1, all iterations are taken into account. Otherwise,
+    only iterations up to and including *up_to_iteration* are taken into account, subsequent iterations are disregarded.
 
     .. math::
         \{ \|\mathbf{x}_0 - \mathbf{x}^\star\|, \|\mathbf{x}_1 - \mathbf{x}^\star\|, ... \}
@@ -110,20 +113,32 @@ def x_error(agent: AgentMetricsView, problem: BenchmarkProblem) -> NDArray[float
     where :math:`\mathbf{x}_k` is the agent's local x at iteration k,
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
     """
-    x_per_iteration = np.asarray([iop.to_numpy(x) for _, x in sorted(agent.x_history.items())])
+    if up_to_iteration == -1:
+        up_to_iteration = int(1e100)
+
+    x_per_iteration = np.asarray([
+        iop.to_numpy(x) for iteration, x in sorted(agent.x_history.items()) if iteration <= up_to_iteration
+    ])
     opt_x = iop.to_numpy(problem.x_optimal)
     errors: NDArray[float64] = la.norm(x_per_iteration - opt_x, axis=tuple(range(1, x_per_iteration.ndim)))
     return errors
 
 
 @cache
-def asymptotic_convergence_rate_and_order(agent: AgentMetricsView, problem: BenchmarkProblem) -> tuple[float, float]:
+def asymptotic_convergence_rate_and_order(
+    agent: AgentMetricsView,
+    problem: BenchmarkProblem,
+    up_to_iteration: int,
+) -> tuple[float, float]:
     r"""
-    Estimate the asymptotic convergence rate and order as defined below.
+    Estimate the asymptotic convergence rate and order as defined below (until up_to_iteration iteration).
+
+    If *up_to_iteration* is -1, all iterations are taken into account. Otherwise,
+    only iterations up to and including *up_to_iteration* are taken into account, subsequent iterations are disregarded.
 
     .. include:: snippets/asymptotic_convergence_rate_and_order.rst
     """
-    errors = x_error(agent, problem)
+    errors = x_error(agent, problem, up_to_iteration)
     errors = errors[errors > 0]
     if not np.isfinite(errors).all():
         return np.nan, np.nan
@@ -139,13 +154,20 @@ def asymptotic_convergence_rate_and_order(agent: AgentMetricsView, problem: Benc
 
 
 @cache
-def iterative_convergence_rate_and_order(agent: AgentMetricsView, problem: BenchmarkProblem) -> tuple[float, float]:
+def iterative_convergence_rate_and_order(
+    agent: AgentMetricsView,
+    problem: BenchmarkProblem,
+    up_to_iteration: int,
+) -> tuple[float, float]:
     r"""
-    Estimate the iterative convergence rate and order as defined below.
+    Estimate the iterative convergence rate and order as defined below (until up_to_iteration iteration).
+
+    If *up_to_iteration* is -1, all iterations are taken into account. Otherwise,
+    only iterations up to and including *up_to_iteration* are taken into account, subsequent iterations are disregarded.
 
     .. include:: snippets/iterative_convergence_rate_and_order.rst
     """
-    errors = x_error(agent, problem)
+    errors = x_error(agent, problem, up_to_iteration)
     if not np.isfinite(errors).all():
         return np.nan, np.nan
     iterations_and_errors = [(i + 1, e) for i, e in enumerate(errors)]
@@ -177,7 +199,7 @@ def split_dataset(data: Dataset) -> tuple[list[Array], NDArray[float64]]:
     return test_x, test_y
 
 
-def accuracy(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
+def accuracy(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
     """
     Calculate the accuracy per agent.
 
@@ -253,7 +275,7 @@ def optimal_x_accuracy(problem: BenchmarkProblem) -> float:
     return accuracy([amv], problem, iteration=-1)[0]
 
 
-def mse(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
+def mse(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
     """
     Calculate the mean squared error (MSE) per agent.
 
@@ -321,7 +343,7 @@ def optimal_x_mse(problem: BenchmarkProblem) -> float:
     return mse([amv], problem, iteration=-1)[0]
 
 
-def precision(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
+def precision(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
     """
     Calculate the precision per agent.
 
@@ -400,7 +422,7 @@ def optimal_x_precision(problem: BenchmarkProblem) -> float:
     return precision([amv], problem, iteration=-1)[0]
 
 
-def recall(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
+def recall(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
     """
     Calculate the recall per agent.
 

@@ -19,7 +19,7 @@ class SyntheticClassificationDatasetHandler(DatasetHandler):
         framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
         device: SupportedDevices = SupportedDevices.CPU,
         feature_dtype: DTypeLike = np.float64,
-        target_dtype: DTypeLike = np.float64,
+        target_dtype: DTypeLike = np.int64,
         squeeze_targets: bool = False,
         seed: int | None = None,
     ):

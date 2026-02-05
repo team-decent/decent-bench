@@ -12,10 +12,8 @@ from rich.status import Status
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import Algorithm
-from decent_bench.metrics import plot_metrics as pm
-from decent_bench.metrics import table_metrics as tm
-from decent_bench.metrics.plot_metrics import DEFAULT_PLOT_METRICS, PlotMetric
-from decent_bench.metrics.table_metrics import DEFAULT_TABLE_METRICS, TableMetric
+from decent_bench.metrics import metric_collection as mc
+from decent_bench.metrics.metric import ComputationalCost, Metric, create_plots, create_table
 from decent_bench.networks import P2PNetwork, create_distributed_network
 from decent_bench.utils import logger
 from decent_bench.utils.logger import LOGGER
@@ -28,14 +26,14 @@ if TYPE_CHECKING:
 def benchmark(
     algorithms: list[Algorithm],
     benchmark_problem: BenchmarkProblem,
-    plot_metrics: list[PlotMetric] = DEFAULT_PLOT_METRICS,
-    table_metrics: list[TableMetric] = DEFAULT_TABLE_METRICS,
+    plot_metrics: list[Metric] = mc.DEFAULT_PLOT_METRICS,
+    table_metrics: list[Metric] = mc.DEFAULT_TABLE_METRICS,
     table_fmt: Literal["grid", "latex"] = "grid",
     *,
     plot_grid: bool = True,
     plot_path: str | None = None,
     table_path: str | None = None,
-    computational_cost: pm.ComputationalCost | None = None,
+    computational_cost: ComputationalCost | None = None,
     x_axis_scaling: float = 1e-4,
     n_trials: int = 30,
     confidence_level: float = 0.95,
@@ -54,9 +52,9 @@ def benchmark(
         benchmark_problem: problem to benchmark on, defines the network topology, cost functions, and communication
             constraints
         plot_metrics: metrics to plot after the execution, defaults to
-            :const:`~decent_bench.metrics.plot_metrics.DEFAULT_PLOT_METRICS`
+            :const:`~decent_bench.metrics.metric_collection.DEFAULT_PLOT_METRICS`
         table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
-            :const:`~decent_bench.metrics.table_metrics.DEFAULT_TABLE_METRICS`
+            :const:`~decent_bench.metrics.metric_collection.DEFAULT_TABLE_METRICS`
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         plot_grid: whether to show grid lines on the plots
         plot_path: optional file path to save the generated plot as an image file (e.g., "plots.png"). If ``None``,
@@ -69,7 +67,7 @@ def benchmark(
             manageable units for plotting. Only used if ``computational_cost`` is provided.
         n_trials: number of times to run each algorithm on the benchmark problem, running more trials improves the
             statistical results, at least 30 trials are recommended for the central limit theorem to apply
-        confidence_level: confidence level of the confidence intervals
+        confidence_level: confidence level of the confidence intervals in the results table
         log_level: minimum level to log, e.g. :data:`logging.INFO`
         max_processes: maximum number of processes to use when running trials, multiprocessing improves performance
             but can be inhibiting when debugging or using a profiler, set to 1 to disable multiprocessing or ``None`` to
@@ -122,7 +120,7 @@ def benchmark(
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
     for alg, networks in resulting_nw_states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
-    tm.tabulate(
+    create_table(
         resulting_agent_states,
         benchmark_problem,
         table_metrics,
@@ -130,7 +128,7 @@ def benchmark(
         table_fmt,
         table_path=table_path,
     )
-    pm.plot(
+    create_plots(
         resulting_agent_states,
         benchmark_problem,
         plot_metrics,

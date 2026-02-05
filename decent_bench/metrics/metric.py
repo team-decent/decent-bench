@@ -1,14 +1,18 @@
 import math
+import pathlib
 import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
+import tabulate as tb
 from matplotlib.axes import Axes as SubPlot
 from matplotlib.figure import Figure
+from scipy import stats
 
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
@@ -16,6 +20,7 @@ from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.utils.logger import LOGGER
 
+Statistic = Callable[[Sequence[float]], float]
 X = float
 Y = float
 
@@ -31,173 +36,106 @@ class ComputationalCost:
     communication: float = 1.0
 
 
-class PlotMetric(ABC):
+class Metric(ABC):
     """
-    Metric to plot at the end of the benchmarking execution.
+    Abstract base class for metrics.
 
     Args:
-        x_log: whether to apply log scaling to the x-axis.
-        y_log: whether to apply log scaling to the y-axis.
+        statistics: sequence of statistics such as :func:`min`, :func:`sum`, and :func:`~numpy.average` used for
+            aggregating the data retrieved with :func:`get_data_from_trial` into a single value, each statistic gets its
+            own row in the table
+        x_log: whether to apply log scaling to the x-axis in plots.
+        y_log: whether to apply log scaling to the y-axis in plots.
+        fmt: format string used to format the values in the table, defaults to ".2e". Common formats include:
+            - ".2e": scientific notation with 2 decimal places
+            - ".3f": fixed-point notation with 3 decimal places
+            - ".4g": general format with 4 significant digits
+            - ".1%": percentage format with 1 decimal place
+
+            Where the integer specifies the precision.
+            See :meth:`str.format` documentation for details on the format string options.
 
     """
 
-    def __init__(self, *, x_log: bool = False, y_log: bool = True):
+    def __init__(
+        self,
+        statistics: Sequence[Statistic],
+        *,
+        x_log: bool = False,
+        y_log: bool = True,
+        fmt: str = ".2e",
+    ) -> None:
+        self.statistics = statistics
         self.x_log = x_log
         self.y_log = y_log
+        self.fmt = fmt
 
     @property
     @abstractmethod
     def plot_description(self) -> str:
-        """Label for the y-axis."""
+        """Label for the y-axis in plots."""
+
+    @property
+    @abstractmethod
+    def table_description(self) -> str:
+        """Metric description to display in the table."""
+
+    @property
+    def can_diverge(self) -> bool:
+        """
+        Indicates whether the metric can diverge, i.e. take on infinite or NaN values.
+
+        If True then the table will try to indicate if the has metric diverged.
+        Has no real impact on calulations of the metric, will not effect plots.
+        """
+        return True
 
     @abstractmethod
-    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> Sequence[tuple[X, Y]]:
-        """Extract trial data in the form of (x, y) datapoints."""
+    def get_data_from_trial(
+        self,
+        agents: Sequence[AgentMetricsView],
+        problem: BenchmarkProblem,
+        iteration: int,
+    ) -> Sequence[float]:
+        """
+        Get the data for this metric from a trial.
 
+        Args:
+            agents: the agents being evaluated
+            problem: the benchmark problem being evaluated
+            iteration: the iteration at which to evaluate the metric, or -1 to use the agents' final x
 
-class RegretPerIteration(PlotMetric):
-    r"""
-    Global regret (y-axis) per iteration (x-axis).
+        Returns:
+            a list of floats, one for each agent
 
-    Global regret is defined as:
+        """
 
-    .. include:: snippets/global_cost_error.rst
+    def get_plot_data(self, agents: Sequence[AgentMetricsView], problem: BenchmarkProblem) -> Sequence[tuple[X, Y]]:
+        """
+        Extract trial data to be used in plots for this metric.
 
-    All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
-    iterations are disregarded. This is done to not miscalculate the global cost error which relies on all agents for
-    its calculation.
-    """
-
-    plot_description: str = "regret"
-
-    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
-        # Determine the set of recorded iterations common to all agents and use those
-        return [(i, utils.regret(agents, problem, i)) for i in utils.common_sorted_iterations(agents)]
-
-
-class GradientNormPerIteration(PlotMetric):
-    r"""
-    Global gradient norm (y-axis) per iteration (x-axis).
-
-    Global gradient norm is defined as:
-
-    .. include:: snippets/global_gradient_optimality.rst
-
-    All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
-    iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are
-    included in the calculation.
-    """
-
-    plot_description: str = "gradient norm"
-
-    def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
-        # Determine the set of recorded iterations common to all agents and use those
-        return [(i, utils.gradient_norm(agents, i)) for i in utils.common_sorted_iterations(agents)]
-
-
-class AccuracyPerIteration(PlotMetric):
-    """
-    Accuracy (y-axis) per iteration (x-axis).
-
-    Accuracy is calculated as the mean accuracy across agents, where each agent's accuracy is calculated using its
-    recorded x at that iteration. Only iterations that are recorded for all agents are taken into account, subsequent
-    iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
-
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
-
-    See :func:`~decent_bench.metrics.metric_utils.accuracy` for the specific accuracy calculation used.
-    """
-
-    plot_description: str = "accuracy"
-
-    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
-        return [(i, float(np.mean(utils.accuracy(agents, problem, i)))) for i in utils.common_sorted_iterations(agents)]
-
-
-class MSEPerIteration(PlotMetric):
-    """
-    Mean Squared Error (MSE) (y-axis) per iteration (x-axis).
-
-    MSE is calculated as the mean MSE across agents, where each agent's MSE is calculated using its
-    recorded x at that iteration. Only iterations that are recorded for all agents are taken into account, subsequent
-    iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
-
-    See :func:`~decent_bench.metrics.metric_utils.mse` for the specific MSE calculation used.
-    """
-
-    plot_description: str = "MSE"
-
-    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
-        return [(i, float(np.mean(utils.mse(agents, problem, i)))) for i in utils.common_sorted_iterations(agents)]
-
-
-class PrecisionPerIteration(PlotMetric):
-    """
-    Precision (y-axis) per iteration (x-axis).
-
-    Precision is calculated as the mean precision across agents, where each agent's precision is calculated using its
-    recorded x at that iteration. Only iterations that are recorded for all agents are taken into account, subsequent
-    iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
-
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
-
-    See :func:`~decent_bench.metrics.metric_utils.precision` for the specific precision calculation used.
-    """
-
-    plot_description: str = "precision"
-
-    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
+        This is used by :func:`create_plots` to generate plots for this metric.
+        By default, it calculates statistics on the intersection of all the iterations
+        reached by all agents, but it can be overridden to perform additional
+        processing on the data before it is used in plots.
+        """
         return [
-            (i, float(np.mean(utils.precision(agents, problem, i)))) for i in utils.common_sorted_iterations(agents)
+            (i, float(np.mean(self.get_data_from_trial(agents, problem, i))))
+            for i in utils.common_sorted_iterations(agents)
         ]
 
+    def get_table_data(self, agents: Sequence[AgentMetricsView], problem: BenchmarkProblem) -> Sequence[float]:
+        """
+        Extract trial data to be used in the table for this metric.
 
-class RecallPerIteration(PlotMetric):
-    """
-    Recall (y-axis) per iteration (x-axis).
-
-    Recall is calculated as the mean recall across agents, where each agent's recall is calculated using its
-    recorded x at that iteration. Only iterations that are recorded for all agents are taken into account, subsequent
-    iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
-
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
-
-    See :func:`~decent_bench.metrics.metric_utils.recall` for the specific recall calculation used.
-    """
-
-    plot_description: str = "recall"
-
-    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
-        return [(i, float(np.mean(utils.recall(agents, problem, i)))) for i in utils.common_sorted_iterations(agents)]
+        This is used by :func:`create_table` to generate the table for this metric.
+        By default, it returns the metric from the last iteration,
+        but it can be overridden to perform additional processing on the data before it is used in the table.
+        """
+        return self.get_data_from_trial(agents, problem, -1)
 
 
-DEFAULT_PLOT_METRICS: list[PlotMetric] = [
-    RegretPerIteration(x_log=False, y_log=True),
-    GradientNormPerIteration(x_log=False, y_log=True),
-]
-"""
-- :class:`RegretPerIteration` (semi-log)
-- :class:`GradientNormPerIteration` (semi-log)
-
-:meta hide-value:
-"""
-
-EMPIRICAL_PLOT_METRICS: list[PlotMetric] = [
-    AccuracyPerIteration(x_log=False, y_log=False),
-    MSEPerIteration(x_log=False, y_log=True),
-    PrecisionPerIteration(x_log=False, y_log=False),
-    RecallPerIteration(x_log=False, y_log=False),
-]
-"""
-- :class:`AccuracyPerIteration` (linear)
-- :class:`MSEPerIteration` (semi-log)
-- :class:`PrecisionPerIteration` (linear)
-- :class:`RecallPerIteration` (linear)
-
-:meta hide-value:
-"""
-
-PLOT_METRICS_DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/api/decent_bench.metrics.plot_metrics.html"
+METRICS_DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/api/decent_bench.metrics.metric_collection.html"
 X_LABELS = {
     "iterations": "iterations",
     "computational_cost": "time (computational cost units)",
@@ -221,10 +159,10 @@ MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p", "P", "X"]
 STYLES = ["-", ":", "--", "-.", (5, (10, 3)), (0, (5, 10)), (0, (3, 1, 1, 1))]
 
 
-def plot(  # noqa: PLR0917
+def create_plots(  # noqa: PLR0917
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
-    metrics: list[PlotMetric],
+    metrics: list[Metric],
     computational_cost: ComputationalCost | None,
     x_axis_scaling: float = 1e-4,
     compare_iterations_and_computational_cost: bool = False,
@@ -261,7 +199,7 @@ def plot(  # noqa: PLR0917
     """
     if not metrics:
         return
-    LOGGER.info(f"Plot metric definitions can be found here: {PLOT_METRICS_DOC_LINK}")
+    LOGGER.info(f"Plot metric definitions can be found here: {METRICS_DOC_LINK}")
 
     if len(metrics) > 4:
         LOGGER.warning(
@@ -291,8 +229,10 @@ def plot(  # noqa: PLR0917
                 status=f"Task: {metrics[metric_index].plot_description} vs {x_label}",
             )
             for i, (alg, agent_states) in enumerate(resulting_agent_states.items()):
-                data_per_trial: list[Sequence[tuple[X, Y]]] = _get_data_per_trial(
-                    agent_states, problem, metrics[metric_index]
+                data_per_trial: list[Sequence[tuple[X, Y]]] = _plot_data_per_trial(
+                    agent_states,
+                    problem,
+                    metrics[metric_index],
                 )
                 if not _is_finite(data_per_trial):
                     msg = (
@@ -325,7 +265,7 @@ def plot(  # noqa: PLR0917
 
 
 def _create_metric_subplots(
-    metrics: list[PlotMetric],
+    metrics: list[Metric],
     use_cost: bool,
     compare_iterations_and_computational_cost: bool,
     plot_grid: bool,
@@ -504,13 +444,15 @@ def _calc_total_cost(agent_states: list[list[AgentMetricsView]], computational_c
     )
 
 
-def _get_data_per_trial(
-    agents_per_trial: list[list[AgentMetricsView]], problem: BenchmarkProblem, metric: PlotMetric
+def _plot_data_per_trial(
+    agents_per_trial: list[list[AgentMetricsView]],
+    problem: BenchmarkProblem,
+    metric: Metric,
 ) -> list[Sequence[tuple[X, Y]]]:
     data_per_trial: list[Sequence[tuple[X, Y]]] = []
     for agents in agents_per_trial:
         with warnings.catch_warnings(action="ignore"):
-            trial_data = metric.get_data_from_trial(agents, problem)
+            trial_data = metric.get_plot_data(agents, problem)
         data_per_trial.append(trial_data)
     return data_per_trial
 
@@ -530,3 +472,113 @@ def _calculate_envelope(data_per_trial: list[Sequence[tuple[X, Y]]]) -> tuple[li
             y_span_per_x[x]["y_min"] = min(y_span_per_x[x]["y_min"], y)
             y_span_per_x[x]["y_max"] = max(y_span_per_x[x]["y_max"], y)
     return [v["y_min"] for v in y_span_per_x.values()], [v["y_max"] for v in y_span_per_x.values()]
+
+
+def create_table(
+    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
+    problem: BenchmarkProblem,
+    metrics: list[Metric],
+    confidence_level: float,
+    table_fmt: Literal["grid", "latex"],
+    *,
+    table_path: str | None = None,
+) -> None:
+    """
+    Print table with confidence intervals, one row per metric and statistic, and one column per algorithm.
+
+    Args:
+        resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
+        problem: benchmark problem whose properties, e.g.
+            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.x_optimal`,
+            are used for metric calculations
+        metrics: metrics to calculate
+        confidence_level: confidence level of the confidence intervals
+        table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
+        table_path: optional path to save the table as a text file, if not provided the table is not saved to a file
+
+    """
+    if not metrics:
+        return
+    LOGGER.info(f"Table metric definitions can be found here: {METRICS_DOC_LINK}")
+    algs = list(resulting_agent_states)
+    headers = ["Metric (statistic)"] + [alg.name for alg in algs]
+    rows: list[list[str]] = []
+    statistics_abbr = {"average": "avg", "median": "mdn"}
+    with warnings.catch_warnings(action="ignore"), utils.MetricProgressBar() as progress:
+        n_statistics = sum(len(metric.statistics) for metric in metrics)
+        table_task = progress.add_task("Generating table", total=n_statistics, status="")
+        for metric in metrics:
+            progress.update(table_task, status=f"Task: {metric.table_description}")
+            data_per_trial = [_table_data_per_trial(resulting_agent_states[a], problem, metric) for a in algs]
+            for statistic in metric.statistics:
+                row = [f"{metric.table_description} ({statistics_abbr.get(statistic.__name__) or statistic.__name__})"]
+                for i in range(len(algs)):
+                    agg_data_per_trial = [statistic(trial) for trial in data_per_trial[i]]
+                    mean, margin_of_error = _calculate_mean_and_margin_of_error(agg_data_per_trial, confidence_level)
+                    formatted_confidence_interval = _format_confidence_interval(
+                        mean,
+                        margin_of_error,
+                        metric.fmt,
+                        metric.can_diverge,
+                    )
+                    row.append(formatted_confidence_interval)
+                rows.append(row)
+                progress.advance(table_task)
+        progress.update(table_task, status="Finalizing table")
+    formatted_table = tb.tabulate(rows, headers, tablefmt=table_fmt)
+    LOGGER.info("\n" + formatted_table)
+    if table_path:
+        pathlib.Path(table_path).parent.mkdir(parents=True, exist_ok=True)
+        pathlib.Path(table_path).write_text(formatted_table, encoding="utf-8")
+
+
+def _table_data_per_trial(
+    agents_per_trial: list[list[AgentMetricsView]],
+    problem: BenchmarkProblem,
+    metric: Metric,
+) -> list[Sequence[float]]:
+    data_per_trial: list[Sequence[float]] = []
+    for agents in agents_per_trial:
+        trial_data = metric.get_table_data(agents, problem)
+        data_per_trial.append(trial_data)
+
+    return data_per_trial
+
+
+def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: float) -> tuple[float, float]:
+    mean = np.mean(data)
+    sem = stats.sem(data) if len(set(data)) > 1 else None
+    raw_interval = (
+        stats.t.interval(confidence=confidence_level, df=len(data) - 1, loc=mean, scale=sem) if sem else (mean, mean)
+    )
+    if np.isfinite(mean) and np.isfinite(raw_interval).all():
+        return (float(mean), float(mean - raw_interval[0]))
+
+    return np.nan, np.nan
+
+
+def _format_confidence_interval(mean: float, margin_of_error: float, fmt: str, can_diverge: bool) -> str:
+    if not _is_valid_float_format_spec(fmt):
+        LOGGER.warning(f"Invalid format string '{fmt}', defaulting to scientific notation")
+        fmt = ".2e"
+
+    formatted_confidence_interval = f"{mean:{fmt}} \u00b1 {margin_of_error:{fmt}}"
+
+    if any(np.isnan([mean, margin_of_error])) and can_diverge:
+        formatted_confidence_interval += " (diverged?)"
+
+    return formatted_confidence_interval
+
+
+def _is_valid_float_format_spec(fmt: str) -> bool:
+    """
+    Validate that the given format spec can be used to format a float.
+
+    This avoids attempting to format real values with an invalid format string.
+
+    """
+    try:
+        f"{0.01:{fmt}}"
+    except (ValueError, TypeError):
+        return False
+    return True
