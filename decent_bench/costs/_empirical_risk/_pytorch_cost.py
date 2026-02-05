@@ -145,8 +145,9 @@ class PyTorchCost(EmpiricalRiskCost):
         self._last_batch_used = []  # Pre-allocate list for last used batch for efficiency in _get_batch_data
 
         # Store parameter shapes for flattening/unflattening
-        self.param_shapes = [p.shape for p in self.model.parameters()]
-        self.param_sizes = [p.numel() for p in self.model.parameters()]
+        self._params_list = list(self.model.parameters())  # Cache for faster access
+        self.param_shapes = [p.shape for p in self._params_list]
+        self.param_sizes = [p.numel() for p in self._params_list]
         self.total_params = sum(self.param_sizes)
         self.param_names = [n for n, _ in self.model.named_parameters()]
         self.param_offsets = torch.cumsum(torch.tensor([0, *self.param_sizes[:-1]]), dim=0).tolist()
@@ -209,17 +210,18 @@ class PyTorchCost(EmpiricalRiskCost):
                 f"Parameter vector size {x.numel()} does not match total model parameters {self.total_params}"
             )
 
-        # Unflatten the parameter vector and set model parameters
-        start_idx = 0
+        # Move to target device once (assumes all params on same device)
+        x = x.to(self._pytorch_device)
+
+        # Split tensor efficiently and unflatten
+        param_chunks = torch.split(x, self.param_sizes)
         with torch.no_grad():
-            for param, size, shape in zip(self.model.parameters(), self.param_sizes, self.param_shapes, strict=True):
-                end_idx = start_idx + size
-                param.data = x[start_idx:end_idx].reshape(shape).to(param.device)
-                start_idx = end_idx
+            for param, chunk, shape in zip(self._params_list, param_chunks, self.param_shapes, strict=True):
+                param.data = chunk.view(shape)
 
     def _get_model_parameters(self) -> torch.Tensor:
         """Get model parameters as a flattened tensor."""
-        params = [p.detach().flatten() for p in self.model.parameters()]
+        params = [p.detach().flatten() for p in self._params_list]
         return torch.cat(params).to(self._pytorch_device)
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.predict)
@@ -236,7 +238,9 @@ class PyTorchCost(EmpiricalRiskCost):
 
         """
         self._set_model_parameters(x)
-        self.model.eval()
+        if self.model.training:
+            self.model.eval()
+
         with torch.no_grad():
             inputs = torch.stack(data).to(self._pytorch_device)
             outputs: torch.Tensor = self.model(inputs)
@@ -247,7 +251,8 @@ class PyTorchCost(EmpiricalRiskCost):
     @iop.autodecorate_cost_method(EmpiricalRiskCost.function)
     def function(self, x: torch.Tensor, indices: EmpiricalRiskIndices = "batch") -> float:
         self._set_model_parameters(x)
-        self.model.eval()
+        if self.model.training:
+            self.model.eval()
 
         batch_x, batch_y = self._get_batch_data(indices)
 
@@ -268,7 +273,8 @@ class PyTorchCost(EmpiricalRiskCost):
             return self._per_sample_gradients(x, indices)
 
         self._set_model_parameters(x)
-        self.model.train()
+        if not self.model.training:
+            self.model.train()
 
         batch_x, batch_y = self._get_batch_data(indices)
 
@@ -277,29 +283,18 @@ class PyTorchCost(EmpiricalRiskCost):
         loss = self.loss_fn(outputs, batch_y)
 
         # Compute gradients using torch.autograd.grad (doesn't modify model parameters)
-        model_params = list(self.model.parameters())
-        gradients = torch.autograd.grad(
-            loss,
-            model_params,
-            create_graph=False,
-            retain_graph=False,
-            allow_unused=True,
-        )
-
-        grads = [
-            g.reshape(-1) if g is not None else torch.zeros_like(p)
-            for p, g in zip(self.model.parameters(), gradients, strict=True)
-        ]
+        gradients = torch.autograd.grad(loss, self._params_list)
 
         # Return concatenated gradient tensor
-        return torch.cat(grads)
+        return torch.cat([g.flatten() for g in gradients])
 
     def _per_sample_gradients(self, x: torch.Tensor, indices: EmpiricalRiskIndices = "batch") -> torch.Tensor:
         """Compute per-sample gradients for the specified indices. May need to batch calls due to memory constraints."""
         # Credit: https://docs.pytorch.org/tutorials/intermediate/per_sample_grads.html
         self._init_per_sample_grad()
         self._set_model_parameters(x)
-        self.model.train()
+        if not self.model.training:
+            self.model.train()
 
         batch_x, batch_y = self._get_batch_data(indices)
 
@@ -310,14 +305,12 @@ class PyTorchCost(EmpiricalRiskCost):
 
         # Collect gradients and flatten them into a single tensor
         batch_size = batch_x.shape[0]
-        dtype = next(self.model.parameters()).dtype
-        with torch.no_grad():
-            flat_grads = torch.empty((batch_size, self.total_params), device=self._pytorch_device, dtype=dtype)
-            for name, off, size in zip(self.param_names, self.param_offsets, self.param_sizes, strict=True):
-                g = ft_per_sample_grads[name].reshape(batch_size, size)
-                flat_grads[:, off : off + size] = g
-
-        return flat_grads
+        # Concatenate all per-sample gradients
+        grad_list = [
+            ft_per_sample_grads[name].view(batch_size, size)
+            for name, size in zip(self.param_names, self.param_sizes, strict=True)
+        ]
+        return torch.cat(grad_list, dim=1)
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.hessian)
     def hessian(self, x: torch.Tensor, indices: EmpiricalRiskIndices = "batch") -> torch.Tensor:

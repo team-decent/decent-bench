@@ -103,8 +103,8 @@ def create_classification_problem(
         def model_gen() -> torch.nn.Module:
             return SimpleLinearModel(
                 input_size=3,
-                hidden_sizes=[32, 16],
-                activation="relu",
+                hidden_sizes=[],
+                activation=None,
                 output_size=2,
             )
 
