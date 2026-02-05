@@ -95,13 +95,107 @@ class GradientNormPerIteration(PlotMetric):
         return [(i, utils.gradient_norm(agents, i)) for i in utils.common_sorted_iterations(agents)]
 
 
-DEFAULT_PLOT_METRICS = [
+class AccuracyPerIteration(PlotMetric):
+    """
+    Accuracy (y-axis) per iteration (x-axis).
+
+    Accuracy is calculated as the mean accuracy across agents, where each agent's accuracy is calculated using its
+    recorded x at that iteration. Only iterations that are recorded for all agents are taken into account, subsequent
+    iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
+
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
+    returns NaN otherwise.
+
+    See :func:`~decent_bench.metrics.metric_utils.accuracy` for the specific accuracy calculation used.
+    """
+
+    plot_description: str = "accuracy"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
+        return [(i, float(np.mean(utils.accuracy(agents, problem, i)))) for i in utils.common_sorted_iterations(agents)]
+
+
+class MSEPerIteration(PlotMetric):
+    """
+    Mean Squared Error (MSE) (y-axis) per iteration (x-axis).
+
+    MSE is calculated as the mean MSE across agents, where each agent's MSE is calculated using its
+    recorded x at that iteration. Only iterations that are recorded for all agents are taken into account, subsequent
+    iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
+
+    See :func:`~decent_bench.metrics.metric_utils.mse` for the specific MSE calculation used.
+    """
+
+    plot_description: str = "MSE"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
+        return [(i, float(np.mean(utils.mse(agents, problem, i)))) for i in utils.common_sorted_iterations(agents)]
+
+
+class PrecisionPerIteration(PlotMetric):
+    """
+    Precision (y-axis) per iteration (x-axis).
+
+    Precision is calculated as the mean precision across agents, where each agent's precision is calculated using its
+    recorded x at that iteration. Only iterations that are recorded for all agents are taken into account, subsequent
+    iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
+
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
+    returns NaN otherwise.
+
+    See :func:`~decent_bench.metrics.metric_utils.precision` for the specific precision calculation used.
+    """
+
+    plot_description: str = "precision"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
+        return [
+            (i, float(np.mean(utils.precision(agents, problem, i)))) for i in utils.common_sorted_iterations(agents)
+        ]
+
+
+class RecallPerIteration(PlotMetric):
+    """
+    Recall (y-axis) per iteration (x-axis).
+
+    Recall is calculated as the mean recall across agents, where each agent's recall is calculated using its
+    recorded x at that iteration. Only iterations that are recorded for all agents are taken into account, subsequent
+    iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
+
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
+    returns NaN otherwise.
+
+    See :func:`~decent_bench.metrics.metric_utils.recall` for the specific recall calculation used.
+    """
+
+    plot_description: str = "recall"
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
+        return [(i, float(np.mean(utils.recall(agents, problem, i)))) for i in utils.common_sorted_iterations(agents)]
+
+
+DEFAULT_PLOT_METRICS: list[PlotMetric] = [
     RegretPerIteration(x_log=False, y_log=True),
     GradientNormPerIteration(x_log=False, y_log=True),
 ]
 """
 - :class:`RegretPerIteration` (semi-log)
 - :class:`GradientNormPerIteration` (semi-log)
+
+:meta hide-value:
+"""
+
+EMPIRICAL_PLOT_METRICS: list[PlotMetric] = [
+    AccuracyPerIteration(x_log=False, y_log=False),
+    MSEPerIteration(x_log=False, y_log=True),
+    PrecisionPerIteration(x_log=False, y_log=False),
+    RecallPerIteration(x_log=False, y_log=False),
+]
+"""
+- :class:`AccuracyPerIteration` (linear)
+- :class:`MSEPerIteration` (semi-log)
+- :class:`PrecisionPerIteration` (linear)
+- :class:`RecallPerIteration` (linear)
 
 :meta hide-value:
 """

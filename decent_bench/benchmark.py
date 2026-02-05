@@ -34,6 +34,7 @@ def benchmark(
     *,
     plot_grid: bool = True,
     plot_path: str | None = None,
+    table_path: str | None = None,
     computational_cost: pm.ComputationalCost | None = None,
     x_axis_scaling: float = 1e-4,
     n_trials: int = 30,
@@ -60,6 +61,8 @@ def benchmark(
         plot_grid: whether to show grid lines on the plots
         plot_path: optional file path to save the generated plot as an image file (e.g., "plots.png"). If ``None``,
             the plot will only be displayed
+        table_path: optional file path to save the generated table as a text file (e.g., "table.txt"). If ``None``,
+            the table will only be displayed
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
             of computational cost
         x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
@@ -119,7 +122,14 @@ def benchmark(
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
     for alg, networks in resulting_nw_states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
-    tm.tabulate(resulting_agent_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
+    tm.tabulate(
+        resulting_agent_states,
+        benchmark_problem,
+        table_metrics,
+        confidence_level,
+        table_fmt,
+        table_path=table_path,
+    )
     pm.plot(
         resulting_agent_states,
         benchmark_problem,

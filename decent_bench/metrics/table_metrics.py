@@ -1,3 +1,4 @@
+import pathlib
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
@@ -40,6 +41,15 @@ class TableMetric(ABC):
     def __init__(self, statistics: list[Statistic], fmt: str = ".2e"):
         self.statistics = statistics
         self.fmt = fmt
+
+    @property
+    def can_diverge(self) -> bool:
+        """
+        Indicates whether the metric can diverge, i.e. take on infinite or NaN values.
+
+        If True then the table will try to indicate if the has metric diverged.
+        """
+        return True
 
     @property
     @abstractmethod
@@ -227,7 +237,139 @@ class SentMessagesDropped(TableMetric):
         return [a.n_sent_messages_dropped for a in agents]
 
 
-DEFAULT_TABLE_METRICS = [
+class Accuracy(TableMetric):
+    """
+    Final accuracy per agent.
+
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
+    returns NaN otherwise.
+
+    See :func:`~decent_bench.metrics.metric_utils.accuracy` for the specific accuracy calculation used.
+    """
+
+    table_description: str = "accuracy"
+    can_diverge: bool = False
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return utils.accuracy(agents, problem, iteration=-1)
+
+
+class OptimalAccuracy(TableMetric):
+    """
+    Accuracy calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
+
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
+    returns NaN otherwise.
+
+    See :func:`~decent_bench.metrics.metric_utils.optimal_accuracy` for the specific optimal accuracy calculation used.
+    """
+
+    table_description: str = "optimal accuracy"
+    can_diverge: bool = False
+
+    def get_data_from_trial(self, _: list[AgentMetricsView], problem: BenchmarkProblem) -> tuple[float]:  # noqa: D102
+        return (utils.optimal_x_accuracy(problem),)
+
+
+class MSE(TableMetric):
+    """
+    Final MSE per agent, only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`.
+
+    See :func:`~decent_bench.metrics.metric_utils.mse` for the specific MSE calculation used.
+    """
+
+    table_description: str = "mse"
+    can_diverge: bool = False
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return utils.mse(agents, problem, iteration=-1)
+
+
+class OptimalMSE(TableMetric):
+    """
+    MSE calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
+
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
+
+    See :func:`~decent_bench.metrics.metric_utils.optimal_x_mse` for the specific optimal MSE calculation used.
+    """
+
+    table_description: str = "optimal mse"
+    can_diverge: bool = False
+
+    def get_data_from_trial(self, _: list[AgentMetricsView], problem: BenchmarkProblem) -> tuple[float]:  # noqa: D102
+        return (utils.optimal_x_mse(problem),)
+
+
+class Precision(TableMetric):
+    """
+    Final precision per agent.
+
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
+    returns NaN otherwise.
+
+    See :func:`~decent_bench.metrics.metric_utils.precision` for the specific precision calculation used.
+    """
+
+    table_description: str = "precision"
+    can_diverge: bool = False
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return utils.precision(agents, problem, iteration=-1)
+
+
+class OptimalPrecision(TableMetric):
+    """
+    Precision calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
+
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
+    returns NaN otherwise.
+
+    See :func:`~decent_bench.metrics.metric_utils.optimal_x_precision` for the specific optimal precision calculation used.
+    """
+
+    table_description: str = "optimal precision"
+    can_diverge: bool = False
+
+    def get_data_from_trial(self, _: list[AgentMetricsView], problem: BenchmarkProblem) -> tuple[float]:  # noqa: D102
+        return (utils.optimal_x_precision(problem),)
+
+
+class Recall(TableMetric):
+    """
+    Final recall per agent.
+
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
+    returns NaN otherwise.
+
+    See :func:`~decent_bench.metrics.metric_utils.recall` for the specific recall calculation used.
+    """
+
+    table_description: str = "recall"
+    can_diverge: bool = False
+
+    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[float]:  # noqa: D102
+        return utils.recall(agents, problem, iteration=-1)
+
+
+class OptimalRecall(TableMetric):
+    """
+    Recall calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
+
+    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and single dimensional targets,
+    returns NaN otherwise.
+
+    See :func:`~decent_bench.metrics.metric_utils.optimal_x_recall` for the specific optimal recall calculation used.
+    """
+
+    table_description: str = "optimal recall"
+    can_diverge: bool = False
+
+    def get_data_from_trial(self, _: list[AgentMetricsView], problem: BenchmarkProblem) -> tuple[float]:  # noqa: D102
+        return (utils.optimal_x_recall(problem),)
+
+
+DEFAULT_TABLE_METRICS: list[TableMetric] = [
     Regret([utils.single]),
     GradientNorm([utils.single]),
     XError([min, np.average, max]),
@@ -264,6 +406,29 @@ DEFAULT_TABLE_METRICS = [
 :meta hide-value:
 """
 
+EMPIRICAL_TABLE_METRICS: list[TableMetric] = [
+    Accuracy([min, np.average, max], fmt=".2%"),
+    OptimalAccuracy([utils.single], fmt=".2%"),
+    MSE([min, np.average, max]),
+    OptimalMSE([utils.single]),
+    Precision([min, np.average, max], fmt=".2%"),
+    OptimalPrecision([utils.single], fmt=".2%"),
+    Recall([min, np.average, max], fmt=".2%"),
+    OptimalRecall([utils.single], fmt=".2%"),
+]
+"""
+- :class:`Accuracy` - :func:`min`, :func:`~numpy.average`, :func:`max` with percentage format
+- :class:`OptimalAccuracy` - :func:`~.metric_utils.single` with percentage format
+- :class:`MSE` - :func:`min`, :func:`~numpy.average`, :func:`max`
+- :class:`OptimalMSE` - :func:`~.metric_utils.single`
+- :class:`Precision` - :func:`min`, :func:`~numpy.average`, :func:`max` with percentage format
+- :class:`OptimalPrecision` - :func:`~.metric_utils.single` with percentage
+- :class:`Recall` - :func:`min`, :func:`~numpy.average`, :func:`max` with percentage format
+- :class:`OptimalRecall` - :func:`~.metric_utils.single` with percentage format
+
+:meta hide-value:
+"""
+
 
 TABLE_METRICS_DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/api/decent_bench.metrics.table_metrics.html"
 
@@ -274,6 +439,8 @@ def tabulate(
     metrics: list[TableMetric],
     confidence_level: float,
     table_fmt: Literal["grid", "latex"],
+    *,
+    table_path: str | None = None,
 ) -> None:
     """
     Print table with confidence intervals, one row per metric and statistic, and one column per algorithm.
@@ -286,6 +453,7 @@ def tabulate(
         metrics: metrics to calculate
         confidence_level: confidence level of the confidence intervals
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
+        table_path: optional path to save the table as a text file, if not provided the table is not saved to a file
 
     """
     if not metrics:
@@ -306,13 +474,20 @@ def tabulate(
                 for i in range(len(algs)):
                     agg_data_per_trial = [statistic(trial) for trial in data_per_trial[i]]
                     mean, margin_of_error = _calculate_mean_and_margin_of_error(agg_data_per_trial, confidence_level)
-                    formatted_confidence_interval = _format_confidence_interval(mean, margin_of_error, metric.fmt)
+                    formatted_confidence_interval = _format_confidence_interval(
+                        mean,
+                        margin_of_error,
+                        metric.fmt,
+                        metric.can_diverge,
+                    )
                     row.append(formatted_confidence_interval)
                 rows.append(row)
                 progress.advance(table_task)
         progress.update(table_task, status="Finalizing table")
     formatted_table = tb.tabulate(rows, headers, tablefmt=table_fmt)
     LOGGER.info("\n" + formatted_table)
+    if table_path:
+        pathlib.Path(table_path).write_text(formatted_table, encoding="utf-8")
 
 
 def _data_per_trial(
@@ -338,14 +513,14 @@ def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: flo
     return np.nan, np.nan
 
 
-def _format_confidence_interval(mean: float, margin_of_error: float, fmt: str) -> str:
+def _format_confidence_interval(mean: float, margin_of_error: float, fmt: str, can_diverge: bool) -> str:
     if not _is_valid_float_format_spec(fmt):
         LOGGER.warning(f"Invalid format string '{fmt}', defaulting to scientific notation")
         fmt = ".2e"
 
     formatted_confidence_interval = f"{mean:{fmt}} \u00b1 {margin_of_error:{fmt}}"
 
-    if any(np.isnan([mean, margin_of_error])):
+    if any(np.isnan([mean, margin_of_error])) and can_diverge:
         formatted_confidence_interval += " (diverged?)"
 
     return formatted_confidence_interval

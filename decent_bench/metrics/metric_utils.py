@@ -7,11 +7,15 @@ from numpy import linalg as la
 from numpy.linalg import LinAlgError
 from numpy.typing import NDArray
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
+from sklearn import metrics as sk_metrics
 
 import decent_bench.utils.interoperability as iop
+from decent_bench import costs
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.utils.array import Array
+from decent_bench.utils.logger import LOGGER
+from decent_bench.utils.types import Dataset
 
 
 class MetricProgressBar(Progress):
@@ -154,6 +158,297 @@ def iterative_convergence_rate_and_order(agent: AgentMetricsView, problem: Bench
     except LinAlgError:
         rate, order = np.nan, np.nan
     return rate, order
+
+
+def split_dataset(data: Dataset) -> tuple[list[Array], NDArray[float64]]:
+    """
+    Split dataset into features and labels.
+
+    Args:
+        data: dataset to split, as a tuple of (features, labels)
+
+    Returns:
+        tuple of (features, labels)
+
+    """
+    x, y = zip(*data, strict=True)
+    test_x = list(x)
+    test_y = np.array(y)
+    return test_x, test_y
+
+
+def accuracy(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
+    """
+    Calculate the accuracy per agent.
+
+    Accuracy is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
+
+    Args:
+        agents: sequence of agents to calculate accuracy for
+        problem: benchmark problem containing test data
+        iteration: iteration to calculate accuracy at, or -1 to use the agents' final x
+
+    Returns:
+        list of accuracies per agent at *iteration*
+
+    """
+    if problem.test_data is None:
+        LOGGER.warning(
+            "Test data is required to calculate accuracy but is not provided in the problem, returning NaN for accuracy"
+        )
+        return [np.nan for _ in agents]
+
+    ret: list[float] = []
+    test_x, test_y = split_dataset(problem.test_data)
+    for agent in agents:
+        if isinstance(agent.cost, costs.EmpiricalRiskCost):
+            iteration = max(agent.x_history) if iteration == -1 else iteration
+            preds = iop.to_numpy(agent.cost.predict(agent.x_history[iteration], test_x))
+            try:
+                ret.append(float(sk_metrics.accuracy_score(test_y, preds)))
+            except ValueError as e:
+                LOGGER.warning(
+                    "Accuracy calculation failed, make sure your predictions and true labels are one-dimensional, "
+                    f"returning NaN for accuracy.\nError caught: {e}"
+                )
+                ret.append(np.nan)
+        else:
+            LOGGER.warning("Accuracy metric is only applicable for EmpiricalRiskCost, returning NaN for accuracy")
+            ret.append(np.nan)
+    return ret
+
+
+def optimal_x_accuracy(problem: BenchmarkProblem) -> float:
+    """
+    Calculate the accuracy using the benchmark problem's optimal x.
+
+    Optimal x accuracy is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
+
+    Args:
+        problem: benchmark problem containing test data
+
+    Returns:
+        accuracy using the benchmark problem's optimal x
+
+    """
+    amv = AgentMetricsView(
+        cost=problem.costs[0],
+        x_history={0: problem.x_optimal},
+        n_x_updates=0,
+        n_function_calls=0,
+        n_gradient_calls=0,
+        n_hessian_calls=0,
+        n_proximal_calls=0,
+        n_sent_messages=0,
+        n_received_messages=0,
+        n_sent_messages_dropped=0,
+    )
+    return accuracy([amv], problem, iteration=-1)[0]
+
+
+def mse(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
+    """
+    Calculate the mean squared error (MSE) per agent.
+
+    MSE is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
+
+    Args:
+        agents: sequence of agents to calculate MSE for
+        problem: benchmark problem containing test data
+        iteration: iteration to calculate MSE at, or -1 to use the agents' final x
+
+    Returns:
+        list of MSE per agent
+
+    """
+    if problem.test_data is None:
+        LOGGER.warning(
+            "Test data is required to calculate MSE but is not provided in the problem, returning NaN for MSE"
+        )
+        return [np.nan for _ in agents]
+
+    ret: list[float] = []
+    test_x, test_y = split_dataset(problem.test_data)
+    for agent in agents:
+        if isinstance(agent.cost, costs.EmpiricalRiskCost):
+            iteration = max(agent.x_history) if iteration == -1 else iteration
+            preds = iop.to_numpy(agent.cost.predict(agent.x_history[iteration], test_x))
+            ret.append(sk_metrics.mean_squared_error(test_y, preds))
+        else:
+            LOGGER.warning("Accuracy metric is only applicable for EmpiricalRiskCost, returning NaN for accuracy")
+            ret.append(np.nan)
+    return ret
+
+
+def optimal_x_mse(problem: BenchmarkProblem) -> float:
+    """
+    Calculate the mean squared error (MSE) using the benchmark problem's optimal x.
+
+    Optimal x MSE is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
+
+    Args:
+        problem: benchmark problem containing test data
+
+    Returns:
+        MSE using the benchmark problem's optimal x
+
+    """
+    amv = AgentMetricsView(
+        cost=problem.costs[0],
+        x_history={0: problem.x_optimal},
+        n_x_updates=0,
+        n_function_calls=0,
+        n_gradient_calls=0,
+        n_hessian_calls=0,
+        n_proximal_calls=0,
+        n_sent_messages=0,
+        n_received_messages=0,
+        n_sent_messages_dropped=0,
+    )
+    return mse([amv], problem, iteration=-1)[0]
+
+
+def precision(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
+    """
+    Calculate the precision per agent.
+
+    Precision is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
+    Calculated using :func:`sklearn.metrics.precision_score` with micro averaging.
+
+    Args:
+        agents: sequence of agents to calculate precision for
+        problem: benchmark problem containing test data
+        iteration: iteration to calculate precision at, or -1 to use the agents' final x
+
+    Returns:
+        list of precision per agent at *iteration*
+
+    """
+    if problem.test_data is None:
+        LOGGER.warning(
+            "Test data is required to calculate precision but is not provided "
+            "in the problem, returning NaN for precision"
+        )
+        return [np.nan for _ in agents]
+
+    ret: list[float] = []
+    test_x, test_y = split_dataset(problem.test_data)
+    for agent in agents:
+        if isinstance(agent.cost, costs.EmpiricalRiskCost):
+            iteration = max(agent.x_history) if iteration == -1 else iteration
+            preds = iop.to_numpy(agent.cost.predict(agent.x_history[iteration], test_x))
+            try:
+                ret.append(float(sk_metrics.precision_score(test_y, preds, average="micro")))
+            except ValueError as e:
+                LOGGER.warning(
+                    "Precision calculation failed, make sure your predictions and true labels are one-dimensional, "
+                    f"returning NaN for precision.\nError caught: {e}"
+                )
+                ret.append(np.nan)
+        else:
+            LOGGER.warning("Precision metric is only applicable for EmpiricalRiskCost, returning NaN for precision")
+            ret.append(np.nan)
+    return ret
+
+
+def optimal_x_precision(problem: BenchmarkProblem) -> float:
+    """
+    Calculate the precision using the benchmark problem's optimal x.
+
+    Optimal x precision is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
+    Calculated using :func:`sklearn.metrics.precision_score` with micro averaging.
+
+    Args:
+        problem: benchmark problem containing test data
+
+    Returns:
+        precision using the benchmark problem's optimal x
+
+    """
+    amv = AgentMetricsView(
+        cost=problem.costs[0],
+        x_history={0: problem.x_optimal},
+        n_x_updates=0,
+        n_function_calls=0,
+        n_gradient_calls=0,
+        n_hessian_calls=0,
+        n_proximal_calls=0,
+        n_sent_messages=0,
+        n_received_messages=0,
+        n_sent_messages_dropped=0,
+    )
+    return precision([amv], problem, iteration=-1)[0]
+
+
+def recall(agents: list[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
+    """
+    Calculate the recall per agent.
+
+    Recall is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
+    Calculated using :func:`sklearn.metrics.recall_score` with micro averaging.
+
+    Args:
+        agents: sequence of agents to calculate recall for
+        problem: benchmark problem containing test data
+        iteration: iteration to calculate recall at, or -1 to use the agents' final x
+
+    Returns:
+        list of recall per agent at *iteration*
+
+    """
+    if problem.test_data is None:
+        LOGGER.warning(
+            "Test data is required to calculate recall but is not provided in the problem, returning NaN for recall"
+        )
+        return [np.nan for _ in agents]
+
+    ret: list[float] = []
+    test_x, test_y = split_dataset(problem.test_data)
+    for agent in agents:
+        if isinstance(agent.cost, costs.EmpiricalRiskCost):
+            iteration = max(agent.x_history) if iteration == -1 else iteration
+            preds = iop.to_numpy(agent.cost.predict(agent.x_history[iteration], test_x))
+            try:
+                ret.append(float(sk_metrics.recall_score(test_y, preds, average="micro")))
+            except ValueError as e:
+                LOGGER.warning(
+                    "Recall calculation failed, make sure your predictions and true labels are one-dimensional, "
+                    f"returning NaN for recall.\nError caught: {e}"
+                )
+                ret.append(np.nan)
+        else:
+            LOGGER.warning("Recall metric is only applicable for EmpiricalRiskCost, returning NaN for recall")
+            ret.append(np.nan)
+    return ret
+
+
+def optimal_x_recall(problem: BenchmarkProblem) -> float:
+    """
+    Calculate the recall using the benchmark problem's optimal x.
+
+    Optimal x recall is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
+    Calculated using :func:`sklearn.metrics.recall_score` with micro averaging.
+
+    Args:
+        problem: benchmark problem containing test data
+
+    Returns:
+        recall using the benchmark problem's optimal x
+
+    """
+    amv = AgentMetricsView(
+        cost=problem.costs[0],
+        x_history={0: problem.x_optimal},
+        n_x_updates=0,
+        n_function_calls=0,
+        n_gradient_calls=0,
+        n_hessian_calls=0,
+        n_proximal_calls=0,
+        n_sent_messages=0,
+        n_received_messages=0,
+        n_sent_messages_dropped=0,
+    )
+    return recall([amv], problem, iteration=-1)[0]
 
 
 def common_sorted_iterations(agents: Sequence[AgentMetricsView]) -> list[int]:

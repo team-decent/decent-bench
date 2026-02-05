@@ -126,6 +126,7 @@ def create_classification_problem(
             for p in dataset.get_partitions()
         ]
         x_optimal = ca.pytorch_gradient_descent(costs, lr=0.01, epochs=10000, conv_tol=1e-6)  # type: ignore[arg-type]
+        test_data = dataset.get_datapoints()
     elif cost_cls is LogisticRegressionCost:
         dataset = SyntheticClassificationDatasetHandler(
             n_targets=2,
@@ -139,6 +140,7 @@ def create_classification_problem(
         costs = [cost_cls(p) for p in dataset.get_partitions()]  # type: ignore[call-arg]
         sum_cost = reduce(add, costs)
         x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
+        test_data = None
     else:
         raise ValueError(f"Unsupported cost class: {cost_cls}")
 
@@ -155,7 +157,7 @@ def create_classification_problem(
         message_compression=message_compression,
         message_noise=message_noise,
         message_drop=message_drop,
-        test_data=None,
+        test_data=test_data,
     )
 
 
@@ -218,6 +220,7 @@ def create_regression_problem(
         )
         costs = [cost_cls(p, model_gen(), torch.nn.MSELoss()) for p in dataset.get_partitions()]  # type: ignore[call-arg, arg-type]
         x_optimal = ca.pytorch_gradient_descent(costs, lr=0.01, epochs=15000, conv_tol=1e-6)  # type: ignore[arg-type]
+        test_data = dataset.get_datapoints()
     elif cost_cls is LinearRegressionCost:
         dataset = SyntheticRegressionDatasetHandler(
             n_targets=1,
@@ -231,6 +234,7 @@ def create_regression_problem(
         costs = [cost_cls(p) for p in dataset.get_partitions()]  # type: ignore[call-arg]
         sum_cost = reduce(add, costs)
         x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
+        test_data = None
     else:
         raise ValueError(f"Unsupported cost class: {cost_cls}")
 
@@ -247,5 +251,5 @@ def create_regression_problem(
         message_compression=message_compression,
         message_noise=message_noise,
         message_drop=message_drop,
-        test_data=None,
+        test_data=test_data,
     )
