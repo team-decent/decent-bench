@@ -15,6 +15,8 @@ class ScaledCost(Cost):
     """A scalar multiple of another cost function."""
 
     def __init__(self, cost: Cost, scalar: float):
+        self.cost: Cost
+        self.scalar: float
         if isinstance(cost, ScaledCost):
             self.cost = cost.cost
             self.scalar = scalar * cost.scalar
@@ -52,10 +54,10 @@ class ScaledCost(Cost):
         return float(self.scalar * self.cost.function(x, *args, **kwargs))
 
     def gradient(self, x: Array, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        return self.scalar * self.cost.gradient(x, *args, **kwargs)
+        return self.cost.gradient(x, *args, **kwargs) * self.scalar
 
     def hessian(self, x: Array, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        return self.scalar * self.cost.hessian(x, *args, **kwargs)
+        return self.cost.hessian(x, *args, **kwargs) * self.scalar
 
     def proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         if self.scalar == 0:
