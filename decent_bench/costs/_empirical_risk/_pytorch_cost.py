@@ -150,7 +150,6 @@ class PyTorchCost(EmpiricalRiskCost):
         self.param_sizes = [p.numel() for p in self._params_list]
         self.total_params = sum(self.param_sizes)
         self.param_names = [n for n, _ in self.model.named_parameters()]
-        self.param_offsets = torch.cumsum(torch.tensor([0, *self.param_sizes[:-1]]), dim=0).tolist()
 
     @property
     def shape(self) -> tuple[int, ...]:
