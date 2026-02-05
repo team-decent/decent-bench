@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from numbers import Real
 from typing import Any
 
 from decent_bench.utils.array import Array
@@ -135,3 +136,50 @@ class Cost(ABC):
         form proximal solution and only requires one evaluation instead of two when calling :meth:`evaluate`,
         :meth:`gradient`, and :meth:`hessian`.
         """
+
+    def __mul__(self, other: Real) -> Cost:
+        """Multiply by a scalar to create a weighted cost."""
+        if not self._is_valid_scalar(other):
+            raise TypeError(f"Cost can only be multiplied by a real number, got {type(other)}.")
+        from decent_bench.costs._base._scaled_cost import ScaledCost
+
+        return ScaledCost(self, float(other))
+
+    def __rmul__(self, other: Real) -> Cost:
+        """Right-side scalar multiplication."""
+        return self * other
+
+    def __truediv__(self, other: Real) -> Cost:
+        """Divide by a scalar."""
+        if not self._is_valid_scalar(other):
+            raise TypeError(f"Cost can only be divided by a real number, got {type(other)}.")
+        if other == 0:
+            raise ZeroDivisionError("Division by zero is not allowed for Cost objects.")
+        return self * (1.0 / float(other))
+
+    def __rtruediv__(self, other: Real) -> Cost:
+        """Right-side scalar division, equivalent to dividing this cost by the scalar."""
+        return self / other
+
+    def __neg__(self) -> Cost:
+        """Negate this cost function."""
+        return -1.0 * self
+
+    def __sub__(self, other: Cost) -> Cost:
+        """Subtract another cost function as sum with its negation."""
+        if not isinstance(other, Cost):
+            raise TypeError(f"Cost can only be subtracted by another Cost, got {type(other)}.")
+        return self + (-other)
+
+    def __radd__(self, other: object) -> Cost:
+        """Right-side addition, used to make sum(costs) work."""
+        if other == 0:
+            return self
+        if isinstance(other, Cost):
+            return other + self
+        raise TypeError(f"Cost can only be added to another Cost, got {type(other)}.")
+
+    @staticmethod
+    def _is_valid_scalar(value: Any) -> bool:
+        """Return True if value is a real scalar and not bool."""
+        return isinstance(value, Real) and not isinstance(value, bool)
