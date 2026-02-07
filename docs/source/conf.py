@@ -44,6 +44,8 @@ nitpick_ignore = [
     ("py:class", "JaxArray"),
 ]
 
+suppress_warnings = ["toc.duplicate"]
+
 intersphinx_mapping = {
     "networkx": ("https://networkx.org/documentation/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),

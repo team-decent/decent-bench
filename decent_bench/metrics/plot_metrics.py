@@ -13,7 +13,7 @@ from matplotlib.figure import Figure
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.distributed_algorithms import P2PAlgorithm
 from decent_bench.utils.logger import LOGGER
 
 X = float
@@ -131,7 +131,7 @@ STYLES = ["-", ":", "--", "-.", (5, (10, 3)), (0, (5, 10)), (0, (3, 1, 1, 1))]
 
 
 def plot(  # noqa: PLR0917
-    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
+    resulting_agent_states: dict[P2PAlgorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[PlotMetric],
     computational_cost: ComputationalCost | None,
@@ -331,7 +331,7 @@ def _plot(  # noqa: PLR0917
     compare_iterations_and_computational_cost: bool,
     x_axis_scaling: float,
     agent_states: list[list[AgentMetricsView]],
-    alg: Algorithm,
+    alg: P2PAlgorithm,
     metric_index: int,
     iteration: int,
 ) -> None:

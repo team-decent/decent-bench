@@ -10,7 +10,7 @@ from rich.status import Status
 
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.distributed_algorithms import P2PAlgorithm
 from decent_bench.metrics import plot_metrics as pm
 from decent_bench.metrics import table_metrics as tm
 from decent_bench.metrics.plot_metrics import DEFAULT_PLOT_METRICS, PlotMetric
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 
 def benchmark(
-    algorithms: list[Algorithm],
+    algorithms: list[P2PAlgorithm],
     benchmark_problem: BenchmarkProblem,
     plot_metrics: list[PlotMetric] = DEFAULT_PLOT_METRICS,
     table_metrics: list[TableMetric] = DEFAULT_TABLE_METRICS,
@@ -103,7 +103,7 @@ def benchmark(
     prog_ctrl = ProgressBarController(manager, algorithms, n_trials, progress_step, show_speed, show_trial)
     resulting_nw_states = _run_trials(algorithms, n_trials, nw_init_state, prog_ctrl, log_listener, max_processes)
     LOGGER.info("All trials complete")
-    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
+    resulting_agent_states: dict[P2PAlgorithm, list[list[AgentMetricsView]]] = {}
     for alg, networks in resulting_nw_states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
     tm.tabulate(resulting_agent_states, benchmark_problem, table_metrics, confidence_level, table_fmt)
@@ -122,13 +122,13 @@ def benchmark(
 
 
 def _run_trials(  # noqa: PLR0917
-    algorithms: list[Algorithm],
+    algorithms: list[P2PAlgorithm],
     n_trials: int,
     nw_init_state: P2PNetwork,
     progress_bar_ctrl: ProgressBarController,
     log_listener: QueueListener,
     max_processes: int | None,
-) -> dict[Algorithm, list[P2PNetwork]]:
+) -> dict[P2PAlgorithm, list[P2PNetwork]]:
     progress_bar_handle = progress_bar_ctrl.get_handle()
     if max_processes == 1:
         result = {
@@ -154,7 +154,7 @@ def _run_trials(  # noqa: PLR0917
 
 
 def _run_trial(
-    algorithm: Algorithm,
+    algorithm: P2PAlgorithm,
     nw_init_state: P2PNetwork,
     progress_bar_handle: "ProgressBarHandle",
     trial: int,

@@ -12,7 +12,7 @@ import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.distributed_algorithms import P2PAlgorithm
 from decent_bench.utils.logger import LOGGER
 
 Statistic = Callable[[Sequence[float]], float]
@@ -269,7 +269,7 @@ TABLE_METRICS_DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/api/dece
 
 
 def tabulate(
-    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
+    resulting_agent_states: dict[P2PAlgorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[TableMetric],
     confidence_level: float,

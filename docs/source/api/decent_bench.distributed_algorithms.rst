@@ -3,8 +3,19 @@ decent\_bench.distributed\_algorithms
 
 .. currentmodule:: decent_bench.distributed_algorithms
 
-.. autoclass:: Algorithm
+.. py:class:: NetworkT
+
+   Type parameter bound to :class:`decent_bench.networks.Network`.
+
+.. autoclass:: DecAlgorithm
    :members:
+   :private-members:
+   :show-inheritance:
+   :undoc-members:
+
+.. autoclass:: P2PAlgorithm
+   :members:
+   :inherited-members:
    :show-inheritance:
    :undoc-members:
 
@@ -13,7 +24,8 @@ decent\_bench.distributed\_algorithms
    :show-inheritance:
    :undoc-members:
    :exclude-members:
-      Algorithm,
+      DecAlgorithm,
+      P2PAlgorithm,
       initialize,
       step,
       finalize,

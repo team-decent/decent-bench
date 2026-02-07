@@ -1,23 +1,24 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
-from decent_bench.networks import P2PNetwork
+from decent_bench.networks import Network, P2PNetwork
 
 if TYPE_CHECKING:
+    from decent_bench.agents import Agent
     from decent_bench.utils.array import Array
 
 
-class Algorithm(ABC):
-    """Distributed algorithm - agents collaborate to solve an optimization problem using peer-to-peer communication."""
+class DecAlgorithm[NetworkT: Network](ABC):
+    """Base class for decentralized algorithms."""
 
     @property
     @abstractmethod
     def iterations(self) -> int:
-        """Number of iterations to run the algorithm for."""
+        """Number of iterations or rounds to run the algorithm for."""
 
     @property
     @abstractmethod
@@ -25,45 +26,54 @@ class Algorithm(ABC):
         """Name of the algorithm."""
 
     @abstractmethod
-    def initialize(self, network: P2PNetwork) -> None:
+    def initialize(self, network: NetworkT) -> None:
         """
         Initialize the algorithm.
 
         Args:
-            network: provides agents, neighbors etc.
+            network: provides the agents and topology for this algorithm.
 
         """
 
     @abstractmethod
-    def step(self, network: P2PNetwork, iteration: int) -> None:
+    def step(self, network: NetworkT, iteration: int) -> None:
         """
         Perform one iteration of the algorithm.
 
         Args:
-            network: provides agents, neighbors etc.
-            iteration: current iteration number
+            network: provides the agents and topology for this algorithm.
+            iteration: current iteration number.
 
         """
 
-    def finalize(self, network: P2PNetwork) -> None:
+    @abstractmethod
+    def _finalize_agents(self, network: NetworkT) -> Iterable["Agent"]:
+        """
+        Return the agents whose auxiliary variables should be cleared.
+
+        Args:
+            network: provides the agents and topology for this algorithm.
+
+        """
+
+    def finalize(self, network: NetworkT) -> None:
         """
         Finalize the algorithm.
 
         Note:
-            Override method as needed.
-            Does not need to be implemented if no finalization is required.
-            By default it is used to clean up auxiliary variables to free memory.
+            Override :meth:`~decent_bench.distributed_algorithms.DecAlgorithm._finalize_agents` to control which
+            agents are finalized.
 
         Args:
-            network: provides agents, neighbors etc.
+            network: provides the agents and topology for this algorithm.
 
         """
-        for i in network.agents():
-            if i.aux_vars is not None:
-                i.aux_vars.clear()
+        for agent in self._finalize_agents(network):
+            if agent.aux_vars is not None:
+                agent.aux_vars.clear()
 
     @final
-    def run(self, network: P2PNetwork, progress_callback: Callable[[int], None] | None = None) -> None:
+    def run(self, network: NetworkT, progress_callback: Callable[[int], None] | None = None) -> None:
         """
         Run the algorithm.
 
@@ -76,7 +86,7 @@ class Algorithm(ABC):
             as needed.
 
         Args:
-            network: provides agents, neighbors etc.
+            network: provides the agents and topology for this algorithm.
             progress_callback: optional callback to report progress after each iteration.
 
         """
@@ -88,8 +98,15 @@ class Algorithm(ABC):
         self.finalize(network)
 
 
+class P2PAlgorithm(DecAlgorithm[P2PNetwork]):
+    """Distributed algorithm - agents collaborate to solve an optimization problem using peer-to-peer communication."""
+
+    def _finalize_agents(self, network: P2PNetwork) -> Iterable["Agent"]:
+        return network.agents()
+
+
 @dataclass(eq=False)
-class DGD(Algorithm):
+class DGD(P2PAlgorithm):
     r"""
     Distributed gradient descent characterized by the update step below.
 
@@ -132,7 +149,7 @@ class DGD(Algorithm):
 
 
 @dataclass(eq=False)
-class ATC(Algorithm):
+class ATC(P2PAlgorithm):
     r"""
     Adapt-Then-Combine (ATC) distributed gradient descent characterized by the update below [r1]_.
 
@@ -194,7 +211,7 @@ AdaptThenCombine = ATC  # alias
 
 
 @dataclass(eq=False)
-class SimpleGT(Algorithm):
+class SimpleGT(P2PAlgorithm):
     r"""
     Gradient tracking algorithm characterized by the update step below.
 
@@ -248,7 +265,7 @@ SimpleGradientTracking = SimpleGT  # Alias
 
 
 @dataclass(eq=False)
-class ED(Algorithm):
+class ED(P2PAlgorithm):
     r"""
     Gradient tracking algorithm characterized by the update step below.
 
@@ -308,7 +325,7 @@ ExactDiffusion = ED  # alias
 
 
 @dataclass(eq=False)
-class AugDGM(Algorithm):
+class AugDGM(P2PAlgorithm):
     r"""
     Aug-DGM [r2]_ or ATC-DIGing [r3]_ gradient tracking algorithm, characterized by the updates below.
 
@@ -395,7 +412,7 @@ ATCDIGing = AugDGM  # alias
 
 
 @dataclass(eq=False)
-class WangElia(Algorithm):
+class WangElia(P2PAlgorithm):
     r"""
     Wang-Elia gradient tracking algorithm characterized by the updates below, see [r4]_ and [r5]_.
 
@@ -477,7 +494,7 @@ class WangElia(Algorithm):
 
 
 @dataclass(eq=False)
-class EXTRA(Algorithm):
+class EXTRA(P2PAlgorithm):
     r"""
     EXTRA [r6]_ gradient tracking algorithm characterized by the update steps below.
 
@@ -559,7 +576,7 @@ class EXTRA(Algorithm):
 
 
 @dataclass(eq=False)
-class ATCTracking(Algorithm):
+class ATCTracking(P2PAlgorithm):
     r"""
     ATC-Tracking [r7]_, [r8]_, [r9]_ gradient tracking algorithm, characterized by the updates below.
 
@@ -652,7 +669,7 @@ ATCT = ATCTracking  # alias
 
 
 @dataclass(eq=False)
-class NIDS(Algorithm):
+class NIDS(P2PAlgorithm):
     r"""
     NIDS [r10]_ gradient tracking algorithm characterized by the update steps below.
 
@@ -725,7 +742,7 @@ class NIDS(Algorithm):
 
 
 @dataclass(eq=False)
-class ADMM(Algorithm):
+class ADMM(P2PAlgorithm):
     r"""
     Distributed Alternating Direction Method of Multipliers characterized by the update step below.
 
@@ -790,7 +807,7 @@ class ADMM(Algorithm):
 
 
 @dataclass(eq=False)
-class ATG(Algorithm):
+class ATG(P2PAlgorithm):
     r"""
     ADMM-Tracking Gradient (ATG) [r11]_ characterized by the update steps below.
 
@@ -895,7 +912,7 @@ ADMMTrackingGradient = ATG  # alias
 
 
 @dataclass(eq=False)
-class DLM(Algorithm):
+class DLM(P2PAlgorithm):
     r"""
     Decentralized Linearized ADMM (DLM) [r12]_ characterized by the update steps below (see also [r13]_).
 

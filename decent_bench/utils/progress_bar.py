@@ -18,7 +18,7 @@ from rich.progress import (
 from rich.table import Column, Table
 from rich.text import Text
 
-from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.distributed_algorithms import P2PAlgorithm
 
 if TYPE_CHECKING:
     from rich.progress import Task
@@ -130,7 +130,7 @@ class ProgressBarHandle:
     _progress_bar_ids: dict[Any, Any]
     _progress_step: int | None
 
-    def start_progress_bar(self, algorithm: Algorithm, trial: int) -> None:
+    def start_progress_bar(self, algorithm: P2PAlgorithm, trial: int) -> None:
         """
         Start the clock of *algorithm*'s progress bar without incrementing it.
 
@@ -141,7 +141,7 @@ class ProgressBarHandle:
         progress_bar_id = self._progress_bar_ids[algorithm]
         self._progress_increment_queue.put(_ProgressRecord(progress_bar_id, 0, trial + 1))
 
-    def advance_progress_bar(self, algorithm: Algorithm, iteration: int) -> None:
+    def advance_progress_bar(self, algorithm: P2PAlgorithm, iteration: int) -> None:
         """Advance *algorithm*'s progress bar by an amount (units)."""
         if self._progress_step is None:
             if (iteration + 1) < algorithm.iterations:
@@ -176,7 +176,7 @@ class ProgressBarController:
     def __init__(  # noqa: PLR0917
         self,
         manager: SyncManager,
-        algorithms: list[Algorithm],
+        algorithms: list[P2PAlgorithm],
         n_trials: int,
         progress_step: int | None,
         show_speed: bool = False,
