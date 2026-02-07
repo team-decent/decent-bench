@@ -60,6 +60,10 @@ class ScaledCost(Cost):
         return self.cost.hessian(x, *args, **kwargs) * self.scalar
 
     def proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
+        if rho <= 0:
+            raise ValueError("The penalty parameter rho must be positive.")
+        if self.scalar < 0:
+            raise ValueError("The proximal operator is not defined for negative scaling.")
         if self.scalar == 0:
             return x
         return self.cost.proximal(x, rho * self.scalar, *args, **kwargs)

@@ -171,8 +171,14 @@ class Cost(ABC):  # noqa: PLR0904
         return self.__mul__(1.0 / float(other))
 
     def __rtruediv__(self, other: float) -> Cost:
-        """Right-side scalar division, equivalent to dividing this cost by the scalar."""
-        return self.__truediv__(other)
+        """
+        Right-side scalar division is not supported.
+
+        Raises:
+            TypeError: Always, since scalar / cost is not supported.
+
+        """
+        raise TypeError("Right-side division is not supported for Cost objects.")
 
     def __neg__(self) -> Cost:
         """Negate this cost function."""

@@ -28,10 +28,8 @@ def test_cost_scalar_division() -> None:
     cost = _simple_quadratic(A_scale=4.0, b_scale=2.0, c=1.0)
     x = np.array([0.5, -0.25])
     divided = cost / 2.0
-    divided_reverse = 2.0 / cost
 
     assert divided.function(x) == pytest.approx(0.5 * cost.function(x))
-    assert divided_reverse.function(x) == pytest.approx(0.5 * cost.function(x))
     np.testing.assert_allclose(iop.to_numpy(divided.gradient(x)), 0.5 * iop.to_numpy(cost.gradient(x)))
     np.testing.assert_allclose(iop.to_numpy(divided.hessian(x)), 0.5 * iop.to_numpy(cost.hessian(x)))
 
@@ -82,5 +80,5 @@ def test_cost_scalar_ops_reject_invalid_inputs() -> None:
         _ = 1.0 + cost  # type: ignore[operator]
     with pytest.raises(ZeroDivisionError):
         _ = cost / 0.0
-    with pytest.raises(ZeroDivisionError):
+    with pytest.raises(TypeError):
         _ = 0.0 / cost
