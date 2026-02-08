@@ -448,6 +448,15 @@ Create new cost functions by subclassing :class:`~decent_bench.costs.Cost` and u
 your implementation framework-agnostic. The decorators automatically wrap inputs/outputs as `Array` and ensure
 compatibility with the selected framework and device of your custom cost.
 
+Supported operations for cost objects:
+
+- Addition: ``cost_a + cost_b``
+- Subtraction: ``cost_a - cost_b``
+- Negation: ``-cost``
+- Scalar multiplication: ``scalar * cost`` or ``cost * scalar``
+- Scalar division: ``cost / scalar``
+- Summation: ``sum(costs)`` (uses ``__radd__``)
+
 .. code-block:: python
 
     from numpy import float64
