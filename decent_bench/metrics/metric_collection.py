@@ -7,7 +7,7 @@ import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.metrics.metric import Metric
+from decent_bench.metrics._metric import Metric
 
 
 class Regret(Metric):
@@ -29,8 +29,8 @@ class Regret(Metric):
     .. include:: snippets/global_cost_error.rst
     """
 
-    plot_description: str = "regret"
     table_description: str = "regret \n[<1e-9 = exact conv.]"
+    plot_description: str = "regret"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -43,7 +43,7 @@ class Regret(Metric):
 
 class GradientNorm(Metric):
     r"""
-    Gradient norm.
+    Global gradient norm.
 
     Table:
         Gradient norm using the agents' final x.
@@ -60,8 +60,8 @@ class GradientNorm(Metric):
     .. include:: snippets/global_gradient_optimality.rst
     """
 
-    plot_description: str = "gradient norm"
     table_description: str = "gradient norm"
+    plot_description: str = "gradient norm"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -96,8 +96,8 @@ class XError(Metric):
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
     """
 
-    plot_description: str = "x error"
     table_description: str = "x error"
+    plot_description: str = "x error"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -105,6 +105,9 @@ class XError(Metric):
         problem: BenchmarkProblem,
         iteration: int,
     ) -> list[float]:
+        if problem.x_optimal is None:
+            return [float("nan") for _ in agents]
+
         if iteration == -1:
             return [
                 float(la.norm(iop.to_numpy(problem.x_optimal) - iop.to_numpy(a.x_history[max(a.x_history)])))
@@ -132,8 +135,8 @@ class AsymptoticConvergenceOrder(Metric):
     .. include:: snippets/asymptotic_convergence_rate_and_order.rst
     """
 
-    plot_description: str = "asymptotic convergence order"
     table_description: str = "asymptotic convergence order"
+    plot_description: str = "asymptotic convergence order"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -163,8 +166,8 @@ class AsymptoticConvergenceRate(Metric):
     .. include:: snippets/asymptotic_convergence_rate_and_order.rst
     """
 
-    plot_description: str = "asymptotic convergence rate"
     table_description: str = "asymptotic convergence rate"
+    plot_description: str = "asymptotic convergence rate"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -194,8 +197,8 @@ class IterativeConvergenceOrder(Metric):
     .. include:: snippets/iterative_convergence_rate_and_order.rst
     """
 
-    plot_description: str = "iterative convergence order"
     table_description: str = "iterative convergence order"
+    plot_description: str = "iterative convergence order"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -225,8 +228,8 @@ class IterativeConvergenceRate(Metric):
     .. include:: snippets/iterative_convergence_rate_and_order.rst
     """
 
-    plot_description: str = "iterative convergence rate"
     table_description: str = "iterative convergence rate"
+    plot_description: str = "iterative convergence rate"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -250,8 +253,8 @@ class XUpdates(Metric):
         not per iteration.
     """
 
-    plot_description: str = "nr x updates"
     table_description: str = "nr x updates"
+    plot_description: str = "nr x updates"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -275,8 +278,8 @@ class FunctionCalls(Metric):
         not per iteration.
     """
 
-    plot_description: str = "nr function calls"
     table_description: str = "nr function calls"
+    plot_description: str = "nr function calls"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -300,8 +303,8 @@ class GradientCalls(Metric):
         not per iteration.
     """
 
-    plot_description: str = "nr gradient calls"
     table_description: str = "nr gradient calls"
+    plot_description: str = "nr gradient calls"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -325,8 +328,8 @@ class HessianCalls(Metric):
         not per iteration.
     """
 
-    plot_description: str = "nr Hessian calls"
     table_description: str = "nr Hessian calls"
+    plot_description: str = "nr Hessian calls"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -350,8 +353,8 @@ class ProximalCalls(Metric):
         not per iteration.
     """
 
-    plot_description: str = "nr proximal calls"
     table_description: str = "nr proximal calls"
+    plot_description: str = "nr proximal calls"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -375,8 +378,8 @@ class SentMessages(Metric):
         not per iteration.
     """
 
-    plot_description: str = "nr sent messages"
     table_description: str = "nr sent messages"
+    plot_description: str = "nr sent messages"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -400,8 +403,8 @@ class ReceivedMessages(Metric):
         not per iteration.
     """
 
-    plot_description: str = "nr received messages"
     table_description: str = "nr received messages"
+    plot_description: str = "nr received messages"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -425,8 +428,8 @@ class SentMessagesDropped(Metric):
         not per iteration.
     """
 
-    plot_description: str = "nr sent messages dropped"
     table_description: str = "nr sent messages dropped"
+    plot_description: str = "nr sent messages dropped"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -456,8 +459,8 @@ class Accuracy(Metric):
     See :func:`~decent_bench.metrics.metric_utils.accuracy` for the specific accuracy calculation used.
     """
 
-    plot_description: str = "accuracy"
     table_description: str = "accuracy"
+    plot_description: str = "accuracy"
     can_diverge: bool = False
 
     def get_data_from_trial(  # noqa: D102
@@ -467,36 +470,6 @@ class Accuracy(Metric):
         iteration: int,
     ) -> list[float]:
         return utils.accuracy(agents, problem, iteration)
-
-
-class OptimalAccuracy(Metric):
-    r"""
-    Optimal accuracy.
-
-    Table:
-        Accuracy calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
-
-    Plot:
-        Accuracy calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
-        Will be a flat line as the optimal x does not change per iteration.
-
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets, returns NaN otherwise.
-
-    See :func:`~decent_bench.metrics.metric_utils.optimal_x_accuracy` for the specific optimal
-    accuracy calculation used.
-    """
-
-    plot_description: str = "optimal accuracy"
-    table_description: str = "optimal accuracy"
-    can_diverge: bool = False
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        _: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
-        __: int,
-    ) -> tuple[float]:
-        return (utils.optimal_x_accuracy(problem),)
 
 
 class MSE(Metric):
@@ -518,8 +491,8 @@ class MSE(Metric):
     See :func:`~decent_bench.metrics.metric_utils.mse` for the specific mean squared error calculation used.
     """
 
-    plot_description: str = "mse"
     table_description: str = "mse"
+    plot_description: str = "mse"
     can_diverge: bool = False
 
     def get_data_from_trial(  # noqa: D102
@@ -529,37 +502,6 @@ class MSE(Metric):
         iteration: int,
     ) -> list[float]:
         return utils.mse(agents, problem, iteration=iteration)
-
-
-class OptimalMSE(Metric):
-    r"""
-    Optimal mean squared error.
-
-    Table:
-        Mean squared error calculated using the optimal x defined in the benchmark problem
-        instead of the agents' final x.
-
-    Plot:
-        Mean Squared Error (MSE) calculated using the optimal x defined in the benchmark problem instead of the
-        agents' final x. Will be a flat line as the optimal x does not change per iteration.
-
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
-
-    See :func:`~decent_bench.metrics.metric_utils.optimal_x_mse` for the specific optimal mean
-    squared error calculation used.
-    """
-
-    plot_description: str = "optimal mse"
-    table_description: str = "optimal mse"
-    can_diverge: bool = False
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        _: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
-        __: int,
-    ) -> tuple[float]:
-        return (utils.optimal_x_mse(problem),)
 
 
 class Precision(Metric):
@@ -581,8 +523,8 @@ class Precision(Metric):
     See :func:`~decent_bench.metrics.metric_utils.precision` for the specific precision calculation used.
     """
 
-    plot_description: str = "precision"
     table_description: str = "precision"
+    plot_description: str = "precision"
     can_diverge: bool = False
 
     def get_data_from_trial(  # noqa: D102
@@ -592,36 +534,6 @@ class Precision(Metric):
         iteration: int,
     ) -> list[float]:
         return utils.precision(agents, problem, iteration=iteration)
-
-
-class OptimalPrecision(Metric):
-    r"""
-    Optimal precision.
-
-    Table:
-        Precision calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
-
-    Plot:
-        Precision calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
-        Will be a flat line as the optimal x does not change per iteration.
-
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets, returns NaN otherwise.
-
-    See :func:`~decent_bench.metrics.metric_utils.optimal_x_precision` for the specific optimal
-    precision calculation used.
-    """
-
-    plot_description: str = "optimal precision"
-    table_description: str = "optimal precision"
-    can_diverge: bool = False
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        _: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
-        __: int,
-    ) -> tuple[float]:
-        return (utils.optimal_x_precision(problem),)
 
 
 class Recall(Metric):
@@ -643,8 +555,8 @@ class Recall(Metric):
     See :func:`~decent_bench.metrics.metric_utils.recall` for the specific recall calculation used.
     """
 
-    plot_description: str = "recall"
     table_description: str = "recall"
+    plot_description: str = "recall"
     can_diverge: bool = False
 
     def get_data_from_trial(  # noqa: D102
@@ -654,36 +566,6 @@ class Recall(Metric):
         iteration: int,
     ) -> list[float]:
         return utils.recall(agents, problem, iteration=iteration)
-
-
-class OptimalRecall(Metric):
-    r"""
-    Optimal recall.
-
-    Table:
-        Recall calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
-
-    Plot:
-        Recall calculated using the optimal x defined in the benchmark problem instead of the agents' final x.
-        Will be a flat line as the optimal x does not change per iteration.
-
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets, returns NaN otherwise.
-
-    See :func:`~decent_bench.metrics.metric_utils.optimal_x_recall` for the specific optimal
-    recall calculation used.
-    """
-
-    plot_description: str = "optimal recall"
-    table_description: str = "optimal recall"
-    can_diverge: bool = False
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        _: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
-        __: int,
-    ) -> tuple[float]:
-        return (utils.optimal_x_recall(problem),)
 
 
 DEFAULT_TABLE_METRICS: list[Metric] = [
@@ -723,25 +605,24 @@ DEFAULT_TABLE_METRICS: list[Metric] = [
 :meta hide-value:
 """
 
-EMPIRICAL_TABLE_METRICS: list[Metric] = [
-    Accuracy([min, np.average, max], fmt=".2%"),
-    OptimalAccuracy([utils.single], fmt=".2%"),
-    MSE([min, np.average, max]),
-    OptimalMSE([utils.single]),
-    Precision([min, np.average, max], fmt=".2%"),
-    OptimalPrecision([utils.single], fmt=".2%"),
-    Recall([min, np.average, max], fmt=".2%"),
-    OptimalRecall([utils.single], fmt=".2%"),
+REGRESSION_TABLE_METRICS: list[Metric] = [
+    MSE([min, np.average, max], x_log=False, y_log=True),
+]
+"""
+- :class:`MSE` - :func:`min`, :func:`~numpy.average`, :func:`max`
+
+:meta hide-value:
+"""
+
+CLASSIFICATION_TABLE_METRICS: list[Metric] = [
+    Accuracy([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
+    Precision([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
+    Recall([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
 ]
 """
 - :class:`Accuracy` - :func:`min`, :func:`~numpy.average`, :func:`max` with percentage format
-- :class:`OptimalAccuracy` - :func:`~.metric_utils.single` with percentage format
-- :class:`MSE` - :func:`min`, :func:`~numpy.average`, :func:`max`
-- :class:`OptimalMSE` - :func:`~.metric_utils.single`
 - :class:`Precision` - :func:`min`, :func:`~numpy.average`, :func:`max` with percentage format
-- :class:`OptimalPrecision` - :func:`~.metric_utils.single` with percentage format
 - :class:`Recall` - :func:`min`, :func:`~numpy.average`, :func:`max` with percentage format
-- :class:`OptimalRecall` - :func:`~.metric_utils.single` with percentage format
 
 :meta hide-value:
 """
@@ -760,18 +641,17 @@ DEFAULT_PLOT_METRICS: list[Metric] = [
 :meta hide-value:
 """
 
-# No need to specify statistics for plot metrics as they are only
-# used for table metrics, if you were to use the same Metric object
-# for both, you would need to specify statistics
-EMPIRICAL_PLOT_METRICS: list[Metric] = [
-    Accuracy([], x_log=False, y_log=False),
-    MSE([], x_log=False, y_log=True),
-    Precision([], x_log=False, y_log=False),
-    Recall([], x_log=False, y_log=False),
-]
+
+REGRESSION_PLOT_METRICS: list[Metric] = REGRESSION_TABLE_METRICS
+"""
+- :class:`MSE` (semi-log)
+
+:meta hide-value:
+"""
+
+CLASSIFICATION_PLOT_METRICS: list[Metric] = CLASSIFICATION_TABLE_METRICS
 """
 - :class:`Accuracy` (linear)
-- :class:`MSE` (semi-log)
 - :class:`Precision` (linear)
 - :class:`Recall` (linear)
 

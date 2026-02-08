@@ -52,7 +52,7 @@ class BenchmarkProblem:
     """
 
     network_structure: AnyGraph
-    x_optimal: Array
+    x_optimal: Array | None
     costs: Sequence[Cost]
     agent_state_snapshot_period: int
     agent_activations: Sequence[AgentActivationScheme]
@@ -92,6 +92,29 @@ def create_classification_problem(
 
     """
     network_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
+    dataset = SyntheticClassificationDatasetHandler(
+        n_targets=2,
+        n_partitions=n_agents,
+        n_samples_per_partition=10,
+        n_features=3,
+        framework=SupportedFrameworks.PYTORCH if cost_cls is PyTorchCost else SupportedFrameworks.NUMPY,
+        device=SupportedDevices.CPU,
+        feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
+        squeeze_targets=cost_cls is PyTorchCost,  # PyTorchCost expects squeezed targets for CrossEntropyLoss
+        seed=0,
+    )
+    test_data = SyntheticClassificationDatasetHandler(
+        n_targets=2,
+        n_partitions=1,
+        n_samples_per_partition=100,  # 1 partition so this is number of samples in test set
+        n_features=3,
+        framework=SupportedFrameworks.PYTORCH if cost_cls is PyTorchCost else SupportedFrameworks.NUMPY,
+        device=SupportedDevices.CPU,
+        feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
+        squeeze_targets=cost_cls is PyTorchCost,
+        seed=12345,
+    )
+
     if cost_cls is PyTorchCost:
         try:
             import torch  # noqa: PLC0415
@@ -108,33 +131,13 @@ def create_classification_problem(
                 output_size=2,
             )
 
-        dataset = SyntheticClassificationDatasetHandler(
-            n_targets=2,
-            n_partitions=n_agents,
-            n_samples_per_partition=10,
-            n_features=3,
-            framework=SupportedFrameworks.PYTORCH,
-            device=SupportedDevices.CPU,
-            feature_dtype=np.float32,
-            squeeze_targets=True,
-            seed=0,
-        )
         # Mypy cannot infer that cost_cls is PyTorchCost here
         costs = [
             cost_cls(p, model_gen(), torch.nn.CrossEntropyLoss(), final_activation=ArgmaxActivation())  # type: ignore[call-arg, arg-type]
             for p in dataset.get_partitions()
         ]
-        x_optimal = ca.pytorch_gradient_descent(costs, lr=0.01, epochs=10000, conv_tol=1e-6)  # type: ignore[arg-type]
+        x_optimal = None
     elif cost_cls is LogisticRegressionCost:
-        dataset = SyntheticClassificationDatasetHandler(
-            n_targets=2,
-            n_partitions=n_agents,
-            n_samples_per_partition=10,
-            n_features=3,
-            framework=SupportedFrameworks.NUMPY,
-            device=SupportedDevices.CPU,
-            seed=0,
-        )
         costs = [cost_cls(p) for p in dataset.get_partitions()]  # type: ignore[call-arg]
         sum_cost = reduce(add, costs)
         x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
@@ -154,7 +157,7 @@ def create_classification_problem(
         message_compression=message_compression,
         message_noise=message_noise,
         message_drop=message_drop,
-        test_data=dataset.get_datapoints(),
+        test_data=test_data.get_datapoints(),
     )
 
 
@@ -188,6 +191,28 @@ def create_regression_problem(
 
     """
     network_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
+    dataset = SyntheticRegressionDatasetHandler(
+        n_targets=1,
+        n_partitions=n_agents,
+        n_samples_per_partition=10,
+        n_features=1,
+        framework=SupportedFrameworks.PYTORCH if cost_cls is PyTorchCost else SupportedFrameworks.NUMPY,
+        device=SupportedDevices.CPU,
+        feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
+        target_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
+        seed=0,
+    )
+    test_data = SyntheticRegressionDatasetHandler(
+        n_targets=1,
+        n_partitions=1,
+        n_samples_per_partition=100,  # 1 partition so this is number of samples in test set
+        n_features=1,
+        framework=SupportedFrameworks.PYTORCH if cost_cls is PyTorchCost else SupportedFrameworks.NUMPY,
+        device=SupportedDevices.CPU,
+        feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
+        target_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
+        seed=12345,
+    )
     if cost_cls is PyTorchCost:
         try:
             import torch  # noqa: PLC0415
@@ -204,29 +229,9 @@ def create_regression_problem(
                 output_size=1,
             )
 
-        dataset = SyntheticRegressionDatasetHandler(
-            n_targets=1,
-            n_partitions=n_agents,
-            n_samples_per_partition=10,
-            n_features=1,
-            framework=SupportedFrameworks.PYTORCH,
-            device=SupportedDevices.CPU,
-            feature_dtype=np.float32,
-            target_dtype=np.float32,
-            seed=0,
-        )
         costs = [cost_cls(p, model_gen(), torch.nn.MSELoss()) for p in dataset.get_partitions()]  # type: ignore[call-arg, arg-type]
-        x_optimal = ca.pytorch_gradient_descent(costs, lr=0.01, epochs=15000, conv_tol=1e-6)  # type: ignore[arg-type]
+        x_optimal = None
     elif cost_cls is LinearRegressionCost:
-        dataset = SyntheticRegressionDatasetHandler(
-            n_targets=1,
-            n_partitions=n_agents,
-            n_samples_per_partition=10,
-            n_features=1,
-            framework=SupportedFrameworks.NUMPY,
-            device=SupportedDevices.CPU,
-            seed=0,
-        )
         costs = [cost_cls(p) for p in dataset.get_partitions()]  # type: ignore[call-arg]
         sum_cost = reduce(add, costs)
         x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
@@ -246,5 +251,5 @@ def create_regression_problem(
         message_compression=message_compression,
         message_noise=message_noise,
         message_drop=message_drop,
-        test_data=dataset.get_datapoints(),
+        test_data=test_data.get_datapoints(),
     )

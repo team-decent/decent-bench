@@ -12,7 +12,11 @@ if TYPE_CHECKING:
 
 
 class Algorithm(ABC):
-    """Distributed algorithm - agents collaborate to solve an optimization problem using peer-to-peer communication."""
+    """
+    Decentralized algorithm.
+
+    Agents collaborate to solve an optimization problem using peer-to-peer communication.
+    """
 
     @property
     @abstractmethod
@@ -91,7 +95,7 @@ class Algorithm(ABC):
 @dataclass(eq=False)
 class DGD(Algorithm):
     r"""
-    Distributed gradient descent characterized by the update step below.
+    Decentralized gradient descent characterized by the update step below.
 
     .. math::
         \mathbf{x}_{i, k+1} = (\sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k}) - \rho \nabla f_i(\mathbf{x}_{i,k})

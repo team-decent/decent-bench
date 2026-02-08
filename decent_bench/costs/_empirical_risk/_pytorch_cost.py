@@ -47,9 +47,9 @@ class _IndexDataset:
 
 class PyTorchCost(EmpiricalRiskCost):
     """
-    Cost function wrapper for PyTorch neural networks that integrates with the distributed optimization framework.
+    Cost function wrapper for PyTorch neural networks that integrates with the decentralized optimization framework.
 
-    Supports batch-based training and gradient computation for distributed learning scenarios.
+    Supports batch-based training and gradient computation for decentralized learning scenarios.
 
     Note:
         It is generally recommended to set `agent_state_snapshot_period` in

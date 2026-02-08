@@ -12,8 +12,8 @@ from rich.status import Status
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.metrics import ComputationalCost, Metric, create_plots, create_tables
 from decent_bench.metrics import metric_collection as mc
-from decent_bench.metrics.metric import ComputationalCost, Metric, create_plots, create_table
 from decent_bench.networks import P2PNetwork, create_distributed_network
 from decent_bench.utils import logger
 from decent_bench.utils.logger import LOGGER
@@ -26,11 +26,12 @@ if TYPE_CHECKING:
 def benchmark(
     algorithms: list[Algorithm],
     benchmark_problem: BenchmarkProblem,
-    plot_metrics: list[Metric] = mc.DEFAULT_PLOT_METRICS,
+    plot_metrics: list[Metric] | list[list[Metric]] = mc.DEFAULT_PLOT_METRICS,
     table_metrics: list[Metric] = mc.DEFAULT_TABLE_METRICS,
     table_fmt: Literal["grid", "latex"] = "grid",
     *,
     plot_grid: bool = True,
+    individual_plots: bool = False,
     plot_path: str | None = None,
     table_path: str | None = None,
     computational_cost: ComputationalCost | None = None,
@@ -38,25 +39,28 @@ def benchmark(
     n_trials: int = 30,
     confidence_level: float = 0.95,
     log_level: int = logging.INFO,
-    max_processes: int | None = None,
+    max_processes: int | None = 1,
     progress_step: int | None = None,
     show_speed: bool = False,
     show_trial: bool = False,
     compare_iterations_and_computational_cost: bool = False,
 ) -> None:
     """
-    Benchmark distributed algorithms.
+    Benchmark decentralized algorithms.
 
     Args:
         algorithms: algorithms to benchmark
         benchmark_problem: problem to benchmark on, defines the network topology, cost functions, and communication
             constraints
         plot_metrics: metrics to plot after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_collection.DEFAULT_PLOT_METRICS`
+            :const:`~decent_bench.metrics.metric_collection.DEFAULT_PLOT_METRICS`.
+            If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
+            metrics will be grouped and plotted in their own figure with subplots.
         table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
             :const:`~decent_bench.metrics.metric_collection.DEFAULT_TABLE_METRICS`
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         plot_grid: whether to show grid lines on the plots
+        individual_plots: whether to plot each metric in a separate figure
         plot_path: optional file path to save the generated plot as an image file (e.g., "plots.png"). If ``None``,
             the plot will only be displayed
         table_path: optional file path to save the generated table as a text file (e.g., "table.txt"). If ``None``,
@@ -80,6 +84,16 @@ def benchmark(
         show_trial: whether to show which trials are currently running in the progress bar.
         compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
             metric vs iterations. Only used if ``computational_cost`` is provided.
+
+    Important:
+        Multiprocessing with certain frameworks (e.g., PyTorch) can lead to unexpected behavior due to how they handle
+        multiprocessing. It is recommended to not use multiprocessing when benchmarking algorithms that utilize such
+        frameworks. If you choose to use multiprocessing with such frameworks, please ensure that you understand
+        the potential issues and have taken appropriate measures. Decent-Bench will attempt to detect if any
+        cost function is a PyTorchCost and warn the user accordingly. Multiprocessing is mostly intended to be used
+        with Numpy-based implementations. Feel free to try using multiprocessing by setting ``max_processes`` to a value
+        other than ``1`` to see if it works with your specific algorithm and setup. See the documentation for
+        ``max_processes`` for available options.
 
     Note:
         If ``progress_step`` is too small performance may degrade due to the
@@ -108,7 +122,7 @@ def benchmark(
     log_listener = logger.start_log_listener(manager, log_level)
     LOGGER.info("Starting benchmark execution ")
     if use_spawn:
-        LOGGER.debug("Using spawn multiprocessing context for PyTorch compatibility")
+        LOGGER.debug("Using spawn multiprocessing context for PyTorch/JAX compatibility")
     with Status("Generating initial network state"):
         nw_init_state = create_distributed_network(benchmark_problem)
     LOGGER.debug(f"Nr of agents: {len(nw_init_state.agents())}")
@@ -120,7 +134,7 @@ def benchmark(
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
     for alg, networks in resulting_nw_states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
-    create_table(
+    create_tables(
         resulting_agent_states,
         benchmark_problem,
         table_metrics,
@@ -135,6 +149,7 @@ def benchmark(
         computational_cost,
         x_axis_scaling,
         compare_iterations_and_computational_cost,
+        individual_plots,
         plot_path,
         plot_grid,
     )

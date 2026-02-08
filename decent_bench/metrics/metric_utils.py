@@ -79,6 +79,9 @@ def regret(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iterat
 
     .. include:: snippets/global_cost_error.rst
     """
+    if problem.x_optimal is None:
+        return float("nan")
+
     x_opt = problem.x_optimal
     mean_x = x_mean(tuple(agents), iteration)
     optimal_cost = sum(a.cost.function(x_opt) for a in agents)
@@ -116,6 +119,9 @@ def x_error(agent: AgentMetricsView, problem: BenchmarkProblem, up_to_iteration:
     if up_to_iteration == -1:
         up_to_iteration = int(1e100)
 
+    if problem.x_optimal is None:
+        return np.array([np.nan for iteration, _ in sorted(agent.x_history.items()) if iteration <= up_to_iteration])
+
     x_per_iteration = np.asarray([
         iop.to_numpy(x) for iteration, x in sorted(agent.x_history.items()) if iteration <= up_to_iteration
     ])
@@ -139,9 +145,9 @@ def asymptotic_convergence_rate_and_order(
     .. include:: snippets/asymptotic_convergence_rate_and_order.rst
     """
     errors = x_error(agent, problem, up_to_iteration)
-    errors = errors[errors > 0]
     if not np.isfinite(errors).all():
         return np.nan, np.nan
+    errors = errors[errors > 0]
     log_errors = np.log(errors)
     x = log_errors[:-1]
     y = log_errors[1:]
@@ -180,23 +186,6 @@ def iterative_convergence_rate_and_order(
     except LinAlgError:
         rate, order = np.nan, np.nan
     return rate, order
-
-
-def split_dataset(data: Dataset) -> tuple[list[Array], NDArray[float64]]:
-    """
-    Split dataset into features and labels.
-
-    Args:
-        data: dataset to split, as a tuple of (features, labels)
-
-    Returns:
-        tuple of (features, labels)
-
-    """
-    x, y = zip(*data, strict=True)
-    test_x = list(x)
-    test_y = np.array(y)
-    return test_x, test_y
 
 
 def accuracy(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
@@ -247,34 +236,6 @@ def accuracy(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iter
     return ret
 
 
-def optimal_x_accuracy(problem: BenchmarkProblem) -> float:
-    """
-    Calculate the accuracy using the benchmark problem's optimal x.
-
-    Optimal x accuracy is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
-
-    Args:
-        problem: benchmark problem containing test data
-
-    Returns:
-        accuracy using the benchmark problem's optimal x
-
-    """
-    amv = AgentMetricsView(
-        cost=problem.costs[0],
-        x_history={0: problem.x_optimal},
-        n_x_updates=0,
-        n_function_calls=0,
-        n_gradient_calls=0,
-        n_hessian_calls=0,
-        n_proximal_calls=0,
-        n_sent_messages=0,
-        n_received_messages=0,
-        n_sent_messages_dropped=0,
-    )
-    return accuracy([amv], problem, iteration=-1)[0]
-
-
 def mse(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
     """
     Calculate the mean squared error (MSE) per agent.
@@ -313,34 +274,6 @@ def mse(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration
         else:
             ret.append(np.nan)
     return ret
-
-
-def optimal_x_mse(problem: BenchmarkProblem) -> float:
-    """
-    Calculate the mean squared error (MSE) using the benchmark problem's optimal x.
-
-    Optimal x MSE is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
-
-    Args:
-        problem: benchmark problem containing test data
-
-    Returns:
-        MSE using the benchmark problem's optimal x
-
-    """
-    amv = AgentMetricsView(
-        cost=problem.costs[0],
-        x_history={0: problem.x_optimal},
-        n_x_updates=0,
-        n_function_calls=0,
-        n_gradient_calls=0,
-        n_hessian_calls=0,
-        n_proximal_calls=0,
-        n_sent_messages=0,
-        n_received_messages=0,
-        n_sent_messages_dropped=0,
-    )
-    return mse([amv], problem, iteration=-1)[0]
 
 
 def precision(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
@@ -393,35 +326,6 @@ def precision(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, ite
     return ret
 
 
-def optimal_x_precision(problem: BenchmarkProblem) -> float:
-    """
-    Calculate the precision using the benchmark problem's optimal x.
-
-    Optimal x precision is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
-    Calculated using :func:`sklearn.metrics.precision_score` with micro averaging.
-
-    Args:
-        problem: benchmark problem containing test data
-
-    Returns:
-        precision using the benchmark problem's optimal x
-
-    """
-    amv = AgentMetricsView(
-        cost=problem.costs[0],
-        x_history={0: problem.x_optimal},
-        n_x_updates=0,
-        n_function_calls=0,
-        n_gradient_calls=0,
-        n_hessian_calls=0,
-        n_proximal_calls=0,
-        n_sent_messages=0,
-        n_received_messages=0,
-        n_sent_messages_dropped=0,
-    )
-    return precision([amv], problem, iteration=-1)[0]
-
-
 def recall(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
     """
     Calculate the recall per agent.
@@ -471,33 +375,21 @@ def recall(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iterat
     return ret
 
 
-def optimal_x_recall(problem: BenchmarkProblem) -> float:
+def split_dataset(data: Dataset) -> tuple[list[Array], NDArray[float64]]:
     """
-    Calculate the recall using the benchmark problem's optimal x.
-
-    Optimal x recall is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
-    Calculated using :func:`sklearn.metrics.recall_score` with micro averaging.
+    Split dataset into features and labels.
 
     Args:
-        problem: benchmark problem containing test data
+        data: dataset to split, as a tuple of (features, labels)
 
     Returns:
-        recall using the benchmark problem's optimal x
+        tuple of (features, labels)
 
     """
-    amv = AgentMetricsView(
-        cost=problem.costs[0],
-        x_history={0: problem.x_optimal},
-        n_x_updates=0,
-        n_function_calls=0,
-        n_gradient_calls=0,
-        n_hessian_calls=0,
-        n_proximal_calls=0,
-        n_sent_messages=0,
-        n_received_messages=0,
-        n_sent_messages_dropped=0,
-    )
-    return recall([amv], problem, iteration=-1)[0]
+    x, y = zip(*data, strict=True)
+    test_x = list(x)
+    test_y = np.array(y)
+    return test_x, test_y
 
 
 def common_sorted_iterations(agents: Sequence[AgentMetricsView]) -> list[int]:

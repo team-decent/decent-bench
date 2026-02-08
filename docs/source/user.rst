@@ -406,7 +406,7 @@ Create your own metrics to tabulate and/or plot.
     from decent_bench.benchmark_problem import BenchmarkProblem
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
-    from decent_bench.metrics.metric import Metric
+    from decent_bench.metrics import Metric
 
     class XError(Metric):
 
@@ -419,6 +419,9 @@ Create your own metrics to tabulate and/or plot.
             problem: BenchmarkProblem,
             iteration: int,
         ) -> list[float]:
+            if problem.x_optimal is None:
+                return [float("nan")] * len(agents)
+
             if iteration == -1:
                 # agent.x_history is a dict of {iteration: x_value}, so we get the max iteration to retrieve the final x value for each agent
                 return [
