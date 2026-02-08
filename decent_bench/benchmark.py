@@ -5,6 +5,7 @@ from copy import deepcopy
 from logging.handlers import QueueListener
 from multiprocessing import Manager, get_context
 from multiprocessing.context import BaseContext
+from time import sleep
 from typing import TYPE_CHECKING, Literal
 
 from rich.status import Status
@@ -212,24 +213,17 @@ def _run_trial(
 
 
 def _should_use_spawn_context(benchmark_problem: BenchmarkProblem) -> bool:
-    """
-    Check if any cost function is a PyTorchCost, which requires spawn context.
-
-    Raises:
-        RuntimeError: if user chooses not to continue when PyTorchCost is detected.
-
-    """
+    """Check if any cost function is a PyTorchCost, which requires spawn context."""
     try:
         from decent_bench.costs import PyTorchCost  # noqa: PLC0415
 
         if any(isinstance(cost, PyTorchCost) for cost in benchmark_problem.costs):
             LOGGER.warning(
                 "It is not recommended to use use multiprocessing with PyTorchCost, "
-                "may cause unexpected behavior. Consider setting max_processes=1 to disable multiprocessing."
+                "may cause unexpected behavior. Consider setting max_processes=1 to disable multiprocessing.\n"
+                "Execution will continue in 5 seconds, Ctrl+C to abort..."
             )
-            ans = input("Are you sure you want to continue? (y/n): ")
-            if ans.lower() != "y":
-                raise RuntimeError("Benchmarking aborted by user.")
+            sleep(5)  # Sleep to give the user a chance to read the warning
 
             return True
     except ImportError:

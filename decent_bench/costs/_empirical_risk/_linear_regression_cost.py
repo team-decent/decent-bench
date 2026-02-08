@@ -248,9 +248,10 @@ class LinearRegressionCost(EmpiricalRiskCost):
         x: NDArray[float64],
         indices: EmpiricalRiskIndices = "batch",
     ) -> NDArray[float64]:
-        A, ATA, b = self._get_batch_data(indices)  # noqa: N806
-        res = [ATA[i, :].reshape(-1, 1) * x - A[i, :].reshape(-1, 1) * b[i] for i in range(A.shape[0])]
-        return np.asarray(res)
+        A, _, b = self._get_batch_data(indices)  # noqa: N806
+        residuals = A.dot(x) - b  # shape: (n_samples,)
+        res: NDArray[float64] = residuals[:, np.newaxis] * A
+        return res
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.hessian)
     def hessian(self, x: NDArray[float64], indices: EmpiricalRiskIndices = "batch") -> NDArray[float64]:  # noqa: ARG002

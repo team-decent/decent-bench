@@ -206,7 +206,7 @@ class IterativeConvergenceOrder(Metric):
         problem: BenchmarkProblem,
         iteration: int,
     ) -> list[float]:
-        return [utils.iterative_convergence_rate_and_order(a, problem, iteration)[0] for a in agents]
+        return [utils.iterative_convergence_rate_and_order(a, problem, iteration)[1] for a in agents]
 
 
 class IterativeConvergenceRate(Metric):

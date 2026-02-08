@@ -53,6 +53,7 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
     from logging import DEBUG
     import numpy as np
 
+    import decent_bench.metrics.metric_utils as utils
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
