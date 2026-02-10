@@ -195,7 +195,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
         """
         A, _, b = self._get_batch_data(indices)  # noqa: N806
         residual = A.dot(x) - b
-        return float(0.5 / len(self.batch_used) * residual.dot(residual))
+        return float(0.5 * residual.dot(residual) / len(self.batch_used))
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.gradient)
     def gradient(
@@ -240,7 +240,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
             return self._per_sample_gradients(x, indices)
 
         A, ATA, b = self._get_batch_data(indices)  # noqa: N806
-        res: NDArray[float64] = (1 / len(self.batch_used)) * (ATA.dot(x) - A.T.dot(b))
+        res: NDArray[float64] = (ATA.dot(x) - A.T.dot(b)) / len(self.batch_used)
         return res
 
     def _per_sample_gradients(
