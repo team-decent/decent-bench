@@ -1,6 +1,6 @@
-import pathlib
 import warnings
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -22,7 +22,7 @@ def create_tables(
     confidence_level: float,
     table_fmt: Literal["grid", "latex"],
     *,
-    table_path: str | None = None,
+    table_path: Path | None = None,
 ) -> None:
     """
     Print table with confidence intervals, one row per metric and statistic, and one column per algorithm.
@@ -68,10 +68,12 @@ def create_tables(
                 progress.advance(table_task)
         progress.update(table_task, status="Finalizing table")
     formatted_table = tb.tabulate(rows, headers, tablefmt=table_fmt)
+    latex_table = tb.tabulate(rows, headers, tablefmt="latex")
     LOGGER.info("\n" + formatted_table)
     if table_path:
-        pathlib.Path(table_path).parent.mkdir(parents=True, exist_ok=True)
-        pathlib.Path(table_path).write_text(formatted_table, encoding="utf-8")
+        table_path.parent.mkdir(parents=True, exist_ok=True)
+        table_path.write_text(latex_table, encoding="utf-8")
+        LOGGER.info(f"Saved table to {table_path}")
 
 
 def _table_data_per_trial(

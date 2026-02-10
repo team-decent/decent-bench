@@ -7,6 +7,7 @@ decent\_bench.utils
 
    decent_bench.utils.algorithm_helpers
    decent_bench.utils.array
+   decent_bench.utils.checkpoint_manager
    decent_bench.utils.interoperability
    decent_bench.utils.logger
    decent_bench.utils.network_utils

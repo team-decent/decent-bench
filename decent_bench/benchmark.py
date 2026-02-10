@@ -1,5 +1,6 @@
 import logging
 import warnings
+from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from logging.handlers import QueueListener
@@ -17,6 +18,7 @@ from decent_bench.metrics import ComputationalCost, Metric, create_plots, create
 from decent_bench.metrics import metric_collection as mc
 from decent_bench.networks import P2PNetwork, create_distributed_network
 from decent_bench.utils import logger
+from decent_bench.utils.checkpoint_manager import CheckpointManager
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.progress_bar import ProgressBarController
 
@@ -33,8 +35,6 @@ def benchmark(
     *,
     plot_grid: bool = True,
     individual_plots: bool = False,
-    plot_path: str | None = None,
-    table_path: str | None = None,
     computational_cost: ComputationalCost | None = None,
     x_axis_scaling: float = 1e-4,
     n_trials: int = 30,
@@ -45,6 +45,9 @@ def benchmark(
     show_speed: bool = False,
     show_trial: bool = False,
     compare_iterations_and_computational_cost: bool = False,
+    checkpoint_dir: str | None = None,
+    checkpoint_step: int | None = None,
+    keep_n_checkpoints: int = 3,
 ) -> None:
     """
     Benchmark decentralized algorithms.
@@ -62,10 +65,6 @@ def benchmark(
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         plot_grid: whether to show grid lines on the plots
         individual_plots: whether to plot each metric in a separate figure
-        plot_path: optional file path to save the generated plot as an image file (e.g., "plots.png"). If ``None``,
-            the plot will only be displayed
-        table_path: optional file path to save the generated table as a text file (e.g., "table.txt"). If ``None``,
-            the table will only be displayed
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
             of computational cost
         x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
@@ -87,6 +86,14 @@ def benchmark(
         show_trial: whether to show which trials are currently running in the progress bar.
         compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
             metric vs iterations. Only used if ``computational_cost`` is provided.
+        checkpoint_dir: directory path to save checkpoints during execution. If provided, progress will be saved
+            at regular intervals allowing resumption if interrupted. When starting a new benchmark
+            the directory must be empty or non-existent. Plots and tables will be saved to the subfolder *results*.
+        checkpoint_step: number of iterations between checkpoints within each trial. Only used if ``checkpoint_dir``
+            is provided. If ``None``, only save checkpoint at the end of each trial. For long-running algorithms,
+            set this to checkpoint during trial execution (e.g., every 1000 iterations).
+        keep_n_checkpoints: maximum number of iteration checkpoints to keep per trial. Older checkpoints are
+            automatically deleted to save disk space. Only applies to within-trial checkpoints, not final results.
 
     Important:
         Multiprocessing with certain frameworks (e.g., PyTorch) can lead to unexpected behavior due to how they handle
@@ -112,6 +119,9 @@ def benchmark(
         will be plotted twice: once against computational cost and once against iterations.
         Computational cost plots will be shown on the left and iteration plots on the right.
 
+    Raises:
+        ValueError: If the checkpoint directory is not empty when initializing the CheckpointManager.
+
     """
     # Detect if PyTorch costs are being used to determine multiprocessing context
     if max_processes != 1:
@@ -121,6 +131,15 @@ def benchmark(
         use_spawn = False
         mp_context = None
 
+    checkpoint_manager = None
+    if checkpoint_dir is not None:
+        checkpoint_manager = CheckpointManager(checkpoint_dir, checkpoint_step, keep_n_checkpoints)
+        if not checkpoint_manager.is_empty():
+            raise ValueError(
+                f"Checkpoint directory '{checkpoint_dir}' is not empty. "
+                f"Please provide an empty or non-existent directory to save checkpoints."
+            )
+
     manager = Manager() if not use_spawn else get_context("spawn").Manager()
     log_listener = logger.start_log_listener(manager, log_level)
     LOGGER.info("Starting benchmark execution ")
@@ -129,9 +148,25 @@ def benchmark(
     with Status("Generating initial network state"):
         nw_init_state = create_distributed_network(benchmark_problem)
     LOGGER.debug(f"Nr of agents: {len(nw_init_state.agents())}")
+
+    if checkpoint_manager is not None:
+        benchmark_metadata = {
+            "n_trails": n_trials,
+            "checkpoint_step": checkpoint_step,
+            "keep_n_checkpoints": keep_n_checkpoints,
+        }
+        checkpoint_manager.initialize(algorithms, nw_init_state, benchmark_metadata)
+
     prog_ctrl = ProgressBarController(manager, algorithms, n_trials, progress_step, show_speed, show_trial)
     resulting_nw_states = _run_trials(
-        algorithms, n_trials, nw_init_state, prog_ctrl, log_listener, max_processes, mp_context
+        algorithms,
+        n_trials,
+        nw_init_state,
+        prog_ctrl,
+        log_listener,
+        max_processes,
+        mp_context,
+        checkpoint_manager,
     )
     LOGGER.info("All trials complete")
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
@@ -143,18 +178,18 @@ def benchmark(
         table_metrics,
         confidence_level,
         table_fmt,
-        table_path=table_path,
+        table_path=checkpoint_manager.get_results_path("table_results.txt") if checkpoint_manager else None,
     )
     create_plots(
         resulting_agent_states,
         benchmark_problem,
         plot_metrics,
-        computational_cost,
-        x_axis_scaling,
-        compare_iterations_and_computational_cost,
-        individual_plots,
-        plot_path,
-        plot_grid,
+        computational_cost=computational_cost,
+        x_axis_scaling=x_axis_scaling,
+        compare_iterations_and_computational_cost=compare_iterations_and_computational_cost,
+        individual_plots=individual_plots,
+        plot_path=checkpoint_manager.get_results_path("plots.png") if checkpoint_manager else None,
+        plot_grid=plot_grid,
     )
     LOGGER.info("Benchmark execution complete, thanks for using decent-bench")
     log_listener.stop()
@@ -168,12 +203,35 @@ def _run_trials(  # noqa: PLR0917
     log_listener: QueueListener,
     max_processes: int | None,
     mp_context: BaseContext | None = None,
+    checkpoint_manager: CheckpointManager | None = None,
 ) -> dict[Algorithm, list[P2PNetwork]]:
+    results: dict[Algorithm, list[P2PNetwork]] = defaultdict(list)
     progress_bar_handle = progress_bar_ctrl.get_handle()
+
+    # Filter out completed trials if checkpoint manager is provided, and load their results, otherwise run all trials
+    # Used when resuming from a previous benchmark run, so that only incomplete trials are run and completed trial
+    # results are loaded from the checkpoint directory
+    to_run: dict[Algorithm, list[int]] = defaultdict(list)
+    if checkpoint_manager is not None:
+        for alg_idx, alg in enumerate(algorithms):
+            completed_trials = checkpoint_manager.get_completed_trials(alg_idx, n_trials)
+            incompleted_trials = [t for t in range(n_trials) if t not in completed_trials]
+            to_run[alg] = incompleted_trials
+
+            # load completed trials
+            for trial in completed_trials:
+                results[alg].append(checkpoint_manager.load_trial_result(alg_idx, trial))
+                LOGGER.debug(f"Loaded completed trial {trial} for algorithm {alg.name} from checkpoint")
+    else:
+        to_run = {alg: list(range(n_trials)) for alg in algorithms}
+
     if max_processes == 1:
-        result = {
-            alg: [_run_trial(alg, nw_init_state, progress_bar_handle, trial) for trial in range(n_trials)]
-            for alg in algorithms
+        partial_result = {
+            alg: [
+                _run_trial(alg, nw_init_state, progress_bar_handle, trial, alg_idx, checkpoint_manager)
+                for trial in to_run[alg]
+            ]
+            for alg_idx, alg in enumerate(algorithms)
         }
     else:
         with ProcessPoolExecutor(
@@ -185,32 +243,64 @@ def _run_trials(  # noqa: PLR0917
             LOGGER.debug(f"Concurrent processes: {executor._max_workers}")  # type: ignore[attr-defined] # noqa: SLF001
             all_futures = {
                 alg: [
-                    executor.submit(_run_trial, alg, nw_init_state, progress_bar_handle, trial)
-                    for trial in range(n_trials)
+                    executor.submit(
+                        _run_trial, alg, nw_init_state, progress_bar_handle, trial, alg_idx, checkpoint_manager
+                    )
+                    for trial in to_run[alg]
                 ]
-                for alg in algorithms
+                for alg_idx, alg in enumerate(algorithms)
             }
-            result = {alg: [f.result() for f in as_completed(futures)] for alg, futures in all_futures.items()}
+            partial_result = {alg: [f.result() for f in as_completed(futures)] for alg, futures in all_futures.items()}
 
     progress_bar_ctrl.stop()
-    return result
+    for alg in partial_result:
+        results[alg].extend(partial_result[alg])
+
+    return results
 
 
-def _run_trial(
+def _run_trial(  # noqa: PLR0917
     algorithm: Algorithm,
     nw_init_state: P2PNetwork,
     progress_bar_handle: "ProgressBarHandle",
     trial: int,
+    alg_idx: int,
+    checkpoint_manager: CheckpointManager | None = None,
 ) -> P2PNetwork:
     progress_bar_handle.start_progress_bar(algorithm, trial)
-    network = deepcopy(nw_init_state)
-    alg = deepcopy(algorithm)
 
+    if checkpoint_manager is not None:
+        checkpoint = checkpoint_manager.load_checkpoint(alg_idx, trial)
+        if checkpoint is not None:
+            alg, network, start_iteration = checkpoint
+            LOGGER.debug(
+                f"Resuming {algorithm.name} trial {trial} from iteration {start_iteration}/{algorithm.iterations}"
+            )
+        else:
+            start_iteration = 0
+            network = deepcopy(nw_init_state)
+            alg = deepcopy(algorithm)
+    else:
+        start_iteration = 0
+        network = deepcopy(nw_init_state)
+        alg = deepcopy(algorithm)
+
+    def progress_callback(iteration: int) -> None:
+        progress_bar_handle.advance_progress_bar(algorithm, iteration)
+        if checkpoint_manager is not None and checkpoint_manager.should_checkpoint(algorithm.iterations, iteration):
+            checkpoint_manager.save_checkpoint(alg_idx, trial, iteration, alg, network)
+
+    alg_failed = False
     with warnings.catch_warnings(action="error"):
         try:
-            alg.run(network, lambda iteration: progress_bar_handle.advance_progress_bar(algorithm, iteration))
+            alg.run(network, start_iteration, progress_callback)
         except Exception as e:
+            alg_failed = True
             LOGGER.exception(f"An error or warning occurred when running {alg.name}: {type(e).__name__}: {e}")
+
+    if not alg_failed and checkpoint_manager is not None:
+        checkpoint_manager.mark_trial_complete(alg_idx, trial, algorithm.iterations - 1, algorithm=alg, network=network)
+
     return network
 
 
