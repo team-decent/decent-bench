@@ -128,7 +128,7 @@ class EmpiricalRiskCost(Cost, ABC):
 
         Supported values for reduction are:
             - "mean": average the gradients over the samples.
-            - None: return the gradients for each sample as a list.
+            - None: return the gradients for each sample, index as the first dimension.
 
         Note:
             When reduction is None, the returned array will have an additional leading dimension

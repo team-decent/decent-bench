@@ -72,7 +72,9 @@ def benchmark(
             manageable units for plotting. Only used if ``computational_cost`` is provided.
         n_trials: number of times to run each algorithm on the benchmark problem, running more trials improves the
             statistical results, at least 30 trials are recommended for the central limit theorem to apply
-        confidence_level: confidence level of the confidence intervals in the results table
+        confidence_level: confidence level for computing confidence intervals of the table metrics, expressed as a value
+            between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
+            wider confidence intervals.
         log_level: minimum level to log, e.g. :data:`logging.INFO`
         max_processes: maximum number of processes to use when running trials, multiprocessing improves performance
             but can be inhibiting when debugging or using a profiler, set to 1 to disable multiprocessing or ``None`` to

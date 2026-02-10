@@ -33,7 +33,9 @@ def create_tables(
             :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.x_optimal`,
             are used for metric calculations
         metrics: metrics to calculate
-        confidence_level: confidence level of the confidence intervals
+        confidence_level: confidence level for computing confidence intervals of the metrics, expressed as a value
+            between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
+            wider confidence intervals.
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         table_path: optional path to save the table as a text file, if not provided the table is not saved to a file
 

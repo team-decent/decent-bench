@@ -402,6 +402,7 @@ Create your own metrics to tabulate and/or plot.
     import numpy.linalg as la
     import decent_bench.utils.interoperability as iop
 
+    import decent_bench.metrics.metric_utils as utils
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.agents import AgentMetricsView
     from decent_bench.benchmark_problem import BenchmarkProblem
@@ -411,8 +412,8 @@ Create your own metrics to tabulate and/or plot.
 
     class XError(Metric):
 
-        plot_description: str = "x error"
         table_description: str = "x error"
+        plot_description: str = "x error"
 
         def get_data_from_trial(  # noqa: D102
             self,
@@ -421,15 +422,16 @@ Create your own metrics to tabulate and/or plot.
             iteration: int,
         ) -> list[float]:
             if problem.x_optimal is None:
-                return [float("nan")] * len(agents)
+                return [float("nan") for _ in agents]
+
+            x_optimal_np = iop.to_numpy(problem.x_optimal)
 
             if iteration == -1:
-                # agent.x_history is a dict of {iteration: x_value}, so we get the max iteration to retrieve the final x value for each agent
-                return [
-                    float(la.norm(iop.to_numpy(problem.x_optimal) - iop.to_numpy(a.x_history[max(a.x_history)])))
-                    for a in agents
-                ]
-            return [float(la.norm(iop.to_numpy(problem.x_optimal) - iop.to_numpy(a.x_history[iteration]))) for a in agents]
+                return [float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[max(a.x_history)]))) for a in agents]
+            return [
+                float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[utils.find_closest_iteration(a, iteration)])))
+                for a in agents
+            ]
 
     if __name__ == "__main__":
         benchmark.benchmark(

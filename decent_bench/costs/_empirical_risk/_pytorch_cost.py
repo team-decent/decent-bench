@@ -84,15 +84,16 @@ class PyTorchCost(EmpiricalRiskCost):
             model (torch.nn.Module): PyTorch neural network model.
             loss_fn: (torch.nn.Module): PyTorch loss function.
             final_activation (torch.nn.Module | None): Optional final activation layer to apply after
-                model output when predicting targets. E.g., argmax if classification and model outputs logits.
+                model output when predicting targets using :meth:`predict`.
+                E.g., argmax if classification and model outputs logits.
             batch_size (EmpiricalRiskBatchSize): Size of mini-batches for stochastic methods, or "all" for full-batch.
             device (SupportedDevices): Device to run computations on.
             use_dataloader (bool): Whether to use DataLoader for batching.
                 Can be beneficial for large datasets to avoid loading all data into memory.
             dataloader_kwargs (dict | None): Additional arguments for the DataLoader.
-            load_dataset (bool): If True, load the entire dataset into memory to optimize data access.
-                This may lead to major speedups if the dataset is lazily loaded.
-                May increase memory usage if the dataset is lazily loaded, set to False if memory is an issue.
+            load_dataset (bool): If True, loads the entire dataset into memory to optimize data access.
+                This may lead to major speedups if the dataset is lazily loaded (e.g., loading data from disk), but it
+                might increase memory usage so set to False if memory is an issue.
             compile_model (bool): Whether to compile the model using torch.compile for performance.
                 May improve speed after warm-up. Might need to try different modes based on the model and OS,
                 use compile_kwargs.

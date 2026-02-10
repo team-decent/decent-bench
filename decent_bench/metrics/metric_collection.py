@@ -20,9 +20,10 @@ class Regret(Metric):
     Plot:
         Global regret (y-axis) per iteration (x-axis).
 
-        All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
-        iterations are disregarded. This is done to not miscalculate the global cost error which relies on all
-        agents for its calculation.
+        If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to True, only iterations that are recorded for
+        all agents are taken into account. If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to False
+        then all iterations are taken into account, if an agent does not have a recorded x at that iteration the most
+        recent recorded x is used.
 
     Global regret is defined as:
 
@@ -51,9 +52,10 @@ class GradientNorm(Metric):
     Plot:
         Gradient norm (y-axis) per iteration (x-axis).
 
-        All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
-        iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are
-        included in the calculation.
+        If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to True, only iterations that are recorded for
+        all agents are taken into account. If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to False
+        then all iterations are taken into account, if an agent does not have a recorded x at that iteration the most
+        recent recorded x is used.
 
     Gradient norm is defined as:
 
@@ -82,9 +84,10 @@ class XError(Metric):
     Plot:
         Distance to optimal solution (y-axis) per iteration (x-axis).
 
-        All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
-        iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are
-        included in the calculation.
+        If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to True, only iterations that are recorded for
+        all agents are taken into account. If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to False
+        then all iterations are taken into account, if an agent does not have a recorded x at that iteration the most
+        recent recorded x is used.
 
     X error per agent is defined as:
 
@@ -108,12 +111,14 @@ class XError(Metric):
         if problem.x_optimal is None:
             return [float("nan") for _ in agents]
 
+        x_optimal_np = iop.to_numpy(problem.x_optimal)
+
         if iteration == -1:
-            return [
-                float(la.norm(iop.to_numpy(problem.x_optimal) - iop.to_numpy(a.x_history[max(a.x_history)])))
-                for a in agents
-            ]
-        return [float(la.norm(iop.to_numpy(problem.x_optimal) - iop.to_numpy(a.x_history[iteration]))) for a in agents]
+            return [float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[max(a.x_history)]))) for a in agents]
+        return [
+            float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[utils.find_closest_iteration(a, iteration)])))
+            for a in agents
+        ]
 
 
 class AsymptoticConvergenceOrder(Metric):
@@ -126,9 +131,10 @@ class AsymptoticConvergenceOrder(Metric):
     Plot:
         Asymptotic convergence order (y-axis) per iteration (x-axis).
 
-        All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
-        iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are
-        included in the calculation.
+        If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to True, only iterations that are recorded for
+        all agents are taken into account. If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to False
+        then all iterations are taken into account, if an agent does not have a recorded x at that iteration the most
+        recent recorded x is used.
 
     Asymptotic convergence order is defined as:
 
@@ -157,9 +163,10 @@ class AsymptoticConvergenceRate(Metric):
     Plot:
         Asymptotic convergence rate (y-axis) per iteration (x-axis).
 
-        All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
-        iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are
-        included in the calculation.
+        If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to True, only iterations that are recorded for
+        all agents are taken into account. If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to False
+        then all iterations are taken into account, if an agent does not have a recorded x at that iteration the most
+        recent recorded x is used.
 
     Asymptotic convergence rate is defined as:
 
@@ -188,9 +195,10 @@ class IterativeConvergenceOrder(Metric):
     Plot:
         Iterative convergence order (y-axis) per iteration (x-axis).
 
-        All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
-        iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are
-        included in the calculation.
+        If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to True, only iterations that are recorded for
+        all agents are taken into account. If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to False
+        then all iterations are taken into account, if an agent does not have a recorded x at that iteration the most
+        recent recorded x is used.
 
     Iterative convergence order is defined as:
 
@@ -219,9 +227,10 @@ class IterativeConvergenceRate(Metric):
     Plot:
         Iterative convergence rate (y-axis) per iteration (x-axis).
 
-        All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
-        iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are
-        included in the calculation.
+        If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to True, only iterations that are recorded for
+        all agents are taken into account. If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to False
+        then all iterations are taken into account, if an agent does not have a recorded x at that iteration the most
+        recent recorded x is used.
 
     Iterative convergence rate is defined as:
 
@@ -448,15 +457,23 @@ class Accuracy(Metric):
         Accuracy of the agents' final x.
 
     Plot:
-        Not implemented, as the accuracy is only calculated at the end of the trial, not per iteration.
+        Accuracy (y-axis) per iteration (x-axis).
 
         Accuracy is calculated as the mean accuracy across agents, where each agent's accuracy is calculated using its
-        recorded x at that iteration. Only iterations that are recorded for all agents are taken into account,
-        subsequent iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
+        recorded x at that iteration. If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to True,
+        only iterations that are recorded for all agents are taken into account.
+        If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to False then all iterations are
+        taken into account, if an agent does not have a recorded x at that iteration the most recent recorded x is used.
 
     Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets, returns NaN otherwise.
 
-    See :func:`~decent_bench.metrics.metric_utils.accuracy` for the specific accuracy calculation used.
+    Accuracy measures the proportion of correct predictions:
+
+    .. math::
+
+        \text{Accuracy} = \frac{\text{TP} + \text{TN}}{\text{TP} + \text{TN} + \text{FP} + \text{FN}}
+
+    where TP, TN, FP, and FN are true positives, true negatives, false positives, and false negatives, respectively.
     """
 
     table_description: str = "accuracy"
@@ -483,12 +500,21 @@ class MSE(Metric):
         Mean Squared Error (MSE) (y-axis) per iteration (x-axis).
 
         MSE is calculated as the mean MSE across agents, where each agent's MSE is calculated using its
-        recorded x at that iteration. Only iterations that are recorded for all agents are taken into account,
-        subsequent iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
+        recorded x at that iteration. If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to True,
+        only iterations that are recorded for all agents are taken into account.
+        If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to False then all iterations are
+        taken into account, if an agent does not have a recorded x at that iteration the most recent recorded x is used.
 
     Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
 
-    See :func:`~decent_bench.metrics.metric_utils.mse` for the specific mean squared error calculation used.
+    MSE measures the average squared difference between predictions and true values:
+
+    .. math::
+
+        \text{MSE} = \frac{1}{n} \sum_{i=1}^{n} (\hat{y}_i - y_i)^2
+
+    where :math:`\hat{y}_i` are the predicted values, :math:`y_i` are the true values, and :math:`n` is
+    the number of samples.
     """
 
     table_description: str = "mse"
@@ -515,12 +541,20 @@ class Precision(Metric):
         Precision (y-axis) per iteration (x-axis).
 
         Precision is calculated as the mean precision across agents, where each agent's precision is calculated using
-        its recorded x at that iteration. Only iterations that are recorded for all agents are taken into account,
-        subsequent iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
+        its recorded x at that iteration. If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to True,
+        only iterations that are recorded for all agents are taken into account.
+        If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to False then all iterations are
+        taken into account, if an agent does not have a recorded x at that iteration the most recent recorded x is used.
 
     Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets, returns NaN otherwise.
 
-    See :func:`~decent_bench.metrics.metric_utils.precision` for the specific precision calculation used.
+    Precision measures the proportion of positive predictions that are correct:
+
+    .. math::
+
+        \text{Precision} = \frac{\text{TP}}{\text{TP} + \text{FP}}
+
+    where TP is the number of true positives and FP is the number of false positives.
     """
 
     table_description: str = "precision"
@@ -547,12 +581,20 @@ class Recall(Metric):
         Recall (y-axis) per iteration (x-axis).
 
         Recall is calculated as the mean recall across agents, where each agent's recall is calculated using its
-        recorded x at that iteration. Only iterations that are recorded for all agents are taken into account,
-        subsequent iterations are disregarded to avoid volatility from fewer agents being included in the calculation.
+        recorded x at that iteration. If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to True,
+        only iterations that are recorded for all agents are taken into account.
+        If :attr:`~decent_bench.metrics.Metric.common_iterations` is set to False then all iterations are
+        taken into account, if an agent does not have a recorded x at that iteration the most recent recorded x is used.
 
     Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets, returns NaN otherwise.
 
-    See :func:`~decent_bench.metrics.metric_utils.recall` for the specific recall calculation used.
+    Recall measures the proportion of actual positives that are correctly identified:
+
+    .. math::
+
+        \text{Recall} = \frac{\text{TP}}{\text{TP} + \text{FN}}
+
+    where TP is the number of true positives and FN is the number of false negatives.
     """
 
     table_description: str = "recall"
