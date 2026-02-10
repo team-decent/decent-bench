@@ -64,7 +64,7 @@ def create_array(data: list, framework: str, device: str = "cpu"):
 
     if framework == "numpy":
         return Array(np.array(data, dtype=np.float32))
-    if framework == "torch":
+    if framework == "pytorch":
         array1 = torch.tensor(data, dtype=torch.float32)
         if device == "gpu" and TORCH_CUDA_AVAILABLE:
             array1 = array1.to("cuda")
@@ -94,7 +94,7 @@ def assert_arrays_equal(result, expected, framework: str):
     result_np = iop.to_numpy(result)
     expected_np = iop.to_numpy(expected)
 
-    if framework == "torch" and isinstance(result, torch.Tensor):
+    if framework == "pytorch" and isinstance(result, torch.Tensor):
         # For torch, use torch_assert_close if result is still a tensor
         expected_torch = torch.tensor(expected_np).to(result.dtype)
         if result.is_cuda:
@@ -118,7 +118,7 @@ def assert_same_type(result: Any, framework: str):
 
     if framework == "numpy":
         assert "numpy" in str(type(result)), f"Expected numpy.ndarray, got {type(result)}"
-    elif framework == "torch":
+    elif framework == "pytorch":
         assert "torch" in str(type(result)), f"Expected torch.Tensor, got {type(result)}"
     elif framework == "tensorflow":
         assert "tensorflow" in str(type(result)), f"Expected tf.Tensor, got {type(result)}"
@@ -189,12 +189,12 @@ def test_dictionary_conversion():
     "framework,device",
     [
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -234,12 +234,12 @@ def test_to_numpy_frameworks(framework: str, device: str):
     "framework,device",
     [
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -286,12 +286,12 @@ def test_numpy_to_frameworks_like(framework, device: str):
     "framework,device",
     [
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -327,8 +327,8 @@ def test_to_torch_frameworks(framework: str, device: str):
     assert out.device.type == ("cuda" if device == "gpu" and TORCH_CUDA_AVAILABLE else "cpu"), (
         f"Expected device {device}, got {out.device.type}"
     )
-    equals = create_array(data, "torch", device)
-    assert_arrays_equal(out, equals, "torch")
+    equals = create_array(data, "pytorch", device)
+    assert_arrays_equal(out, equals, "pytorch")
 
 
 # ============================================================================
@@ -340,12 +340,12 @@ def test_to_torch_frameworks(framework: str, device: str):
     "framework,device",
     [
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -394,12 +394,12 @@ def test_to_tensorflow_frameworks(framework: str, device: str):
     "framework,device",
     [
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -449,12 +449,12 @@ def test_to_jax_frameworks(framework: str, device: str):
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -512,12 +512,12 @@ def test_sum_all_combinations(framework: str, device: str, dim, keepdims):
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -575,12 +575,12 @@ def test_mean_all_combinations(framework: str, device: str, dim, keepdims):
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -638,12 +638,12 @@ def test_min_all_combinations(framework: str, device: str, dim, keepdims):
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -706,12 +706,12 @@ def test_max_all_combinations(framework: str, device: str, dim, keepdims):
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -767,12 +767,12 @@ def test_argmax_all_combinations(framework: str, device: str, dim, keepdims):
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -833,12 +833,12 @@ def test_argmin_all_combinations(framework: str, device: str, dim, keepdims):
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -876,7 +876,7 @@ def test_copy_frameworks(framework: str, device: str):
     # Modify the copy and ensure the original is unchanged
     if framework == "numpy":
         arr_copy[0, 0] = 999  # type: ignore
-    elif framework == "torch":
+    elif framework == "pytorch":
         arr_copy[0, 0] = 999  # type: ignore
     elif framework == "tensorflow":
         arr_copy = tf.tensor_scatter_nd_update(arr_copy, [[0, 0]], [999])  # type: ignore
@@ -906,12 +906,12 @@ def test_copy_frameworks(framework: str, device: str):
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -968,12 +968,12 @@ def test_stack_frameworks(framework: str, device: str, dim: int):
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1023,12 +1023,12 @@ def test_reshape_matrix_frameworks(framework: str, device: str, new_shape: tuple
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1083,12 +1083,12 @@ def test_reshape_vector_frameworks(framework: str, device: str, new_shape: tuple
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1140,12 +1140,12 @@ def test_zeros_like_frameworks(framework: str, device: str, shape: tuple[int, ..
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1197,12 +1197,12 @@ def test_ones_like_frameworks(framework: str, device: str, shape: tuple[int, ...
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1252,12 +1252,12 @@ def test_rand_like_frameworks(framework: str, device: str, shape: tuple[int, ...
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1307,12 +1307,12 @@ def test_randn_like_frameworks(framework: str, device: str, shape: tuple[int, ..
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1358,12 +1358,12 @@ def test_eye_frameworks(framework: str, device: str, n: int) -> None:
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1424,12 +1424,12 @@ def test_eye_like_frameworks(framework: str, device: str, shape: tuple[int, ...]
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1484,12 +1484,12 @@ def test_transpose_frameworks(framework: str, device: str, dims: tuple[int, ...]
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1533,12 +1533,12 @@ def test_shape_frameworks(framework: str, device: str) -> None:
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1588,12 +1588,12 @@ def test_zeros_frameworks(framework: str, device: str, shape: tuple[int, ...]) -
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1642,12 +1642,12 @@ def test_randn_frameworks(framework: str, device: str, shape: tuple[int, ...]) -
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1679,12 +1679,12 @@ def test_get_set_item_frameworks(framework: str, device: str) -> None:
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1732,12 +1732,12 @@ def test_astype_frameworks(framework: str, device: str, to_type: type, expected_
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1789,12 +1789,12 @@ def test_norm_frameworks(framework: str, device: str, p_norm: int, data: list) -
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -1839,12 +1839,12 @@ def test_framework_device_of_array(framework: str, device: str) -> None:
     [
         ("numpy", "cpu"),
         pytest.param(
-            "torch",
+            "pytorch",
             "cpu",
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            "torch",
+            "pytorch",
             "gpu",
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),

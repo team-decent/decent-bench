@@ -12,7 +12,11 @@ if TYPE_CHECKING:
 
 
 class Algorithm(ABC):
-    """Distributed algorithm - agents collaborate to solve an optimization problem using peer-to-peer communication."""
+    """
+    Decentralized algorithm.
+
+    Agents collaborate to solve an optimization problem using peer-to-peer communication.
+    """
 
     @property
     @abstractmethod

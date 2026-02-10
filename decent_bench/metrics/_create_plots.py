@@ -1,12 +1,12 @@
 import math
 import warnings
-from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.artist import Artist
 from matplotlib.axes import Axes as SubPlot
 from matplotlib.figure import Figure
 
@@ -14,99 +14,10 @@ import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.metrics._computational_cost import ComputationalCost
+from decent_bench.metrics._metric import Metric, X, Y
 from decent_bench.utils.logger import LOGGER
 
-X = float
-Y = float
-
-
-@dataclass
-class ComputationalCost:
-    """Computational costs associated with an algorithm for plot metrics."""
-
-    function: float = 1.0
-    gradient: float = 1.0
-    hessian: float = 1.0
-    proximal: float = 1.0
-    communication: float = 1.0
-
-
-class PlotMetric(ABC):
-    """
-    Metric to plot at the end of the benchmarking execution.
-
-    Args:
-        x_log: whether to apply log scaling to the x-axis.
-        y_log: whether to apply log scaling to the y-axis.
-
-    """
-
-    def __init__(self, *, x_log: bool = False, y_log: bool = True):
-        self.x_log = x_log
-        self.y_log = y_log
-
-    @property
-    @abstractmethod
-    def plot_description(self) -> str:
-        """Label for the y-axis."""
-
-    @abstractmethod
-    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> Sequence[tuple[X, Y]]:
-        """Extract trial data in the form of (x, y) datapoints."""
-
-
-class RegretPerIteration(PlotMetric):
-    r"""
-    Global regret (y-axis) per iteration (x-axis).
-
-    Global regret is defined as:
-
-    .. include:: snippets/global_cost_error.rst
-
-    All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
-    iterations are disregarded. This is done to not miscalculate the global cost error which relies on all agents for
-    its calculation.
-    """
-
-    plot_description: str = "regret"
-
-    def get_data_from_trial(self, agents: list[AgentMetricsView], problem: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
-        # Determine the set of recorded iterations common to all agents and use those
-        return [(i, utils.regret(agents, problem, i)) for i in utils.common_sorted_iterations(agents)]
-
-
-class GradientNormPerIteration(PlotMetric):
-    r"""
-    Global gradient norm (y-axis) per iteration (x-axis).
-
-    Global gradient norm is defined as:
-
-    .. include:: snippets/global_gradient_optimality.rst
-
-    All iterations up to and including the last one reached by all *agents* are taken into account, subsequent
-    iterations are disregarded. This avoids the curve volatility that occurs when fewer and fewer agents are
-    included in the calculation.
-    """
-
-    plot_description: str = "gradient norm"
-
-    def get_data_from_trial(self, agents: list[AgentMetricsView], _: BenchmarkProblem) -> list[tuple[X, Y]]:  # noqa: D102
-        # Determine the set of recorded iterations common to all agents and use those
-        return [(i, utils.gradient_norm(agents, i)) for i in utils.common_sorted_iterations(agents)]
-
-
-DEFAULT_PLOT_METRICS = [
-    RegretPerIteration(x_log=False, y_log=True),
-    GradientNormPerIteration(x_log=False, y_log=True),
-]
-"""
-- :class:`RegretPerIteration` (semi-log)
-- :class:`GradientNormPerIteration` (semi-log)
-
-:meta hide-value:
-"""
-
-PLOT_METRICS_DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/api/decent_bench.metrics.plot_metrics.html"
 X_LABELS = {
     "iterations": "iterations",
     "computational_cost": "time (computational cost units)",
@@ -130,13 +41,14 @@ MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p", "P", "X"]
 STYLES = ["-", ":", "--", "-.", (5, (10, 3)), (0, (5, 10)), (0, (3, 1, 1, 1))]
 
 
-def plot(  # noqa: PLR0917
+def create_plots(  # noqa: PLR0917
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
-    metrics: list[PlotMetric],
+    metrics: list[Metric] | list[list[Metric]],
     computational_cost: ComputationalCost | None,
     x_axis_scaling: float = 1e-4,
     compare_iterations_and_computational_cost: bool = False,
+    individual_plots: bool = False,
     plot_path: str | None = None,
     plot_grid: bool = True,
 ) -> None:
@@ -149,13 +61,15 @@ def plot(  # noqa: PLR0917
         resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties, e.g.
             :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.x_optimal`, are used for metric calculations
-        metrics: metrics to calculate and plot
+        metrics: metrics to calculate and plot. If a list of lists is provided, each inner list will be plotted in a
+            separate figure. Otherwise groups of 3 metrics will be plotted together in subplots of the same figure
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
             of computational cost
         x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
             manageable units for plotting. Only used if ``computational_cost`` is provided
         compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
             metric vs iterations. Only used if ``computational_cost`` is provided
+        individual_plots: whether to create individual plots for each metric instead of subplots
         plot_path: optional file path to save the generated plot as an image file (e.g., "plots.png"). If ``None``,
             the plot will only be displayed
         plot_grid: whether to show grid lines on the plots
@@ -170,71 +84,156 @@ def plot(  # noqa: PLR0917
     """
     if not metrics:
         return
-    LOGGER.info(f"Plot metric definitions can be found here: {PLOT_METRICS_DOC_LINK}")
 
-    if len(metrics) > 4:
-        LOGGER.warning(
-            f"Plotting {len(metrics)} (> 4) metrics may result in a cluttered figure. "
-            "Consider reducing the number of metrics for better readability."
-        )
+    # Normalize metrics into list of groups (each group will be one figure)
+    metric_groups = _organize_metrics_into_groups(metrics, individual_plots)
 
-    did_plot = False
     use_cost = computational_cost is not None
     two_columns = use_cost and compare_iterations_and_computational_cost
-    fig, metric_subplots = _create_metric_subplots(
-        metrics,
-        use_cost,
-        compare_iterations_and_computational_cost,
-        plot_grid,
-    )
+
+    # Track all figures to display at the end
+    all_figures: list[tuple[Figure, list[SubPlot]]] = []
+
+    # Create a figure for each metric group
+    for metric_group in metric_groups:
+        fig, metric_subplots = _create_metric_subplots(
+            metric_group,
+            use_cost,
+            compare_iterations_and_computational_cost,
+            plot_grid,
+        )
+        all_figures.append((fig, metric_subplots))
+
+    # Now plot all the data
+    did_plot = False
     with utils.MetricProgressBar() as progress:
+        total_plots = (
+            sum(len(group) for group in metric_groups) * len(resulting_agent_states) * (2 if two_columns else 1)
+        )
         plot_task = progress.add_task(
             "Generating plots",
-            total=len(metric_subplots) * len(resulting_agent_states),
+            total=total_plots,
             status="",
         )
         x_label = X_LABELS["computational_cost" if use_cost else "iterations"]
-        for metric_index in range(len(metrics)):
-            progress.update(
-                plot_task,
-                status=f"Task: {metrics[metric_index].plot_description} vs {x_label}",
-            )
-            for i, (alg, agent_states) in enumerate(resulting_agent_states.items()):
-                data_per_trial: list[Sequence[tuple[X, Y]]] = _get_data_per_trial(
-                    agent_states, problem, metrics[metric_index]
+
+        for group_idx, metric_group in enumerate(metric_groups):
+            fig, metric_subplots = all_figures[group_idx]
+
+            for metric_index_in_group, metric in enumerate(metric_group):
+                progress.update(
+                    plot_task,
+                    status=f"Task: {metric.plot_description} vs {x_label}",
                 )
-                if not _is_finite(data_per_trial):
-                    msg = (
-                        f"Skipping plot {metrics[metric_index].plot_description}/{x_label} "
-                        f"for {alg.name}: found nan or inf in datapoints."
+                for alg_idx, (alg, agent_states) in enumerate(resulting_agent_states.items()):
+                    data_per_trial: list[Sequence[tuple[X, Y]]] = _plot_data_per_trial(
+                        agent_states,
+                        problem,
+                        metric,
                     )
-                    LOGGER.warning(msg)
+                    if not _is_finite(data_per_trial):
+                        msg = (
+                            f"Skipping plot {metric.plot_description}/{x_label} "
+                            f"for {alg.name}: found nan or inf in datapoints. "
+                            f"Test data or optimal x may be missing from the benchmark problem, got: "
+                            f"test_data={type(problem.test_data)}, x_optimal={type(problem.x_optimal)}"
+                        )
+                        LOGGER.warning(msg)
+                        progress.advance(plot_task, 2 if two_columns else 1)
+                        continue
+                    _plot(
+                        metric_subplots,
+                        data_per_trial,
+                        computational_cost,
+                        compare_iterations_and_computational_cost,
+                        x_axis_scaling,
+                        agent_states,
+                        alg,
+                        metric_index_in_group,
+                        alg_idx,
+                    )
+                    did_plot = True
                     progress.advance(plot_task, 2 if two_columns else 1)
-                    continue
-                _plot(
-                    metric_subplots,
-                    data_per_trial,
-                    computational_cost,
-                    compare_iterations_and_computational_cost,
-                    x_axis_scaling,
-                    agent_states,
-                    alg,
-                    metric_index,
-                    i,
-                )
-                did_plot = True
-                progress.advance(plot_task, 2 if two_columns else 1)
         progress.update(plot_task, status="Finalizing plots")
 
     if not did_plot:
         LOGGER.warning("No plots were generated due to invalid data.")
         return
 
-    _show_figure(fig, metric_subplots, two_columns, plot_path)
+    # Filter out empty figures (ones with no data plotted in any subplot)
+    figures_to_show = [
+        (fig, metric_subplots)
+        for fig, metric_subplots in all_figures
+        if any(sp.get_legend_handles_labels()[0] for sp in metric_subplots)  # Check if any subplot has data
+    ]
+
+    if not figures_to_show:
+        LOGGER.warning("All figures are empty, nothing to display.")
+        return
+
+    # Add legends and save all non-empty figures
+    for fig_idx, (fig, metric_subplots) in enumerate(figures_to_show):
+        # Append figure number to plot_path if there are multiple figures
+        current_plot_path = plot_path
+        if plot_path is not None and len(figures_to_show) > 1:
+            # Split the path into name and extension
+            path = Path(plot_path)
+            current_plot_path = str(path.with_stem(f"{path.stem}_fig{fig_idx + 1}"))
+
+        _add_legend_and_save(fig, metric_subplots, two_columns, current_plot_path)
+
+    # Close empty figures to free memory
+    for fig, metric_subplots in all_figures:
+        if (fig, metric_subplots) not in figures_to_show:
+            plt.close(fig)
+
+    # Show all non-empty figures at once
+    plt.show()
+
+
+def _organize_metrics_into_groups(
+    metrics: list[Metric] | list[list[Metric]],
+    individual_plots: bool,
+) -> list[list[Metric]]:
+    """
+    Organize metrics into groups where each group will be plotted in one figure.
+
+    Args:
+        metrics: Either a flat list of metrics or a list of lists of metrics
+        individual_plots: If True, each metric gets its own figure
+
+    Returns:
+        List of metric groups, where each group will be plotted in one figure
+
+    Raises:
+        ValueError: If metrics is a list of lists but not all elements are lists
+
+    """
+    # Check if metrics is list[list[Metric]]
+    if any(isinstance(m, list) for m in metrics):
+        if not all(isinstance(m, list) for m in metrics):
+            raise ValueError("If metrics is a list of lists, all elements must be lists.")
+        if individual_plots:
+            # Flatten and make each metric its own group
+            flat_metrics: list[Metric] = [m for group in metrics for m in group]  # type: ignore[union-attr]
+            return [[metric] for metric in flat_metrics]
+
+        # Use the provided grouping
+        return metrics  # type: ignore[return-value]
+
+    # Flat list[Metric]
+    flat_metrics_list: list[Metric] = metrics  # type: ignore[assignment]
+    if individual_plots:
+        # Each metric in its own figure
+        return [[metric] for metric in flat_metrics_list]
+
+    # Group into chunks of up to 3 metrics per figure
+    groups: list[list[Metric]] = [flat_metrics_list[i : i + 3] for i in range(0, len(flat_metrics_list), 3)]
+    return groups
 
 
 def _create_metric_subplots(
-    metrics: list[PlotMetric],
+    metrics: list[Metric],
     use_cost: bool,
     compare_iterations_and_computational_cost: bool,
     plot_grid: bool,
@@ -289,34 +288,36 @@ def _create_metric_subplots(
     return fig, subplots[:n_plots]
 
 
-def _show_figure(
+def _add_legend_and_save(
     fig: Figure,
     metric_subplots: list[SubPlot],
     two_columns: bool,
     plot_path: str | None = None,
 ) -> None:
-    manager = plt.get_current_fig_manager()
-    if not manager:
-        raise RuntimeError("Something went wrong, did not receive a FigureManager...")
+    # Find the first subplot with data to get legend handles
+    handles: list[Artist] = []
+    labels: list[str] = []
+    for sp in metric_subplots:
+        handles, labels = sp.get_legend_handles_labels()
+        if handles:
+            break
 
-    # Create a single legend at the top of the figure
-    handles, labels = metric_subplots[0].get_legend_handles_labels()
-    label_cols = min(len(labels), 4 if two_columns else 3)
+    # Only add legend if there are any handles to display
+    if handles:
+        label_cols = min(len(labels), 4 if two_columns else 3)
 
-    # Create the legend to get the height of the legend box
-    fig.legend(
-        handles,
-        labels,
-        loc="outside upper center",
-        ncol=label_cols,
-        frameon=True,
-    )
+        # Create the legend to get the height of the legend box
+        fig.legend(
+            handles,
+            labels,
+            loc="outside upper center",
+            ncol=label_cols,
+            frameon=True,
+        )
 
     if plot_path is not None:
-        fig.savefig(plot_path, dpi=300)
+        fig.savefig(plot_path, dpi=600)
         LOGGER.info(f"Saved plot to: {plot_path}")
-
-    plt.show()
 
 
 def _is_finite(data_per_trial: list[Sequence[tuple[X, Y]]]) -> bool:
@@ -413,13 +414,15 @@ def _calc_total_cost(agent_states: list[list[AgentMetricsView]], computational_c
     )
 
 
-def _get_data_per_trial(
-    agents_per_trial: list[list[AgentMetricsView]], problem: BenchmarkProblem, metric: PlotMetric
+def _plot_data_per_trial(
+    agents_per_trial: list[list[AgentMetricsView]],
+    problem: BenchmarkProblem,
+    metric: Metric,
 ) -> list[Sequence[tuple[X, Y]]]:
     data_per_trial: list[Sequence[tuple[X, Y]]] = []
     for agents in agents_per_trial:
         with warnings.catch_warnings(action="ignore"):
-            trial_data = metric.get_data_from_trial(agents, problem)
+            trial_data = metric.get_plot_data(agents, problem)
         data_per_trial.append(trial_data)
     return data_per_trial
 

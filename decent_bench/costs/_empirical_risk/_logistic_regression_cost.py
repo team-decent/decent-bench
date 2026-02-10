@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Literal
 
 import numpy as np
 import numpy.linalg as la
@@ -14,7 +13,14 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
 from decent_bench.utils.array import Array
-from decent_bench.utils.types import Dataset, EmpiricalRiskIndices, SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import (
+    Dataset,
+    EmpiricalRiskBatchSize,
+    EmpiricalRiskIndices,
+    EmpiricalRiskReduction,
+    SupportedDevices,
+    SupportedFrameworks,
+)
 
 from ._empirical_risk_cost import EmpiricalRiskCost
 
@@ -27,32 +33,32 @@ class LogisticRegressionCost(EmpiricalRiskCost):
     :math:`\mathbf{b} \in \mathbb{R}^{m}`, the logistic regression cost function is defined as:
 
     .. math:: f(\mathbf{x}) =
-        -\left[ \mathbf{b}^T \log( \sigma(\mathbf{Ax}) )
+        -\frac{1}{m} \left[ \mathbf{b}^T \log( \sigma(\mathbf{Ax}) )
         + ( \mathbf{1} - \mathbf{b} )^T
             \log( 1 - \sigma(\mathbf{Ax}) ) \right]
 
-        = -\sum_{i = 1}^m \left[ b_i \log( \sigma(A_i x) )
+        = -\frac{1}{m} \sum_{i = 1}^m \left[ b_i \log( \sigma(A_i x) )
         + (1 - b_i) \log( 1 - \sigma(A_i x) ) \right]
 
-    where :math:`A_i` and :math:`b_i` are the i-th row of :math:`\mathbf{A}` and
-    the i-th element of :math:`\mathbf{b}` respectively.
+    where :math:`\sigma(z) = \frac{1}{1 + e^{-z}}` is the sigmoid function, :math:`A_i` and :math:`b_i` are the i-th
+    row of :math:`\mathbf{A}` and the i-th element of :math:`\mathbf{b}` respectively.
 
     In the stochastic setting, a mini-batch of size :math:`b < m` is used to compute the cost and its derivatives.
     The cost function then becomes:
 
     .. math:: f(\mathbf{x}) =
-        -\left[ \mathbf{b}_{\mathcal{B}}^T \log( \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) )
+        -\frac{1}{b} \left[ \mathbf{b}_{\mathcal{B}}^T \log( \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) )
         + ( \mathbf{1} - \mathbf{b}_{\mathcal{B}} )^T
             \log( 1 - \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) ) \right]
 
-        = -\sum_{i \in \mathcal{B}} \left[ b_i \log( \sigma(A_i x) )
+        = -\frac{1}{b} \sum_{i \in \mathcal{B}} \left[ b_i \log( \sigma(A_i x) )
         + (1 - b_i) \log( 1 - \sigma(A_i x) ) \right]
 
     where :math:`\mathcal{B}` is a sampled batch of :math:`b` indices from :math:`\{1, \ldots, m\}`,
     :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
     """
 
-    def __init__(self, dataset: Dataset, batch_size: int | Literal["all"] = "all"):
+    def __init__(self, dataset: Dataset, batch_size: EmpiricalRiskBatchSize = "all"):
         """
         Initialize logistic regression cost function.
 
@@ -60,7 +66,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
             dataset (Dataset): Dataset containing features and targets. The expected shapes are:
                 - Features: (n_features,)
                 - Targets: single dimensional values
-            batch_size (int | Literal["all"]): Size of mini-batch to use for stochastic methods.
+            batch_size (EmpiricalRiskBatchSize): Size of mini-batch to use for stochastic methods.
                 If "all", full-batch methods are used.
 
         Raises:
@@ -70,10 +76,10 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         """
         if len(iop.shape(dataset[0][0])) != 1:
             raise ValueError(f"Dataset features must be vectors, got: {dataset[0][0]}")
-        if iop.to_numpy(dataset[0][1]).shape != ():
+        if iop.to_numpy(dataset[0][1]).shape != (1,):
             raise TypeError(
                 f"Dataset targets must be single dimensional values, got: {dataset[0][1]} "
-                f"with shape {iop.to_numpy(dataset[0][1]).shape}, expected shape is ()."
+                f"with shape {iop.to_numpy(dataset[0][1]).shape}, expected shape is (1,)."
             )
         if isinstance(batch_size, int) and (batch_size <= 0 or batch_size > len(dataset)):
             raise ValueError(
@@ -124,7 +130,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         The cost function's smoothness constant.
 
         .. math::
-            \frac{m}{4} \max_i \|\mathbf{A}_i\|^2
+            \frac{1}{m} \frac{m}{4} \max_i \|\mathbf{A}_i\|^2 = \frac{1}{4} \max_i \|\mathbf{A}_i\|^2
 
         where m is the number of rows in :math:`\mathbf{A}`.
 
@@ -132,7 +138,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
         """
         A, _ = self._get_batch_data("all")  # noqa: N806
-        return float(max(pow(la.norm(row), 2) for row in A) * A.shape[0] / 4)
+        return float(max(pow(la.norm(row), 2) for row in A) / 4)
 
     @property
     def m_cvx(self) -> float:
@@ -149,7 +155,8 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         r"""
         Make predictions at x on the given data.
 
-        The predicted targets are computed as :math:`\sigma(\mathbf{Ax}) > 0.5`.
+        The predicted targets are computed as :math:`\sigma(\mathbf{Ax}) > 0.5`,
+        where :math:`\sigma` is the sigmoid function.
 
         Args:
             x: Point to make predictions at.
@@ -178,28 +185,34 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         If no batching is used, this is:
 
         .. math::
-            -\left[ \mathbf{b}^T \log( \sigma(\mathbf{Ax}) )
+            - \frac{1}{m} \left[ \mathbf{b}^T \log( \sigma(\mathbf{Ax}) )
             + ( \mathbf{1} - \mathbf{b} )^T
                 \log( 1 - \sigma(\mathbf{Ax}) ) \right]
 
         If indices is "batch", a random batch :math:`\mathcal{B}` is drawn with :attr:`batch_size` samples.
 
         .. math::
-            -\left[ \mathbf{b}_{\mathcal{B}}^T \log( \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) )
+            -\frac{1}{b} \left[ \mathbf{b}_{\mathcal{B}}^T \log( \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) )
             + ( \mathbf{1} - \mathbf{b}_{\mathcal{B}} )^T
                 \log( 1 - \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) ) \right]
 
-        where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
+        where :math:`\sigma` is the sigmoid function, :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are
+        the rows corresponding to the batch :math:`\mathcal{B}`.
 
         """
         A, b = self._get_batch_data(indices)  # noqa: N806
         Ax = A.dot(x)  # noqa: N806
         neg_log_sig = np.logaddexp(0.0, -Ax)
         cost = b.dot(neg_log_sig) + (1 - b).dot(Ax + neg_log_sig)
-        return float(cost)
+        return float(cost) / len(self.batch_used)
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.gradient)
-    def gradient(self, x: NDArray[float64], indices: EmpiricalRiskIndices = "batch") -> NDArray[float64]:
+    def gradient(
+        self,
+        x: NDArray[float64],
+        indices: EmpiricalRiskIndices = "batch",
+        reduction: EmpiricalRiskReduction = "mean",
+    ) -> NDArray[float64]:
         r"""
         Gradient at x using datapoints at the given indices.
 
@@ -209,22 +222,47 @@ class LogisticRegressionCost(EmpiricalRiskCost):
             - "all": the full dataset is used.
             - "batch": a batch is drawn with :attr:`batch_size` samples.
 
+        Supported values for reduction are:
+            - "mean": average the gradients over the samples.
+            - None: return the gradients for each sample, index as the first dimension.
+
         If no batching is used, this is:
 
         .. math::
-            \mathbf{A}^T (\sigma(\mathbf{Ax}) - \mathbf{b})
+            \frac{1}{m} \mathbf{A}^T (\sigma(\mathbf{Ax}) - \mathbf{b})
 
         If indices is "batch", a random batch :math:`\mathcal{B}` is drawn with :attr:`batch_size` samples.
 
         .. math::
-            \mathbf{A}_{\mathcal{B}}^T (\sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) - \mathbf{b}_{\mathcal{B}})
+            \frac{1}{b} \mathbf{A}_{\mathcal{B}}^T (\sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x})
+            - \mathbf{b}_{\mathcal{B}})
 
-        where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
+        where :math:`\sigma` is the sigmoid function, :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B`
+        are the rows corresponding to the batch :math:`\mathcal{B}`.
+
+        Note:
+            When reduction is None, the returned array will have an additional leading dimension
+            corresponding to the number of samples used. Indexing into this dimension will give the gradient
+            for the respective sample in :attr:`batch_used <decent_bench.costs.EmpiricalRiskCost.batch_used>`.
+
         """
+        if reduction is None:
+            return self._per_sample_gradients(x, indices)
+
         A, b = self._get_batch_data(indices)  # noqa: N806
         sig = special.expit(A.dot(x))
-        res: NDArray[float64] = A.T.dot(sig - b)
+        res: NDArray[float64] = A.T.dot(sig - b) / len(self.batch_used)
         return res
+
+    def _per_sample_gradients(
+        self,
+        x: NDArray[float64],
+        indices: EmpiricalRiskIndices = "batch",
+    ) -> NDArray[float64]:
+        A, b = self._get_batch_data(indices)  # noqa: N806
+        sig = special.expit(A.dot(x))
+        res = [A[i, :].reshape(-1, 1) * (sig[i] - b[i]) for i in range(A.shape[0])]
+        return np.asarray(res)
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.hessian)
     def hessian(self, x: NDArray[float64], indices: EmpiricalRiskIndices = "batch") -> NDArray[float64]:
@@ -240,22 +278,22 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         If no batching is used, this is:
 
         .. math::
-            \mathbf{A}^T \mathbf{DA}
+            \frac{1}{m} \mathbf{A}^T \mathbf{DA}
 
-        where :math:`\mathbf{D}` is a diagonal matrix such that
+        where :math:`\sigma` is the sigmoid function and :math:`\mathbf{D}` is a diagonal matrix such that
         :math:`\mathbf{D}_i = \sigma(\mathbf{Ax}_i) (1-\sigma(\mathbf{Ax}_i))`
 
         If indices is "batch", a random batch :math:`\mathcal{B}` is drawn with :attr:`batch_size` samples.
 
         .. math::
-            \mathbf{A}_{\mathcal{B}}^T \mathbf{D}_{\mathcal{B}} \mathbf{A}_{\mathcal{B}}
+            \frac{1}{b} \mathbf{A}_{\mathcal{B}}^T \mathbf{D}_{\mathcal{B}} \mathbf{A}_{\mathcal{B}}
 
         where :math:`\mathbf{A}_B` and :math:`\mathbf{D}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
         """
         A, _ = self._get_batch_data(indices)  # noqa: N806
         sig = special.expit(A.dot(x))
         D = np.diag(sig * (1 - sig))  # noqa: N806
-        res: NDArray[float64] = A.T.dot(D).dot(A)
+        res: NDArray[float64] = A.T.dot(D).dot(A) / len(self.batch_used)
         return res
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.proximal)
@@ -275,7 +313,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         self._batch_size = self.n_samples  # Use full dataset for proximal
         approx = ca.proximal_solver(self, x, rho)
         self._batch_size = prev_batch_size  # Restore previous batch size
-        return approx
+        return approx / self.n_samples
 
     def _get_batch_data(self, indices: EmpiricalRiskIndices = "batch") -> tuple[NDArray[float64], NDArray[float64]]:
         """Get data for a batch. Returns A and b for the batch."""

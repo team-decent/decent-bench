@@ -133,7 +133,7 @@ class Cost(ABC):  # noqa: PLR0904
         For example, the addition of two :class:`~decent_bench.costs.QuadraticCost` objects benefits
         from returning a new :class:`~decent_bench.costs.QuadraticCost` instead of a
         :class:`~decent_bench.costs.SumCost` as this preserves the closed
-        form proximal solution and only requires one evaluation instead of two when calling :meth:`evaluate`,
+        form proximal solution and only requires one evaluation instead of two when calling :meth:`function`,
         :meth:`gradient`, and :meth:`hessian`.
         """
 

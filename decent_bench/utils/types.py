@@ -38,6 +38,19 @@ Can be a list of integers, the string "all" for full dataset, the string "batch"
 or an integer specifying a single datapoint.
 """
 
+type EmpiricalRiskReduction = Literal["mean"] | None
+"""
+Type alias for specifying reduction methods in empirical risk computations.
+Can be "mean" to average over samples or None for no reduction and the result
+is returned as a list of gradients for each sample.
+"""
+
+type EmpiricalRiskBatchSize = int | Literal["all"]
+"""
+Type alias for specifying batch size in empirical risk initialization.
+Can be an integer for mini-batch size or the string "all" for full dataset.
+"""
+
 type Datapoint = tuple["Array", "Array"]  # noqa: TC008
 """Tuple of (x, y) representing one datapoint where x are features and y is the target."""
 
@@ -67,7 +80,7 @@ class SupportedFrameworks(Enum):
     """Enum for supported frameworks in decent-bench."""
 
     NUMPY = "numpy"
-    TORCH = "torch"
+    PYTORCH = "pytorch"
     TENSORFLOW = "tensorflow"
     JAX = "jax"
 

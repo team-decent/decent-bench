@@ -45,12 +45,12 @@ except RuntimeError:
             SupportedDevices.CPU,
         ),
         pytest.param(
-            SupportedFrameworks.TORCH,
+            SupportedFrameworks.PYTORCH,
             SupportedDevices.CPU,
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            SupportedFrameworks.TORCH,
+            SupportedFrameworks.PYTORCH,
             SupportedDevices.GPU,
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -80,7 +80,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
     """Test that in-place operations on agent.x properly update the history."""
     agent = Agent(
         0,
-        LinearRegressionCost([(np.array([1.0, 1.0, 1.0]), 1.0)]),
+        LinearRegressionCost([(np.array([1.0, 1.0, 1.0]), np.array([1.0]))]),
         None,
         state_snapshot_period=1,
     )
@@ -184,12 +184,12 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
             SupportedDevices.CPU,
         ),
         pytest.param(
-            SupportedFrameworks.TORCH,
+            SupportedFrameworks.PYTORCH,
             SupportedDevices.CPU,
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            SupportedFrameworks.TORCH,
+            SupportedFrameworks.PYTORCH,
             SupportedDevices.GPU,
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
@@ -222,7 +222,7 @@ def test_agent_state_snapshot_period(
     """Test that agent history is recorded according to the specified history period."""
     agent = Agent(
         0,
-        LinearRegressionCost([(np.array([1.0, 1.0, 1.0]), 1.0)]),
+        LinearRegressionCost([(np.array([1.0, 1.0, 1.0]), np.array([1.0]))]),
         None,
         state_snapshot_period=state_snapshot_period,
     )

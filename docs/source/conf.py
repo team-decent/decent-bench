@@ -56,6 +56,7 @@ intersphinx_mapping = {
     ),
     "jax": ("https://jax.readthedocs.io/en/latest/", None),
     "rich": ("https://rich.readthedocs.io/en/latest/", None),
+    "sklearn": ("https://scikit-learn.org/stable/", None),
 }
 
 
@@ -77,6 +78,10 @@ def _numpy_typing_missing_ref(app, env, node, contnode):
                 "",
                 "NDArray",
                 refuri="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray",
+            )
+        if target in {"DTypeLike", "numpy.typing.DTypeLike", "numpy._typing.DTypeLike"}:
+            return nodes.reference(
+                "", "DTypeLike", refuri="https://numpy.org/doc/stable/reference/typing.html#numpy.typing.DTypeLike"
             )
     return None
 
