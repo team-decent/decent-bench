@@ -40,8 +40,8 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         = -\frac{1}{m} \sum_{i = 1}^m \left[ b_i \log( \sigma(A_i x) )
         + (1 - b_i) \log( 1 - \sigma(A_i x) ) \right]
 
-    where :math:`A_i` and :math:`b_i` are the i-th row of :math:`\mathbf{A}` and
-    the i-th element of :math:`\mathbf{b}` respectively.
+    where :math:`\sigma(z) = \frac{1}{1 + e^{-z}}` is the sigmoid function, :math:`A_i` and :math:`b_i` are the i-th
+    row of :math:`\mathbf{A}` and the i-th element of :math:`\mathbf{b}` respectively.
 
     In the stochastic setting, a mini-batch of size :math:`b < m` is used to compute the cost and its derivatives.
     The cost function then becomes:
@@ -155,7 +155,8 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         r"""
         Make predictions at x on the given data.
 
-        The predicted targets are computed as :math:`\sigma(\mathbf{Ax}) > 0.5`.
+        The predicted targets are computed as :math:`\sigma(\mathbf{Ax}) > 0.5`,
+        where :math:`\sigma` is the sigmoid function.
 
         Args:
             x: Point to make predictions at.
@@ -195,7 +196,8 @@ class LogisticRegressionCost(EmpiricalRiskCost):
             + ( \mathbf{1} - \mathbf{b}_{\mathcal{B}} )^T
                 \log( 1 - \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) ) \right]
 
-        where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
+        where :math:`\sigma` is the sigmoid function, :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are
+        the rows corresponding to the batch :math:`\mathcal{B}`.
 
         """
         A, b = self._get_batch_data(indices)  # noqa: N806
@@ -235,7 +237,8 @@ class LogisticRegressionCost(EmpiricalRiskCost):
             \frac{1}{b} \mathbf{A}_{\mathcal{B}}^T (\sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x})
             - \mathbf{b}_{\mathcal{B}})
 
-        where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
+        where :math:`\sigma` is the sigmoid function, :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B`
+        are the rows corresponding to the batch :math:`\mathcal{B}`.
 
         Note:
             When reduction is None, the returned array will have an additional leading dimension
@@ -277,7 +280,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         .. math::
             \frac{1}{m} \mathbf{A}^T \mathbf{DA}
 
-        where :math:`\mathbf{D}` is a diagonal matrix such that
+        where :math:`\sigma` is the sigmoid function and :math:`\mathbf{D}` is a diagonal matrix such that
         :math:`\mathbf{D}_i = \sigma(\mathbf{Ax}_i) (1-\sigma(\mathbf{Ax}_i))`
 
         If indices is "batch", a random batch :math:`\mathcal{B}` is drawn with :attr:`batch_size` samples.
