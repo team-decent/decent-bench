@@ -65,14 +65,12 @@ class CheckpointManager:
         keep_n_checkpoints: int,
     ) -> None:
         """Initialize CheckpointManager with a checkpoint directory path."""
-        # Checked
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_step = checkpoint_step
         self.keep_n_checkpoints = keep_n_checkpoints
 
     def is_empty(self) -> bool:
         """Check if checkpoint directory is empty or doesn't exist."""
-        # Checked
         if not self.checkpoint_dir.exists():
             return True
         return not any(self.checkpoint_dir.iterdir())
@@ -98,7 +96,6 @@ class CheckpointManager:
                 configuration and context when analyzing results later.
 
         """
-        # Checked
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         # Save metadata
@@ -126,7 +123,7 @@ class CheckpointManager:
         for idx in range(len(algorithms)):
             self._get_algorithm_dir(idx).mkdir(parents=True, exist_ok=True)
 
-    def append_metadata(self, additional_metadata: dict[str, Any]) -> None:
+    def append_metadata(self, additional_metadata: dict[str, Any]) -> dict[str, Any]:
         """
         Append additional metadata to existing checkpoint metadata.
 
@@ -136,12 +133,16 @@ class CheckpointManager:
         Args:
             additional_metadata: Dictionary of additional metadata to append to the existing metadata.
 
+        Returns:
+            Updated metadata dictionary after appending the additional metadata.
+
         """
         metadata = self.load_metadata()
         if "benchmark_metadata" not in metadata:
             metadata["benchmark_metadata"] = {}
         metadata["benchmark_metadata"].update(additional_metadata)
         self._save_metadata(metadata)
+        return metadata
 
     def load_initial_network(self) -> P2PNetwork:
         """
@@ -204,7 +205,7 @@ class CheckpointManager:
         if self.checkpoint_step is None:
             return False
 
-        return iteration % self.checkpoint_step == 0
+        return (iteration + 1) % self.checkpoint_step == 0
 
     def save_checkpoint(
         self,
@@ -410,7 +411,7 @@ class CheckpointManager:
         metadata_path = self.checkpoint_dir / "metadata.json"
         with metadata_path.open(encoding="utf-8") as f:
             metadata: dict[str, Any] = json.load(f)
-            return metadata
+        return metadata
 
     def get_results_path(self, file_name: str) -> Path:
         """
@@ -488,9 +489,11 @@ class CheckpointManager:
 
         # Find all iteration checkpoint files
         network_files = list(trial_dir.glob("network_*.pkl"))
-        network_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        # Sort by iteration number in filename (network_0000100.pkl -> 100)
+        network_files.sort(key=lambda p: int(p.stem.split("_")[-1]), reverse=True)
         algorithm_files = list(trial_dir.glob("algorithm_state_*.pkl"))
-        algorithm_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        # Sort by iteration number in filename (algorithm_state_0000100.pkl -> 100)
+        algorithm_files.sort(key=lambda p: int(p.stem.split("_")[-1]), reverse=True)
 
         # Remove older checkpoints
         if len(network_files) > self.keep_n_checkpoints:

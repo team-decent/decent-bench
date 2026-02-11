@@ -67,13 +67,18 @@ def create_tables(
                 rows.append(row)
                 progress.advance(table_task)
         progress.update(table_task, status="Finalizing table")
-    formatted_table = tb.tabulate(rows, headers, tablefmt=table_fmt)
+    grid_table = tb.tabulate(rows, headers, tablefmt="grid")
     latex_table = tb.tabulate(rows, headers, tablefmt="latex")
-    LOGGER.info("\n" + formatted_table)
+    LOGGER.info("\n" + latex_table if table_fmt == "latex" else "\n" + grid_table)
     if table_path:
+        # Save both latex and grid tables to two files with appropriate suffixes
         table_path.parent.mkdir(parents=True, exist_ok=True)
-        table_path.write_text(latex_table, encoding="utf-8")
-        LOGGER.info(f"Saved table to {table_path}")
+        latex_path = table_path.parent / (table_path.stem + ".tex")
+        grid_path = table_path.parent / (table_path.stem + ".txt")
+        latex_path.write_text(latex_table, encoding="utf-8")
+        grid_path.write_text(grid_table, encoding="utf-8")
+        LOGGER.info(f"Saved LaTeX table to {latex_path}")
+        LOGGER.info(f"Saved grid table to {grid_path}")
 
 
 def _table_data_per_trial(

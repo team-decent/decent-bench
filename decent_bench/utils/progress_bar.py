@@ -130,7 +130,7 @@ class ProgressBarHandle:
     _progress_bar_ids: dict[Any, Any]
     _progress_step: int | None
 
-    def start_progress_bar(self, algorithm: Algorithm, trial: int) -> None:
+    def start_progress_bar(self, algorithm: Algorithm, trial: int, initial_progress: int) -> None:
         """
         Start the clock of *algorithm*'s progress bar without incrementing it.
 
@@ -139,7 +139,13 @@ class ProgressBarHandle:
         was first rendered.
         """
         progress_bar_id = self._progress_bar_ids[algorithm]
-        self._progress_increment_queue.put(_ProgressRecord(progress_bar_id, 0, trial + 1))
+        self._progress_increment_queue.put(
+            _ProgressRecord(
+                progress_bar_id,
+                initial_progress % self._progress_step if self._progress_step else 0,
+                trial + 1,
+            )
+        )
 
     def advance_progress_bar(self, algorithm: Algorithm, iteration: int) -> None:
         """Advance *algorithm*'s progress bar by an amount (units)."""

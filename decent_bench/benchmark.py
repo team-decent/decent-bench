@@ -6,6 +6,7 @@ from copy import deepcopy
 from logging.handlers import QueueListener
 from multiprocessing import Manager, get_context
 from multiprocessing.context import BaseContext
+from multiprocessing.managers import SyncManager
 from pathlib import Path
 from time import sleep
 from typing import TYPE_CHECKING, Any, Literal
@@ -150,9 +151,9 @@ def resume_benchmark(
             if nw_init_state is None:
                 raise ValueError("Initial network state not found in checkpoint metadata")
 
-            LOGGER.debug(
-                f"Loaded checkpoint metadata: algorithms={algorithms}, problem={problem}, nw_init_state={nw_init_state}"
-            )
+            log_listener, manager, mp_context = _init_logging_and_multiprocessing(log_level, max_processes, problem)
+
+            LOGGER.debug(f"Loaded checkpoint: algorithms={algorithms}")
         except (FileNotFoundError, KeyError) as e:
             raise ValueError(f"Invalid checkpoint directory: missing or corrupted metadata - {e}") from e
 
@@ -164,14 +165,19 @@ def resume_benchmark(
                 checkpoint_manager.unmark_trial_complete(alg_idx, trial)
         # If we resume again, we have to increase the iterations on top of the already increased iterations,
         # so we need to keep track of the total increase in the metadata
-        total_increased = increase_iterations + metadata.get("benchmark_metadata", {}).get("increase_iterations", 0)
-        checkpoint_manager.append_metadata({"increased_iterations": total_increased})
-        LOGGER.info(f"Increased iterations for all algorithms by {increase_iterations}")
+        total_increased = increase_iterations + metadata.get("benchmark_metadata", {}).get("increased_iterations", 0)
+        metadata = checkpoint_manager.append_metadata({"increased_iterations": total_increased})
+        LOGGER.info(
+            f"Increased iterations for all algorithms by {increase_iterations}, total increase is {total_increased}"
+        )
 
     _benchmark(
         algorithms=algorithms,
         benchmark_problem=problem,
         nw_init_state=nw_init_state,
+        log_listener=log_listener,
+        manager=manager,
+        mp_context=mp_context,
         plot_metrics=plot_metrics,
         table_metrics=table_metrics,
         table_fmt=table_fmt,
@@ -181,7 +187,6 @@ def resume_benchmark(
         x_axis_scaling=x_axis_scaling,
         n_trials=n_trials,
         confidence_level=confidence_level,
-        log_level=log_level,
         max_processes=max_processes,
         progress_step=progress_step,
         show_speed=show_speed,
@@ -292,6 +297,8 @@ def benchmark(
         ValueError: If the checkpoint directory is not empty when initializing the CheckpointManager.
 
     """
+    log_listener, manager, mp_context = _init_logging_and_multiprocessing(log_level, max_processes, benchmark_problem)
+
     nw_init_state = create_distributed_network(benchmark_problem)
     LOGGER.debug("Created initial network state from benchmark problem configuration")
 
@@ -315,6 +322,9 @@ def benchmark(
         algorithms=algorithms,
         benchmark_problem=benchmark_problem,
         nw_init_state=nw_init_state,
+        log_listener=log_listener,
+        manager=manager,
+        mp_context=mp_context,
         plot_metrics=plot_metrics,
         table_metrics=table_metrics,
         table_fmt=table_fmt,
@@ -324,7 +334,6 @@ def benchmark(
         x_axis_scaling=x_axis_scaling,
         n_trials=n_trials,
         confidence_level=confidence_level,
-        log_level=log_level,
         max_processes=max_processes,
         progress_step=progress_step,
         show_speed=show_speed,
@@ -338,9 +347,12 @@ def _benchmark(
     algorithms: list[Algorithm],
     benchmark_problem: BenchmarkProblem,
     nw_init_state: P2PNetwork,
+    log_listener: QueueListener,
+    manager: SyncManager,
+    *,
+    mp_context: BaseContext | None = None,
     plot_metrics: list[Metric] | list[list[Metric]] = mc.DEFAULT_PLOT_METRICS,
     table_metrics: list[Metric] = mc.DEFAULT_TABLE_METRICS,
-    *,
     table_fmt: Literal["grid", "latex"] = "grid",
     plot_grid: bool = True,
     individual_plots: bool = False,
@@ -348,7 +360,6 @@ def _benchmark(
     x_axis_scaling: float = 1e-4,
     n_trials: int = 30,
     confidence_level: float = 0.95,
-    log_level: int = logging.INFO,
     max_processes: int | None = 1,
     progress_step: int | None = None,
     show_speed: bool = False,
@@ -364,6 +375,9 @@ def _benchmark(
         benchmark_problem: problem to benchmark on, defines the network topology, cost functions, and communication
             constraints
         nw_init_state: initial state of the network to run the algorithms on
+        log_listener: multiprocessing logging listener to handle log messages from worker processes
+        manager: multiprocessing manager for sharing data between processes
+        mp_context: multiprocessing context to use for creating new processes
         plot_metrics: metrics to plot after the execution, defaults to
             :const:`~decent_bench.metrics.metric_collection.DEFAULT_PLOT_METRICS`.
             If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
@@ -382,7 +396,6 @@ def _benchmark(
         confidence_level: confidence level for computing confidence intervals of the table metrics, expressed as a value
             between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
             wider confidence intervals.
-        log_level: minimum level to log, e.g. :data:`logging.INFO`
         max_processes: maximum number of processes to use when running trials, multiprocessing improves performance
             but can be inhibiting when debugging or using a profiler, set to 1 to disable multiprocessing or ``None`` to
             use :class:`~concurrent.futures.ProcessPoolExecutor`'s default. If your algorithm is very lightweight you
@@ -423,19 +436,7 @@ def _benchmark(
         Computational cost plots will be shown on the left and iteration plots on the right.
 
     """
-    # Detect if PyTorch costs are being used to determine multiprocessing context
-    if max_processes != 1:
-        use_spawn = _should_use_spawn_context(benchmark_problem)
-        mp_context = get_context("spawn") if use_spawn else None
-    else:
-        use_spawn = False
-        mp_context = None
-
-    manager = Manager() if not use_spawn else get_context("spawn").Manager()
-    log_listener = logger.start_log_listener(manager, log_level)
     LOGGER.info("Starting benchmark execution ")
-    if use_spawn:
-        LOGGER.debug("Using spawn multiprocessing context for PyTorch/JAX compatibility")
     LOGGER.debug(f"Nr of agents: {len(nw_init_state.agents())}")
     prog_ctrl = ProgressBarController(manager, algorithms, n_trials, progress_step, show_speed, show_trial)
     resulting_nw_states = _run_trials(
@@ -458,7 +459,7 @@ def _benchmark(
         table_metrics,
         confidence_level,
         table_fmt,
-        table_path=checkpoint_manager.get_results_path("table_results.txt") if checkpoint_manager else None,
+        table_path=checkpoint_manager.get_results_path("table.txt") if checkpoint_manager else None,
     )
     create_plots(
         resulting_agent_states,
@@ -473,6 +474,26 @@ def _benchmark(
     )
     LOGGER.info("Benchmark execution complete, thanks for using decent-bench")
     log_listener.stop()
+
+
+def _init_logging_and_multiprocessing(
+    log_level: int, max_processes: int | None, benchmark_problem: BenchmarkProblem
+) -> tuple[QueueListener, SyncManager, BaseContext | None]:
+    # Detect if PyTorch costs are being used to determine multiprocessing context
+    if max_processes != 1:
+        use_spawn = _should_use_spawn_context(benchmark_problem)
+        mp_context = get_context("spawn") if use_spawn else None
+    else:
+        use_spawn = False
+        mp_context = None
+
+    manager = Manager() if not use_spawn else get_context("spawn").Manager()
+    log_listener = logger.start_log_listener(manager, log_level)
+
+    if use_spawn:
+        LOGGER.debug("Using spawn multiprocessing context for PyTorch/JAX compatibility")
+
+    return log_listener, manager, mp_context
 
 
 def _run_trials(  # noqa: PLR0917
@@ -504,6 +525,11 @@ def _run_trials(  # noqa: PLR0917
                 LOGGER.debug(f"Loaded completed trial {trial} for algorithm {alg.name} from checkpoint")
     else:
         to_run = {alg: list(range(n_trials)) for alg in algorithms}
+
+    LOGGER.debug(
+        f"Trials to run: { {alg.name: trials for alg, trials in to_run.items()} }, "
+        f"Trials completed: { {alg.name: len(results[alg]) for alg in algorithms} }"
+    )
 
     if max_processes == 1:
         partial_result = {
@@ -547,12 +573,12 @@ def _run_trial(  # noqa: PLR0917
     alg_idx: int,
     checkpoint_manager: CheckpointManager | None = None,
 ) -> P2PNetwork:
-    progress_bar_handle.start_progress_bar(algorithm, trial)
-
     if checkpoint_manager is not None:
         checkpoint = checkpoint_manager.load_checkpoint(alg_idx, trial)
         if checkpoint is not None:
             alg, network, start_iteration = checkpoint
+            # Set iterations
+            alg.iterations = algorithm.iterations
             LOGGER.debug(
                 f"Resuming {algorithm.name} trial {trial} from iteration {start_iteration}/{algorithm.iterations}"
             )
@@ -565,21 +591,24 @@ def _run_trial(  # noqa: PLR0917
         network = deepcopy(nw_init_state)
         alg = deepcopy(algorithm)
 
+    progress_bar_handle.start_progress_bar(algorithm, trial, start_iteration)
+
     def progress_callback(iteration: int) -> None:
         progress_bar_handle.advance_progress_bar(algorithm, iteration)
         if checkpoint_manager is not None and checkpoint_manager.should_checkpoint(algorithm.iterations, iteration):
             checkpoint_manager.save_checkpoint(alg_idx, trial, iteration, alg, network)
 
-    alg_failed = False
     with warnings.catch_warnings(action="error"):
         try:
-            alg.run(network, start_iteration, progress_callback)
+            alg.run(network, start_iteration, progress_callback, skip_finalize=True)
+            if checkpoint_manager is not None:
+                checkpoint_manager.mark_trial_complete(
+                    alg_idx, trial, algorithm.iterations - 1, algorithm=alg, network=network
+                )
+            # Now that checkpoint is saved, we can finalize to clean up memory
+            alg.finalize(network)
         except Exception as e:
-            alg_failed = True
             LOGGER.exception(f"An error or warning occurred when running {alg.name}: {type(e).__name__}: {e}")
-
-    if not alg_failed and checkpoint_manager is not None:
-        checkpoint_manager.mark_trial_complete(alg_idx, trial, algorithm.iterations - 1, algorithm=alg, network=network)
 
     return network
 

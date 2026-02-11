@@ -77,6 +77,7 @@ class Algorithm(ABC):
         network: P2PNetwork,
         start_iteration: int = 0,
         progress_callback: Callable[[int], None] | None = None,
+        skip_finalize: bool = False,
     ) -> None:
         """
         Run the algorithm.
@@ -94,6 +95,9 @@ class Algorithm(ABC):
             start_iteration: iteration number to start from, used when resuming from a checkpoint.
             progress_callback: optional callback to report progress after each iteration. If greater than 0,
                 :meth:`initialize` will be skipped.
+            skip_finalize: if True, skip calling :meth:`finalize` after running the iterations. This is needed
+                so that full agent states and training variables can be saved in checkpoints without being cleared
+                by :meth:`finalize`.
 
         Raises:
             ValueError: if start_iteration is not in [0, iterations]
@@ -110,7 +114,9 @@ class Algorithm(ABC):
             self.step(network, k)
             if progress_callback is not None:
                 progress_callback(k)
-        self.finalize(network)
+
+        if not skip_finalize:
+            self.finalize(network)
 
 
 @dataclass(eq=False)
