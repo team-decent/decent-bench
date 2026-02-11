@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.networks import P2PNetwork
 from decent_bench.utils.logger import LOGGER
@@ -76,14 +77,25 @@ class CheckpointManager:
             return True
         return not any(self.checkpoint_dir.iterdir())
 
-    def initialize(self, algorithms: list[Algorithm], network: P2PNetwork, benchmark_metadata: dict[str, Any]) -> None:
+    def initialize(
+        self,
+        algorithms: list[Algorithm],
+        network: P2PNetwork,
+        problem: BenchmarkProblem,
+        n_trials: int,
+        benchmark_metadata: dict[str, Any] | None,
+    ) -> None:
         """
         Initialize checkpoint directory structure for a new benchmark run.
 
         Args:
             algorithms: List of Algorithm objects to be benchmarked.
             network: Initial P2PNetwork state before any trials run.
-            benchmark_metadata: Benchmark configuration (n_trials, checkpoint_step).
+            problem: BenchmarkProblem configuration for the benchmark.
+            n_trials: Total number of trials to run for each algorithm, used for resuming.
+            benchmark_metadata: Optional dictionary of additional metadata to save in the checkpoint directory,
+                such as hyperparameters or system information. This can be useful for keeping track of the benchmark
+                configuration and context when analyzing results later.
 
         """
         # Checked
@@ -91,7 +103,7 @@ class CheckpointManager:
 
         # Save metadata
         metadata = {
-            "benchmark_metadata": benchmark_metadata,
+            "n_trials": n_trials,
             "algorithms": [
                 {
                     "name": alg.name,
@@ -101,12 +113,35 @@ class CheckpointManager:
                 for idx, alg in enumerate(algorithms)
             ],
         }
+        if benchmark_metadata is not None:
+            metadata["benchmark_metadata"] = benchmark_metadata
+
+        # Save initial state and metadata for resuming later if needed
         self._save_metadata(metadata)
         self._save_initial_network(network)
+        self._save_initial_algorithms(algorithms)
+        self._save_benchmark_problem(problem)
 
         # Create algorithm directories
         for idx in range(len(algorithms)):
             self._get_algorithm_dir(idx).mkdir(parents=True, exist_ok=True)
+
+    def append_metadata(self, additional_metadata: dict[str, Any]) -> None:
+        """
+        Append additional metadata to existing checkpoint metadata.
+
+        This can be used to add information after initialization, such as system resource usage,
+        hyperparameters, or other contextual information that may be relevant for analyzing results later.
+
+        Args:
+            additional_metadata: Dictionary of additional metadata to append to the existing metadata.
+
+        """
+        metadata = self.load_metadata()
+        if "benchmark_metadata" not in metadata:
+            metadata["benchmark_metadata"] = {}
+        metadata["benchmark_metadata"].update(additional_metadata)
+        self._save_metadata(metadata)
 
     def load_initial_network(self) -> P2PNetwork:
         """
@@ -119,6 +154,32 @@ class CheckpointManager:
         initial_path = self.checkpoint_dir / "initial_network.pkl"
         with initial_path.open("rb") as f:
             ret: P2PNetwork = pickle.load(f)  # noqa: S301
+        return ret
+
+    def load_initial_algorithms(self) -> list[Algorithm]:
+        """
+        Load initial algorithm states from checkpoint.
+
+        Returns:
+            List of Algorithm objects representing the initial algorithm states.
+
+        """
+        initial_path = self.checkpoint_dir / "initial_algorithms.pkl"
+        with initial_path.open("rb") as f:
+            ret: list[Algorithm] = pickle.load(f)  # noqa: S301
+        return ret
+
+    def load_benchmark_problem(self) -> BenchmarkProblem:
+        """
+        Load benchmark problem configuration from checkpoint.
+
+        Returns:
+            BenchmarkProblem object representing the benchmark problem configuration.
+
+        """
+        problem_path = self.checkpoint_dir / "benchmark_problem.pkl"
+        with problem_path.open("rb") as f:
+            ret: BenchmarkProblem = pickle.load(f)  # noqa: S301
         return ret
 
     def should_checkpoint(self, alg_iterations: int, iteration: int) -> bool:
@@ -271,6 +332,21 @@ class CheckpointManager:
         LOGGER.debug(f"Marked trial complete: alg={alg_idx}, trial={trial}")
         return network_path, alg_path
 
+    def unmark_trial_complete(self, alg_idx: int, trial: int) -> None:
+        """
+        Remove the completion marker for a trial, allowing it to be rerun.
+
+        Args:
+            alg_idx: Algorithm index (0-based).
+            trial: Trial number (0-based).
+
+        """
+        trial_dir = self._get_trial_dir(alg_idx, trial)
+        complete_path = trial_dir / "complete.json"
+        if complete_path.exists():
+            complete_path.unlink()
+            LOGGER.debug(f"Unmarked trial complete: alg={alg_idx}, trial={trial}")
+
     def is_trial_complete(self, alg_idx: int, trial: int) -> bool:
         """
         Check if a trial has been completed.
@@ -383,6 +459,20 @@ class CheckpointManager:
             pickle.dump(network, f)
         LOGGER.debug(f"Saved initial network to {initial_path}")
 
+    def _save_initial_algorithms(self, algorithms: list[Algorithm]) -> None:
+        """Save initial algorithm states before any trials run."""
+        initial_path = self.checkpoint_dir / "initial_algorithms.pkl"
+        with initial_path.open("wb") as f:
+            pickle.dump(algorithms, f)
+        LOGGER.debug(f"Saved initial algorithms to {initial_path}")
+
+    def _save_benchmark_problem(self, problem: BenchmarkProblem) -> None:
+        """Save benchmark problem configuration."""
+        problem_path = self.checkpoint_dir / "benchmark_problem.pkl"
+        with problem_path.open("wb") as f:
+            pickle.dump(problem, f)
+        LOGGER.debug(f"Saved benchmark problem to {problem_path}")
+
     def _cleanup_old_checkpoints(self, alg_idx: int, trial: int) -> None:
         """
         Remove old iteration checkpoint files, keeping only the most recent N.
@@ -397,11 +487,18 @@ class CheckpointManager:
             return
 
         # Find all iteration checkpoint files
-        checkpoint_files = sorted(trial_dir.glob("network_*.pkl")) + sorted(trial_dir.glob("algorithm_state_*.pkl"))
-        checkpoint_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        network_files = list(trial_dir.glob("network_*.pkl"))
+        network_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        algorithm_files = list(trial_dir.glob("algorithm_state_*.pkl"))
+        algorithm_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
 
         # Remove older checkpoints
-        if len(checkpoint_files) > self.keep_n_checkpoints * 2:
-            for file_to_remove in checkpoint_files[self.keep_n_checkpoints * 2 :]:
+        if len(network_files) > self.keep_n_checkpoints:
+            for file_to_remove in network_files[self.keep_n_checkpoints :]:
                 file_to_remove.unlink()
-                LOGGER.debug(f"Removed old checkpoint: {file_to_remove}")
+                LOGGER.debug(f"Removed old network checkpoint: {file_to_remove}")
+
+        if len(algorithm_files) > self.keep_n_checkpoints:
+            for file_to_remove in algorithm_files[self.keep_n_checkpoints :]:
+                file_to_remove.unlink()
+                LOGGER.debug(f"Removed old algorithm checkpoint: {file_to_remove}")
