@@ -32,6 +32,7 @@ def resume_benchmark(
     checkpoint_dir: str,
     increase_iterations: int = 0,
     increase_trials: int = 0,
+    create_backup: bool = True,
     *,
     plot_metrics: list[Metric] | list[list[Metric]] = mc.DEFAULT_PLOT_METRICS,
     table_metrics: list[Metric] = mc.DEFAULT_TABLE_METRICS,
@@ -64,6 +65,10 @@ def resume_benchmark(
         increase_trials: number of additional trials to run for each algorithm. This allows you to increase the
             statistical significance of the benchmark results by collecting more trials. If set to 0 (default), the
             benchmark will resume with the same number of trials as defined in the checkpoint.
+        create_backup: whether to create a backup of the existing checkpoint directory before resuming. It is
+            recommended to set this to True to avoid accidental data loss, as resuming will modify the checkpoint
+            directory by adding new checkpoints and metadata. If True, a backup will be created with the name
+            ``{checkpoint_dir}_backup.zip`` before resuming.
         plot_metrics: metrics to plot after the execution, defaults to
             :const:`~decent_bench.metrics.metric_collection.DEFAULT_PLOT_METRICS`.
             If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
@@ -131,6 +136,10 @@ def resume_benchmark(
         raise ValueError(f"Checkpoint directory '{checkpoint_dir}' does not exist for resume")
     if checkpoint_manager.is_empty():
         raise ValueError(f"Checkpoint directory '{checkpoint_dir}' is empty or invalid for resume")
+
+    if create_backup:
+        backup_path = checkpoint_manager.create_backup()
+        LOGGER.info(f"Created backup of checkpoint directory at '{backup_path}'")
 
     with Status("Loading benchmark state from checkpoint..."):
         try:
@@ -326,7 +335,7 @@ def benchmark(
             "Progress cannot be resumed if interrupted."
         )
 
-    return _benchmark(
+    _benchmark(
         algorithms=algorithms,
         benchmark_problem=benchmark_problem,
         nw_init_state=nw_init_state,
@@ -458,7 +467,6 @@ def _benchmark(
         checkpoint_manager,
     )
     LOGGER.info("All trials complete")
-    return resulting_nw_states
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
     for alg, networks in resulting_nw_states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
@@ -615,7 +623,7 @@ def _run_trial(  # noqa: PLR0917
 
     def progress_callback(iteration: int) -> None:
         progress_bar_handle.advance_progress_bar(algorithm, iteration)
-        if checkpoint_manager is not None and checkpoint_manager.should_checkpoint(algorithm.iterations, iteration):
+        if checkpoint_manager is not None and checkpoint_manager.should_checkpoint(iteration):
             checkpoint_manager.save_checkpoint(alg_idx, trial, iteration, alg, network)
 
     with warnings.catch_warnings(action="error"):

@@ -22,15 +22,16 @@ class CheckpointManager:
         The checkpoint directory is organized as follows::
 
             checkpoint_dir/
-            ├── metadata.json                 # Run configuration and algorithm metadata
-            ├── initial_network.pkl           # Initial network state (before any trials)
-            └── algorithm_0/                  # Directory for first algorithm
-                ├── trial_0/                  # Directory for trial 0
-                │   ├── iter_0000100.pkl      # Network state at iteration 100
-                │   ├── iter_0000200.pkl      # Network state at iteration 200
-                │   ├── algorithm_state.pkl   # Algorithm object state (updated each checkpoint)
-                │   ├── progress.json         # {"last_completed_iteration": N}
-                │   └── complete.json         # Marker file, contains path to final checkpoint
+            ├── metadata.json                   # Run configuration and algorithm metadata
+            ├── benchmark_problem.pkl           # Initial benchmark problem state (before any trials)
+            ├── initial_algorithms.pkl          # Initial algorithm states (before any trials)
+            ├── initial_network.pkl             # Initial network state (before any trials)
+            └── algorithm_0/                    # Directory for first algorithm
+                ├── trial_0/                    # Directory for trial 0
+                │   ├── checkpoint_0000100.pkl  # Combined algorithm+network state at iteration 100
+                │   ├── checkpoint_0000200.pkl  # Combined algorithm+network state at iteration 200
+                │   ├── progress.json           # {"last_completed_iteration": N}
+                │   └── complete.json           # Marker file, contains path to final checkpoint
                 ├── trial_1/
                 │   └── ...
                 └── trial_N/
@@ -38,9 +39,10 @@ class CheckpointManager:
 
     File Descriptions:
         - **metadata.json**: Benchmark configuration.
+        - **benchmark_problem.pkl**: Initial benchmark problem state before any trials run.
+        - **initial_algorithms.pkl**: Initial algorithm states before any trials run.
         - **initial_network.pkl**: Starting network state before any algorithm execution.
-        - **iter_NNNNNNN.pkl**: Network state snapshots at specific iterations during execution.
-        - **algorithm_state.pkl**: Algorithm object with internal state at last checkpoint.
+        - **checkpoint_NNNNNNN.pkl**: Combined checkpoint containing both algorithm and network state.
         - **progress.json**: Tracks the last completed iteration within a trial.
         - **complete.json**: Marker file, contains path to final checkpoint.
 
@@ -123,6 +125,25 @@ class CheckpointManager:
         for idx in range(len(algorithms)):
             self._get_algorithm_dir(idx).mkdir(parents=True, exist_ok=True)
 
+    def create_backup(self) -> Path:
+        """
+        Create a backup of the existing checkpoint directory.
+
+        Returns:
+            Path to the created backup zip file.
+
+        Raises:
+            FileExistsError: If the backup file already exists.
+
+        """
+        backup_path = Path(f"{self.checkpoint_dir}_backup.zip")
+        if backup_path.exists():
+            raise FileExistsError(f"Backup file '{backup_path}' already exists")
+
+        shutil.make_archive(str(backup_path.with_suffix("")), "zip", self.checkpoint_dir)
+        LOGGER.info(f"Created backup of checkpoint directory at '{backup_path}'")
+        return backup_path
+
     def append_metadata(self, additional_metadata: dict[str, Any]) -> dict[str, Any]:
         """
         Append additional metadata to existing checkpoint metadata.
@@ -183,7 +204,7 @@ class CheckpointManager:
             ret: BenchmarkProblem = pickle.load(f)  # noqa: S301
         return ret
 
-    def should_checkpoint(self, alg_iterations: int, iteration: int) -> bool:
+    def should_checkpoint(self, iteration: int) -> bool:
         """
         Determine if a checkpoint should be saved at the current iteration.
 
@@ -191,7 +212,6 @@ class CheckpointManager:
             - checkpoint_step is set and iteration is a multiple of checkpoint_step
 
         Args:
-            alg_iterations: Total number of iterations for the algorithm.
             iteration: Current iteration number.
 
         Returns:
@@ -210,7 +230,7 @@ class CheckpointManager:
         iteration: int,
         algorithm: Algorithm,
         network: P2PNetwork,
-    ) -> tuple[Path, Path]:
+    ) -> Path:
         """
         Save checkpoint for a specific algorithm trial at a given iteration.
 
@@ -224,21 +244,21 @@ class CheckpointManager:
             network: P2PNetwork object with current agent states and metrics.
 
         Returns:
-            Tuple of (network_checkpoint_path, algorithm_checkpoint_path) for the saved checkpoint files.
+            Path to the saved checkpoint file.
 
         """
         trial_dir = self._get_trial_dir(alg_idx, trial)
         trial_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save network state
-        network_path = trial_dir / f"network_{iteration:07d}.pkl"
-        with network_path.open("wb") as f:
-            pickle.dump(network, f)
-
-        # Save algorithm state
-        alg_path = trial_dir / f"algorithm_state_{iteration:07d}.pkl"
-        with alg_path.open("wb") as f:
-            pickle.dump(algorithm, f)
+        # Save both algorithm and network in a single pickle file to preserve shared object references
+        checkpoint_path = trial_dir / f"checkpoint_{iteration:07d}.pkl"
+        checkpoint_data = {
+            "algorithm": algorithm,
+            "network": network,
+            "iteration": iteration,
+        }
+        with checkpoint_path.open("wb") as f:
+            pickle.dump(checkpoint_data, f)
 
         # Update progress
         progress = {"last_completed_iteration": iteration}
@@ -249,7 +269,7 @@ class CheckpointManager:
         LOGGER.debug(f"Saved checkpoint: alg={alg_idx}, trial={trial}, iter={iteration}")
 
         self._cleanup_old_checkpoints(alg_idx, trial)
-        return network_path, alg_path
+        return checkpoint_path
 
     def load_checkpoint(self, alg_idx: int, trial: int) -> tuple[Algorithm, P2PNetwork, int] | None:
         """
@@ -273,17 +293,15 @@ class CheckpointManager:
         # Load progress
         with progress_path.open(encoding="utf-8") as f:
             progress = json.load(f)
-        last_iteration = progress["last_completed_iteration"]
+        last_iteration: int = progress["last_completed_iteration"]
 
-        # Load algorithm state
-        alg_path = trial_dir / f"algorithm_state_{last_iteration:07d}.pkl"
-        with alg_path.open("rb") as f:
-            algorithm = pickle.load(f)  # noqa: S301
+        # Load both algorithm and network from single checkpoint file
+        checkpoint_path = trial_dir / f"checkpoint_{last_iteration:07d}.pkl"
+        with checkpoint_path.open("rb") as f:
+            checkpoint_data = pickle.load(f)  # noqa: S301
 
-        # Load network state
-        network_path = trial_dir / f"network_{last_iteration:07d}.pkl"
-        with network_path.open("rb") as f:
-            network = pickle.load(f)  # noqa: S301
+        algorithm: Algorithm = checkpoint_data["algorithm"]
+        network: P2PNetwork = checkpoint_data["network"]
 
         LOGGER.debug(f"Loaded checkpoint: alg={alg_idx}, trial={trial}, iter={last_iteration}")
         return algorithm, network, last_iteration
@@ -295,7 +313,7 @@ class CheckpointManager:
         iteration: int,
         algorithm: Algorithm,
         network: P2PNetwork,
-    ) -> tuple[Path, Path]:
+    ) -> Path:
         """
         Mark a trial as complete and save final result.
 
@@ -307,10 +325,10 @@ class CheckpointManager:
             network: Final P2PNetwork state after all iterations complete.
 
         Returns:
-            Tuple of (network_checkpoint_path, algorithm_checkpoint_path) for the saved final checkpoint files.
+            Path to the saved final checkpoint file.
 
         """
-        network_path, alg_path = self.save_checkpoint(alg_idx, trial, iteration, algorithm, network)
+        checkpoint_path = self.save_checkpoint(alg_idx, trial, iteration, algorithm, network)
 
         # Mark as complete
         trial_dir = self._get_trial_dir(alg_idx, trial)
@@ -320,14 +338,13 @@ class CheckpointManager:
             "alg_idx": alg_idx,
             "trial": trial,
             "iteration": iteration,
-            "network_path": str(network_path),
-            "algorithm_path": str(alg_path),
+            "checkpoint_path": str(checkpoint_path),
         }
         with complete_path.open("w") as f:
             json.dump(completed_metadata, f)
 
         LOGGER.debug(f"Marked trial complete: alg={alg_idx}, trial={trial}")
-        return network_path, alg_path
+        return checkpoint_path
 
     def unmark_trial_complete(self, alg_idx: int, trial: int) -> None:
         """
@@ -359,7 +376,7 @@ class CheckpointManager:
         trial_dir = self._get_trial_dir(alg_idx, trial)
         return (trial_dir / "complete.json").exists()
 
-    def load_trial_result(self, alg_idx: int, trial: int) -> P2PNetwork:
+    def load_trial_result(self, alg_idx: int, trial: int) -> tuple[Algorithm, P2PNetwork]:
         """
         Load final result of a completed trial.
 
@@ -368,7 +385,7 @@ class CheckpointManager:
             trial: Trial number (0-based).
 
         Returns:
-            P2PNetwork object with final state after all iterations.
+            Tuple of (Algorithm object, P2PNetwork object) with final state after all iterations.
 
         """
         trial_dir = self._get_trial_dir(alg_idx, trial)
@@ -376,11 +393,14 @@ class CheckpointManager:
 
         with complete_path.open(encoding="utf-8") as f:
             completed_metadata = json.load(f)
-        final_path = Path(completed_metadata["network_path"])
+        final_path = Path(completed_metadata["checkpoint_path"])
 
         with final_path.open("rb") as f:
-            ret: P2PNetwork = pickle.load(f)  # noqa: S301
-        return ret
+            checkpoint_data = pickle.load(f)  # noqa: S301
+
+        alg: Algorithm = checkpoint_data["algorithm"]
+        network: P2PNetwork = checkpoint_data["network"]
+        return alg, network
 
     def get_completed_trials(self, alg_idx: int, n_trials: int) -> list[int]:
         """
@@ -484,20 +504,12 @@ class CheckpointManager:
             return
 
         # Find all iteration checkpoint files
-        network_files = list(trial_dir.glob("network_*.pkl"))
-        # Sort by iteration number in filename (network_0000100.pkl -> 100)
-        network_files.sort(key=lambda p: int(p.stem.split("_")[-1]), reverse=True)
-        algorithm_files = list(trial_dir.glob("algorithm_state_*.pkl"))
-        # Sort by iteration number in filename (algorithm_state_0000100.pkl -> 100)
-        algorithm_files.sort(key=lambda p: int(p.stem.split("_")[-1]), reverse=True)
+        checkpoint_files = list(trial_dir.glob("checkpoint_*.pkl"))
+        # Sort by iteration number in filename (checkpoint_0000100.pkl -> 100)
+        checkpoint_files.sort(key=lambda p: int(p.stem.split("_")[-1]), reverse=True)
 
         # Remove older checkpoints
-        if len(network_files) > self.keep_n_checkpoints:
-            for file_to_remove in network_files[self.keep_n_checkpoints :]:
+        if len(checkpoint_files) > self.keep_n_checkpoints:
+            for file_to_remove in checkpoint_files[self.keep_n_checkpoints :]:
                 file_to_remove.unlink()
-                LOGGER.debug(f"Removed old network checkpoint: {file_to_remove}")
-
-        if len(algorithm_files) > self.keep_n_checkpoints:
-            for file_to_remove in algorithm_files[self.keep_n_checkpoints :]:
-                file_to_remove.unlink()
-                LOGGER.debug(f"Removed old algorithm checkpoint: {file_to_remove}")
+                LOGGER.debug(f"Removed old checkpoint: {file_to_remove}")

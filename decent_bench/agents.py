@@ -137,24 +137,6 @@ class Agent:
         """Enable using agent as index, for example ``W[a1, a2]`` instead of ``W[a1.id, a2.id]``."""
         return self._id
 
-    def __hash__(self) -> int:
-        """
-        Hash based on unique id.
-
-        Needed for using agents as keys in dictionaries that persist across checkpointing,
-        since the default object hashing would change after loading from a checkpoint due
-        to changes in memory addresses of the agent objects.
-        """
-        # Use getattr with fallback since __hash__ may be called during unpickling before _id is set
-        return hash(getattr(self, "_id", id(self)))
-
-    def __eq__(self, other: object) -> bool:
-        """Compare agents by ID so agents with same ID are equal, even if different instances."""
-        if not isinstance(other, Agent):
-            return NotImplemented
-        # Use getattr with fallback for consistency with __hash__
-        return getattr(self, "_id", id(self)) == getattr(other, "_id", id(other))
-
 
 @dataclass(frozen=True, eq=False)
 class AgentMetricsView:
