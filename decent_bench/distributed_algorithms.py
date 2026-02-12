@@ -1,11 +1,14 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, final
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field
+import random
+from typing import TYPE_CHECKING, Literal, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
-from decent_bench.networks import Network, P2PNetwork
+from decent_bench.costs import EmpiricalRiskCost
+from decent_bench.networks import FedNetwork, Network, P2PNetwork
+from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -103,6 +106,225 @@ class P2PAlgorithm(DecAlgorithm[P2PNetwork]):
 
     def _finalize_agents(self, network: P2PNetwork) -> Iterable["Agent"]:
         return network.agents()
+
+
+class FedAlgorithm(DecAlgorithm[FedNetwork]):
+    """Federated algorithm - clients collaborate via a central server."""
+
+    def _finalize_agents(self, network: FedNetwork) -> Iterable["Agent"]:
+        return [network.server, *network.clients]
+
+    @staticmethod
+    def _select_clients(
+        clients: Sequence["Agent"],
+        iteration: int,
+        selection_scheme: ClientSelectionScheme | None,
+    ) -> list["Agent"]:
+        if selection_scheme is None:
+            return list(clients)
+        return selection_scheme.select(clients, iteration)
+
+    @staticmethod
+    def _infer_client_weight(client: "Agent") -> float:
+        cost = client.cost
+        if hasattr(cost, "A"):
+            try:
+                size = iop.shape(cost.A)[0]
+            except Exception:
+                size = None
+            if size is not None:
+                return float(size)
+        if hasattr(cost, "b"):
+            try:
+                size = iop.shape(cost.b)[0]
+            except Exception:
+                size = None
+            if size is not None:
+                return float(size)
+        if hasattr(cost, "n_samples"):
+            n_samples = cost.n_samples
+            if n_samples is not None:
+                return float(n_samples)
+        raise ValueError(
+            "Cannot infer client data size. Provide client_weights to the algorithm or add a size "
+            "attribute to the cost."
+        )
+
+    @classmethod
+    def _weights_for_clients(
+        cls,
+        clients: Sequence["Agent"],
+        client_weights: dict[int, float] | Sequence[float] | None,
+    ) -> list[float]:
+        if client_weights is None:
+            weights = [cls._infer_client_weight(client) for client in clients]
+        elif isinstance(client_weights, dict):
+            weights = []
+            for client in clients:
+                if client.id not in client_weights:
+                    raise ValueError(f"Missing weight for client id {client.id}")
+                weights.append(float(client_weights[client.id]))
+        else:
+            max_id = max(client.id for client in clients)
+            if len(client_weights) <= max_id:
+                raise ValueError("client_weights sequence must be indexed by client id")
+            weights = [float(client_weights[client.id]) for client in clients]
+        if any(weight < 0 for weight in weights):
+            raise ValueError("Client weights must be non-negative")
+        return weights
+
+    @staticmethod
+    def _require_empirical_risk(client: "Agent") -> EmpiricalRiskCost:
+        if not isinstance(client.cost, EmpiricalRiskCost):
+            raise TypeError(
+                "Mini-batch federated algorithms require EmpiricalRiskCost; set batch_size=\"all\" for generic costs."
+            )
+        return client.cost
+
+
+@dataclass(eq=False)
+class FedAvg(FedAlgorithm):
+    r"""
+    Federated Averaging (FedAvg) with local SGD epochs.
+
+    .. math::
+        \mathbf{x}_{i, k}^{(t+1)} = \mathbf{x}_{i, k}^{(t)} - \eta \nabla f_i(\mathbf{x}_{i, k}^{(t)})
+
+    .. math::
+        \mathbf{x}_{k+1} = \frac{1}{|S_k|} \sum_{i \in S_k} \mathbf{x}_{i, k}^{(E)}
+
+    where :math:`E` is the number of local epochs per round, :math:`\eta` is the step size, and :math:`S_k` is the set
+    of participating clients at round :math:`k`. The aggregation uses client weights, defaulting to data-size weights
+    when ``client_weights`` is not provided. Client selection (subsampling) defaults to uniform sampling with
+    fraction 1.0 (all active clients) and can be customized via ``selection_scheme``. Local updates use stochastic
+    gradients computed over all minibatches of size ``batch_size`` per epoch. Mini-batching requires each client cost
+    to be an :class:`~decent_bench.costs.EmpiricalRiskCost`. Set ``batch_size="all"`` for full-batch gradients or
+    ``batch_size="cost"`` to use each client's configured batch size.
+    """
+
+    # C=0.1; batch size= inf/10/50 (dataset sizes are bigger; normally 1/10 of the total dataset).
+    # E= 5/20 (num local epochs).
+    step_size: float
+    local_epochs: int = 1
+    batch_size: int | Literal["all", "cost"] = "cost"
+    batching: Literal["epoch", "random"] = "epoch"
+    sgd_seed: int | None = None
+    client_weights: dict[int, float] | Sequence[float] | None = None
+    selection_scheme: ClientSelectionScheme | None = field(
+        default_factory=lambda: UniformClientSelection(client_fraction=1.0)
+    )
+    x0: "Array | None" = None
+    _sgd_rngs: dict[int, random.Random] | None = field(init=False, repr=False, default=None)
+    iterations: int = 100
+    name: str = "FedAvg"
+
+    def initialize(self, network: FedNetwork) -> None:  # noqa: D102
+        if self.step_size <= 0:
+            raise ValueError("step_size must be positive")
+        if self.local_epochs <= 0:
+            raise ValueError("local_epochs must be positive")
+        if isinstance(self.batch_size, int) and self.batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        server = network.server
+        clients = network.clients
+        if self.batch_size is None:
+            raise ValueError('batch_size cannot be None; use "all" or "cost" for full-batch updates.')
+        if isinstance(self.batch_size, int):
+            for client in clients:
+                self._require_empirical_risk(client)
+        if self.batching not in ("epoch", "random"):
+            raise ValueError("batching must be 'epoch' or 'random'")
+        if self.batch_size == "cost":
+            for client in clients:
+                if isinstance(client.cost, EmpiricalRiskCost) and client.cost.batch_size <= 0:
+                    raise ValueError("EmpiricalRiskCost.batch_size must be positive")
+        if self.sgd_seed is not None:
+            self._sgd_rngs = {client.id: random.Random(self.sgd_seed + client.id) for client in clients}
+        else:
+            self._sgd_rngs = None
+        server.initialize(x=self.x0, received_msgs=dict.fromkeys(clients, self.x0))
+        for client in clients:
+            client.initialize(x=self.x0, received_msgs={server: self.x0})
+
+    def _resolve_batching(self, client: "Agent") -> tuple[int | Literal["all"], EmpiricalRiskCost | None]:
+        # Batching policy:
+        # - "cost": defer to EmpiricalRiskCost.batch_size; non-empirical costs fall back to full-batch.
+        # - "all": always full-batch.
+        # - int: explicit mini-batch size (requires EmpiricalRiskCost).
+        if self.batch_size == "cost":
+            if isinstance(client.cost, EmpiricalRiskCost):
+                return client.cost.batch_size, client.cost
+            return "all", None
+
+        if self.batch_size == "all":
+            if isinstance(client.cost, EmpiricalRiskCost):
+                return "all", client.cost
+            return "all", None
+
+        return self.batch_size, self._require_empirical_risk(client)
+
+    def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
+        server = network.server
+        active_clients = network.active_clients(iteration)
+        if not active_clients:
+            return
+        selected_clients = self._select_clients(active_clients, iteration, self.selection_scheme)
+        if not selected_clients:
+            return
+
+        network.send(sender=server, receiver=selected_clients, msg=server.x)
+        for client in selected_clients:
+            network.receive(receiver=client, sender=server)
+
+        for client in selected_clients:
+            local_x = iop.copy(client.messages[server])
+            per_client_batch, cost = self._resolve_batching(client)
+            if per_client_batch == "all":
+                for _ in range(self.local_epochs):
+                    if cost is not None:
+                        grad = cost.gradient(local_x, indices="all")
+                    else:
+                        grad = client.cost.gradient(local_x)
+                    local_x = local_x - self.step_size * grad
+            else:
+                cost = cost or self._require_empirical_risk(client)
+                n_samples = cost.n_samples
+                if n_samples <= 0:
+                    raise ValueError("Client dataset size must be positive")
+                rng = self._sgd_rngs.get(client.id) if self._sgd_rngs is not None else random.Random()
+                if self.batching == "epoch":
+                    for _ in range(self.local_epochs):
+                        indices = list(range(n_samples))
+                        rng.shuffle(indices)
+                        for start in range(0, n_samples, per_client_batch):
+                            batch_indices = indices[start : start + per_client_batch]
+                            grad = cost.gradient(local_x, indices=batch_indices)
+                            local_x = local_x - self.step_size * grad
+                else:
+                    n_steps = max(1, n_samples // per_client_batch)
+                    for _ in range(self.local_epochs):
+                        for _ in range(n_steps):
+                            if self.batch_size == "cost":
+                                grad = cost.gradient(local_x)
+                            else:
+                                batch_indices = rng.sample(range(n_samples), per_client_batch)
+                                grad = cost.gradient(local_x, indices=batch_indices)
+                            local_x = local_x - self.step_size * grad
+            client.x = local_x
+            network.send(sender=client, receiver=server, msg=client.x)
+
+        network.receive(receiver=server, sender=selected_clients)
+        received_clients = [client for client in selected_clients if client in server.messages]
+        if not received_clients:
+            return
+        updates = [server.messages[client] for client in received_clients]
+        weights = self._weights_for_clients(received_clients, self.client_weights)
+        total_weight = sum(weights)
+        if total_weight <= 0:
+            raise ValueError("Sum of client weights must be positive")
+        weighted_updates = [update * weight for update, weight in zip(updates, weights, strict=True)]
+        server.x = iop.sum(iop.stack(weighted_updates, dim=0), dim=0) / total_weight
 
 
 @dataclass(eq=False)
