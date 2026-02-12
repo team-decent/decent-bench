@@ -189,7 +189,6 @@ class CheckpointManager:
 
         Checkpointing occurs if:
             - checkpoint_step is set and iteration is a multiple of checkpoint_step
-            - This is the final iteration of the algorithm.
 
         Args:
             alg_iterations: Total number of iterations for the algorithm.
@@ -199,9 +198,6 @@ class CheckpointManager:
             True if a checkpoint should be saved, False otherwise.
 
         """
-        if iteration >= alg_iterations - 1:
-            return True  # Always checkpoint at the final iteration
-
         if self.checkpoint_step is None:
             return False
 

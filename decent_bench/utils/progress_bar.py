@@ -142,7 +142,7 @@ class ProgressBarHandle:
         self._progress_increment_queue.put(
             _ProgressRecord(
                 progress_bar_id,
-                initial_progress % self._progress_step if self._progress_step else 0,
+                initial_progress // self._progress_step if self._progress_step else 0,
                 trial + 1,
             )
         )

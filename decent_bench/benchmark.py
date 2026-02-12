@@ -157,6 +157,14 @@ def resume_benchmark(
         except (FileNotFoundError, KeyError) as e:
             raise ValueError(f"Invalid checkpoint directory: missing or corrupted metadata - {e}") from e
 
+    LOGGER.info(
+        f"Resuming benchmark from checkpoint '{checkpoint_dir}' with {n_trials} trials and algorithms: "
+        f"{[alg.name for alg in algorithms]}\n"
+        "It is recommended to make a backup of the checkpoint directory before resuming, "
+        "execution continues in 5 seconds, press Ctrl+C to cancel..."
+    )
+    sleep(5)  # Give user time to read the message and cancel if they want
+
     if increase_iterations != 0:
         for alg_idx, alg in enumerate(algorithms):
             alg.iterations += increase_iterations
@@ -318,7 +326,7 @@ def benchmark(
             "Progress cannot be resumed if interrupted."
         )
 
-    _benchmark(
+    return _benchmark(
         algorithms=algorithms,
         benchmark_problem=benchmark_problem,
         nw_init_state=nw_init_state,
@@ -450,6 +458,7 @@ def _benchmark(
         checkpoint_manager,
     )
     LOGGER.info("All trials complete")
+    return resulting_nw_states
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
     for alg, networks in resulting_nw_states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
@@ -517,7 +526,8 @@ def _run_trials(  # noqa: PLR0917
         for alg_idx, alg in enumerate(algorithms):
             completed_trials = checkpoint_manager.get_completed_trials(alg_idx, n_trials)
             incompleted_trials = [t for t in range(n_trials) if t not in completed_trials]
-            to_run[alg] = incompleted_trials
+            if len(incompleted_trials) > 0:
+                to_run[alg] = incompleted_trials
 
             # load completed trials
             for trial in completed_trials:
@@ -530,6 +540,11 @@ def _run_trials(  # noqa: PLR0917
         f"Trials to run: { {alg.name: trials for alg, trials in to_run.items()} }, "
         f"Trials completed: { {alg.name: len(results[alg]) for alg in algorithms} }"
     )
+
+    if len(to_run) == 0:
+        LOGGER.info("No trials are left to run!")
+        progress_bar_ctrl.stop()
+        return results
 
     if max_processes == 1:
         partial_result = {
@@ -576,11 +591,16 @@ def _run_trial(  # noqa: PLR0917
     if checkpoint_manager is not None:
         checkpoint = checkpoint_manager.load_checkpoint(alg_idx, trial)
         if checkpoint is not None:
-            alg, network, start_iteration = checkpoint
-            # Set iterations
+            alg, network, last_completed_iteration = checkpoint
+            # Set iterations in case it is updated
             alg.iterations = algorithm.iterations
+            # Resume from the next iteration after the last completed one
+            # The checkpoint at iteration N contains the state AFTER step(N) completes,
+            # so we should resume from iteration N+1
+            start_iteration = last_completed_iteration + 1
             LOGGER.debug(
-                f"Resuming {algorithm.name} trial {trial} from iteration {start_iteration}/{algorithm.iterations}"
+                f"Resuming {algorithm.name} trial {trial} from iteration {start_iteration}/{algorithm.iterations} "
+                f"(loaded checkpoint from iteration {last_completed_iteration})"
             )
         else:
             start_iteration = 0

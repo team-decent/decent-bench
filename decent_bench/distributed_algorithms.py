@@ -153,6 +153,11 @@ class DGD(Algorithm):
             s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
             neighborhood_avg += self.W[i, i] * i.x
+            # if i.id == 0:
+            #     print(
+            #         f"iteration {iteration}, agent {i.id}, neighborhood_avg: {neighborhood_avg}, step_size: {self.step_size}, gradient: {i.cost.gradient(i.x)} "
+            #         f"messages: { {j.id: x_j for j, x_j in i.messages.items()} }"
+            #     )
             i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
 
         for i in network.active_agents(iteration):
