@@ -213,9 +213,9 @@ class ProgressBarController:
         if progress_step is None:
             self._progress_bar_ids = {alg: orchestrator.add_task(alg.name, total=n_trials) for alg in algorithms}
         else:
-            steps_per_trial = {alg: max(1, ceil(alg.iterations / progress_step)) for alg in algorithms}
+            self.steps_per_trial = {alg: max(1, ceil(alg.iterations / progress_step)) for alg in algorithms}
             self._progress_bar_ids = {
-                alg: orchestrator.add_task(alg.name, total=n_trials * steps_per_trial[alg]) for alg in algorithms
+                alg: orchestrator.add_task(alg.name, total=n_trials * self.steps_per_trial[alg]) for alg in algorithms
             }
 
         orchestrator.start()
@@ -228,6 +228,12 @@ class ProgressBarController:
             _progress_bar_ids=self._progress_bar_ids,
             _progress_step=self.progress_step,
         )
+
+    def mark_one_trial_as_complete(self, algorithm: Algorithm, trial: int) -> None:
+        """Mark a trial of *algorithm* as complete in the progress bar."""
+        progress_bar_id = self._progress_bar_ids[algorithm]
+        increment = 1 if self.progress_step is None else self.steps_per_trial[algorithm]
+        self._progress_increment_queue.put(_ProgressRecord(progress_bar_id, increment, trial + 1))
 
     def get_handle(self) -> ProgressBarHandle:
         """

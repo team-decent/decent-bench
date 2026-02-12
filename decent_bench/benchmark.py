@@ -167,12 +167,14 @@ def resume_benchmark(
             raise ValueError(f"Invalid checkpoint directory: missing or corrupted metadata - {e}") from e
 
     LOGGER.info(
-        f"Resuming benchmark from checkpoint '{checkpoint_dir}' with {n_trials} trials and algorithms: "
+        f"Resuming benchmark from checkpoint '{checkpoint_dir}' with {metadata['n_trials']} trials and algorithms: "
         f"{[alg.name for alg in algorithms]}\n"
-        "It is recommended to make a backup of the checkpoint directory before resuming, "
-        "execution continues in 5 seconds, press Ctrl+C to cancel..."
     )
-    sleep(5)  # Give user time to read the message and cancel if they want
+
+    if increase_trials != 0:
+        LOGGER.info(
+            f"Increasing number of trials for each algorithm by {increase_trials}, total trials will be {n_trials}"
+        )
 
     if increase_iterations != 0:
         for alg_idx, alg in enumerate(algorithms):
@@ -539,7 +541,9 @@ def _run_trials(  # noqa: PLR0917
 
             # load completed trials
             for trial in completed_trials:
-                results[alg].append(checkpoint_manager.load_trial_result(alg_idx, trial))
+                _, net = checkpoint_manager.load_trial_result(alg_idx, trial)
+                results[alg].append(net)
+                progress_bar_ctrl.mark_one_trial_as_complete(alg, trial)
                 LOGGER.debug(f"Loaded completed trial {trial} for algorithm {alg.name} from checkpoint")
     else:
         to_run = {alg: list(range(n_trials)) for alg in algorithms}

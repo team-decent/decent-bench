@@ -47,8 +47,11 @@ def create_tables(
     rows: list[list[str]] = []
     statistics_abbr = {"average": "avg", "median": "mdn"}
     with warnings.catch_warnings(action="ignore"), utils.MetricProgressBar() as progress:
-        n_statistics = sum(len(metric.statistics) for metric in metrics)
-        table_task = progress.add_task("Generating table", total=n_statistics, status="")
+        table_task = progress.add_task(
+            "Generating table",
+            total=sum(len(metric.statistics) for metric in metrics),
+            status="",
+        )
         for metric in metrics:
             progress.update(table_task, status=f"Task: {metric.table_description}")
             data_per_trial = [_table_data_per_trial(resulting_agent_states[a], problem, metric) for a in algs]
