@@ -25,7 +25,7 @@ Benchmark algorithms on a regression problem without any communication constrain
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
@@ -60,7 +60,7 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
 
     if __name__ == "__main__":
         benchmark.benchmark(
-            algorithms=[DGD(iterations=1000, step_size=0.001), ADMM(iterations=1000, rho=10, alpha=0.3)],
+            algorithms=[DGD(iterations=1000, step_size=0.01), ADMM(iterations=1000, rho=10, alpha=0.3)],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
             table_metrics=[GradientCalls([min, max])],
             plot_metrics=[RegretPerIteration()],
@@ -105,8 +105,8 @@ Configure communication constraints and other settings for out-of-the-box regres
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
-                ED(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
+                ED(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=problem,
@@ -143,8 +143,8 @@ Change the settings of an already created benchmark problem, for example, the ne
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
-                ED(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
+                ED(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=problem,
@@ -199,8 +199,8 @@ Create a custom benchmark problem using existing resources.
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
-                ED(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
+                ED(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=problem,
@@ -257,7 +257,7 @@ corresponding abstracts.
 
     if __name__ == "__main__":
         benchmark.benchmark(
-            algorithms=[DGD(iterations=1000, step_size=0.001), SimpleGT(iterations=1000, step_size=0.001)],
+            algorithms=[DGD(iterations=1000, step_size=0.01), SimpleGT(iterations=1000, step_size=0.01)],
             benchmark_problem=problem,
         )
 
@@ -380,8 +380,8 @@ In :class:`~decent_bench.networks.FedNetwork`, :meth:`~decent_bench.networks.Net
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                MyNewAlgorithm(iterations=1000, step_size=0.001),
-                DGD(iterations=1000, step_size=0.001),
+                MyNewAlgorithm(iterations=1000, step_size=0.01),
+                DGD(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
@@ -433,7 +433,7 @@ Create your own metrics to tabulate and/or plot.
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),

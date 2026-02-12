@@ -20,6 +20,9 @@ class EmpiricalRiskCost(Cost, ABC):
     is designed to work with :class:`~decent_bench.utils.types.Dataset` where each
     datapoint is a tuple of (features, target), or (features, None) for unsupervised learning.
 
+    All empirical risk values, gradients, and Hessians are defined as means over the selected
+    samples (full dataset or batch), not sums.
+
     Mathematical Definition
     -----------------------
     Given a dataset with :math:`m` samples :math:`\{d_i\}_{i=1}^{m}`, the empirical risk is defined as:
@@ -89,6 +92,8 @@ class EmpiricalRiskCost(Cost, ABC):
         """
         Evaluate function at x using datapoints at the given indices.
 
+        The returned value is the mean loss over the selected samples.
+
         Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
@@ -113,6 +118,8 @@ class EmpiricalRiskCost(Cost, ABC):
         """
         Gradient at x using datapoints at the given indices.
 
+        The returned gradient is the mean of per-sample gradients over the selected samples.
+
         Supported values for indices are:
             - int: the corresponding datapoint is used.
             - list[int]: corresponding datapoints are used.
@@ -124,6 +131,8 @@ class EmpiricalRiskCost(Cost, ABC):
     def hessian(self, x: Array, indices: EmpiricalRiskIndices = "batch", **kwargs: Any) -> Array:  # noqa: ANN401
         """
         Hessian at x using datapoints at the given indices.
+
+        The returned Hessian is the mean of per-sample Hessians over the selected samples.
 
         Supported values for indices are:
             - int: the corresponding datapoint is used.

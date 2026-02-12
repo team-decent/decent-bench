@@ -27,11 +27,11 @@ class LogisticRegressionCost(EmpiricalRiskCost):
     :math:`\mathbf{b} \in \mathbb{R}^{m}`, the logistic regression cost function is defined as:
 
     .. math:: f(\mathbf{x}) =
-        -\left[ \mathbf{b}^T \log( \sigma(\mathbf{Ax}) )
+        -\frac{1}{m}\left[ \mathbf{b}^T \log( \sigma(\mathbf{Ax}) )
         + ( \mathbf{1} - \mathbf{b} )^T
             \log( 1 - \sigma(\mathbf{Ax}) ) \right]
 
-        = -\sum_{i = 1}^m \left[ b_i \log( \sigma(A_i x) )
+        = -\frac{1}{m}\sum_{i = 1}^m \left[ b_i \log( \sigma(A_i x) )
         + (1 - b_i) \log( 1 - \sigma(A_i x) ) \right]
 
     where :math:`A_i` and :math:`b_i` are the i-th row of :math:`\mathbf{A}` and
@@ -41,11 +41,11 @@ class LogisticRegressionCost(EmpiricalRiskCost):
     The cost function then becomes:
 
     .. math:: f(\mathbf{x}) =
-        -\left[ \mathbf{b}_{\mathcal{B}}^T \log( \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) )
+        -\frac{1}{|\mathcal{B}|}\left[ \mathbf{b}_{\mathcal{B}}^T \log( \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) )
         + ( \mathbf{1} - \mathbf{b}_{\mathcal{B}} )^T
             \log( 1 - \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) ) \right]
 
-        = -\sum_{i \in \mathcal{B}} \left[ b_i \log( \sigma(A_i x) )
+        = -\frac{1}{|\mathcal{B}|}\sum_{i \in \mathcal{B}} \left[ b_i \log( \sigma(A_i x) )
         + (1 - b_i) \log( 1 - \sigma(A_i x) ) \right]
 
     where :math:`\mathcal{B}` is a sampled batch of :math:`b` indices from :math:`\{1, \ldots, m\}`,
@@ -124,7 +124,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         The cost function's smoothness constant.
 
         .. math::
-            \frac{m}{4} \max_i \|\mathbf{A}_i\|^2
+            \frac{1}{4} \max_i \|\mathbf{A}_i\|^2
 
         where m is the number of rows in :math:`\mathbf{A}`.
 
@@ -132,7 +132,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
         """
         A, _ = self._get_batch_data("all")  # noqa: N806
-        return float(max(pow(la.norm(row), 2) for row in A) * A.shape[0] / 4)
+        return float(max(pow(la.norm(row), 2) for row in A) / 4)
 
     @property
     def m_cvx(self) -> float:
@@ -178,14 +178,14 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         If no batching is used, this is:
 
         .. math::
-            -\left[ \mathbf{b}^T \log( \sigma(\mathbf{Ax}) )
+            -\frac{1}{m}\left[ \mathbf{b}^T \log( \sigma(\mathbf{Ax}) )
             + ( \mathbf{1} - \mathbf{b} )^T
                 \log( 1 - \sigma(\mathbf{Ax}) ) \right]
 
         If indices is "batch", a random batch :math:`\mathcal{B}` is drawn with :attr:`batch_size` samples.
 
         .. math::
-            -\left[ \mathbf{b}_{\mathcal{B}}^T \log( \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) )
+            -\frac{1}{|\mathcal{B}|}\left[ \mathbf{b}_{\mathcal{B}}^T \log( \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) )
             + ( \mathbf{1} - \mathbf{b}_{\mathcal{B}} )^T
                 \log( 1 - \sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) ) \right]
 
@@ -196,7 +196,8 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         Ax = A.dot(x)  # noqa: N806
         neg_log_sig = np.logaddexp(0.0, -Ax)
         cost = b.dot(neg_log_sig) + (1 - b).dot(Ax + neg_log_sig)
-        return float(cost)
+        m = A.shape[0]
+        return float(cost / m)
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.gradient)
     def gradient(self, x: NDArray[float64], indices: EmpiricalRiskIndices = "batch") -> NDArray[float64]:
@@ -212,18 +213,20 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         If no batching is used, this is:
 
         .. math::
-            \mathbf{A}^T (\sigma(\mathbf{Ax}) - \mathbf{b})
+            \frac{1}{m}\mathbf{A}^T (\sigma(\mathbf{Ax}) - \mathbf{b})
 
         If indices is "batch", a random batch :math:`\mathcal{B}` is drawn with :attr:`batch_size` samples.
 
         .. math::
-            \mathbf{A}_{\mathcal{B}}^T (\sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x}) - \mathbf{b}_{\mathcal{B}})
+            \frac{1}{|\mathcal{B}|}\mathbf{A}_{\mathcal{B}}^T (\sigma(\mathbf{A}_{\mathcal{B}}\mathbf{x})
+            - \mathbf{b}_{\mathcal{B}})
 
         where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
         """
         A, b = self._get_batch_data(indices)  # noqa: N806
         sig = special.expit(A.dot(x))
-        res: NDArray[float64] = A.T.dot(sig - b)
+        m = A.shape[0]
+        res: NDArray[float64] = A.T.dot(sig - b) / m
         return res
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.hessian)
@@ -240,7 +243,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         If no batching is used, this is:
 
         .. math::
-            \mathbf{A}^T \mathbf{DA}
+            \frac{1}{m}\mathbf{A}^T \mathbf{DA}
 
         where :math:`\mathbf{D}` is a diagonal matrix such that
         :math:`\mathbf{D}_i = \sigma(\mathbf{Ax}_i) (1-\sigma(\mathbf{Ax}_i))`
@@ -248,14 +251,15 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         If indices is "batch", a random batch :math:`\mathcal{B}` is drawn with :attr:`batch_size` samples.
 
         .. math::
-            \mathbf{A}_{\mathcal{B}}^T \mathbf{D}_{\mathcal{B}} \mathbf{A}_{\mathcal{B}}
+            \frac{1}{|\mathcal{B}|}\mathbf{A}_{\mathcal{B}}^T \mathbf{D}_{\mathcal{B}} \mathbf{A}_{\mathcal{B}}
 
         where :math:`\mathbf{A}_B` and :math:`\mathbf{D}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
         """
         A, _ = self._get_batch_data(indices)  # noqa: N806
         sig = special.expit(A.dot(x))
         D = np.diag(sig * (1 - sig))  # noqa: N806
-        res: NDArray[float64] = A.T.dot(D).dot(A)
+        m = A.shape[0]
+        res: NDArray[float64] = A.T.dot(D).dot(A) / m
         return res
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.proximal)
