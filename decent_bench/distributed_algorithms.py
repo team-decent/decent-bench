@@ -1,7 +1,7 @@
+import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-import random
 from typing import TYPE_CHECKING, Literal, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
@@ -177,7 +177,7 @@ class FedAlgorithm(DecAlgorithm[FedNetwork]):
     def _require_empirical_risk(client: "Agent") -> EmpiricalRiskCost:
         if not isinstance(client.cost, EmpiricalRiskCost):
             raise TypeError(
-                "Mini-batch federated algorithms require EmpiricalRiskCost; set batch_size=\"all\" for generic costs."
+                'Mini-batch federated algorithms require EmpiricalRiskCost; set batch_size="all" for generic costs.'
             )
         return client.cost
 
@@ -219,33 +219,42 @@ class FedAvg(FedAlgorithm):
     name: str = "FedAvg"
 
     def initialize(self, network: FedNetwork) -> None:  # noqa: D102
+        self._validate_hyperparams()
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        server = network.server
+        clients = network.clients
+        self._validate_batching(clients)
+        self._setup_rngs(clients)
+        server.initialize(x=self.x0, received_msgs=dict.fromkeys(clients, self.x0))
+        for client in clients:
+            client.initialize(x=self.x0, received_msgs={server: self.x0})
+
+    def _validate_hyperparams(self) -> None:
         if self.step_size <= 0:
             raise ValueError("step_size must be positive")
         if self.local_epochs <= 0:
             raise ValueError("local_epochs must be positive")
         if isinstance(self.batch_size, int) and self.batch_size <= 0:
             raise ValueError("batch_size must be positive")
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
-        server = network.server
-        clients = network.clients
+
+    def _validate_batching(self, clients: Sequence["Agent"]) -> None:
         if self.batch_size is None:
             raise ValueError('batch_size cannot be None; use "all" or "cost" for full-batch updates.')
         if isinstance(self.batch_size, int):
             for client in clients:
                 self._require_empirical_risk(client)
-        if self.batching not in ("epoch", "random"):
+        if self.batching not in {"epoch", "random"}:
             raise ValueError("batching must be 'epoch' or 'random'")
         if self.batch_size == "cost":
             for client in clients:
                 if isinstance(client.cost, EmpiricalRiskCost) and client.cost.batch_size <= 0:
                     raise ValueError("EmpiricalRiskCost.batch_size must be positive")
+
+    def _setup_rngs(self, clients: Sequence["Agent"]) -> None:
         if self.sgd_seed is not None:
             self._sgd_rngs = {client.id: random.Random(self.sgd_seed + client.id) for client in clients}
         else:
             self._sgd_rngs = None
-        server.initialize(x=self.x0, received_msgs=dict.fromkeys(clients, self.x0))
-        for client in clients:
-            client.initialize(x=self.x0, received_msgs={server: self.x0})
 
     def _resolve_batching(self, client: "Agent") -> tuple[int | Literal["all"], EmpiricalRiskCost | None]:
         # Batching policy:
@@ -266,54 +275,104 @@ class FedAvg(FedAlgorithm):
 
     def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
         server = network.server
-        active_clients = network.active_clients(iteration)
-        if not active_clients:
-            return
-        selected_clients = self._select_clients(active_clients, iteration, self.selection_scheme)
+        selected_clients = self._selected_clients_for_round(network, iteration)
         if not selected_clients:
             return
 
+        self._sync_server_to_clients(network, server, selected_clients)
+        self._run_local_updates(network, server, selected_clients)
+        self._aggregate_updates(network, server, selected_clients)
+
+    def _selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
+        active_clients = network.active_clients(iteration)
+        if not active_clients:
+            return []
+        return self._select_clients(active_clients, iteration, self.selection_scheme)
+
+    def _sync_server_to_clients(
+        self, network: FedNetwork, server: "Agent", selected_clients: Sequence["Agent"]
+    ) -> None:
         network.send(sender=server, receiver=selected_clients, msg=server.x)
         for client in selected_clients:
             network.receive(receiver=client, sender=server)
 
+    def _run_local_updates(self, network: FedNetwork, server: "Agent", selected_clients: Sequence["Agent"]) -> None:
         for client in selected_clients:
-            local_x = iop.copy(client.messages[server])
-            per_client_batch, cost = self._resolve_batching(client)
-            if per_client_batch == "all":
-                for _ in range(self.local_epochs):
-                    if cost is not None:
-                        grad = cost.gradient(local_x, indices="all")
-                    else:
-                        grad = client.cost.gradient(local_x)
-                    local_x = local_x - self.step_size * grad
-            else:
-                cost = cost or self._require_empirical_risk(client)
-                n_samples = cost.n_samples
-                if n_samples <= 0:
-                    raise ValueError("Client dataset size must be positive")
-                rng = self._sgd_rngs.get(client.id) if self._sgd_rngs is not None else random.Random()
-                if self.batching == "epoch":
-                    for _ in range(self.local_epochs):
-                        indices = list(range(n_samples))
-                        rng.shuffle(indices)
-                        for start in range(0, n_samples, per_client_batch):
-                            batch_indices = indices[start : start + per_client_batch]
-                            grad = cost.gradient(local_x, indices=batch_indices)
-                            local_x = local_x - self.step_size * grad
-                else:
-                    n_steps = max(1, n_samples // per_client_batch)
-                    for _ in range(self.local_epochs):
-                        for _ in range(n_steps):
-                            if self.batch_size == "cost":
-                                grad = cost.gradient(local_x)
-                            else:
-                                batch_indices = rng.sample(range(n_samples), per_client_batch)
-                                grad = cost.gradient(local_x, indices=batch_indices)
-                            local_x = local_x - self.step_size * grad
-            client.x = local_x
+            client.x = self._compute_local_update(client, server)
             network.send(sender=client, receiver=server, msg=client.x)
 
+    def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
+        local_x = iop.copy(client.messages[server])
+        per_client_batch, cost = self._resolve_batching(client)
+        if per_client_batch == "all":
+            return self._full_batch_update(client, cost, local_x)
+        return self._mini_batch_update(client, cost, local_x, per_client_batch)
+
+    def _full_batch_update(self, client: "Agent", cost: EmpiricalRiskCost | None, local_x: "Array") -> "Array":
+        for _ in range(self.local_epochs):
+            grad = cost.gradient(local_x, indices="all") if cost is not None else client.cost.gradient(local_x)
+            local_x -= self.step_size * grad
+        return local_x
+
+    def _mini_batch_update(
+        self,
+        client: "Agent",
+        cost: EmpiricalRiskCost | None,
+        local_x: "Array",
+        per_client_batch: int,
+    ) -> "Array":
+        cost = cost or self._require_empirical_risk(client)
+        n_samples = cost.n_samples
+        if n_samples <= 0:
+            raise ValueError("Client dataset size must be positive")
+        rng = self._client_rng(client)
+        if self.batching == "epoch":
+            return self._epoch_minibatch_update(cost, local_x, per_client_batch, n_samples, rng)
+        return self._random_minibatch_update(cost, local_x, per_client_batch, n_samples, rng)
+
+    def _client_rng(self, client: "Agent") -> random.Random:
+        if self._sgd_rngs is None:
+            return random.Random()
+        return self._sgd_rngs[client.id]
+
+    def _epoch_minibatch_update(
+        self,
+        cost: EmpiricalRiskCost,
+        local_x: "Array",
+        per_client_batch: int,
+        n_samples: int,
+        rng: random.Random,
+    ) -> "Array":
+        for _ in range(self.local_epochs):
+            indices = list(range(n_samples))
+            rng.shuffle(indices)
+            for start in range(0, n_samples, per_client_batch):
+                batch_indices = indices[start : start + per_client_batch]
+                grad = cost.gradient(local_x, indices=batch_indices)
+                local_x -= self.step_size * grad
+        return local_x
+
+    def _random_minibatch_update(
+        self,
+        cost: EmpiricalRiskCost,
+        local_x: "Array",
+        per_client_batch: int,
+        n_samples: int,
+        rng: random.Random,
+    ) -> "Array":
+        n_steps = max(1, n_samples // per_client_batch)
+        use_cost_batch = self.batch_size == "cost"
+        for _ in range(self.local_epochs):
+            for _ in range(n_steps):
+                if use_cost_batch:
+                    grad = cost.gradient(local_x)
+                else:
+                    batch_indices = rng.sample(range(n_samples), per_client_batch)
+                    grad = cost.gradient(local_x, indices=batch_indices)
+                local_x -= self.step_size * grad
+        return local_x
+
+    def _aggregate_updates(self, network: FedNetwork, server: "Agent", selected_clients: Sequence["Agent"]) -> None:
         network.receive(receiver=server, sender=selected_clients)
         received_clients = [client for client in selected_clients if client in server.messages]
         if not received_clients:
