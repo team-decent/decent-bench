@@ -2,13 +2,14 @@ import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, final
+from typing import TYPE_CHECKING, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
+from decent_bench.utils.types import BatchingMode, BatchSize, ClientWeights, ResolvedBatchSize
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -154,7 +155,7 @@ class FedAlgorithm(DecAlgorithm[FedNetwork]):
     def _weights_for_clients(
         cls,
         clients: Sequence["Agent"],
-        client_weights: dict[int, float] | Sequence[float] | None,
+        client_weights: ClientWeights | None,
     ) -> list[float]:
         if client_weights is None:
             weights = [cls._infer_client_weight(client) for client in clients]
@@ -206,10 +207,10 @@ class FedAvg(FedAlgorithm):
     # E= 5/20 (num local epochs).
     step_size: float
     local_epochs: int = 1
-    batch_size: int | Literal["all", "cost"] = "cost"
-    batching: Literal["epoch", "random"] = "epoch"
+    batch_size: BatchSize = "cost"
+    batching: BatchingMode = "epoch"
     sgd_seed: int | None = None
-    client_weights: dict[int, float] | Sequence[float] | None = None
+    client_weights: ClientWeights | None = None
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -256,7 +257,7 @@ class FedAvg(FedAlgorithm):
         else:
             self._sgd_rngs = None
 
-    def _resolve_batching(self, client: "Agent") -> tuple[int | Literal["all"], EmpiricalRiskCost | None]:
+    def _resolve_batching(self, client: "Agent") -> tuple[ResolvedBatchSize, EmpiricalRiskCost | None]:
         # Batching policy:
         # - "cost": defer to EmpiricalRiskCost.batch_size; non-empirical costs fall back to full-batch.
         # - "all": always full-batch.

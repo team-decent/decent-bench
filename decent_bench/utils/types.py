@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, SupportsIndex, TypeAlias, Union
 
@@ -36,6 +37,28 @@ type EmpiricalRiskIndices = list[int] | Literal["all", "batch"] | int
 Type alias for specifying indices in empirical risk computations.
 Can be a list of integers, the string "all" for full dataset, the string "batch" for a mini-batch,
 or an integer specifying a single datapoint.
+"""
+
+type BatchSize = int | Literal["all", "cost"]
+"""
+Type alias for batch size configuration in federated algorithms.
+Use "all" for full-batch, "cost" to defer to the cost's batch size, or an explicit integer.
+"""
+
+type ResolvedBatchSize = int | Literal["all"]
+"""
+Type alias for the effective batch size after resolving a batch policy.
+"""
+
+type BatchingMode = Literal["epoch", "random"]
+"""
+Type alias for batching mode configuration when sampling mini-batches.
+"""
+
+type ClientWeights = dict[int, float] | Sequence[float]
+"""
+Type alias for client weighting configuration.
+Use a dict keyed by client id, or a sequence indexed by client id.
 """
 
 type Datapoint = tuple["Array", "Array"]  # noqa: TC008

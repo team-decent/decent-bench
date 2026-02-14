@@ -30,7 +30,12 @@ extensions = [
 autodoc_default_options = {}
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True
-autodoc_type_aliases = {}
+autodoc_type_aliases = {
+    "BatchSize": "decent_bench.utils.types.BatchSize",
+    "ResolvedBatchSize": "decent_bench.utils.types.ResolvedBatchSize",
+    "BatchingMode": "decent_bench.utils.types.BatchingMode",
+    "ClientWeights": "decent_bench.utils.types.ClientWeights",
+}
 
 nitpicky = True
 nitpick_ignore = [
