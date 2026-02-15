@@ -295,7 +295,7 @@ class FunctionCalls(Metric):
         agents: Sequence[AgentMetricsView],
         _: BenchmarkProblem,
         __: int,
-    ) -> list[int]:
+    ) -> list[float]:
         return [a.n_function_calls for a in agents]
 
 
@@ -320,7 +320,7 @@ class GradientCalls(Metric):
         agents: Sequence[AgentMetricsView],
         _: BenchmarkProblem,
         __: int,
-    ) -> list[int]:
+    ) -> list[float]:
         return [a.n_gradient_calls for a in agents]
 
 
@@ -345,7 +345,7 @@ class HessianCalls(Metric):
         agents: Sequence[AgentMetricsView],
         _: BenchmarkProblem,
         __: int,
-    ) -> list[int]:
+    ) -> list[float]:
         return [a.n_hessian_calls for a in agents]
 
 
@@ -370,7 +370,7 @@ class ProximalCalls(Metric):
         agents: Sequence[AgentMetricsView],
         _: BenchmarkProblem,
         __: int,
-    ) -> list[int]:
+    ) -> list[float]:
         return [a.n_proximal_calls for a in agents]
 
 

@@ -25,7 +25,7 @@ from decent_bench.schemes import (
     UniformDropRate,
 )
 from decent_bench.utils.array import Array
-from decent_bench.utils.types import Dataset, SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import Dataset, EmpiricalRiskBatchSize, SupportedDevices, SupportedFrameworks
 
 if TYPE_CHECKING:
     AnyGraph = nx.Graph[Any]
@@ -68,6 +68,7 @@ def create_classification_problem(
     n_agents: int = 100,
     agent_state_snapshot_period: int = 1,
     n_neighbors_per_agent: int = 3,
+    batch_size: EmpiricalRiskBatchSize = "all",
     asynchrony: bool = False,
     compression: bool = False,
     noise: bool = False,
@@ -81,6 +82,7 @@ def create_classification_problem(
         n_agents: number of agents
         agent_state_snapshot_period: period for recording agent state snapshots, used for plot metrics
         n_neighbors_per_agent: number of neighbors per agent
+        batch_size: size of mini-batches for stochastic methods, or "all" for full-batch
         asynchrony: if true, agents only have a 50% probability of being active/participating at any given time
         compression: if true, messages are rounded to 4 significant digits
         noise: if true, messages are distorted by Gaussian noise
@@ -133,12 +135,18 @@ def create_classification_problem(
 
         # Mypy cannot infer that cost_cls is PyTorchCost here
         costs = [
-            cost_cls(p, model_gen(), torch.nn.CrossEntropyLoss(), final_activation=ArgmaxActivation())  # type: ignore[call-arg, arg-type]
+            cost_cls(  # type: ignore[call-arg]
+                dataset=p,
+                model=model_gen(),
+                loss_fn=torch.nn.CrossEntropyLoss(),
+                final_activation=ArgmaxActivation(),
+                batch_size=batch_size,
+            )
             for p in dataset.get_partitions()
         ]
         x_optimal = None
     elif cost_cls is LogisticRegressionCost:
-        costs = [cost_cls(p) for p in dataset.get_partitions()]  # type: ignore[call-arg]
+        costs = [cost_cls(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()]  # type: ignore[call-arg]
         sum_cost = reduce(add, costs)
         x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
     else:
@@ -167,6 +175,7 @@ def create_regression_problem(
     n_agents: int = 100,
     agent_state_snapshot_period: int = 1,
     n_neighbors_per_agent: int = 3,
+    batch_size: EmpiricalRiskBatchSize = "all",
     asynchrony: bool = False,
     compression: bool = False,
     noise: bool = False,
@@ -180,6 +189,7 @@ def create_regression_problem(
         n_agents: number of agents
         agent_state_snapshot_period: period for recording agent state snapshots, used for plot metrics
         n_neighbors_per_agent: number of neighbors per agent
+        batch_size: size of mini-batches for stochastic methods, or "all" for full-batch
         asynchrony: if true, agents only have a 50% probability of being active/participating at any given time
         compression: if true, messages are rounded to 4 significant digits
         noise: if true, messages are distorted by Gaussian noise
@@ -229,10 +239,13 @@ def create_regression_problem(
                 output_size=1,
             )
 
-        costs = [cost_cls(p, model_gen(), torch.nn.MSELoss()) for p in dataset.get_partitions()]  # type: ignore[call-arg, arg-type]
+        costs = [
+            cost_cls(dataset=p, model=model_gen(), loss_fn=torch.nn.MSELoss(), batch_size=batch_size)  # type: ignore[call-arg]
+            for p in dataset.get_partitions()
+        ]
         x_optimal = None
     elif cost_cls is LinearRegressionCost:
-        costs = [cost_cls(p) for p in dataset.get_partitions()]  # type: ignore[call-arg]
+        costs = [cost_cls(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()]  # type: ignore[call-arg]
         sum_cost = reduce(add, costs)
         x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
     else:

@@ -6,7 +6,7 @@ from types import MappingProxyType
 from typing import Any
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.costs import Cost
+from decent_bench.costs import Cost, EmpiricalRiskCost
 from decent_bench.schemes import AgentActivationScheme
 from decent_bench.utils.array import Array
 
@@ -30,10 +30,10 @@ class Agent:
         self._n_sent_messages = 0
         self._n_received_messages = 0
         self._n_sent_messages_dropped = 0
-        self._n_function_calls = 0
-        self._n_gradient_calls = 0
-        self._n_hessian_calls = 0
-        self._n_proximal_calls = 0
+        self._n_function_calls: float = 0
+        self._n_gradient_calls: float = 0
+        self._n_hessian_calls: float = 0
+        self._n_proximal_calls: float = 0
         cost.function = self._call_counting_function  # type: ignore[method-assign]
         cost.gradient = self._call_counting_gradient  # type: ignore[method-assign]
         cost.hessian = self._call_counting_hessian  # type: ignore[method-assign]
@@ -118,20 +118,37 @@ class Agent:
             self._received_messages = {k: iop.copy(v) for k, v in received_msgs.items()}
 
     def _call_counting_function(self, x: Array, *args: Any, **kwargs: Any) -> float:  # noqa: ANN401
-        self._n_function_calls += 1
-        return self._cost.__class__.function(self.cost, x, *args, **kwargs)
+        # Call the function first so "batch_used" is populated for EmpiricalRiskCost before counting function calls
+        res = self._cost.__class__.function(self.cost, x, *args, **kwargs)
+        if isinstance(self._cost, EmpiricalRiskCost):
+            self._n_function_calls += len(self._cost.batch_used) / self._cost.n_samples
+        else:
+            self._n_function_calls += 1
+        return res
 
     def _call_counting_gradient(self, x: Array, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        self._n_gradient_calls += 1
-        return self._cost.__class__.gradient(self.cost, x, *args, **kwargs)
+        res = self._cost.__class__.gradient(self.cost, x, *args, **kwargs)
+        if isinstance(self._cost, EmpiricalRiskCost):
+            self._n_gradient_calls += len(self._cost.batch_used) / self._cost.n_samples
+        else:
+            self._n_gradient_calls += 1
+        return res
 
     def _call_counting_hessian(self, x: Array, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        self._n_hessian_calls += 1
-        return self._cost.__class__.hessian(self.cost, x, *args, **kwargs)
+        res = self._cost.__class__.hessian(self.cost, x, *args, **kwargs)
+        if isinstance(self._cost, EmpiricalRiskCost):
+            self._n_hessian_calls += len(self._cost.batch_used) / self._cost.n_samples
+        else:
+            self._n_hessian_calls += 1
+        return res
 
     def _call_counting_proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        self._n_proximal_calls += 1
-        return self._cost.__class__.proximal(self.cost, x, rho, *args, **kwargs)
+        res = self._cost.__class__.proximal(self.cost, x, rho, *args, **kwargs)
+        if isinstance(self._cost, EmpiricalRiskCost):
+            self._n_proximal_calls += len(self._cost.batch_used) / self._cost.n_samples
+        else:
+            self._n_proximal_calls += 1
+        return res
 
     def __index__(self) -> int:
         """Enable using agent as index, for example ``W[a1, a2]`` instead of ``W[a1.id, a2.id]``."""
@@ -145,10 +162,10 @@ class AgentMetricsView:
     cost: Cost
     x_history: dict[int, Array]
     n_x_updates: int
-    n_function_calls: int
-    n_gradient_calls: int
-    n_hessian_calls: int
-    n_proximal_calls: int
+    n_function_calls: float
+    n_gradient_calls: float
+    n_hessian_calls: float
+    n_proximal_calls: float
     n_sent_messages: int
     n_received_messages: int
     n_sent_messages_dropped: int
