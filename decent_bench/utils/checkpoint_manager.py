@@ -234,8 +234,6 @@ class CheckpointManager:
         """
         Save checkpoint for a specific algorithm trial at a given iteration.
 
-        Saves three files: network state, algorithm state, and progress tracking.
-
         Args:
             alg_idx: Algorithm index (0-based).
             trial: Trial number (0-based).
