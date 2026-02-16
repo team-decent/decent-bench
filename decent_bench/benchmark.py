@@ -19,7 +19,7 @@ from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics import ComputationalCost, Metric, create_plots, create_tables
 from decent_bench.metrics import metric_collection as mc
-from decent_bench.networks import P2PNetwork, create_distributed_network
+from decent_bench.networks import Network, P2PNetwork, create_distributed_network
 from decent_bench.utils import logger
 from decent_bench.utils.checkpoint_manager import CheckpointManager
 from decent_bench.utils.logger import LOGGER
@@ -152,7 +152,6 @@ def resume_benchmark(  # noqa: PLR0912
             metadata = checkpoint_manager.load_metadata()
             if metadata is None or "n_trials" not in metadata:
                 raise ValueError("Invalid or missing metadata in checkpoint directory")
-            n_trials = metadata["n_trials"] + increase_trials
 
             algorithms = checkpoint_manager.load_initial_algorithms()
             if algorithms is None:
@@ -175,27 +174,34 @@ def resume_benchmark(  # noqa: PLR0912
             raise ValueError(f"Invalid checkpoint directory: metadata is not valid JSON - {e}") from e
 
     LOGGER.info(
-        f"Resuming benchmark from checkpoint '{checkpoint_dir}' with {metadata['n_trials']} trials and algorithms: "
-        f"{[alg.name for alg in algorithms]}\n"
+        f"Resuming benchmark from checkpoint '{checkpoint_dir}' with {metadata['n_trials']} trials "
+        f"and algorithms: {[alg.name for alg in algorithms]}\n"
     )
 
+    total_increase_trials = increase_trials + metadata.get("benchmark_metadata", {}).get("increased_trials", 0)
+    n_trials = metadata["n_trials"] + total_increase_trials
     if increase_trials != 0:
+        metadata = checkpoint_manager.append_metadata({"increased_trials": total_increase_trials})
         LOGGER.info(
-            f"Increasing number of trials for each algorithm by {increase_trials}, total trials will be {n_trials}"
+            f"Increasing number of trials for each algorithm by {increase_trials}, "
+            f"total increase is {total_increase_trials}"
         )
 
+    total_increase_iterations = increase_iterations + metadata.get("benchmark_metadata", {}).get(
+        "increased_iterations", 0
+    )
     if increase_iterations != 0:
         for alg_idx, alg in enumerate(algorithms):
-            alg.iterations += increase_iterations
+            alg.iterations += total_increase_iterations
             # Unmark all trials as incomplete to resume them with increased iterations
             for trial in range(n_trials):
                 checkpoint_manager.unmark_trial_complete(alg_idx, trial)
         # If we resume again, we have to increase the iterations on top of the already increased iterations,
         # so we need to keep track of the total increase in the metadata
-        total_increased = increase_iterations + metadata.get("benchmark_metadata", {}).get("increased_iterations", 0)
-        metadata = checkpoint_manager.append_metadata({"increased_iterations": total_increased})
+        metadata = checkpoint_manager.append_metadata({"increased_iterations": total_increase_iterations})
         LOGGER.info(
-            f"Increased iterations for all algorithms by {increase_iterations}, total increase is {total_increased}"
+            f"Increased iterations for all algorithms by {increase_iterations}, "
+            f"total increase is {total_increase_iterations}"
         )
 
     _benchmark(
@@ -373,7 +379,7 @@ def benchmark(
 def _benchmark(
     algorithms: list[Algorithm],
     benchmark_problem: BenchmarkProblem,
-    nw_init_state: P2PNetwork,
+    nw_init_state: Network,
     log_listener: QueueListener,
     manager: SyncManager,
     *,
@@ -526,14 +532,14 @@ def _init_logging_and_multiprocessing(
 def _run_trials(  # noqa: PLR0917
     algorithms: list[Algorithm],
     n_trials: int,
-    nw_init_state: P2PNetwork,
+    nw_init_state: Network,
     progress_bar_ctrl: ProgressBarController,
     log_listener: QueueListener,
     max_processes: int | None,
     mp_context: BaseContext | None = None,
     checkpoint_manager: CheckpointManager | None = None,
-) -> dict[Algorithm, list[P2PNetwork]]:
-    results: dict[Algorithm, list[P2PNetwork]] = defaultdict(list)
+) -> dict[Algorithm, list[Network]]:
+    results: dict[Algorithm, list[Network]] = defaultdict(list)
     progress_bar_handle = progress_bar_ctrl.get_handle()
 
     # Filter out completed trials if checkpoint manager is provided, and load their results, otherwise run all trials
@@ -602,12 +608,12 @@ def _run_trials(  # noqa: PLR0917
 
 def _run_trial(  # noqa: PLR0917
     algorithm: Algorithm,
-    nw_init_state: P2PNetwork,
+    nw_init_state: Network,
     progress_bar_handle: "ProgressBarHandle",
     trial: int,
     alg_idx: int,
     checkpoint_manager: CheckpointManager | None = None,
-) -> P2PNetwork:
+) -> Network:
     if checkpoint_manager is not None:
         checkpoint = checkpoint_manager.load_checkpoint(alg_idx, trial)
         if checkpoint is not None:
@@ -637,6 +643,10 @@ def _run_trial(  # noqa: PLR0917
         progress_bar_handle.advance_progress_bar(algorithm, iteration)
         if checkpoint_manager is not None and checkpoint_manager.should_checkpoint(iteration):
             checkpoint_manager.save_checkpoint(alg_idx, trial, iteration, alg, network)
+
+    if not isinstance(network, P2PNetwork):
+        # Update this when support for federated learning or other types of networks is added
+        raise TypeError(f"Expected network to be a P2PNetwork, got {type(network)}")
 
     with warnings.catch_warnings(action="error"):
         try:

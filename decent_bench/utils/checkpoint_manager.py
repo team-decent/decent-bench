@@ -6,7 +6,7 @@ from typing import Any
 
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import Algorithm
-from decent_bench.networks import P2PNetwork
+from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 
 
@@ -43,11 +43,24 @@ class CheckpointManager:
                 └── table.txt                   # Final text file with table results
 
     File Descriptions:
-        - **metadata.json**: Benchmark configuration.
+        - **metadata.json**: Benchmark configuration and any user-provided metadata
+          (e.g., hyperparameters, system info). User-provided metadata can be added through the
+          :func:`~decent_bench.benchmark.benchmark` function or appended later using
+          :func:`~decent_bench.utils.checkpoint_manager.CheckpointManager.append_metadata`.
         - **benchmark_problem.pkl**: Initial benchmark problem state before any trials run.
         - **initial_algorithms.pkl**: Initial algorithm states before any trials run.
         - **initial_network.pkl**: Starting network state before any algorithm execution.
         - **checkpoint_NNNNNNN.pkl**: Combined checkpoint containing both algorithm and network state.
+          This preserves shared object references and ensures consistency between algorithm and network
+          states at each checkpoint. The checkpoint data is a dictionary with the following structure:
+
+            - algorithm: :class:`~decent_bench.distributed_algorithms.Algorithm`
+            - network: :class:`~decent_bench.networks.Network`
+            - iteration: iteration
+
+          where "algorithm" is the :class:`~decent_bench.distributed_algorithms.Algorithm` object with its internal
+          state at the checkpoint, "network" is the :class:`~decent_bench.networks.Network` object with agent states
+          at the checkpoint and "iteration" is the iteration number of the checkpoint.
         - **progress.json**: Tracks the last completed iteration within a trial.
         - **complete.json**: Marker file, contains path to final checkpoint.
         - **plots_figX.png**: Final plots for figures after benchmark completion.
@@ -110,7 +123,7 @@ class CheckpointManager:
     def initialize(
         self,
         algorithms: list[Algorithm],
-        network: P2PNetwork,
+        network: Network,
         problem: BenchmarkProblem,
         n_trials: int,
         benchmark_metadata: dict[str, Any] | None,
@@ -120,7 +133,7 @@ class CheckpointManager:
 
         Args:
             algorithms: List of Algorithm objects to be benchmarked.
-            network: Initial P2PNetwork state before any trials run.
+            network: Initial Network state before any trials run.
             problem: BenchmarkProblem configuration for the benchmark.
             n_trials: Total number of trials to run for each algorithm, used for resuming.
             benchmark_metadata: Optional dictionary of additional metadata to save in the checkpoint directory,
@@ -195,17 +208,17 @@ class CheckpointManager:
         self._save_metadata(metadata)
         return metadata
 
-    def load_initial_network(self) -> P2PNetwork:
+    def load_initial_network(self) -> Network:
         """
         Load initial network state from checkpoint.
 
         Returns:
-            P2PNetwork object representing the initial network state.
+            Network object representing the initial network state.
 
         """
         initial_path = self.checkpoint_dir / "initial_network.pkl"
         with initial_path.open("rb") as f:
-            ret: P2PNetwork = pickle.load(f)  # noqa: S301
+            ret: Network = pickle.load(f)  # noqa: S301
         return ret
 
     def load_initial_algorithms(self) -> list[Algorithm]:
@@ -265,7 +278,7 @@ class CheckpointManager:
         trial: int,
         iteration: int,
         algorithm: Algorithm,
-        network: P2PNetwork,
+        network: Network,
     ) -> Path:
         """
         Save checkpoint for a specific algorithm trial at a given iteration.
@@ -275,7 +288,7 @@ class CheckpointManager:
             trial: Trial number (0-based).
             iteration: Current iteration number.
             algorithm: Algorithm object with current internal state.
-            network: P2PNetwork object with current agent states and metrics.
+            network: Network object with current agent states and metrics.
 
         Returns:
             Path to the saved checkpoint file.
@@ -305,7 +318,7 @@ class CheckpointManager:
         self._cleanup_old_checkpoints(alg_idx, trial)
         return checkpoint_path
 
-    def load_checkpoint(self, alg_idx: int, trial: int) -> tuple[Algorithm, P2PNetwork, int] | None:
+    def load_checkpoint(self, alg_idx: int, trial: int) -> tuple[Algorithm, Network, int] | None:
         """
         Load the latest checkpoint for a specific algorithm trial.
 
@@ -335,7 +348,7 @@ class CheckpointManager:
             checkpoint_data = pickle.load(f)  # noqa: S301
 
         algorithm: Algorithm = checkpoint_data["algorithm"]
-        network: P2PNetwork = checkpoint_data["network"]
+        network: Network = checkpoint_data["network"]
 
         LOGGER.debug(f"Loaded checkpoint: alg={alg_idx}, trial={trial}, iter={last_iteration}")
         return algorithm, network, last_iteration
@@ -346,7 +359,7 @@ class CheckpointManager:
         trial: int,
         iteration: int,
         algorithm: Algorithm,
-        network: P2PNetwork,
+        network: Network,
     ) -> Path:
         """
         Mark a trial as complete and save final result.
@@ -356,7 +369,7 @@ class CheckpointManager:
             trial: Trial number (0-based).
             iteration: The final iteration number.
             algorithm: Final Algorithm state after all iterations complete.
-            network: Final P2PNetwork state after all iterations complete.
+            network: Final Network state after all iterations complete.
 
         Returns:
             Path to the saved final checkpoint file.
@@ -410,7 +423,7 @@ class CheckpointManager:
         trial_dir = self._get_trial_dir(alg_idx, trial)
         return (trial_dir / "complete.json").exists()
 
-    def load_trial_result(self, alg_idx: int, trial: int) -> tuple[Algorithm, P2PNetwork]:
+    def load_trial_result(self, alg_idx: int, trial: int) -> tuple[Algorithm, Network]:
         """
         Load final result of a completed trial.
 
@@ -419,7 +432,7 @@ class CheckpointManager:
             trial: Trial number (0-based).
 
         Returns:
-            Tuple of (Algorithm object, P2PNetwork object) with final state after all iterations.
+            Tuple of (Algorithm object, Network object) with final state after all iterations.
 
         """
         trial_dir = self._get_trial_dir(alg_idx, trial)
@@ -433,7 +446,7 @@ class CheckpointManager:
             checkpoint_data = pickle.load(f)  # noqa: S301
 
         alg: Algorithm = checkpoint_data["algorithm"]
-        network: P2PNetwork = checkpoint_data["network"]
+        network: Network = checkpoint_data["network"]
         return alg, network
 
     def get_completed_trials(self, alg_idx: int, n_trials: int) -> list[int]:
@@ -503,7 +516,7 @@ class CheckpointManager:
             json.dump(metadata, f)
         LOGGER.debug(f"Saved metadata to {metadata_path}")
 
-    def _save_initial_network(self, network: P2PNetwork) -> None:
+    def _save_initial_network(self, network: Network) -> None:
         """Save initial network state before any trials run."""
         initial_path = self.checkpoint_dir / "initial_network.pkl"
         with initial_path.open("wb") as f:
