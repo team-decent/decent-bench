@@ -26,16 +26,21 @@ class CheckpointManager:
             ├── benchmark_problem.pkl           # Initial benchmark problem state (before any trials)
             ├── initial_algorithms.pkl          # Initial algorithm states (before any trials)
             ├── initial_network.pkl             # Initial network state (before any trials)
-            └── algorithm_0/                    # Directory for first algorithm
-                ├── trial_0/                    # Directory for trial 0
-                │   ├── checkpoint_0000100.pkl  # Combined algorithm+network state at iteration 100
-                │   ├── checkpoint_0000200.pkl  # Combined algorithm+network state at iteration 200
-                │   ├── progress.json           # {"last_completed_iteration": N}
-                │   └── complete.json           # Marker file, contains path to final checkpoint
-                ├── trial_1/
-                │   └── ...
-                └── trial_N/
-                    └── ...
+            ├── algorithm_0/                    # Directory for first algorithm
+            │   ├── trial_0/                    # Directory for trial 0
+            │   │   ├── checkpoint_0000100.pkl  # Combined algorithm+network state at iteration 100
+            │   │   ├── checkpoint_0000200.pkl  # Combined algorithm+network state at iteration 200
+            │   │   ├── progress.json           # {"last_completed_iteration": N}
+            │   │   └── complete.json           # Marker file, contains path to final checkpoint
+            │   ├── trial_1/
+            │   │   └── ...
+            │   └── trial_N/
+            │       └── ...
+            └── results/                        # Results directory for storing final tables and plots after completion
+                ├── plots_fig1.png              # Final plot for figure 1 with plot results
+                ├── plots_fig2.png              # Final plot for figure 2 with plot results
+                ├── table.tex                   # Final LaTeX file with table results
+                └── table.txt                   # Final text file with table results
 
     File Descriptions:
         - **metadata.json**: Benchmark configuration.
@@ -45,6 +50,9 @@ class CheckpointManager:
         - **checkpoint_NNNNNNN.pkl**: Combined checkpoint containing both algorithm and network state.
         - **progress.json**: Tracks the last completed iteration within a trial.
         - **complete.json**: Marker file, contains path to final checkpoint.
+        - **plots_figX.png**: Final plots for figures after benchmark completion.
+        - **table.tex**: Final LaTeX file with table results after benchmark completion.
+        - **table.txt**: Final text file with table results after benchmark completion.
 
     Thread Safety:
         - Each trial writes to its own directory, avoiding write conflicts.
@@ -58,6 +66,9 @@ class CheckpointManager:
         keep_n_checkpoints: Maximum number of iteration checkpoints to keep per trial.
             Older checkpoints are automatically deleted to save disk space.
 
+    Raises:
+            ValueError: If checkpoint_step is not a positive integer or None.
+
     """
 
     def __init__(
@@ -66,7 +77,26 @@ class CheckpointManager:
         checkpoint_step: int | None,
         keep_n_checkpoints: int,
     ) -> None:
-        """Initialize CheckpointManager with a checkpoint directory path."""
+        """
+        Initialize CheckpointManager with a checkpoint directory path.
+
+        Args:
+        checkpoint_dir: Path to the checkpoint directory.
+        checkpoint_step: Number of iterations between checkpoints within each trial.
+            If None, only save at trial completion.
+        keep_n_checkpoints: Maximum number of iteration checkpoints to keep per trial.
+            Older checkpoints are automatically deleted to save disk space.
+
+        Raises:
+            ValueError: If checkpoint_step is not a positive integer or None.
+            ValueError: If keep_n_checkpoints is not a positive integer.
+
+        """
+        if checkpoint_step is not None and checkpoint_step <= 0:
+            raise ValueError(f"checkpoint_step must be a positive integer or None, got {checkpoint_step}")
+        if keep_n_checkpoints <= 0:
+            raise ValueError(f"keep_n_checkpoints must be a positive integer, got {keep_n_checkpoints}")
+
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_step = checkpoint_step
         self.keep_n_checkpoints = keep_n_checkpoints
@@ -217,9 +247,15 @@ class CheckpointManager:
         Returns:
             True if a checkpoint should be saved, False otherwise.
 
+        Raises:
+            ValueError: If iteration number is negative.
+
         """
         if self.checkpoint_step is None:
             return False
+
+        if iteration < 0:
+            raise ValueError(f"Iteration number must be non-negative, got {iteration}")
 
         return (iteration + 1) % self.checkpoint_step == 0
 
@@ -509,5 +545,8 @@ class CheckpointManager:
         # Remove older checkpoints
         if len(checkpoint_files) > self.keep_n_checkpoints:
             for file_to_remove in checkpoint_files[self.keep_n_checkpoints :]:
-                file_to_remove.unlink()
-                LOGGER.debug(f"Removed old checkpoint: {file_to_remove}")
+                try:
+                    file_to_remove.unlink()
+                    LOGGER.debug(f"Removed old checkpoint: {file_to_remove}")
+                except FileNotFoundError:
+                    LOGGER.debug(f"Checkpoint file already removed by another process: {file_to_remove}")

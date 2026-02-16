@@ -3,6 +3,7 @@ import warnings
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
+from json import JSONDecodeError
 from logging.handlers import QueueListener
 from multiprocessing import Manager, get_context
 from multiprocessing.context import BaseContext
@@ -28,7 +29,7 @@ if TYPE_CHECKING:
     from decent_bench.utils.progress_bar import ProgressBarHandle
 
 
-def resume_benchmark(
+def resume_benchmark(  # noqa: PLR0912
     checkpoint_dir: str,
     increase_iterations: int = 0,
     increase_trials: int = 0,
@@ -101,7 +102,7 @@ def resume_benchmark(
             is provided. If ``None``, only save checkpoint at the end of each trial. For long-running algorithms,
             set this to checkpoint during trial execution (e.g., every 1000 iterations).
         keep_n_checkpoints: maximum number of iteration checkpoints to keep per trial. Older checkpoints are
-            automatically deleted to save disk space. Only applies to within-trial checkpoints, not final results.
+            automatically deleted to save disk space.
 
     Important:
         Multiprocessing with certain frameworks (e.g., PyTorch) can lead to unexpected behavior due to how they handle
@@ -129,6 +130,7 @@ def resume_benchmark(
 
     Raises:
         ValueError: If the checkpoint directory does not exist, is empty, or contains invalid metadata.
+        ValueError: If increase_iterations or increase_trials is negative.
 
     """
     checkpoint_manager = CheckpointManager(checkpoint_dir, checkpoint_step, keep_n_checkpoints)
@@ -136,6 +138,10 @@ def resume_benchmark(
         raise ValueError(f"Checkpoint directory '{checkpoint_dir}' does not exist for resume")
     if checkpoint_manager.is_empty():
         raise ValueError(f"Checkpoint directory '{checkpoint_dir}' is empty or invalid for resume")
+    if increase_iterations < 0:
+        raise ValueError("increase_iterations must be a non-negative integer")
+    if increase_trials < 0:
+        raise ValueError("increase_trials must be a non-negative integer")
 
     if create_backup:
         backup_path = checkpoint_manager.create_backup()
@@ -165,6 +171,8 @@ def resume_benchmark(
             LOGGER.debug(f"Loaded checkpoint: algorithms={algorithms}")
         except (FileNotFoundError, KeyError) as e:
             raise ValueError(f"Invalid checkpoint directory: missing or corrupted metadata - {e}") from e
+        except JSONDecodeError as e:
+            raise ValueError(f"Invalid checkpoint directory: metadata is not valid JSON - {e}") from e
 
     LOGGER.info(
         f"Resuming benchmark from checkpoint '{checkpoint_dir}' with {metadata['n_trials']} trials and algorithms: "
@@ -283,7 +291,7 @@ def benchmark(
             is provided. If ``None``, only save checkpoint at the end of each trial. For long-running algorithms,
             set this to checkpoint during trial execution (e.g., every 1000 iterations).
         keep_n_checkpoints: maximum number of iteration checkpoints to keep per trial. Older checkpoints are
-            automatically deleted to save disk space. Only applies to within-trial checkpoints, not final results.
+            automatically deleted to save disk space.
         benchmark_metadata: optional dictionary of additional metadata to save in the checkpoint directory,
             such as hyperparameters or system information. This can be useful for keeping track of the benchmark
             configuration and context when analyzing results later.

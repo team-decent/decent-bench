@@ -82,25 +82,24 @@ class Algorithm(ABC):
         """
         Run the algorithm.
 
-        Note:
-            This method first calls :meth:`initialize`, then :meth:`step` for the specified number of iterations
-            and finally :meth:`finalize`.
-
-        Warning:
-            Do not override this method. Instead, override :meth:`initialize`, :meth:`step` and :meth:`finalize`
-            as needed.
+        This method first calls :meth:`initialize`, then :meth:`step` for the specified number of iterations
+        and finally :meth:`finalize`.
 
         Args:
             network: provides agents, neighbors etc.
-            start_iteration: iteration number to start from, used when resuming from a checkpoint.
-            progress_callback: optional callback to report progress after each iteration. If greater than 0,
+            start_iteration: iteration number to start from, used when resuming from a checkpoint. If greater than 0,
                 :meth:`initialize` will be skipped.
+            progress_callback: optional callback to report progress after each iteration.
             skip_finalize: if True, skip calling :meth:`finalize` after running the iterations. This is needed
                 so that full agent states and training variables can be saved in checkpoints without being cleared
                 by :meth:`finalize`.
 
         Raises:
             ValueError: if start_iteration is not in [0, iterations]
+
+        Warning:
+            Do not override this method. Instead, override :meth:`initialize`, :meth:`step` and :meth:`finalize`
+            as needed.
 
         """
         if start_iteration < 0 or start_iteration > self.iterations:
