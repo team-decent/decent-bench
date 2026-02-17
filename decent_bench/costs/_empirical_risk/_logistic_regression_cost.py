@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Literal
+
 import numpy as np
 import numpy.linalg as la
 from numpy import float64
