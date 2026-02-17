@@ -8,7 +8,7 @@ from decent_bench.utils.types import SupportedArrayTypes, SupportedDevices, Supp
 from ._imports_types import _jnp_types, _np_types, _tf_types, _torch_types, jax, jnp, tf, torch
 
 
-def _device_literal_to_framework_device(device: SupportedDevices, framework: SupportedFrameworks) -> Any:  # noqa: ANN401
+def device_to_framework_device(device: SupportedDevices, framework: SupportedFrameworks) -> Any:  # noqa: ANN401
     """
     Convert SupportedDevices literal to framework-specific device representation.
 
@@ -25,7 +25,7 @@ def _device_literal_to_framework_device(device: SupportedDevices, framework: Sup
     """
     if framework == SupportedFrameworks.NUMPY:
         return device  # NumPy does not have explicit device management
-    if torch and framework == SupportedFrameworks.TORCH:
+    if torch and framework == SupportedFrameworks.PYTORCH:
         return "cuda" if device == SupportedDevices.GPU else "cpu"
     if tf and framework == SupportedFrameworks.TENSORFLOW:
         return f"/{device.value}:0"
@@ -78,7 +78,7 @@ def framework_device_of_array(array: Array) -> tuple[SupportedFrameworks, Suppor
         return SupportedFrameworks.NUMPY, SupportedDevices.CPU
     if torch and isinstance(value, _torch_types):
         device_type = SupportedDevices.GPU if value.device.type == "cuda" else SupportedDevices.CPU  # type: ignore[union-attr]
-        return SupportedFrameworks.TORCH, device_type
+        return SupportedFrameworks.PYTORCH, device_type
     if tf and isinstance(value, _tf_types):
         device_str = value.device.lower()  # type: ignore[union-attr]
         device_type = SupportedDevices.GPU if "gpu" in device_str or "cuda" in device_str else SupportedDevices.CPU

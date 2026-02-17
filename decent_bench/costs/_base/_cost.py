@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from numbers import Real
 from typing import Any
 
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
-class Cost(ABC):
+class Cost(ABC):  # noqa: PLR0904
     """Used by agents to evaluate the cost and its derivatives at a certain x."""
 
     @property
@@ -132,6 +133,84 @@ class Cost(ABC):
         For example, the addition of two :class:`~decent_bench.costs.QuadraticCost` objects benefits
         from returning a new :class:`~decent_bench.costs.QuadraticCost` instead of a
         :class:`~decent_bench.costs.SumCost` as this preserves the closed
-        form proximal solution and only requires one evaluation instead of two when calling :meth:`evaluate`,
+        form proximal solution and only requires one evaluation instead of two when calling :meth:`function`,
         :meth:`gradient`, and :meth:`hessian`.
         """
+
+    def __mul__(self, other: float) -> Cost:
+        """
+        Multiply by a scalar to create a weighted cost.
+
+        Raises:
+            TypeError: If other is not a real scalar.
+
+        """
+        if not self._is_valid_scalar(other):
+            raise TypeError(f"Cost can only be multiplied by a real number, got {type(other)}.")
+        from decent_bench.costs._base._scaled_cost import ScaledCost  # noqa: PLC0415
+
+        return ScaledCost(self, float(other))
+
+    def __rmul__(self, other: float) -> Cost:
+        """Right-side scalar multiplication."""
+        return self.__mul__(other)
+
+    def __truediv__(self, other: float) -> Cost:
+        """
+        Divide by a scalar.
+
+        Raises:
+            TypeError: If other is not a real scalar.
+            ZeroDivisionError: If other is zero.
+
+        """
+        if not self._is_valid_scalar(other):
+            raise TypeError(f"Cost can only be divided by a real number, got {type(other)}.")
+        if other == 0:
+            raise ZeroDivisionError("Division by zero is not allowed for Cost objects.")
+        return self.__mul__(1.0 / float(other))
+
+    def __rtruediv__(self, other: float) -> Cost:
+        """
+        Right-side scalar division is not supported.
+
+        Raises:
+            TypeError: Always, since scalar / cost is not supported.
+
+        """
+        raise TypeError("Right-side division is not supported for Cost objects.")
+
+    def __neg__(self) -> Cost:
+        """Negate this cost function."""
+        return self.__mul__(-1.0)
+
+    def __sub__(self, other: Cost) -> Cost:
+        """
+        Subtract another cost function as sum with its negation.
+
+        Raises:
+            TypeError: If other is not a Cost.
+
+        """
+        if not isinstance(other, Cost):
+            raise TypeError(f"Cost can only be subtracted by another Cost, got {type(other)}.")
+        return self + (-other)
+
+    def __radd__(self, other: object) -> Cost:
+        """
+        Right-side addition, used to make sum(costs) work.
+
+        Raises:
+            TypeError: If other is neither 0 nor a Cost.
+
+        """
+        if other == 0:
+            return self
+        if isinstance(other, Cost):
+            return other + self
+        raise TypeError(f"Cost can only be added to another Cost, got {type(other)}.")
+
+    @staticmethod
+    def _is_valid_scalar(value: object) -> bool:
+        """Return True if value is a real scalar and not bool."""
+        return isinstance(value, Real) and not isinstance(value, bool)

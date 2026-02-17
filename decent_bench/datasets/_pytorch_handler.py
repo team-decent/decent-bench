@@ -113,7 +113,7 @@ class PyTorchDatasetHandler(DatasetHandler):
         """
         Return the dataset divided into partitions for distribution among agents.
 
-        This method provides the core partitioning functionality for distributed
+        This method provides the core partitioning functionality for decentralized
         optimization. Each partition represents the local dataset of an agent in
         the network.
 

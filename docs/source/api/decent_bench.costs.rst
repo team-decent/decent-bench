@@ -9,4 +9,5 @@ decent\_bench.costs
       _sample_batch_indices,
       _get_batch_data,
    :special-members:
+      __init__,
       __add__,

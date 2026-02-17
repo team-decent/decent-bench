@@ -8,7 +8,7 @@ import numpy as np
 
 from decent_bench.costs._base._cost import Cost
 from decent_bench.utils.array import Array
-from decent_bench.utils.types import Dataset, EmpiricalRiskIndices
+from decent_bench.utils.types import Dataset, EmpiricalRiskIndices, EmpiricalRiskReduction
 
 
 class EmpiricalRiskCost(Cost, ABC):
@@ -75,7 +75,8 @@ class EmpiricalRiskCost(Cost, ABC):
 
     @cached_property
     def _rand(self) -> np.random.Generator:
-        return np.random.default_rng(seed=0)  # Later replace with global rng
+        # Later replace with global rng and return Generic generator to support other frameworks
+        return np.random.default_rng(seed=0)
 
     @abstractmethod
     def predict(self, x: Array, data: list[Array]) -> Array:
@@ -114,7 +115,13 @@ class EmpiricalRiskCost(Cost, ABC):
         return self.function(x, indices=indices, **kwargs)
 
     @abstractmethod
-    def gradient(self, x: Array, indices: EmpiricalRiskIndices = "batch", **kwargs: Any) -> Array:  # noqa: ANN401
+    def gradient(
+        self,
+        x: Array,
+        indices: EmpiricalRiskIndices = "batch",
+        reduction: EmpiricalRiskReduction = "mean",
+        **kwargs: Any,  # noqa: ANN401
+    ) -> Array:
         """
         Gradient at x using datapoints at the given indices.
 
@@ -125,6 +132,16 @@ class EmpiricalRiskCost(Cost, ABC):
             - list[int]: corresponding datapoints are used.
             - "all": the full dataset is used.
             - "batch": a batch is drawn with :attr:`batch_size` samples.
+
+        Supported values for reduction are:
+            - "mean": average the gradients over the samples.
+            - None: return the gradients for each sample, index as the first dimension.
+
+        Note:
+            When reduction is None, the returned array will have an additional leading dimension
+            corresponding to the number of samples used. Indexing into this dimension will give the gradient
+            for the respective sample in :attr:`batch_used <decent_bench.costs.EmpiricalRiskCost.batch_used>`.
+
         """
 
     @abstractmethod
@@ -197,7 +214,7 @@ class EmpiricalRiskCost(Cost, ABC):
             # Use full dataset
             self._last_batch_used = list(range(self.n_samples))
         elif indices == "batch":
-            if self.batch_size is not None and self.batch_size < self.n_samples:
+            if self.batch_size < self.n_samples:
                 # Sample a random batch
                 sample: list[int] = self._rand.choice(self.n_samples, size=self.batch_size, replace=False).tolist()
                 self._last_batch_used = sample

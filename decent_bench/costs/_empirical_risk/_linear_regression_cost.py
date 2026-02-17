@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Literal
 
 import numpy as np
 from numpy import float64
@@ -11,7 +10,14 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
 from decent_bench.costs._empirical_risk._empirical_risk_cost import EmpiricalRiskCost
-from decent_bench.utils.types import Dataset, EmpiricalRiskIndices, SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import (
+    Dataset,
+    EmpiricalRiskBatchSize,
+    EmpiricalRiskIndices,
+    EmpiricalRiskReduction,
+    SupportedDevices,
+    SupportedFrameworks,
+)
 
 
 class LinearRegressionCost(EmpiricalRiskCost):
@@ -33,15 +39,15 @@ class LinearRegressionCost(EmpiricalRiskCost):
     The cost function then becomes:
 
     .. math::
-        f(\mathbf{x}) = \frac{1}{2|\mathcal{B}|} \| \mathbf{A}_{\mathcal{B}}\mathbf{x} - \mathbf{b}_{\mathcal{B}} \|^2
+        f(\mathbf{x}) = \frac{1}{2b} \| \mathbf{A}_{\mathcal{B}}\mathbf{x} - \mathbf{b}_{\mathcal{B}} \|^2
 
-        = \frac{1}{2|\mathcal{B}|} \sum_{i \in \mathcal{B}} (A_i x - b_i)^2
+        = \frac{1}{2b} \sum_{i \in \mathcal{B}} (A_i x - b_i)^2
 
     where :math:`\mathcal{B}` is a sampled batch of :math:`b` indices from :math:`\{1, \ldots, m\}`,
     :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
     """
 
-    def __init__(self, dataset: Dataset, batch_size: int | Literal["all"] = "all"):
+    def __init__(self, dataset: Dataset, batch_size: EmpiricalRiskBatchSize = "all"):
         """
         Initialize a LinearRegressionCost instance.
 
@@ -49,7 +55,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
             dataset (Dataset): Dataset containing features and targets. The expected shapes are:
                 - Features: (n_features,)
                 - Targets: single dimensional values
-            batch_size (int | Literal["all"]): Size of mini-batches for stochastic methods, or "all" for full-batch.
+            batch_size (EmpiricalRiskBatchSize): Size of mini-batches for stochastic methods, or "all" for full-batch.
 
         Raises:
             ValueError: If input dimensions are inconsistent or batch_size is invalid.
@@ -58,10 +64,10 @@ class LinearRegressionCost(EmpiricalRiskCost):
         """
         if len(iop.shape(dataset[0][0])) != 1:
             raise ValueError(f"Dataset features must be vectors, got: {dataset[0][0]}")
-        if iop.to_numpy(dataset[0][1]).shape != ():
+        if iop.to_numpy(dataset[0][1]).shape != (1,):
             raise TypeError(
                 f"Dataset targets must be single dimensional values, got: {dataset[0][1]} "
-                f"with shape {iop.to_numpy(dataset[0][1]).shape}, expected shape is ()."
+                f"with shape {iop.to_numpy(dataset[0][1]).shape}, expected shape is (1,)."
             )
         if isinstance(batch_size, int) and (batch_size <= 0 or batch_size > len(dataset)):
             raise ValueError(
@@ -108,7 +114,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
         The cost function's smoothness constant.
 
         .. math::
-            \max_{i} \left| \lambda_i \right|
+            \max_{i} \left| \frac{1}{m} \lambda_i \right|
 
         where :math:`\lambda_i` are the eigenvalues of :math:`\frac{1}{m}\mathbf{A}^T \mathbf{A}`.
 
@@ -117,7 +123,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
         """
         _, ATA, _ = self._get_batch_data(indices="all")  # noqa: N806
         eigs = np.linalg.eigvalsh(ATA)
-        return float(np.max(np.abs(eigs)))
+        return float(np.max(np.abs(eigs))) / self.n_samples
 
     @cached_property
     def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -126,7 +132,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
 
         .. math::
             \begin{array}{ll}
-                \min_i \lambda_i, & \text{if } \min_i \lambda_i > 0, \\
+                \frac{1}{m} \min_i \lambda_i, & \text{if } \min_i \lambda_i > 0, \\
                 0, & \text{if } \min_i \lambda_i = 0, \\
                 \text{NaN}, & \text{if } \min_i \lambda_i < 0
             \end{array}
@@ -137,7 +143,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
         :attr:`Cost.m_cvx <decent_bench.costs.Cost.m_cvx>`.
         """
         _, ATA, _ = self._get_batch_data(indices="all")  # noqa: N806
-        l_min = float(np.min(np.linalg.eigvalsh(ATA)))
+        l_min = float(np.min(np.linalg.eigvalsh(ATA))) / self.n_samples
         tol = 1e-12
         if l_min > tol:
             return l_min
@@ -183,17 +189,21 @@ class LinearRegressionCost(EmpiricalRiskCost):
         If indices is "batch", a random batch :math:`\mathcal{B}` is drawn with :attr:`batch_size` samples.
 
         .. math::
-            \frac{1}{2|\mathcal{B}|} \| \mathbf{A}_{\mathcal{B}}\mathbf{x} - \mathbf{b}_{\mathcal{B}} \|^2
+            \frac{1}{2b} \| \mathbf{A}_{\mathcal{B}}\mathbf{x} - \mathbf{b}_{\mathcal{B}} \|^2
 
         where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
         """
         A, _, b = self._get_batch_data(indices)  # noqa: N806
         residual = A.dot(x) - b
-        m = A.shape[0]
-        return float(0.5 * residual.dot(residual) / m)
+        return float(0.5 * residual.dot(residual) / len(self.batch_used))
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.gradient)
-    def gradient(self, x: NDArray[float64], indices: EmpiricalRiskIndices = "batch") -> NDArray[float64]:
+    def gradient(
+        self,
+        x: NDArray[float64],
+        indices: EmpiricalRiskIndices = "batch",
+        reduction: EmpiricalRiskReduction = "mean",
+    ) -> NDArray[float64]:
         r"""
         Gradient at x using datapoints at the given indices.
 
@@ -203,23 +213,44 @@ class LinearRegressionCost(EmpiricalRiskCost):
             - "all": the full dataset is used.
             - "batch": a batch is drawn with :attr:`batch_size` samples.
 
+        Supported values for reduction are:
+            - "mean": average the gradients over the samples.
+            - None: return the gradients for each sample, index as the first dimension.
+
         If no batching is used, this is:
 
         .. math::
-            \frac{1}{m} \mathbf{A}^T\mathbf{Ax} - \frac{1}{m} \mathbf{A}^T \mathbf{b}
+            \frac{1}{m}(\mathbf{A}^T\mathbf{Ax} - \mathbf{A}^T \mathbf{b})
 
         If indices is "batch", a random batch :math:`\mathcal{B}` is drawn with :attr:`batch_size` samples.
 
         .. math::
-            \frac{1}{|\mathcal{B}|}\mathbf{A}_{\mathcal{B}}^T\mathbf{A}_{\mathcal{B}}\mathbf{x} -
-            \frac{1}{|\mathcal{B}|}\mathbf{A}_{\mathcal{B}}^T \mathbf{b}_{\mathcal{B}}
+            \frac{1}{b}(\mathbf{A}_{\mathcal{B}}^T\mathbf{A}_{\mathcal{B}}\mathbf{x} -
+            \mathbf{A}_{\mathcal{B}}^T \mathbf{b}_{\mathcal{B}})
 
         where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
 
+        Note:
+            When reduction is None, the returned array will have an additional leading dimension
+            corresponding to the number of samples used. Indexing into this dimension will give the gradient
+            for the respective sample in :attr:`batch_used <decent_bench.costs.EmpiricalRiskCost.batch_used>`.
+
         """
+        if reduction is None:
+            return self._per_sample_gradients(x, indices)
+
         A, ATA, b = self._get_batch_data(indices)  # noqa: N806
-        m = A.shape[0]
-        res: NDArray[float64] = ATA.dot(x) - (A.T.dot(b) / m)
+        res: NDArray[float64] = (ATA.dot(x) - A.T.dot(b)) / len(self.batch_used)
+        return res
+
+    def _per_sample_gradients(
+        self,
+        x: NDArray[float64],
+        indices: EmpiricalRiskIndices = "batch",
+    ) -> NDArray[float64]:
+        A, _, b = self._get_batch_data(indices)  # noqa: N806
+        residuals = A.dot(x) - b  # shape: (n_samples,)
+        res: NDArray[float64] = residuals[:, np.newaxis] * A
         return res
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.hessian)
@@ -241,12 +272,12 @@ class LinearRegressionCost(EmpiricalRiskCost):
         If indices is "batch", a random batch :math:`\mathcal{B}` is drawn with :attr:`batch_size` samples.
 
         .. math::
-            \frac{1}{|\mathcal{B}|}\mathbf{A}_{\mathcal{B}}^T \mathbf{A}_{\mathcal{B}}
+            \frac{1}{b}\mathbf{A}_{\mathcal{B}}^T \mathbf{A}_{\mathcal{B}}
 
         where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
         """
         _, ATA, _ = self._get_batch_data(indices)  # noqa: N806
-        res: NDArray[float64] = ATA
+        res: NDArray[float64] = ATA / len(self.batch_used)
         return res
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.proximal)
@@ -257,17 +288,15 @@ class LinearRegressionCost(EmpiricalRiskCost):
         The proximal operator for the linear regression cost function is given by:
 
         .. math::
-            \left(\frac{\rho}{m} \mathbf{A}^T \mathbf{A} + \mathbf{I}\right)^{-1}
-            \left(\mathbf{x} + \frac{\rho}{m} \mathbf{A}^T\mathbf{b}\right)
+            \frac{1}{m}(\rho \mathbf{A}^T \mathbf{A} + \mathbf{I})^{-1} (\mathbf{x} + \rho \mathbf{A}^T\mathbf{b})
 
         where :math:`\rho > 0` is the penalty. This is a closed form solution.
 
         """
         A, ATA, b = self._get_batch_data("all")  # noqa: N806
-        m = A.shape[0]
-        lhs = (rho / m) * ATA + np.eye(A.shape[1])
-        rhs = x + (rho / m) * A.T @ b
-        return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
+        lhs = rho * ATA + np.eye(A.shape[1])
+        rhs = x + rho * A.T @ b
+        return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64) / self.n_samples
 
     def _get_batch_data(
         self,

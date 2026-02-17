@@ -1,6 +1,6 @@
 from urllib.request import Request, urlopen
-from decent_bench.metrics.table_metrics import TABLE_METRICS_DOC_LINK
-from decent_bench.metrics.plot_metrics import PLOT_METRICS_DOC_LINK
+
+DOC_LINK = "https://decent-bench.readthedocs.io/en/latest/"
 
 
 def open_url(url: str):
@@ -8,9 +8,5 @@ def open_url(url: str):
     assert urlopen(url=req, timeout=10).status == 200
 
 
-def test_table_metrics_doc_link_works():
-    open_url(TABLE_METRICS_DOC_LINK)
-
-
-def test_plot_metrics_doc_link_works():
-    open_url(PLOT_METRICS_DOC_LINK)
+def test_metrics_doc_link_works():
+    open_url(DOC_LINK)
