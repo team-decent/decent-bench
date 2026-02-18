@@ -8,9 +8,8 @@ from logging.handlers import QueueListener
 from multiprocessing import Manager, get_context
 from multiprocessing.context import BaseContext
 from multiprocessing.managers import SyncManager
-from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 from rich.status import Status
 
@@ -30,7 +29,7 @@ if TYPE_CHECKING:
 
 
 def resume_benchmark(  # noqa: PLR0912
-    checkpoint_dir: str,
+    checkpoint_manager: CheckpointManager,
     increase_iterations: int = 0,
     increase_trials: int = 0,
     create_backup: bool = True,
@@ -49,16 +48,14 @@ def resume_benchmark(  # noqa: PLR0912
     show_speed: bool = False,
     show_trial: bool = False,
     compare_iterations_and_computational_cost: bool = False,
-    checkpoint_step: int | None = None,
-    keep_n_checkpoints: int = 3,
 ) -> None:
     """
     Resume a benchmark from an existing checkpoint directory.
 
     Args:
-        checkpoint_dir: directory path to load checkpoints from. Must contain valid checkpoints and metadata from a
-            previous benchmark run. Progress will be loaded from the latest checkpoints and the benchmark will resume
-            from there. Plots and tables will be saved to the subfolder ``results`` within the checkpoint directory.
+        checkpoint_manager: CheckpointManager instance to load checkpoints from. Must contain valid checkpoints and
+            metadata from a previous benchmark run. Progress will be loaded from the latest checkpoints and the
+            benchmark will resume from there.
         increase_iterations: number of iterations to add to each algorithm's existing iteration count. This allows
             you to extend the benchmark run and collect more data points for the metrics. The additional iterations will
             be added on top of the existing iterations defined in the checkpoint metadata for each algorithm. If set to
@@ -69,7 +66,7 @@ def resume_benchmark(  # noqa: PLR0912
         create_backup: whether to create a backup of the existing checkpoint directory before resuming. It is
             recommended to set this to True to avoid accidental data loss, as resuming will modify the checkpoint
             directory by adding new checkpoints and metadata. If True, a backup will be created with the name
-            ``{checkpoint_dir}_backup.zip`` before resuming.
+            ``{checkpoint_manager.checkpoint_dir}_backup_{timestamp}.zip`` before resuming.
         plot_metrics: metrics to plot after the execution, defaults to
             :const:`~decent_bench.metrics.metric_collection.DEFAULT_PLOT_METRICS`.
             If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
@@ -98,11 +95,6 @@ def resume_benchmark(  # noqa: PLR0912
         show_trial: whether to show which trials are currently running in the progress bar.
         compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
             metric vs iterations. Only used if ``computational_cost`` is provided.
-        checkpoint_step: number of iterations between checkpoints within each trial. Only used if ``checkpoint_dir``
-            is provided. If ``None``, only save checkpoint at the end of each trial. For long-running algorithms,
-            set this to checkpoint during trial execution (e.g., every 1000 iterations).
-        keep_n_checkpoints: maximum number of iteration checkpoints to keep per trial. Older checkpoints are
-            automatically deleted to save disk space.
 
     Important:
         Multiprocessing with certain frameworks (e.g., PyTorch) can lead to unexpected behavior due to how they handle
@@ -133,11 +125,10 @@ def resume_benchmark(  # noqa: PLR0912
         ValueError: If increase_iterations or increase_trials is negative.
 
     """
-    checkpoint_manager = CheckpointManager(checkpoint_dir, checkpoint_step, keep_n_checkpoints)
-    if not Path(checkpoint_dir).exists():
-        raise ValueError(f"Checkpoint directory '{checkpoint_dir}' does not exist for resume")
+    if not checkpoint_manager.checkpoint_dir.exists():
+        raise ValueError(f"Checkpoint directory '{checkpoint_manager.checkpoint_dir}' does not exist for resume")
     if checkpoint_manager.is_empty():
-        raise ValueError(f"Checkpoint directory '{checkpoint_dir}' is empty or invalid for resume")
+        raise ValueError(f"Checkpoint directory '{checkpoint_manager.checkpoint_dir}' is empty or invalid for resume")
     if increase_iterations < 0:
         raise ValueError("increase_iterations must be a non-negative integer")
     if increase_trials < 0:
@@ -174,7 +165,7 @@ def resume_benchmark(  # noqa: PLR0912
             raise ValueError(f"Invalid checkpoint directory: metadata is not valid JSON - {e}") from e
 
     LOGGER.info(
-        f"Resuming benchmark from checkpoint '{checkpoint_dir}' with {metadata['n_trials']} trials "
+        f"Resuming benchmark from checkpoint '{checkpoint_manager.checkpoint_dir}' with {metadata['n_trials']} trials "
         f"and algorithms: {[alg.name for alg in algorithms]}\n"
     )
 
@@ -248,10 +239,7 @@ def benchmark(
     show_speed: bool = False,
     show_trial: bool = False,
     compare_iterations_and_computational_cost: bool = False,
-    checkpoint_dir: str | None = None,
-    checkpoint_step: int | None = None,
-    keep_n_checkpoints: int = 3,
-    benchmark_metadata: dict[str, Any] | None = None,
+    checkpoint_manager: CheckpointManager | None = None,
 ) -> None:
     """
     Benchmark decentralized algorithms.
@@ -290,17 +278,7 @@ def benchmark(
         show_trial: whether to show which trials are currently running in the progress bar.
         compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
             metric vs iterations. Only used if ``computational_cost`` is provided.
-        checkpoint_dir: directory path to save checkpoints during execution. If provided, progress will be saved
-            at regular intervals allowing resumption if interrupted. When starting a new benchmark
-            the directory must be empty or non-existent. Plots and tables will be saved to the subfolder ``results``.
-        checkpoint_step: number of iterations between checkpoints within each trial. Only used if ``checkpoint_dir``
-            is provided. If ``None``, only save checkpoint at the end of each trial. For long-running algorithms,
-            set this to checkpoint during trial execution (e.g., every 1000 iterations).
-        keep_n_checkpoints: maximum number of iteration checkpoints to keep per trial. Older checkpoints are
-            automatically deleted to save disk space.
-        benchmark_metadata: optional dictionary of additional metadata to save in the checkpoint directory,
-            such as hyperparameters or system information. This can be useful for keeping track of the benchmark
-            configuration and context when analyzing results later.
+        checkpoint_manager: if provided, will be used to save checkpoints during execution.
 
     Important:
         Multiprocessing with certain frameworks (e.g., PyTorch) can lead to unexpected behavior due to how they handle
@@ -335,19 +313,17 @@ def benchmark(
     nw_init_state = create_distributed_network(benchmark_problem)
     LOGGER.debug("Created initial network state from benchmark problem configuration")
 
-    checkpoint_manager = None
-    if checkpoint_dir is not None:
-        checkpoint_manager = CheckpointManager(checkpoint_dir, checkpoint_step, keep_n_checkpoints)
+    if checkpoint_manager is not None:
         if not checkpoint_manager.is_empty():
             raise ValueError(
-                f"Checkpoint directory '{checkpoint_dir}' is not empty. "
+                f"Checkpoint directory '{checkpoint_manager.checkpoint_dir}' is not empty. "
                 f"Please provide an empty or non-existent directory to save checkpoints."
             )
 
-        checkpoint_manager.initialize(algorithms, nw_init_state, benchmark_problem, n_trials, benchmark_metadata)
+        checkpoint_manager.initialize(algorithms, nw_init_state, benchmark_problem, n_trials)
     else:
         LOGGER.info(
-            "No checkpoint directory provided, running benchmark without checkpointing. "
+            "No checkpoint manager provided, running benchmark without checkpointing. "
             "Progress cannot be resumed if interrupted."
         )
 

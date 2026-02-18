@@ -1,6 +1,7 @@
 import json
 import pickle  # noqa: S403
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -87,21 +88,28 @@ class CheckpointManager:
     def __init__(
         self,
         checkpoint_dir: str | Path,
-        checkpoint_step: int | None,
-        keep_n_checkpoints: int,
+        checkpoint_step: int | None = None,
+        keep_n_checkpoints: int = 3,
+        benchmark_metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Initialize CheckpointManager with a checkpoint directory path.
 
         Args:
-        checkpoint_dir: Path to the checkpoint directory.
-        checkpoint_step: Number of iterations between checkpoints within each trial.
-            If None, only save at trial completion.
-        keep_n_checkpoints: Maximum number of iteration checkpoints to keep per trial.
-            Older checkpoints are automatically deleted to save disk space.
+            checkpoint_dir: Path to save checkpoints during execution. If provided, progress will be saved
+                at regular intervals allowing resumption if interrupted. When starting a new benchmark
+                the directory must be empty or non-existent.
+            checkpoint_step: Number of iterations between checkpoints within each trial.
+                If ``None``, only save at the end of each trial. For long-running algorithms,
+                set this to checkpoint during trial execution (e.g., every 1000 iterations).
+            keep_n_checkpoints: Maximum number of iteration checkpoints to keep per trial.
+                Older checkpoints are automatically deleted to save disk space.
+            benchmark_metadata: Optional dictionary of additional metadata to save in the checkpoint directory,
+                    such as hyperparameters or system information. This can be useful for keeping track of the benchmark
+                    configuration and context when analyzing results later.
 
         Raises:
-            ValueError: If checkpoint_step is not a positive integer or None.
+            ValueError: If checkpoint_step is not a positive integer or ``None``.
             ValueError: If keep_n_checkpoints is not a positive integer.
 
         """
@@ -113,6 +121,7 @@ class CheckpointManager:
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_step = checkpoint_step
         self.keep_n_checkpoints = keep_n_checkpoints
+        self._metadata = benchmark_metadata
 
     def is_empty(self) -> bool:
         """Check if checkpoint directory is empty or doesn't exist."""
@@ -126,7 +135,6 @@ class CheckpointManager:
         network: Network,
         problem: BenchmarkProblem,
         n_trials: int,
-        benchmark_metadata: dict[str, Any] | None,
     ) -> None:
         """
         Initialize checkpoint directory structure for a new benchmark run.
@@ -136,9 +144,6 @@ class CheckpointManager:
             network: Initial Network state before any trials run.
             problem: BenchmarkProblem configuration for the benchmark.
             n_trials: Total number of trials to run for each algorithm, used for resuming.
-            benchmark_metadata: Optional dictionary of additional metadata to save in the checkpoint directory,
-                such as hyperparameters or system information. This can be useful for keeping track of the benchmark
-                configuration and context when analyzing results later.
 
         """
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -155,8 +160,8 @@ class CheckpointManager:
                 for idx, alg in enumerate(algorithms)
             ],
         }
-        if benchmark_metadata is not None:
-            metadata["benchmark_metadata"] = benchmark_metadata
+        if self._metadata is not None:
+            metadata["benchmark_metadata"] = self._metadata
 
         # Save initial state and metadata for resuming later if needed
         self._save_metadata(metadata)
@@ -179,7 +184,7 @@ class CheckpointManager:
             FileExistsError: If the backup file already exists.
 
         """
-        backup_path = Path(f"{self.checkpoint_dir}_backup.zip")
+        backup_path = Path(f"{self.checkpoint_dir}_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip")  # noqa: DTZ005
         if backup_path.exists():
             raise FileExistsError(f"Backup file '{backup_path}' already exists")
 

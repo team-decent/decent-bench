@@ -285,6 +285,11 @@ class FunctionCalls(Metric):
         Number of function calls (y-axis) per iteration (x-axis).
         Will be a flat line as the number of function calls is only calculated at the end of the trial,
         not per iteration.
+
+    Note:
+        Can be a floating point number if :class:`~decent_bench.costs.EmpiricalRiskCost` is used and a
+        batch size other than the full dataset size is used.
+
     """
 
     table_description: str = "nr function calls"
@@ -310,6 +315,11 @@ class GradientCalls(Metric):
         Number of gradient calls (y-axis) per iteration (x-axis).
         Will be a flat line as the number of gradient calls is only calculated at the end of the trial,
         not per iteration.
+
+    Note:
+        Can be a floating point number if :class:`~decent_bench.costs.EmpiricalRiskCost` is used and a
+        batch size other than the full dataset size is used.
+
     """
 
     table_description: str = "nr gradient calls"
@@ -335,6 +345,11 @@ class HessianCalls(Metric):
         Number of Hessian calls (y-axis) per iteration (x-axis).
         Will be a flat line as the number of Hessian calls is only calculated at the end of the trial,
         not per iteration.
+
+    Note:
+        Can be a floating point number if :class:`~decent_bench.costs.EmpiricalRiskCost` is used and a
+        batch size other than the full dataset size is used.
+
     """
 
     table_description: str = "nr Hessian calls"
