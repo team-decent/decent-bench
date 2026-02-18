@@ -88,6 +88,10 @@ Configure out-of-the-box regression problems
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Configure communication constraints and other settings for out-of-the-box regression problems.
 
+The ``agent_state_snapshot_period`` parameter controls how often metrics are recorded.
+Setting it to a value greater than 1 (the default) can help reduce overhead for long-running algorithms while still providing enough data points for analysis.
+This also speeds up metric calulation and plotting, which can be significant for large benchmarks with many iterations and agents.
+
 .. code-block:: python
 
     from decent_bench import benchmark, benchmark_problem
@@ -286,6 +290,148 @@ Plot a network explicitly when you need it:
     nx.drawing.nx_pylab.draw_networkx(problem.network_structure, pos=pos, with_labels=True)
 
 For more options, see the `NetworkX drawing guide <https://networkx.org/documentation/stable/reference/drawing.html>`_.
+
+
+Storing results and checkpointing
+----------------------------------
+By default, benchmark results (plots and tables) are only displayed but not saved to disk. To save results and enable
+resumption of interrupted benchmarks, use the checkpoint functionality.
+
+Basic checkpointing
+~~~~~~~~~~~~~~~~~~~
+Enable checkpointing by providing a :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager` instance. This automatically saves:
+
+- Plots to ``{checkpoint_dir}/results/plots_figX.png``
+- Tables to ``{checkpoint_dir}/results/table.txt`` and ``{checkpoint_dir}/results/table.tex``
+- Progress checkpoints allowing benchmark resumption if interrupted
+
+.. code-block:: python
+
+    from decent_bench import benchmark, benchmark_problem
+    from decent_bench.costs import LinearRegressionCost
+    from decent_bench.distributed_algorithms import ADMM, DGD
+    from decent_bench.utils.checkpoint_manager import CheckpointManager
+
+    if __name__ == "__main__":
+        benchmark.benchmark(
+            algorithms=[
+                DGD(iterations=10000, step_size=0.001),
+                ADMM(iterations=10000, rho=10, alpha=0.3),
+            ],
+            benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
+            checkpoint_manager=CheckpointManager(checkpoint_dir="benchmark_results/my_experiment"),
+        )
+
+The checkpoint directory structure:
+
+.. code-block:: text
+
+    benchmark_results/my_experiment/
+    ├── metadata.json                   # Run configuration and algorithm metadata
+    ├── benchmark_problem.pkl           # Benchmark problem state
+    ├── initial_algorithms.pkl          # Initial algorithm states
+    ├── initial_network.pkl             # Initial network state
+    ├── algorithm_0/                    # Directory for first algorithm
+    │   ├── trial_0/
+    │   │   ├── checkpoint_0001000.pkl  # Checkpoint at iteration 1000
+    │   │   ├── checkpoint_0002000.pkl  # Checkpoint at iteration 2000
+    │   │   ├── progress.json           # Tracks last completed iteration
+    │   │   └── complete.json           # Marker file when trial completes
+    │   └── trial_1/
+    │       └── ...
+    └── results/                        # Final results (saved after completion)
+        ├── plots_fig1.png              # Plot figure 1
+        └── table.tex                   # LaTeX table
+        └── table.txt                   # Text table
+
+
+Resuming benchmarks
+~~~~~~~~~~~~~~~~~~~
+If a benchmark is interrupted, resume from the most recent checkpoint:
+
+.. code-block:: python
+
+    from decent_bench import benchmark
+    from decent_bench.utils.checkpoint_manager import CheckpointManager
+
+    if __name__ == "__main__":
+        benchmark.resume_benchmark(
+            checkpoint_dir=CheckpointManager(checkpoint_dir="benchmark_results/my_experiment"),
+            create_backup=True,  # Creates a backup zip before resuming
+        )
+
+Extend an existing benchmark with more iterations or trials:
+
+.. code-block:: python
+
+    from decent_bench import benchmark
+    from decent_bench.utils.checkpoint_manager import CheckpointManager
+
+    if __name__ == "__main__":
+        benchmark.resume_benchmark(
+            checkpoint_dir=CheckpointManager(checkpoint_dir="benchmark_results/my_experiment"),
+            increase_iterations=5000,  # Run 5000 additional iterations
+            increase_trials=10,        # Run 10 additional trials
+            create_backup=True,
+        )
+
+The optional parameters ``checkpoint_step`` and ``keep_n_checkpoints`` in :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager` 
+can be changed when resuming to control how frequently checkpoints are saved and how many are kept, allowing you to manage disk space for long-running benchmarks.
+
+
+Saving custom metadata
+~~~~~~~~~~~~~~~~~~~~~~
+Store additional information about your benchmark run using the ``benchmark_metadata`` parameter:
+
+.. code-block:: python
+
+    from decent_bench import benchmark, benchmark_problem
+    from decent_bench.costs import LinearRegressionCost
+    from decent_bench.distributed_algorithms import DGD
+    import platform
+
+    if __name__ == "__main__":
+        benchmark.benchmark(
+            algorithms=[DGD(iterations=1000, step_size=0.001)],
+            benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
+            checkpoint_manager=CheckpointManager(
+                checkpoint_dir="benchmark_results/my_experiment",
+                benchmark_metadata={
+                    "description": "Testing DGD step size sensitivity",
+                    "system": platform.system(),
+                    "python_version": platform.python_version(),
+                    "notes": "Baseline run for paper experiments",
+                },
+            )
+        )
+
+
+Checkpoint parameters
+~~~~~~~~~~~~~~~~~~~~~
+Control checkpoint behavior with these parameters:
+
+- **checkpoint_dir**: Directory path to save checkpoints. Must be empty or non-existent when starting a new benchmark.
+- **checkpoint_step**: Number of iterations between checkpoints within each trial. If ``None``, only saves at trial completion. For long-running algorithms, use a value like 1000 to checkpoint during execution.
+- **keep_n_checkpoints**: Maximum number of iteration checkpoints to keep per trial. Older checkpoints are automatically deleted to save disk space. Default is 3.
+- **benchmark_metadata**: Optional dictionary to store custom metadata about the benchmark run (e.g., descriptions, system info, notes). This is saved in ``metadata.json`` and can be used for tracking and analysis.
+
+.. code-block:: python
+
+    from decent_bench import benchmark, benchmark_problem
+    from decent_bench.costs import LinearRegressionCost
+    from decent_bench.distributed_algorithms import DGD
+    from decent_bench.utils.checkpoint_manager import CheckpointManager
+
+    if __name__ == "__main__":
+        benchmark.benchmark(
+            algorithms=[DGD(iterations=50000, step_size=0.001)],
+            benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
+            checkpoint_manager=CheckpointManager(
+                checkpoint_dir="benchmark_results/long_run",
+                checkpoint_step=5000,      # Checkpoint every 5000 iterations
+                keep_n_checkpoints=5,      # Keep 5 most recent checkpoints
+            ),
+        )
 
 
 Interoperability requirement

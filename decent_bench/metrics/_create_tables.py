@@ -1,6 +1,6 @@
-import pathlib
 import warnings
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -22,7 +22,7 @@ def create_tables(
     confidence_level: float,
     table_fmt: Literal["grid", "latex"],
     *,
-    table_path: str | None = None,
+    table_path: Path | None = None,
 ) -> None:
     """
     Print table with confidence intervals, one row per metric and statistic, and one column per algorithm.
@@ -37,7 +37,8 @@ def create_tables(
             between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
             wider confidence intervals.
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
-        table_path: optional path to save the table as a text file, if not provided the table is not saved to a file
+        table_path: optional path to save the table as a text file and as a LaTeX file,
+            if not provided the table is not saved to a file
 
     """
     if not metrics:
@@ -47,8 +48,11 @@ def create_tables(
     rows: list[list[str]] = []
     statistics_abbr = {"average": "avg", "median": "mdn"}
     with warnings.catch_warnings(action="ignore"), utils.MetricProgressBar() as progress:
-        n_statistics = sum(len(metric.statistics) for metric in metrics)
-        table_task = progress.add_task("Generating table", total=n_statistics, status="")
+        table_task = progress.add_task(
+            "Generating table",
+            total=sum(len(metric.statistics) for metric in metrics),
+            status="",
+        )
         for metric in metrics:
             progress.update(table_task, status=f"Task: {metric.table_description}")
             data_per_trial = [_table_data_per_trial(resulting_agent_states[a], problem, metric) for a in algs]
@@ -67,11 +71,18 @@ def create_tables(
                 rows.append(row)
                 progress.advance(table_task)
         progress.update(table_task, status="Finalizing table")
-    formatted_table = tb.tabulate(rows, headers, tablefmt=table_fmt)
-    LOGGER.info("\n" + formatted_table)
+    grid_table = tb.tabulate(rows, headers, tablefmt="grid")
+    latex_table = tb.tabulate(rows, headers, tablefmt="latex")
+    LOGGER.info("\n" + latex_table if table_fmt == "latex" else "\n" + grid_table)
     if table_path:
-        pathlib.Path(table_path).parent.mkdir(parents=True, exist_ok=True)
-        pathlib.Path(table_path).write_text(formatted_table, encoding="utf-8")
+        # Save both latex and grid tables to two files with appropriate suffixes
+        table_path.parent.mkdir(parents=True, exist_ok=True)
+        latex_path = table_path.parent / (table_path.stem + ".tex")
+        grid_path = table_path.parent / (table_path.stem + ".txt")
+        latex_path.write_text(latex_table, encoding="utf-8")
+        grid_path.write_text(grid_table, encoding="utf-8")
+        LOGGER.info(f"Saved LaTeX table to {latex_path}")
+        LOGGER.info(f"Saved grid table to {grid_path}")
 
 
 def _table_data_per_trial(

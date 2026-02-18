@@ -302,7 +302,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         Proximal at x solved using an iterative method.
 
         The proximal for logistic regression does not have closed form solution, will use
-        a gradient based approximation method over the entire dataset.
+        a gradient based approximation method over the entire dataset, over at most 100 iterations.
 
         See
         :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>`

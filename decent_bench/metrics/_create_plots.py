@@ -41,16 +41,17 @@ MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p", "P", "X"]
 STYLES = ["-", ":", "--", "-.", (5, (10, 3)), (0, (5, 10)), (0, (3, 1, 1, 1))]
 
 
-def create_plots(  # noqa: PLR0917
+def create_plots(
     resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[Metric] | list[list[Metric]],
+    *,
     computational_cost: ComputationalCost | None,
     x_axis_scaling: float = 1e-4,
     compare_iterations_and_computational_cost: bool = False,
     individual_plots: bool = False,
-    plot_path: str | None = None,
     plot_grid: bool = True,
+    plot_path: Path | None = None,
 ) -> None:
     """
     Plot the execution results with one subplot per metric.
@@ -70,9 +71,9 @@ def create_plots(  # noqa: PLR0917
         compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
             metric vs iterations. Only used if ``computational_cost`` is provided
         individual_plots: whether to create individual plots for each metric instead of subplots
+        plot_grid: whether to show grid lines on the plots
         plot_path: optional file path to save the generated plot as an image file (e.g., "plots.png"). If ``None``,
             the plot will only be displayed
-        plot_grid: whether to show grid lines on the plots
 
     Note:
         Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
@@ -177,8 +178,7 @@ def create_plots(  # noqa: PLR0917
         current_plot_path = plot_path
         if plot_path is not None and len(figures_to_show) > 1:
             # Split the path into name and extension
-            path = Path(plot_path)
-            current_plot_path = str(path.with_stem(f"{path.stem}_fig{fig_idx + 1}"))
+            current_plot_path = plot_path.with_stem(f"{plot_path.stem}_fig{fig_idx + 1}")
 
         _add_legend_and_save(fig, metric_subplots, two_columns, current_plot_path)
 
@@ -292,7 +292,7 @@ def _add_legend_and_save(
     fig: Figure,
     metric_subplots: list[SubPlot],
     two_columns: bool,
-    plot_path: str | None = None,
+    plot_path: Path | None = None,
 ) -> None:
     # Find the first subplot with data to get legend handles
     handles: list[Artist] = []

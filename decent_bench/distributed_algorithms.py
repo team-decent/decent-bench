@@ -23,6 +23,11 @@ class Algorithm(ABC):
     def iterations(self) -> int:
         """Number of iterations to run the algorithm for."""
 
+    @iterations.setter
+    @abstractmethod
+    def iterations(self, value: int) -> None:
+        """Set the number of iterations to run the algorithm for."""
+
     @property
     @abstractmethod
     def name(self) -> str:
@@ -67,29 +72,50 @@ class Algorithm(ABC):
                 i.aux_vars.clear()
 
     @final
-    def run(self, network: P2PNetwork, progress_callback: Callable[[int], None] | None = None) -> None:
+    def run(
+        self,
+        network: P2PNetwork,
+        start_iteration: int = 0,
+        progress_callback: Callable[[int], None] | None = None,
+        skip_finalize: bool = False,
+    ) -> None:
         """
         Run the algorithm.
 
-        Note:
-            This method first calls :meth:`initialize`, then :meth:`step` for the specified number of iterations
-            and finally :meth:`finalize`.
+        This method first calls :meth:`initialize`, then :meth:`step` for the specified number of iterations
+        and finally :meth:`finalize`.
+
+        Args:
+            network: provides agents, neighbors etc.
+            start_iteration: iteration number to start from, used when resuming from a checkpoint. If greater than 0,
+                :meth:`initialize` will be skipped.
+            progress_callback: optional callback to report progress after each iteration.
+            skip_finalize: if True, skip calling :meth:`finalize` after running the iterations. This is needed
+                so that full agent states and training variables can be saved in checkpoints without being cleared
+                by :meth:`finalize`.
+
+        Raises:
+            ValueError: if start_iteration is not in [0, iterations]
 
         Warning:
             Do not override this method. Instead, override :meth:`initialize`, :meth:`step` and :meth:`finalize`
             as needed.
 
-        Args:
-            network: provides agents, neighbors etc.
-            progress_callback: optional callback to report progress after each iteration.
-
         """
-        self.initialize(network)
-        for k in range(self.iterations):
+        if start_iteration < 0 or start_iteration > self.iterations:
+            raise ValueError(
+                f"Invalid start_iteration {start_iteration} for algorithm with {self.iterations} iterations"
+            )
+
+        if start_iteration == 0:
+            self.initialize(network)
+        for k in range(start_iteration, self.iterations):
             self.step(network, k)
             if progress_callback is not None:
                 progress_callback(k)
-        self.finalize(network)
+
+        if not skip_finalize:
+            self.finalize(network)
 
 
 @dataclass(eq=False)
