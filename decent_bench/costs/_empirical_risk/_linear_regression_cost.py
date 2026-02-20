@@ -294,9 +294,10 @@ class LinearRegressionCost(EmpiricalRiskCost):
 
         """
         A, ATA, b = self._get_batch_data("all")  # noqa: N806
-        lhs = rho * ATA + np.eye(A.shape[1])
-        rhs = x + rho * A.T @ b
-        return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64) / self.n_samples
+        scale = 1 / self.n_samples
+        lhs = rho * scale * ATA + np.eye(A.shape[1])
+        rhs = x + rho * scale * A.T @ b
+        return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
 
     def _get_batch_data(
         self,
@@ -310,8 +311,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
                 self.A = np.stack([iop.to_numpy(x) for x, _ in self._dataset])
                 self.b = np.stack([iop.to_numpy(y) for _, y in self._dataset]).squeeze()
                 self.ATA = self.A.T @ self.A
-            m = self.A.shape[0]
-            return self.A, self.ATA / m, self.b
+            return self.A, self.ATA, self.b
 
         A_list, b_list = [], []  # noqa: N806
         for idx in indices:
@@ -320,8 +320,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
             b_list.append(iop.to_numpy(y_i))
         A = np.stack(A_list)  # noqa: N806
         b = np.stack(b_list).squeeze()
-        m = A.shape[0]
-        return A, (A.T @ A) / m, b
+        return A, A.T @ A, b
 
     def __add__(self, other: Cost) -> Cost:
         """
