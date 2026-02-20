@@ -3,7 +3,7 @@ import warnings
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -53,6 +53,7 @@ def display_plots(
     compare_iterations_and_computational_cost: bool = False,
     individual_plots: bool = False,
     plot_grid: bool = True,
+    plot_format: Literal["png", "pdf", "svg"] = "pdf",
     plot_path: Path | None = None,
 ) -> None:
     """
@@ -72,6 +73,7 @@ def display_plots(
             metric vs iterations. Only used if ``computational_cost`` is provided.
         individual_plots: whether to create individual plots for each metric instead of subplots.
         plot_grid: whether to show grid lines on the plots.
+        plot_format: format to save plots in, defaults to ``pdf``. Can be ``png``, ``pdf``, or ``svg``.
         plot_path: optional directory path to save the generated plots as image files.
             Will be saved as "plot.png" or "plot_fig1.png", "plot_fig2.png", etc. if multiple figures.
             If not provided, the plots will only be displayed.
@@ -115,7 +117,7 @@ def display_plots(
         return
 
     # Save and show figures
-    _save_and_show_figures(all_figures, two_columns, plot_path=plot_path)
+    _save_and_show_figures(all_figures, two_columns, plot_path=plot_path, plot_format=plot_format)
 
 
 def compute_plots(
@@ -271,6 +273,7 @@ def _save_and_show_figures(
     two_columns: bool,
     *,
     plot_path: Path | None,
+    plot_format: Literal["png", "pdf", "svg"] = "pdf",
 ) -> None:
     """Add legends, save figures to files, and display them."""
     for fig_idx, (fig, metric_subplots) in enumerate(figures_to_show):
@@ -278,9 +281,9 @@ def _save_and_show_figures(
         current_plot_path = None
         if plot_path is not None:
             if len(figures_to_show) > 1:
-                current_plot_path = plot_path / f"plot_fig{fig_idx + 1}.png"
+                current_plot_path = plot_path / f"plot_fig{fig_idx + 1}.{plot_format}"
             else:
-                current_plot_path = plot_path / "plot.png"
+                current_plot_path = plot_path / f"plot.{plot_format}"
 
         _add_legend_and_save(fig, metric_subplots, two_columns, current_plot_path)
 

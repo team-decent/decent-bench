@@ -30,6 +30,7 @@ def display_metrics(
     x_axis_scaling: float = 1e-4,
     compare_iterations_and_computational_cost: bool = False,
     save_path: str | Path | None = None,
+    plot_format: Literal["png", "pdf", "svg"] = "png",
     log_level: int = logging.INFO,
 ) -> None:
     """
@@ -55,6 +56,7 @@ def display_metrics(
         save_path: optional directory path to save the tables and plots to. Tables will be saved as ``table.txt`` and
             ``table.tex`` while plots will be saved as ``plot_{#}.{format}`` in the specified directory.
             If not provided, the tables and plots are not saved to files.
+        plot_format: format to save plots in, defaults to ``pdf``. Can be ``png``, ``pdf``, or ``svg``.
         log_level: minimum level to log, e.g. :data:`logging.INFO`
 
     Raises:
@@ -103,6 +105,7 @@ def display_metrics(
         compare_iterations_and_computational_cost=compare_iterations_and_computational_cost,
         individual_plots=individual_plots,
         plot_grid=plot_grid,
+        plot_format=plot_format,
         plot_path=save_path,
     )
 
