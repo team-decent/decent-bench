@@ -5,13 +5,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from decent_bench.benchmark import BenchmarkResult, MetricsResult
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 
 
-class CheckpointManager:
+class CheckpointManager:  # noqa: PLR0904
     """
     Manages checkpoint directory structure and file operations for benchmark execution.
 
@@ -27,6 +28,7 @@ class CheckpointManager:
             ├── benchmark_problem.pkl           # Initial benchmark problem state (before any trials)
             ├── initial_algorithms.pkl          # Initial algorithm states (before any trials)
             ├── initial_network.pkl             # Initial network state (before any trials)
+            ├── metric_computation.pkl          # Computed metrics results (after all trials complete)
             ├── algorithm_0/                    # Directory for first algorithm
             │   ├── trial_0/                    # Directory for trial 0
             │   │   ├── checkpoint_0000100.pkl  # Combined algorithm+network state at iteration 100
@@ -51,6 +53,8 @@ class CheckpointManager:
         - **benchmark_problem.pkl**: Initial benchmark problem state before any trials run.
         - **initial_algorithms.pkl**: Initial algorithm states before any trials run.
         - **initial_network.pkl**: Starting network state before any algorithm execution.
+        - **metric_computation.pkl**: Computed metrics results after :func:`~decent_bench.benchmark.compute_metrics`
+          completes.
         - **checkpoint_NNNNNNN.pkl**: Combined checkpoint containing both algorithm and network state.
           This preserves shared object references and ensures consistency between algorithm and network
           states at each checkpoint. The checkpoint data is a dictionary with the following structure:
@@ -172,6 +176,8 @@ class CheckpointManager:
         # Create algorithm directories
         for idx in range(len(algorithms)):
             self._get_algorithm_dir(idx).mkdir(parents=True, exist_ok=True)
+
+        LOGGER.info(f"Initialized checkpoint directory at '{self.checkpoint_dir}'")
 
     def create_backup(self) -> Path:
         """
@@ -481,18 +487,85 @@ class CheckpointManager:
             metadata: dict[str, Any] = json.load(f)
         return metadata
 
-    def get_results_path(self, file_name: str) -> Path:
+    def load_benchmark_result(self) -> BenchmarkResult:
         """
-        Get the path for a results file (e.g., table or plot) in the checkpoint directory.
+        Load benchmark problem configuration and states from checkpoint.
 
-        Args:
-            file_name: Name of the results file (e.g., "table_results.txt" or "plots.png").
+        If an algorithm does not have all trials completed, its results will be skipped and not included in the loaded
+        benchmark result. This is to ensure that the metrics are not skewed by incomplete data and only include
+        algorithms with full results. A warning will be logged for any incomplete algorithms.
 
         Returns:
-            Path object representing the full path to the results file within the checkpoint directory.
+            BenchmarkResult object containing the loaded benchmark problem, initial algorithms, and initial network.
 
         """
-        return self.checkpoint_dir / "results" / file_name
+        problem = self.load_benchmark_problem()
+        algorithms = self.load_initial_algorithms()
+        metadata = self.load_metadata()
+        n_trials = metadata["n_trials"]
+        states: dict[Algorithm, list[Network]] = {}
+        for idx, alg in enumerate(algorithms):
+            completed_trials = self.get_completed_trials(idx, n_trials)
+            if len(completed_trials) != n_trials:
+                LOGGER.warning(
+                    f"Algorithm '{alg.name}' has {len(completed_trials)}/{n_trials} completed trials. "
+                    "Results will not be loaded for this algorithm."
+                )
+                continue
+            for trial in completed_trials:
+                loaded_alg, loaded_net = self.load_trial_result(idx, trial)
+                if loaded_alg.name != alg.name:
+                    LOGGER.warning(
+                        f"Algorithm mismatch in trial {trial} for algorithm {alg.name}, loaded {loaded_alg.name}. "
+                        "Results will not be loaded for this algorithm."
+                    )
+                    states.pop(alg, None)  # Remove any previously loaded states for this algorithm
+                    break
+                if alg not in states:
+                    states[alg] = []
+                states[alg].append(loaded_net)
+
+        return BenchmarkResult(
+            problem=problem,
+            states=states,
+        )
+
+    def save_metrics_result(self, metrics_result: MetricsResult) -> None:
+        """
+        Save the computed metrics result to the checkpoint directory.
+
+        Args:
+            metrics_result: MetricsResult object containing the computed metrics to save.
+
+        """
+        metric_path = self.checkpoint_dir / "metric_computation.pkl"
+        with metric_path.open("wb") as f:
+            pickle.dump(metrics_result, f)
+        LOGGER.info(f"Saved computed metrics result to {metric_path}")
+
+    def load_metrics_result(self) -> MetricsResult:
+        """
+        Load the computed metrics result from the checkpoint directory.
+
+        Returns:
+            MetricsResult object containing the computed metrics.
+
+        """
+        metric_path = self.checkpoint_dir / "metric_computation.pkl"
+        with metric_path.open("rb") as f:
+            metrics_result: MetricsResult = pickle.load(f)  # noqa: S301
+        LOGGER.info(f"Loaded computed metrics result from {metric_path}")
+        return metrics_result
+
+    def get_results_path(self) -> Path:
+        """
+        Get the path to the results directory within the checkpoint directory.
+
+        Returns:
+            Path to the results directory within the checkpoint directory.
+
+        """
+        return self.checkpoint_dir / "results"
 
     def clear(self) -> None:
         """

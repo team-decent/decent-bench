@@ -1,3 +1,5 @@
+"""Collection of pre-defined runtime metrics."""
+
 from collections.abc import Sequence
 
 import numpy as np

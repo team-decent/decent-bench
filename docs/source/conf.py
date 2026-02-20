@@ -66,7 +66,7 @@ exclude_patterns = []
 # A way to link numpy.typing.ArrayLike and NDArray correctly
 # Seems to be an open issue, see https://github.com/sphinx-doc/sphinx/issues/10794
 # https://github.com/sphinx-doc/sphinx/issues/10785#issuecomment-1321100925
-def _numpy_typing_missing_ref(app, env, node, contnode):
+def _fix_missing_ref(app, env, node, contnode):
     if node.get("refdomain") == "py" and node.get("reftype") in {"class", "data"}:
         target = node.get("reftarget")
         if target in {"ArrayLike", "numpy.typing.ArrayLike"}:
@@ -83,11 +83,23 @@ def _numpy_typing_missing_ref(app, env, node, contnode):
             return nodes.reference(
                 "", "DTypeLike", refuri="https://numpy.org/doc/stable/reference/typing.html#numpy.typing.DTypeLike"
             )
+        if target in {"DefaultContext", "multiprocessing.context.DefaultContext"}:
+            return nodes.reference(
+                "",
+                "DefaultContext",
+                refuri="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.get_context",
+            )
+        if target in {"SpawnContext", "multiprocessing.context.SpawnContext"}:
+            return nodes.reference(
+                "",
+                "SpawnContext",
+                refuri="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.get_context",
+            )
     return None
 
 
 def setup(app):
-    app.connect("missing-reference", _numpy_typing_missing_ref)
+    app.connect("missing-reference", _fix_missing_ref)
 
 
 # -- Options for HTML output -------------------------------------------------

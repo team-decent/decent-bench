@@ -29,6 +29,28 @@ class LogQueue(Protocol):
         """Get item."""
 
 
+def start_logger(log_level: int = logging.INFO) -> None:
+    """
+    Configure the logger for single-process use.
+
+    Use this function when you don't need multiprocessing support (e.g., when calling
+    `display_metrics` or `compute_metrics` directly). For multiprocessing contexts,
+    use `start_log_listener` and `start_queue_logger` instead.
+
+    Args:
+        log_level: minimum level to log, e.g. :data:`logging.INFO`
+
+    Note:
+        Filtering is done at the logger level (not handler level) for consistency.
+        The logger level controls what messages are processed, and the handler
+        inherits this by using NOTSET (the default).
+
+    """
+    LOGGER.handlers.clear()
+    LOGGER.addHandler(RichHandler())
+    LOGGER.setLevel(log_level)
+
+
 def start_log_listener(manager: SyncManager, log_level: int) -> QueueListener:
     """
     Start listener thread which can receive log messages through a queue.
@@ -41,6 +63,12 @@ def start_log_listener(manager: SyncManager, log_level: int) -> QueueListener:
         `QueueListener` which can be used to access the log queue and to stop the listener
         thread
 
+    Note:
+        For multiprocessing, filtering is done at the handler level (not logger level).
+        Worker processes use `start_queue_logger` which sets LOGGER to NOTSET, allowing
+        all messages to be sent to the queue. The RichHandler on the listener filters
+        messages based on `log_level`.
+
     """
     log_queue = manager.Queue()
     log_listener = QueueListener(log_queue, RichHandler(level=log_level), respect_handler_level=True)
@@ -50,7 +78,14 @@ def start_log_listener(manager: SyncManager, log_level: int) -> QueueListener:
 
 
 def start_queue_logger(queue: LogQueue) -> None:
-    """Configure the default logger for the current process to put log messages in the *queue*."""
+    """
+    Configure the default logger for the current process to put log messages in the *queue*.
+
+    Note:
+        Sets LOGGER level to NOTSET so all messages are sent to the queue regardless of level.
+        Filtering happens on the listener side via the handler's level setting.
+
+    """
     LOGGER.handlers.clear()
     LOGGER.addHandler(QueueHandler(queue))
     LOGGER.setLevel(logging.NOTSET)
