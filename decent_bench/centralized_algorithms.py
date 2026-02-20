@@ -117,7 +117,7 @@ def accelerated_gradient_descent(
 
 def proximal_solver(cost: "Cost", y: Array, rho: float) -> Array:
     """
-    Find the proximal at y using accelerated gradient descent.
+    Find the proximal at y using at most 100 iterations of accelerated gradient descent.
 
     This is the solution to the proximal operator defined as:
 
