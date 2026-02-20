@@ -20,9 +20,8 @@ class BenchmarkResult:
     * `states`: contains the final states of the algorithms after execution, organized by algorithm where
       each algorithm maps to a sequence of network states (one per trial).
 
-    These results can be used for analysis, visualization, and comparison of the algorithms' performance on the
-    benchmark problem. It is especially useful for hyperparameter tuning, algorithm comparison, and understanding
-    the behavior of algorithms under different conditions.
+    These results can be used to compute metrics after the benchmark run using
+    :func:`~decent_bench.benchmark.compute_metrics`.
     """
 
     problem: BenchmarkProblem

@@ -59,7 +59,7 @@ def compute_metrics(
         used to save the computed metrics result. If neither is provided, an error will be raised.
 
         All used table- and plot-metrics will be saved to the checkpoints' metadata if a checkpoint manager is provided,
-        so that they can be displayed later when the metrics result is loaded and passed to the display function.
+        in order to know which metrics were computed and can be displayed later.
 
     """
     logger.start_logger(log_level=log_level)
