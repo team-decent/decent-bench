@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.distributed_algorithms import P2PAlgorithm
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 
@@ -55,11 +55,11 @@ class CheckpointManager:
           This preserves shared object references and ensures consistency between algorithm and network
           states at each checkpoint. The checkpoint data is a dictionary with the following structure:
 
-            - algorithm: :class:`~decent_bench.distributed_algorithms.Algorithm`
+            - algorithm: :class:`~decent_bench.distributed_algorithms.P2PAlgorithm`
             - network: :class:`~decent_bench.networks.Network`
             - iteration: iteration
 
-          where "algorithm" is the :class:`~decent_bench.distributed_algorithms.Algorithm` object with its internal
+          where "algorithm" is the :class:`~decent_bench.distributed_algorithms.P2PAlgorithm` object with its internal
           state at the checkpoint, "network" is the :class:`~decent_bench.networks.Network` object with agent states
           at the checkpoint and "iteration" is the iteration number of the checkpoint.
         - **progress.json**: Tracks the last completed iteration within a trial.
@@ -131,7 +131,7 @@ class CheckpointManager:
 
     def initialize(
         self,
-        algorithms: list[Algorithm],
+        algorithms: list[P2PAlgorithm],
         network: Network,
         problem: BenchmarkProblem,
         n_trials: int,
@@ -226,7 +226,7 @@ class CheckpointManager:
             ret: Network = pickle.load(f)  # noqa: S301
         return ret
 
-    def load_initial_algorithms(self) -> list[Algorithm]:
+    def load_initial_algorithms(self) -> list[P2PAlgorithm]:
         """
         Load initial algorithm states from checkpoint.
 
@@ -236,7 +236,7 @@ class CheckpointManager:
         """
         initial_path = self.checkpoint_dir / "initial_algorithms.pkl"
         with initial_path.open("rb") as f:
-            ret: list[Algorithm] = pickle.load(f)  # noqa: S301
+            ret: list[P2PAlgorithm] = pickle.load(f)  # noqa: S301
         return ret
 
     def load_benchmark_problem(self) -> BenchmarkProblem:
@@ -282,7 +282,7 @@ class CheckpointManager:
         alg_idx: int,
         trial: int,
         iteration: int,
-        algorithm: Algorithm,
+        algorithm: P2PAlgorithm,
         network: Network,
     ) -> Path:
         """
@@ -323,7 +323,7 @@ class CheckpointManager:
         self._cleanup_old_checkpoints(alg_idx, trial)
         return checkpoint_path
 
-    def load_checkpoint(self, alg_idx: int, trial: int) -> tuple[Algorithm, Network, int] | None:
+    def load_checkpoint(self, alg_idx: int, trial: int) -> tuple[P2PAlgorithm, Network, int] | None:
         """
         Load the latest checkpoint for a specific algorithm trial.
 
@@ -352,7 +352,7 @@ class CheckpointManager:
         with checkpoint_path.open("rb") as f:
             checkpoint_data = pickle.load(f)  # noqa: S301
 
-        algorithm: Algorithm = checkpoint_data["algorithm"]
+        algorithm: P2PAlgorithm = checkpoint_data["algorithm"]
         network: Network = checkpoint_data["network"]
 
         LOGGER.debug(f"Loaded checkpoint: alg={alg_idx}, trial={trial}, iter={last_iteration}")
@@ -363,7 +363,7 @@ class CheckpointManager:
         alg_idx: int,
         trial: int,
         iteration: int,
-        algorithm: Algorithm,
+        algorithm: P2PAlgorithm,
         network: Network,
     ) -> Path:
         """
@@ -428,7 +428,7 @@ class CheckpointManager:
         trial_dir = self._get_trial_dir(alg_idx, trial)
         return (trial_dir / "complete.json").exists()
 
-    def load_trial_result(self, alg_idx: int, trial: int) -> tuple[Algorithm, Network]:
+    def load_trial_result(self, alg_idx: int, trial: int) -> tuple[P2PAlgorithm, Network]:
         """
         Load final result of a completed trial.
 
@@ -450,7 +450,7 @@ class CheckpointManager:
         with final_path.open("rb") as f:
             checkpoint_data = pickle.load(f)  # noqa: S301
 
-        alg: Algorithm = checkpoint_data["algorithm"]
+        alg: P2PAlgorithm = checkpoint_data["algorithm"]
         network: Network = checkpoint_data["network"]
         return alg, network
 
@@ -528,7 +528,7 @@ class CheckpointManager:
             pickle.dump(network, f)
         LOGGER.debug(f"Saved initial network to {initial_path}")
 
-    def _save_initial_algorithms(self, algorithms: list[Algorithm]) -> None:
+    def _save_initial_algorithms(self, algorithms: list[P2PAlgorithm]) -> None:
         """Save initial algorithm states before any trials run."""
         initial_path = self.checkpoint_dir / "initial_algorithms.pkl"
         with initial_path.open("wb") as f:

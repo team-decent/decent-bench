@@ -1,10 +1,15 @@
 import random
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.utils.array import Array
+
+if TYPE_CHECKING:
+    from decent_bench.agents import Agent
 
 
 class AgentActivationScheme(ABC):
@@ -36,6 +41,56 @@ class UniformActivationRate(AgentActivationScheme):
 
     def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
         return random.random() < self.activation_probability
+
+
+class ClientSelectionScheme(ABC):
+    """Scheme defining how to select a subset of available clients."""
+
+    @abstractmethod
+    def select(self, clients: Sequence["Agent"], iteration: int) -> list["Agent"]:
+        """
+        Select a subset of available clients.
+
+        Args:
+            clients: available clients
+            iteration: current iteration of algorithm execution
+
+        """
+
+
+class UniformClientSelection(ClientSelectionScheme):
+    """Uniformly sample clients without replacement."""
+
+    def __init__(
+        self,
+        *,
+        clients_per_round: int | None = None,
+        client_fraction: float | None = None,
+        seed: int | None = None,
+    ) -> None:
+        if clients_per_round is None and client_fraction is None:
+            raise ValueError("Provide clients_per_round or client_fraction")
+        if clients_per_round is not None and client_fraction is not None:
+            raise ValueError("Provide only one of clients_per_round or client_fraction")
+        if clients_per_round is not None and clients_per_round <= 0:
+            raise ValueError("clients_per_round must be positive")
+        if client_fraction is not None and not (0 < client_fraction <= 1):
+            raise ValueError("client_fraction must be in (0, 1]")
+        self.clients_per_round = clients_per_round
+        self.client_fraction = client_fraction
+        self._rng = random.Random(seed)
+
+    def select(self, clients: Sequence["Agent"], iteration: int) -> list["Agent"]:  # noqa: D102, ARG002
+        if not clients:
+            return []
+        if self.clients_per_round is not None:
+            k = min(self.clients_per_round, len(clients))
+        else:
+            k = max(1, int(self.client_fraction * len(clients)))  # type: ignore[operator]
+            k = min(k, len(clients))
+        if k >= len(clients):
+            return list(clients)
+        return self._rng.sample(list(clients), k)
 
 
 class CompressionScheme(ABC):

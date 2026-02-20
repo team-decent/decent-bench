@@ -15,7 +15,7 @@ from rich.status import Status
 
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.distributed_algorithms import P2PAlgorithm
 from decent_bench.metrics import ComputationalCost, Metric, create_plots, create_tables
 from decent_bench.metrics import metric_collection as mc
 from decent_bench.networks import Network, P2PNetwork, create_distributed_network
@@ -221,7 +221,7 @@ def resume_benchmark(  # noqa: PLR0912
 
 
 def benchmark(
-    algorithms: list[Algorithm],
+    algorithms: list[P2PAlgorithm],
     benchmark_problem: BenchmarkProblem,
     plot_metrics: list[Metric] | list[list[Metric]] = mc.DEFAULT_PLOT_METRICS,
     table_metrics: list[Metric] = mc.DEFAULT_TABLE_METRICS,
@@ -353,7 +353,7 @@ def benchmark(
 
 
 def _benchmark(
-    algorithms: list[Algorithm],
+    algorithms: list[P2PAlgorithm],
     benchmark_problem: BenchmarkProblem,
     nw_init_state: Network,
     log_listener: QueueListener,
@@ -459,7 +459,7 @@ def _benchmark(
         checkpoint_manager,
     )
     LOGGER.info("All trials complete")
-    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
+    resulting_agent_states: dict[P2PAlgorithm, list[list[AgentMetricsView]]] = {}
     for alg, networks in resulting_nw_states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
     create_tables(
@@ -506,7 +506,7 @@ def _init_logging_and_multiprocessing(
 
 
 def _run_trials(  # noqa: PLR0917
-    algorithms: list[Algorithm],
+    algorithms: list[P2PAlgorithm],
     n_trials: int,
     nw_init_state: Network,
     progress_bar_ctrl: ProgressBarController,
@@ -514,14 +514,14 @@ def _run_trials(  # noqa: PLR0917
     max_processes: int | None,
     mp_context: BaseContext | None = None,
     checkpoint_manager: CheckpointManager | None = None,
-) -> dict[Algorithm, list[Network]]:
-    results: dict[Algorithm, list[Network]] = defaultdict(list)
+) -> dict[P2PAlgorithm, list[Network]]:
+    results: dict[P2PAlgorithm, list[Network]] = defaultdict(list)
     progress_bar_handle = progress_bar_ctrl.get_handle()
 
     # Filter out completed trials if checkpoint manager is provided, and load their results, otherwise run all trials
     # Used when resuming from a previous benchmark run, so that only incomplete trials are run and completed trial
     # results are loaded from the checkpoint directory
-    to_run: dict[Algorithm, list[int]] = defaultdict(list)
+    to_run: dict[P2PAlgorithm, list[int]] = defaultdict(list)
     if checkpoint_manager is not None:
         for alg_idx, alg in enumerate(algorithms):
             completed_trials = checkpoint_manager.get_completed_trials(alg_idx, n_trials)
@@ -583,7 +583,7 @@ def _run_trials(  # noqa: PLR0917
 
 
 def _run_trial(  # noqa: PLR0917
-    algorithm: Algorithm,
+    algorithm: P2PAlgorithm,
     nw_init_state: Network,
     progress_bar_handle: "ProgressBarHandle",
     trial: int,

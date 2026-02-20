@@ -33,11 +33,11 @@ class LogisticRegressionCost(EmpiricalRiskCost):
     :math:`\mathbf{b} \in \mathbb{R}^{m}`, the logistic regression cost function is defined as:
 
     .. math:: f(\mathbf{x}) =
-        -\frac{1}{m} \left[ \mathbf{b}^T \log( \sigma(\mathbf{Ax}) )
+        -\frac{1}{m}\left[ \mathbf{b}^T \log( \sigma(\mathbf{Ax}) )
         + ( \mathbf{1} - \mathbf{b} )^T
             \log( 1 - \sigma(\mathbf{Ax}) ) \right]
 
-        = -\frac{1}{m} \sum_{i = 1}^m \left[ b_i \log( \sigma(A_i x) )
+        = -\frac{1}{m}\sum_{i = 1}^m \left[ b_i \log( \sigma(A_i x) )
         + (1 - b_i) \log( 1 - \sigma(A_i x) ) \right]
 
     where :math:`\sigma(z) = \frac{1}{1 + e^{-z}}` is the sigmoid function, :math:`A_i` and :math:`b_i` are the i-th
@@ -185,7 +185,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         If no batching is used, this is:
 
         .. math::
-            - \frac{1}{m} \left[ \mathbf{b}^T \log( \sigma(\mathbf{Ax}) )
+            -\frac{1}{m}\left[ \mathbf{b}^T \log( \sigma(\mathbf{Ax}) )
             + ( \mathbf{1} - \mathbf{b} )^T
                 \log( 1 - \sigma(\mathbf{Ax}) ) \right]
 
@@ -229,7 +229,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         If no batching is used, this is:
 
         .. math::
-            \frac{1}{m} \mathbf{A}^T (\sigma(\mathbf{Ax}) - \mathbf{b})
+            \frac{1}{m}\mathbf{A}^T (\sigma(\mathbf{Ax}) - \mathbf{b})
 
         If indices is "batch", a random batch :math:`\mathcal{B}` is drawn with :attr:`batch_size` samples.
 
@@ -278,7 +278,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         If no batching is used, this is:
 
         .. math::
-            \frac{1}{m} \mathbf{A}^T \mathbf{DA}
+            \frac{1}{m}\mathbf{A}^T \mathbf{DA}
 
         where :math:`\sigma` is the sigmoid function and :math:`\mathbf{D}` is a diagonal matrix such that
         :math:`\mathbf{D}_i = \sigma(\mathbf{Ax}_i) (1-\sigma(\mathbf{Ax}_i))`

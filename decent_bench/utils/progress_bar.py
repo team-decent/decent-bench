@@ -18,7 +18,7 @@ from rich.progress import (
 from rich.table import Column, Table
 from rich.text import Text
 
-from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.distributed_algorithms import P2PAlgorithm
 
 if TYPE_CHECKING:
     from rich.progress import Task
@@ -130,7 +130,7 @@ class ProgressBarHandle:
     _progress_bar_ids: dict[Any, Any]
     _progress_step: int | None
 
-    def start_progress_bar(self, algorithm: Algorithm, trial: int, initial_progress: int) -> None:
+    def start_progress_bar(self, algorithm: P2PAlgorithm, trial: int, initial_progress: int) -> None:
         """
         Start the clock of *algorithm*'s progress bar without incrementing it.
 
@@ -147,7 +147,7 @@ class ProgressBarHandle:
             )
         )
 
-    def advance_progress_bar(self, algorithm: Algorithm, iteration: int) -> None:
+    def advance_progress_bar(self, algorithm: P2PAlgorithm, iteration: int) -> None:
         """Advance *algorithm*'s progress bar by an amount (units)."""
         if self._progress_step is None:
             if (iteration + 1) < algorithm.iterations:
@@ -182,7 +182,7 @@ class ProgressBarController:
     def __init__(  # noqa: PLR0917
         self,
         manager: SyncManager,
-        algorithms: list[Algorithm],
+        algorithms: list[P2PAlgorithm],
         n_trials: int,
         progress_step: int | None,
         show_speed: bool = False,
@@ -229,7 +229,7 @@ class ProgressBarController:
             _progress_step=self.progress_step,
         )
 
-    def mark_one_trial_as_complete(self, algorithm: Algorithm, trial: int) -> None:
+    def mark_one_trial_as_complete(self, algorithm: P2PAlgorithm, trial: int) -> None:
         """Mark a trial of *algorithm* as complete in the progress bar."""
         progress_bar_id = self._progress_bar_ids[algorithm]
         increment = 1 if self.progress_step is None else self.steps_per_trial[algorithm]

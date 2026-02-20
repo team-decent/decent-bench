@@ -25,7 +25,7 @@ Benchmark algorithms on a regression problem without any communication constrain
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
@@ -63,7 +63,7 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
         regret = Regret([utils.single], x_log=False, y_log=True)
         gradient_calls = GradientCalls([min, np.average, max, sum])
         benchmark.benchmark(
-            algorithms=[DGD(iterations=1000, step_size=0.001), ADMM(iterations=1000, rho=10, alpha=0.3)],
+            algorithms=[DGD(iterations=1000, step_size=0.01), ADMM(iterations=1000, rho=10, alpha=0.3)],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
             table_metrics=[regret, gradient_calls],
             plot_metrics=[regret],
@@ -112,8 +112,8 @@ This also speeds up metric calulation and plotting, which can be significant for
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
-                ED(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
+                ED(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=problem,
@@ -150,8 +150,8 @@ Change the settings of an already created benchmark problem, for example, the ne
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
-                ED(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
+                ED(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=problem,
@@ -206,8 +206,8 @@ Create a custom benchmark problem using existing resources.
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
-                ED(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
+                ED(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=problem,
@@ -264,7 +264,7 @@ corresponding abstracts.
 
     if __name__ == "__main__":
         benchmark.benchmark(
-            algorithms=[DGD(iterations=1000, step_size=0.001), SimpleGT(iterations=1000, step_size=0.001)],
+            algorithms=[DGD(iterations=1000, step_size=0.01), SimpleGT(iterations=1000, step_size=0.01)],
             benchmark_problem=problem,
         )
 
@@ -454,7 +454,7 @@ Algorithms
 ----------
 Create a new algorithm to benchmark against existing ones.
 
-When implementing a custom algorithm by subclassing :class:`~decent_bench.distributed_algorithms.Algorithm`, you need to understand the following methods:
+When implementing a custom algorithm by subclassing :class:`~decent_bench.distributed_algorithms.DecAlgorithm`, you need to understand the following methods:
 
 - **initialize(network)**: Called once before the algorithm starts. Use this to set up initial values for agents' primal variables (:attr:`Agent.x <decent_bench.agents.Agent.x>`), auxiliary variables (:attr:`Agent.aux_vars <decent_bench.agents.Agent.aux_vars>`), and received messages (:attr:`Agent.messages <decent_bench.agents.Agent.messages>`). **Implementation required.**
     If you want the agents' primal variable to be a customizable parameter to the algorithm, consider using a field like ``x0: Array | None = None`` in your algorithm class.
@@ -466,7 +466,7 @@ When implementing a custom algorithm by subclassing :class:`~decent_bench.distri
 
 - **finalize(network)**: Called once after all iterations complete. Use this for cleanup operations like clearing auxiliary variables to free memory. **Implementation optional** - the default implementation clears all auxiliary variables.
 
-- **run(network)**: Orchestrates the full algorithm execution by calling :meth:`initialize <decent_bench.distributed_algorithms.Algorithm.initialize>`, then :meth:`step <decent_bench.distributed_algorithms.Algorithm.step>` for each iteration, and finally :meth:`finalize <decent_bench.distributed_algorithms.Algorithm.finalize>`. **You should NOT implement this** - it is already provided by the base :class:`~decent_bench.distributed_algorithms.Algorithm` class.
+- **run(network)**: Orchestrates the full algorithm execution by calling :meth:`initialize <decent_bench.distributed_algorithms.DecAlgorithm.initialize>`, then :meth:`step <decent_bench.distributed_algorithms.DecAlgorithm.step>` for each iteration, and finally :meth:`finalize <decent_bench.distributed_algorithms.DecAlgorithm.finalize>`. **You should NOT implement this** - it is already provided by the base :class:`~decent_bench.distributed_algorithms.DecAlgorithm` class.
 
 **Note**: In order for metrics to work, use :attr:`Agent.x <decent_bench.agents.Agent.x>` to update the local primal
 variable **once** every iteration. If you need to perform multiple updates within an iteration, consider accumulating them and applying a single update at the end of the iteration. 
@@ -482,11 +482,11 @@ In :class:`~decent_bench.networks.FedNetwork`, :meth:`~decent_bench.networks.Net
     import decent_bench.utils.interoperability as iop
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import ADMM, DGD, Algorithm
+    from decent_bench.distributed_algorithms import ADMM, DGD, P2PAlgorithm
     from decent_bench.networks import P2PNetwork
     from decent_bench.utils.array import Array
 
-    class MyNewAlgorithm(Algorithm):
+    class MyNewAlgorithm(P2PAlgorithm):
         step_size: float
         x0: Array | None = None
         iterations: int = 100
@@ -529,8 +529,8 @@ In :class:`~decent_bench.networks.FedNetwork`, :meth:`~decent_bench.networks.Net
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                MyNewAlgorithm(iterations=1000, step_size=0.001),
-                DGD(iterations=1000, step_size=0.001),
+                MyNewAlgorithm(iterations=1000, step_size=0.01),
+                DGD(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
@@ -582,7 +582,7 @@ Create your own metrics to tabulate and/or plot.
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),

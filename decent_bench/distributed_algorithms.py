@@ -1,27 +1,28 @@
+import random
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
-from decent_bench.networks import P2PNetwork
+from decent_bench.costs import EmpiricalRiskCost
+from decent_bench.networks import FedNetwork, Network, P2PNetwork
+from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
+from decent_bench.utils.types import BatchingMode, BatchSize, ClientWeights, ResolvedBatchSize
 
 if TYPE_CHECKING:
+    from decent_bench.agents import Agent
     from decent_bench.utils.array import Array
 
 
-class Algorithm(ABC):
-    """
-    Decentralized algorithm.
-
-    Agents collaborate to solve an optimization problem using peer-to-peer communication.
-    """
+class DecAlgorithm[NetworkT: Network](ABC):
+    """Base class for decentralized algorithms."""
 
     @property
     @abstractmethod
     def iterations(self) -> int:
-        """Number of iterations to run the algorithm for."""
+        """Number of iterations or rounds to run the algorithm for."""
 
     @iterations.setter
     @abstractmethod
@@ -34,47 +35,56 @@ class Algorithm(ABC):
         """Name of the algorithm."""
 
     @abstractmethod
-    def initialize(self, network: P2PNetwork) -> None:
+    def initialize(self, network: NetworkT) -> None:
         """
         Initialize the algorithm.
 
         Args:
-            network: provides agents, neighbors etc.
+            network: provides the agents and topology for this algorithm.
 
         """
 
     @abstractmethod
-    def step(self, network: P2PNetwork, iteration: int) -> None:
+    def step(self, network: NetworkT, iteration: int) -> None:
         """
         Perform one iteration of the algorithm.
 
         Args:
-            network: provides agents, neighbors etc.
-            iteration: current iteration number
+            network: provides the agents and topology for this algorithm.
+            iteration: current iteration number.
 
         """
 
-    def finalize(self, network: P2PNetwork) -> None:
+    @abstractmethod
+    def _finalize_agents(self, network: NetworkT) -> Iterable["Agent"]:
+        """
+        Return the agents whose auxiliary variables should be cleared.
+
+        Args:
+            network: provides the agents and topology for this algorithm.
+
+        """
+
+    def finalize(self, network: NetworkT) -> None:
         """
         Finalize the algorithm.
 
         Note:
-            Override method as needed.
-            Does not need to be implemented if no finalization is required.
-            By default it is used to clean up auxiliary variables to free memory.
+            Override :meth:`~decent_bench.distributed_algorithms.DecAlgorithm._finalize_agents` to control which
+            agents are finalized.
 
         Args:
-            network: provides agents, neighbors etc.
+            network: provides the agents and topology for this algorithm.
 
         """
-        for i in network.agents():
-            if i.aux_vars is not None:
-                i.aux_vars.clear()
+        for agent in self._finalize_agents(network):
+            if agent.aux_vars is not None:
+                agent.aux_vars.clear()
 
     @final
     def run(
         self,
-        network: P2PNetwork,
+        network: NetworkT,
         start_iteration: int = 0,
         progress_callback: Callable[[int], None] | None = None,
         skip_finalize: bool = False,
@@ -86,7 +96,7 @@ class Algorithm(ABC):
         and finally :meth:`finalize`.
 
         Args:
-            network: provides agents, neighbors etc.
+            network: provides the agents and topology for this algorithm.
             start_iteration: iteration number to start from, used when resuming from a checkpoint. If greater than 0,
                 :meth:`initialize` will be skipped.
             progress_callback: optional callback to report progress after each iteration.
@@ -118,8 +128,293 @@ class Algorithm(ABC):
             self.finalize(network)
 
 
+class P2PAlgorithm(DecAlgorithm[P2PNetwork]):
+    """Distributed algorithm - agents collaborate to solve an optimization problem using peer-to-peer communication."""
+
+    def _finalize_agents(self, network: P2PNetwork) -> Iterable["Agent"]:
+        return network.agents()
+
+
+class FedAlgorithm(DecAlgorithm[FedNetwork]):
+    """Federated algorithm - clients collaborate via a central server."""
+
+    def _finalize_agents(self, network: FedNetwork) -> Iterable["Agent"]:
+        return [network.server, *network.clients]
+
+    @staticmethod
+    def _select_clients(
+        clients: Sequence["Agent"],
+        iteration: int,
+        selection_scheme: ClientSelectionScheme | None,
+    ) -> list["Agent"]:
+        if selection_scheme is None:
+            return list(clients)
+        return selection_scheme.select(clients, iteration)
+
+    @staticmethod
+    def _infer_client_weight(client: "Agent") -> float:
+        cost = client.cost
+        if hasattr(cost, "A"):
+            try:
+                size = iop.shape(cost.A)[0]
+            except Exception:
+                size = None
+            if size is not None:
+                return float(size)
+        if hasattr(cost, "b"):
+            try:
+                size = iop.shape(cost.b)[0]
+            except Exception:
+                size = None
+            if size is not None:
+                return float(size)
+        if hasattr(cost, "n_samples"):
+            n_samples = cost.n_samples
+            if n_samples is not None:
+                return float(n_samples)
+        raise ValueError(
+            "Cannot infer client data size. Provide client_weights to the algorithm or add a size "
+            "attribute to the cost."
+        )
+
+    @classmethod
+    def _weights_for_clients(
+        cls,
+        clients: Sequence["Agent"],
+        client_weights: ClientWeights | None,
+    ) -> list[float]:
+        if client_weights is None:
+            weights = [cls._infer_client_weight(client) for client in clients]
+        elif isinstance(client_weights, dict):
+            weights = []
+            for client in clients:
+                if client.id not in client_weights:
+                    raise ValueError(f"Missing weight for client id {client.id}")
+                weights.append(float(client_weights[client.id]))
+        else:
+            max_id = max(client.id for client in clients)
+            if len(client_weights) <= max_id:
+                raise ValueError("client_weights sequence must be indexed by client id")
+            weights = [float(client_weights[client.id]) for client in clients]
+        if any(weight < 0 for weight in weights):
+            raise ValueError("Client weights must be non-negative")
+        return weights
+
+    @staticmethod
+    def _require_empirical_risk(client: "Agent") -> EmpiricalRiskCost:
+        if not isinstance(client.cost, EmpiricalRiskCost):
+            raise TypeError(
+                'Mini-batch federated algorithms require EmpiricalRiskCost; set batch_size="all" for generic costs.'
+            )
+        return client.cost
+
+
 @dataclass(eq=False)
-class DGD(Algorithm):
+class FedAvg(FedAlgorithm):
+    r"""
+    Federated Averaging (FedAvg) with local SGD epochs.
+
+    .. math::
+        \mathbf{x}_{i, k}^{(t+1)} = \mathbf{x}_{i, k}^{(t)} - \eta \nabla f_i(\mathbf{x}_{i, k}^{(t)})
+
+    .. math::
+        \mathbf{x}_{k+1} = \frac{1}{|S_k|} \sum_{i \in S_k} \mathbf{x}_{i, k}^{(E)}
+
+    where :math:`E` is the number of local epochs per round, :math:`\eta` is the step size, and :math:`S_k` is the set
+    of participating clients at round :math:`k`. The aggregation uses client weights, defaulting to data-size weights
+    when ``client_weights`` is not provided. Client selection (subsampling) defaults to uniform sampling with
+    fraction 1.0 (all active clients) and can be customized via ``selection_scheme``. Local updates use stochastic
+    gradients computed over all minibatches of size ``batch_size`` per epoch. Mini-batching requires each client cost
+    to be an :class:`~decent_bench.costs.EmpiricalRiskCost`. Set ``batch_size="all"`` for full-batch gradients or
+    ``batch_size="cost"`` to use each client's configured batch size.
+    """
+
+    # C=0.1; batch size= inf/10/50 (dataset sizes are bigger; normally 1/10 of the total dataset).
+    # E= 5/20 (num local epochs).
+    step_size: float
+    local_epochs: int = 1
+    batch_size: BatchSize = "cost"
+    batching: BatchingMode = "epoch"
+    sgd_seed: int | None = None
+    client_weights: ClientWeights | None = None
+    selection_scheme: ClientSelectionScheme | None = field(
+        default_factory=lambda: UniformClientSelection(client_fraction=1.0)
+    )
+    x0: "Array | None" = None
+    _sgd_rngs: dict[int, random.Random] | None = field(init=False, repr=False, default=None)
+    iterations: int = 100
+    name: str = "FedAvg"
+
+    def initialize(self, network: FedNetwork) -> None:  # noqa: D102
+        self._validate_hyperparams()
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        server = network.server
+        clients = network.clients
+        self._validate_batching(clients)
+        self._setup_rngs(clients)
+        server.initialize(x=self.x0, received_msgs=dict.fromkeys(clients, self.x0))
+        for client in clients:
+            client.initialize(x=self.x0, received_msgs={server: self.x0})
+
+    def _validate_hyperparams(self) -> None:
+        if self.step_size <= 0:
+            raise ValueError("step_size must be positive")
+        if self.local_epochs <= 0:
+            raise ValueError("local_epochs must be positive")
+        if isinstance(self.batch_size, int) and self.batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+
+    def _validate_batching(self, clients: Sequence["Agent"]) -> None:
+        if self.batch_size is None:
+            raise ValueError('batch_size cannot be None; use "all" or "cost" for full-batch updates.')
+        if isinstance(self.batch_size, int):
+            for client in clients:
+                self._require_empirical_risk(client)
+        if self.batching not in {"epoch", "random"}:
+            raise ValueError("batching must be 'epoch' or 'random'")
+        if self.batch_size == "cost":
+            for client in clients:
+                if isinstance(client.cost, EmpiricalRiskCost) and client.cost.batch_size <= 0:
+                    raise ValueError("EmpiricalRiskCost.batch_size must be positive")
+
+    def _setup_rngs(self, clients: Sequence["Agent"]) -> None:
+        if self.sgd_seed is not None:
+            self._sgd_rngs = {client.id: random.Random(self.sgd_seed + client.id) for client in clients}
+        else:
+            self._sgd_rngs = None
+
+    def _resolve_batching(self, client: "Agent") -> tuple[ResolvedBatchSize, EmpiricalRiskCost | None]:
+        # Batching policy:
+        # - "cost": defer to EmpiricalRiskCost.batch_size; non-empirical costs fall back to full-batch.
+        # - "all": always full-batch.
+        # - int: explicit mini-batch size (requires EmpiricalRiskCost).
+        if self.batch_size == "cost":
+            if isinstance(client.cost, EmpiricalRiskCost):
+                return client.cost.batch_size, client.cost
+            return "all", None
+
+        if self.batch_size == "all":
+            if isinstance(client.cost, EmpiricalRiskCost):
+                return "all", client.cost
+            return "all", None
+
+        return self.batch_size, self._require_empirical_risk(client)
+
+    def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
+        server = network.server
+        selected_clients = self._selected_clients_for_round(network, iteration)
+        if not selected_clients:
+            return
+
+        self._sync_server_to_clients(network, server, selected_clients)
+        self._run_local_updates(network, server, selected_clients)
+        self._aggregate_updates(network, server, selected_clients)
+
+    def _selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
+        active_clients = network.active_clients(iteration)
+        if not active_clients:
+            return []
+        return self._select_clients(active_clients, iteration, self.selection_scheme)
+
+    def _sync_server_to_clients(
+        self, network: FedNetwork, server: "Agent", selected_clients: Sequence["Agent"]
+    ) -> None:
+        network.send(sender=server, receiver=selected_clients, msg=server.x)
+        for client in selected_clients:
+            network.receive(receiver=client, sender=server)
+
+    def _run_local_updates(self, network: FedNetwork, server: "Agent", selected_clients: Sequence["Agent"]) -> None:
+        for client in selected_clients:
+            client.x = self._compute_local_update(client, server)
+            network.send(sender=client, receiver=server, msg=client.x)
+
+    def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
+        local_x = iop.copy(client.messages[server])
+        per_client_batch, cost = self._resolve_batching(client)
+        if per_client_batch == "all":
+            return self._full_batch_update(client, cost, local_x)
+        return self._mini_batch_update(client, cost, local_x, per_client_batch)
+
+    def _full_batch_update(self, client: "Agent", cost: EmpiricalRiskCost | None, local_x: "Array") -> "Array":
+        for _ in range(self.local_epochs):
+            grad = cost.gradient(local_x, indices="all") if cost is not None else client.cost.gradient(local_x)
+            local_x -= self.step_size * grad
+        return local_x
+
+    def _mini_batch_update(
+        self,
+        client: "Agent",
+        cost: EmpiricalRiskCost | None,
+        local_x: "Array",
+        per_client_batch: int,
+    ) -> "Array":
+        cost = cost or self._require_empirical_risk(client)
+        n_samples = cost.n_samples
+        if n_samples <= 0:
+            raise ValueError("Client dataset size must be positive")
+        rng = self._client_rng(client)
+        if self.batching == "epoch":
+            return self._epoch_minibatch_update(cost, local_x, per_client_batch, n_samples, rng)
+        return self._random_minibatch_update(cost, local_x, per_client_batch, n_samples, rng)
+
+    def _client_rng(self, client: "Agent") -> random.Random:
+        if self._sgd_rngs is None:
+            return random.Random()
+        return self._sgd_rngs[client.id]
+
+    def _epoch_minibatch_update(
+        self,
+        cost: EmpiricalRiskCost,
+        local_x: "Array",
+        per_client_batch: int,
+        n_samples: int,
+        rng: random.Random,
+    ) -> "Array":
+        for _ in range(self.local_epochs):
+            indices = list(range(n_samples))
+            rng.shuffle(indices)
+            for start in range(0, n_samples, per_client_batch):
+                batch_indices = indices[start : start + per_client_batch]
+                grad = cost.gradient(local_x, indices=batch_indices)
+                local_x -= self.step_size * grad
+        return local_x
+
+    def _random_minibatch_update(
+        self,
+        cost: EmpiricalRiskCost,
+        local_x: "Array",
+        per_client_batch: int,
+        n_samples: int,
+        rng: random.Random,
+    ) -> "Array":
+        n_steps = max(1, n_samples // per_client_batch)
+        use_cost_batch = self.batch_size == "cost"
+        for _ in range(self.local_epochs):
+            for _ in range(n_steps):
+                if use_cost_batch:
+                    grad = cost.gradient(local_x)
+                else:
+                    batch_indices = rng.sample(range(n_samples), per_client_batch)
+                    grad = cost.gradient(local_x, indices=batch_indices)
+                local_x -= self.step_size * grad
+        return local_x
+
+    def _aggregate_updates(self, network: FedNetwork, server: "Agent", selected_clients: Sequence["Agent"]) -> None:
+        network.receive(receiver=server, sender=selected_clients)
+        received_clients = [client for client in selected_clients if client in server.messages]
+        if not received_clients:
+            return
+        updates = [server.messages[client] for client in received_clients]
+        weights = self._weights_for_clients(received_clients, self.client_weights)
+        total_weight = sum(weights)
+        if total_weight <= 0:
+            raise ValueError("Sum of client weights must be positive")
+        weighted_updates = [update * weight for update, weight in zip(updates, weights, strict=True)]
+        server.x = iop.sum(iop.stack(weighted_updates, dim=0), dim=0) / total_weight
+
+
+@dataclass(eq=False)
+class DGD(P2PAlgorithm):
     r"""
     Distributed gradient descent characterized by the update step below.
 
@@ -162,7 +457,7 @@ class DGD(Algorithm):
 
 
 @dataclass(eq=False)
-class ATC(Algorithm):
+class ATC(P2PAlgorithm):
     r"""
     Adapt-Then-Combine (ATC) distributed gradient descent characterized by the update below [r1]_.
 
@@ -224,7 +519,7 @@ AdaptThenCombine = ATC  # alias
 
 
 @dataclass(eq=False)
-class SimpleGT(Algorithm):
+class SimpleGT(P2PAlgorithm):
     r"""
     Gradient tracking algorithm characterized by the update step below.
 
@@ -278,7 +573,7 @@ SimpleGradientTracking = SimpleGT  # Alias
 
 
 @dataclass(eq=False)
-class ED(Algorithm):
+class ED(P2PAlgorithm):
     r"""
     Gradient tracking algorithm characterized by the update step below.
 
@@ -338,7 +633,7 @@ ExactDiffusion = ED  # alias
 
 
 @dataclass(eq=False)
-class AugDGM(Algorithm):
+class AugDGM(P2PAlgorithm):
     r"""
     Aug-DGM [r2]_ or ATC-DIGing [r3]_ gradient tracking algorithm, characterized by the updates below.
 
@@ -425,7 +720,7 @@ ATCDIGing = AugDGM  # alias
 
 
 @dataclass(eq=False)
-class WangElia(Algorithm):
+class WangElia(P2PAlgorithm):
     r"""
     Wang-Elia gradient tracking algorithm characterized by the updates below, see [r4]_ and [r5]_.
 
@@ -507,7 +802,7 @@ class WangElia(Algorithm):
 
 
 @dataclass(eq=False)
-class EXTRA(Algorithm):
+class EXTRA(P2PAlgorithm):
     r"""
     EXTRA [r6]_ gradient tracking algorithm characterized by the update steps below.
 
@@ -589,7 +884,7 @@ class EXTRA(Algorithm):
 
 
 @dataclass(eq=False)
-class ATCTracking(Algorithm):
+class ATCTracking(P2PAlgorithm):
     r"""
     ATC-Tracking [r7]_, [r8]_, [r9]_ gradient tracking algorithm, characterized by the updates below.
 
@@ -682,7 +977,7 @@ ATCT = ATCTracking  # alias
 
 
 @dataclass(eq=False)
-class NIDS(Algorithm):
+class NIDS(P2PAlgorithm):
     r"""
     NIDS [r10]_ gradient tracking algorithm characterized by the update steps below.
 
@@ -755,7 +1050,7 @@ class NIDS(Algorithm):
 
 
 @dataclass(eq=False)
-class ADMM(Algorithm):
+class ADMM(P2PAlgorithm):
     r"""
     Distributed Alternating Direction Method of Multipliers characterized by the update step below.
 
@@ -820,7 +1115,7 @@ class ADMM(Algorithm):
 
 
 @dataclass(eq=False)
-class ATG(Algorithm):
+class ATG(P2PAlgorithm):
     r"""
     ADMM-Tracking Gradient (ATG) [r11]_ characterized by the update steps below.
 
@@ -925,7 +1220,7 @@ ADMMTrackingGradient = ATG  # alias
 
 
 @dataclass(eq=False)
-class DLM(Algorithm):
+class DLM(P2PAlgorithm):
     r"""
     Decentralized Linearized ADMM (DLM) [r12]_ characterized by the update steps below (see also [r13]_).
 
