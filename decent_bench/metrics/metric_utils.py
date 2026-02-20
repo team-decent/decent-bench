@@ -498,9 +498,9 @@ def all_sorted_iterations(agents: Sequence[AgentMetricsView]) -> list[int]:
 
 
 @cache
-def check_same_cost_functions(costs: tuple[costs.Cost]) -> bool:
+def check_same_costs(costs: tuple[costs.Cost]) -> bool:
     """
-    Check if all costs in *costs* have the same function.
+    Check if all costs in *costs* are the same.
 
     This is useful for metrics that can be computed more efficiently if all agents have the same cost function.
 
@@ -508,10 +508,10 @@ def check_same_cost_functions(costs: tuple[costs.Cost]) -> bool:
         costs: sequence of costs to check
 
     Returns:
-        True if all costs have the same function, False otherwise
+        True if all costs are the same, False otherwise
 
     """
     if len(costs) == 0:
         return True
-    first_function = costs[0]
-    return all(cost == first_function for cost in costs)
+    first_cost = costs[0]
+    return all(cost == first_cost for cost in costs)

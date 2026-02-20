@@ -70,6 +70,7 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
+    from decent_bench.metrics import ComputationalCost
     from decent_bench.metrics.metric_collection import GradientCalls, Regret
     from decent_bench.metrics.runtime_collection import RuntimeLoss, RuntimeRegret
 
@@ -106,7 +107,7 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
             table_fmt="latex",
             plot_grid=False,
             individual_plots=False,
-            computational_cost=pm.ComputationalCost(proximal=2.0, communication=0.1),
+            computational_cost=ComputationalCost(proximal=2.0, communication=0.1),
             compare_iterations_and_computational_cost=True,
             save_path="results", # Save tables and plots to the "results" directory
         )
@@ -116,7 +117,7 @@ If you set ``individual_plots = True`` then each plot metric will be displayed i
 otherwise groups of up to 3 plot metrics will be displayed together in the same figure as subplots.
 If you set ``compare_iterations_and_computational_cost = True``, then an additional column of subplots will be added to each figure comparing iterations and computational cost, 
 which can be useful to understand the trade-off between faster convergence and higher computational cost for different algorithms.
-If you set ``plot_metrics`` to a list of lists of :class:``~decent_bench.metrics.Metric`` objects (``list[list[Metric]]```), then each inner list will be plotted together in the same figure as subplots,
+If you set ``plot_metrics`` to a list of lists of :class:`~decent_bench.metrics.Metric` objects (`list[list[Metric]]`), then each inner list will be plotted together in the same figure as subplots,
 allowing you to control which metrics are plotted together.
 
 
@@ -360,6 +361,7 @@ where 3. and 4. are true if ``save_path`` is set to the checkpoint manager's res
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
+    from decent_bench.metrics.runtime_collection import RuntimeLoss, RuntimeRegret
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
     if __name__ == "__main__":
@@ -497,6 +499,7 @@ This is useful when you want to modify plot settings, table formatting or :class
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import DGD
+    from decent_bench.utils.checkpoint_manager import CheckpointManager
     import platform
 
     if __name__ == "__main__":
@@ -520,10 +523,8 @@ The new metrics will be saved to the checkpoint directory as described above.
 
 .. code-block:: python
 
-    from decent_bench import benchmark, benchmark_problem
-    from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import DGD
-    import platform
+    from decent_bench import benchmark
+    from decent_bench.utils.checkpoint_manager import CheckpointManager
 
     if __name__ == "__main__":
         checkpoint_manager = CheckpointManager(checkpoint_dir="benchmark_results/my_experiment")
@@ -540,10 +541,8 @@ Similarly, you can load previously computed metrics by setting ``metrics_result`
 
 .. code-block:: python
 
-    from decent_bench import benchmark, benchmark_problem
-    from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import DGD
-    import platform
+    from decent_bench import benchmark
+    from decent_bench.utils.checkpoint_manager import CheckpointManager
 
     if __name__ == "__main__":
         checkpoint_manager = CheckpointManager(checkpoint_dir="benchmark_results/my_experiment")

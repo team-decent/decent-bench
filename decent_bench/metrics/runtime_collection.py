@@ -60,7 +60,7 @@ class RuntimeRegret(RuntimeMetric):
 
         agent_cost = sum(agent.cost.function(agent.x) for agent in agents) / len(agents)
         # If all agents have the same cost function, we can compute regret using the optimal value
-        if utils.check_same_cost_functions(tuple(agent.cost for agent in agents)):
+        if utils.check_same_costs(tuple(agent.cost for agent in agents)):
             optimal_cost = agents[0].cost.function(problem.x_optimal)
         else:
             optimal_cost = sum(agent.cost.function(problem.x_optimal) for agent in agents) / len(agents)

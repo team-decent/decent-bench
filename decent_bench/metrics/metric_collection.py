@@ -1,4 +1,4 @@
-"""Collection of pre-defined runtime metrics."""
+"""Collection of pre-defined table and plot metrics."""
 
 from collections.abc import Sequence
 

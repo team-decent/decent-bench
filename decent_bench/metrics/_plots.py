@@ -53,7 +53,7 @@ def display_plots(
     compare_iterations_and_computational_cost: bool = False,
     individual_plots: bool = False,
     plot_grid: bool = True,
-    plot_format: Literal["png", "pdf", "svg"] = "pdf",
+    plot_format: Literal["png", "pdf", "svg"] = "png",
     plot_path: Path | None = None,
 ) -> None:
     """
@@ -73,7 +73,7 @@ def display_plots(
             metric vs iterations. Only used if ``computational_cost`` is provided.
         individual_plots: whether to create individual plots for each metric instead of subplots.
         plot_grid: whether to show grid lines on the plots.
-        plot_format: format to save plots in, defaults to ``pdf``. Can be ``png``, ``pdf``, or ``svg``.
+        plot_format: format to save plots in, defaults to ``png``. Can be ``png``, ``pdf``, or ``svg``.
         plot_path: optional directory path to save the generated plots as image files.
             Will be saved as "plot.png" or "plot_fig1.png", "plot_fig2.png", etc. if multiple figures.
             If not provided, the plots will only be displayed.
@@ -273,7 +273,7 @@ def _save_and_show_figures(
     two_columns: bool,
     *,
     plot_path: Path | None,
-    plot_format: Literal["png", "pdf", "svg"] = "pdf",
+    plot_format: Literal["png", "pdf", "svg"],
 ) -> None:
     """Add legends, save figures to files, and display them."""
     for fig_idx, (fig, metric_subplots) in enumerate(figures_to_show):

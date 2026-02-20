@@ -56,7 +56,7 @@ def display_metrics(
         save_path: optional directory path to save the tables and plots to. Tables will be saved as ``table.txt`` and
             ``table.tex`` while plots will be saved as ``plot_{#}.{format}`` in the specified directory.
             If not provided, the tables and plots are not saved to files.
-        plot_format: format to save plots in, defaults to ``pdf``. Can be ``png``, ``pdf``, or ``svg``.
+        plot_format: format to save plots in, defaults to ``png``. Can be ``png``, ``pdf``, or ``svg``.
         log_level: minimum level to log, e.g. :data:`logging.INFO`
 
     Raises:

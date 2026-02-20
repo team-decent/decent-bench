@@ -1,4 +1,5 @@
 import contextlib
+import queue
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -11,7 +12,6 @@ from decent_bench.metrics._plots import _get_marker_style_color
 from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:
-    import queue
     from multiprocessing.context import DefaultContext, Process, SpawnContext, SpawnProcess
 
 
@@ -56,7 +56,7 @@ class RuntimeMetricPlotter:
         self._process = self._context.Process(target=self.run, daemon=True)
         self._process.start()
 
-    def run(self) -> None:
+    def run(self) -> None:  # noqa: PLR0912
         """Process loop, continuously process queue updates."""
         # Set matplotlib to use a backend that works in a separate process
         plt.ion()
@@ -91,7 +91,7 @@ class RuntimeMetricPlotter:
                                 self._draw_modified_figures()
                                 plt.pause(0.001)
                                 processed = 0
-                        except Exception:
+                        except queue.Empty:
                             # Queue is empty
                             break
 
@@ -99,8 +99,17 @@ class RuntimeMetricPlotter:
                     if processed > 0:
                         self._draw_modified_figures()
                         plt.pause(0.001)
-                except Exception:
+
+                except KeyboardInterrupt:
+                    # Allow graceful shutdown on Ctrl+C
+                    self.shutdown(dont_save=True)
+                    break
+                except queue.Empty:
                     # Timeout or other error - small pause to allow GUI updates
+                    plt.pause(0.01)
+                    continue
+                except Exception as e:
+                    LOGGER.debug(f"Error in RuntimeMetricPlotter: {e}")
                     plt.pause(0.01)
                     continue
         finally:
@@ -190,8 +199,19 @@ class RuntimeMetricPlotter:
         ax.relim()
         ax.autoscale_view()
 
-    def shutdown(self) -> None:
-        """Signal the plotter process to stop and wait for it to finish."""
+    def shutdown(self, dont_save: bool = False) -> None:
+        """
+        Signal the plotter process to stop and wait for it to finish.
+
+        Args:
+            dont_save: If True, do not save plots to files on shutdown even if save paths were provided.
+
+        Note:
+            This method can be called multiple times safely. If the process is already stopped, it will do nothing.
+            If the process is still running, it will send a stop signal and wait for it to finish.
+            If the process does not stop within a reasonable time, it will be forcefully terminated.
+
+        """
         if self._queue is not None:
             with contextlib.suppress(Exception):
                 self._queue.put("STOP")
@@ -199,19 +219,36 @@ class RuntimeMetricPlotter:
             self._process.join(timeout=2.0)
             if self._process.is_alive():
                 self._process.terminate()
-        self._close_all()
+        self._close_all(dont_save=dont_save)
 
     def _process_message(self, data: Any) -> None:  # noqa: ANN401
         """Process a single message from the queue."""
-        # Handle different message types
-        if len(data) == 4 and data[0] == "init":
-            # Initialization message: ("init", metric_id, description)
-            _, metric_id, description, save_path = data
-            self.create_figure(metric_id, description, save_path)
-        elif len(data) == 5:
-            # Data update message: (metric_id, algorithm_name, trial, iteration, value)
-            metric_id, algorithm_name, trial, iteration, value = data
-            self.update(metric_id, algorithm_name, trial, iteration, value)
+        try:
+            if not isinstance(data, (tuple, list)):
+                LOGGER.debug(f"Received invalid message in RuntimeMetricPlotter: {data}")
+                return
+
+            # Handle different message types
+            if len(data) == 4 and data[0] == "init":
+                # Initialization message: ("init", metric_id, description)
+                try:
+                    _, metric_id, description, save_path = data
+                except (TypeError, ValueError):
+                    LOGGER.debug("Ignoring malformed init message: %r", data)
+                    return
+                self.create_figure(metric_id, description, save_path)
+            elif len(data) == 5:
+                # Data update message: (metric_id, algorithm_name, trial, iteration, value)
+                try:
+                    metric_id, algorithm_name, trial, iteration, value = data
+                except (TypeError, ValueError):
+                    LOGGER.debug("Ignoring malformed update message: %r", data)
+                    return
+                self.update(metric_id, algorithm_name, trial, iteration, value)
+            else:
+                LOGGER.debug(f"Received message with unrecognized format in RuntimeMetricPlotter: {data}")
+        except Exception as e:
+            LOGGER.debug(f"Error processing message in RuntimeMetricPlotter: {e}")
 
     def _draw_modified_figures(self) -> None:
         """Redraw all figures that were modified during batch processing."""
@@ -228,9 +265,16 @@ class RuntimeMetricPlotter:
             fig.canvas.flush_events()
         plt.pause(0.01)
 
-    def _close_all(self) -> None:
-        """Close all figure windows."""
-        if len(self._should_save_plots) > 0:
+    def _close_all(self, dont_save: bool = False) -> None:
+        """
+        Close all figure windows.
+
+        Args:
+            dont_save: If True, do not save plots to files even if save paths were provided.
+            This can be used for a quick shutdown without saving when plots are not needed.
+
+        """
+        if len(self._should_save_plots) > 0 and not dont_save:
             self._draw_all_figures()  # Ensure all figures are up to date before saving
 
             for metric_id in self._should_save_plots:

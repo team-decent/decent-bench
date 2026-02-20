@@ -88,6 +88,11 @@ def create_classification_problem(
         noise: if true, messages are distorted by Gaussian noise
         drops: if true, messages have a 50% probability of being dropped
 
+    Note:
+        If cost_cls is :class:`~decent_bench.costs.PyTorchCost`, x_optimal is not computed and set to None.
+        Be aware that metrics that rely on x_optimal (e.g. :class:`~decent_bench.metrics.metric_collection.Regret`)
+        will not be available when using PyTorchCost.
+
     Raises:
         ValueError: if an unsupported cost class is provided
         ImportError: if PyTorchCost is selected but PyTorch is not installed
@@ -194,6 +199,11 @@ def create_regression_problem(
         compression: if true, messages are rounded to 4 significant digits
         noise: if true, messages are distorted by Gaussian noise
         drops: if true, messages have a 50% probability of being dropped
+
+    Note:
+        If cost_cls is :class:`~decent_bench.costs.PyTorchCost`, x_optimal is not computed and set to None.
+        Be aware that metrics that rely on x_optimal (e.g. :class:`~decent_bench.metrics.metric_collection.Regret`)
+        will not be available when using PyTorchCost.
 
     Raises:
         ValueError: if an unsupported cost class is provided
