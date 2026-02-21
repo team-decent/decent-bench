@@ -606,6 +606,38 @@ Supported operations for cost objects:
 - Scalar division: ``cost / scalar``
 - Summation: ``sum(costs)`` (uses ``__radd__``)
 
+Regularization
+~~~~~~~~~~~~~~
+Regularized objectives can be built by composing cost functions with arithmetic. Decent-Bench provides built-in
+regularizers and they can be scaled and added to empirical risk costs:
+
+- :class:`~decent_bench.costs.L1RegularizerCost` for :math:`\|x\|_1`
+- :class:`~decent_bench.costs.L2RegularizerCost` for :math:`\frac{1}{2}\|x\|_2^2`
+- :class:`~decent_bench.costs.FractionalQuadraticRegularizerCost` for
+  :math:`\sum_i \frac{x_i^2}{1 + x_i^2}` (nonconvex)
+
+All regularizers accept and ignore ERM-specific kwargs (e.g., ``indices="batch"``), so batching continues to work
+when you compose them with empirical risk costs.
+
+.. code-block:: python
+
+    from decent_bench.costs import (
+        LogisticRegressionCost,
+        L1RegularizerCost,
+        L2RegularizerCost,
+        FractionalQuadraticRegularizerCost,
+    )
+
+    cost = LogisticRegressionCost(dataset=dataset, batch_size="all")
+
+    lam = 0.1
+    eps = 0.01
+    l1 = lam * L1RegularizerCost(shape=cost.shape)
+    l2 = lam * L2RegularizerCost(shape=cost.shape)
+    fq = eps * FractionalQuadraticRegularizerCost(shape=cost.shape)
+
+    regularized = cost + l1 + l2 + fq
+
 .. code-block:: python
 
     from numpy import float64
