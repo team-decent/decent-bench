@@ -15,13 +15,13 @@ from decent_bench.metrics._metric import Metric
 from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:
-    from decent_bench.benchmark import MetricsResult
+    from decent_bench.benchmark import MetricResult
 
 STATISTICS_ABBR = {"average": "avg", "median": "mdn"}
 
 
 def display_tables(
-    metrics_result: "MetricsResult",
+    metrics_result: "MetricResult",
     table_fmt: Literal["grid", "latex"] = "grid",
     table_path: Path | None = None,
 ) -> None:

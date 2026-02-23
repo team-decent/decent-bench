@@ -20,7 +20,7 @@ from decent_bench.metrics._metric import Metric, X, Y
 from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:
-    from decent_bench.benchmark import MetricsResult
+    from decent_bench.benchmark import MetricResult
 
 X_LABELS = {
     "iterations": "iterations",
@@ -46,7 +46,7 @@ STYLES = ["-", ":", "--", "-.", (5, (10, 3)), (0, (5, 10)), (0, (3, 1, 1, 1))]
 
 
 def display_plots(
-    metrics_result: "MetricsResult",
+    metrics_result: "MetricResult",
     *,
     computational_cost: ComputationalCost | None,
     x_axis_scaling: float = 1e-4,

@@ -7,7 +7,7 @@ from decent_bench.metrics import Metric
 
 
 @dataclass
-class MetricsResult:
+class MetricResult:
     """
     Result of metric computation, containing metrics and computed statistics.
 

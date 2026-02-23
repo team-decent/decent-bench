@@ -19,7 +19,7 @@ Benchmark algorithms on a regression problem without any communication constrain
 Generally benchmark execution involves three steps:
 
 1. Run algorithms on a :class:`~decent_bench.benchmark_problem.BenchmarkProblem` object and get results in a :class:`~decent_bench.benchmark.BenchmarkResult` object.
-2. Compute metrics from the benchmark results, which returns a :class:`~decent_bench.benchmark.MetricsResult` object.
+2. Compute metrics from the benchmark results, which returns a :class:`~decent_bench.benchmark.MetricResult` object.
 3. Display the computed metrics in tables and plots.
 
 .. code-block:: python
@@ -535,7 +535,7 @@ The new metrics will be saved to the checkpoint directory as described above.
         )
 
 
-Loading :class:`~decent_bench.benchmark._metrics_result.MetricsResult` for displaying metrics
+Loading :class:`~decent_bench.benchmark._metrics_result.MetricResult` for displaying metrics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Similarly, you can load previously computed metrics by setting ``metrics_result`` to ``None`` in :func:`~decent_bench.benchmark.display_metrics` and providing the same checkpoint manager.
 

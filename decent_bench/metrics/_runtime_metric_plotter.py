@@ -1,4 +1,5 @@
 import contextlib
+import math
 import queue
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -131,7 +132,7 @@ class RuntimeMetricPlotter:
         if save_path is not None:
             self._should_save_plots[metric_id] = save_path
 
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots()
         ax.set_xlabel("Iteration")
         ax.set_ylabel(description)
         ax.set_title(f"{description} - All Trials")
@@ -155,6 +156,13 @@ class RuntimeMetricPlotter:
 
         """
         if metric_id not in self._figures:
+            return
+
+        if math.isnan(value) or math.isinf(value):
+            LOGGER.warning(
+                f"Received invalid value for metric '{metric_id}' from algorithm "
+                f"'{algorithm_name}' trial {trial} at iteration {iteration}: {value}"
+            )
             return
 
         key = (metric_id, algorithm_name, trial)

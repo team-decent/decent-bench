@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
-from decent_bench.benchmark._metrics_result import MetricsResult
+from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics import (
     Metric,
@@ -26,7 +26,7 @@ def compute_metrics(
     plot_metrics: list[Metric] | list[list[Metric]] = mc.DEFAULT_PLOT_METRICS,
     confidence_level: float = 0.95,
     log_level: int = logging.INFO,
-) -> MetricsResult:
+) -> MetricResult:
     """
     Compute metrics from a benchmark result.
 
@@ -87,7 +87,7 @@ def compute_metrics(
     table_results = compute_tables(resulting_agent_states, benchmark_result.problem, table_metrics, confidence_level)
     plot_results = compute_plots(resulting_agent_states, benchmark_result.problem, plot_metrics)
 
-    result = MetricsResult(
+    result = MetricResult(
         agent_metrics=resulting_agent_states,
         table_metrics=table_metrics,
         plot_metrics=plot_metrics,

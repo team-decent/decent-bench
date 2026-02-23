@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from decent_bench.benchmark import BenchmarkResult, MetricsResult
+from decent_bench.benchmark import BenchmarkResult, MetricResult
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.networks import Network
@@ -530,7 +530,7 @@ class CheckpointManager:  # noqa: PLR0904
             states=states,
         )
 
-    def save_metrics_result(self, metrics_result: MetricsResult) -> None:
+    def save_metrics_result(self, metrics_result: MetricResult) -> None:
         """
         Save the computed metrics result to the checkpoint directory.
 
@@ -543,7 +543,7 @@ class CheckpointManager:  # noqa: PLR0904
             pickle.dump(metrics_result, f)
         LOGGER.info(f"Saved computed metrics result to {metric_path}")
 
-    def load_metrics_result(self) -> MetricsResult:
+    def load_metrics_result(self) -> MetricResult:
         """
         Load the computed metrics result from the checkpoint directory.
 
@@ -553,7 +553,7 @@ class CheckpointManager:  # noqa: PLR0904
         """
         metric_path = self.checkpoint_dir / "metric_computation.pkl"
         with metric_path.open("rb") as f:
-            metrics_result: MetricsResult = pickle.load(f)  # noqa: S301
+            metrics_result: MetricResult = pickle.load(f)  # noqa: S301
         LOGGER.info(f"Loaded computed metrics result from {metric_path}")
         return metrics_result
 

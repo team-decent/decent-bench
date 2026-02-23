@@ -3,7 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from decent_bench.benchmark._metrics_result import MetricsResult
+from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.metrics import (
     ComputationalCost,
     Metric,
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 def display_metrics(
-    metrics_result: MetricsResult | None = None,
+    metrics_result: MetricResult | None = None,
     checkpoint_manager: "CheckpointManager | None" = None,
     *,
     table_metrics: list[Metric] | None = None,
@@ -111,7 +111,7 @@ def display_metrics(
 
 
 def _get_new_table_metrics(
-    metrics_result: MetricsResult,
+    metrics_result: MetricResult,
     table_metrics: list[Metric],
 ) -> list[Metric]:
     if metrics_result.table_metrics is None:
@@ -134,7 +134,7 @@ def _get_new_table_metrics(
 
 
 def _get_new_plot_metrics(
-    metrics_result: MetricsResult,
+    metrics_result: MetricResult,
     plot_metrics: list[Metric] | list[list[Metric]],
 ) -> list[Metric] | list[list[Metric]]:
     if metrics_result.plot_metrics is None:
