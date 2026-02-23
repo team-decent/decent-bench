@@ -535,7 +535,7 @@ The new metrics will be saved to the checkpoint directory as described above.
         )
 
 
-Loading :class:`~decent_bench.benchmark._metrics_result.MetricResult` for displaying metrics
+Loading :class:`~decent_bench.benchmark.MetricResult` for displaying metrics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Similarly, you can load previously computed metrics by setting ``metrics_result`` to ``None`` in :func:`~decent_bench.benchmark.display_metrics` and providing the same checkpoint manager.
 
