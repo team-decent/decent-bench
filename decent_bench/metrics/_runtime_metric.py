@@ -20,13 +20,18 @@ class RuntimeMetric(ABC):
     for early stopping or monitoring. Unlike post-hoc metrics, they don't store historical
     data and are designed to be lightweight.
 
-    To create a new runtime metric, subclass this class and implement :meth:`description` and
-    :meth:`compute`.
+    To create a new runtime metric, subclass this class and implement :meth:`description`,
+    :meth:`x_log`, :meth:`y_log`, and :meth:`compute`.
 
     Args:
         update_interval: Number of iterations between metric updates, do not update more frequently than necessary as
             this can slow down the algorithm.
         save_path: Path to save the plot when the metric is updated, if None, the plot will not be saved
+
+    Note:
+        The :meth:`compute` method should be efficient as it's called during algorithm execution.
+        Avoid expensive computations or operations that might significantly slow down
+        the algorithm.
 
     """
 
@@ -53,6 +58,16 @@ class RuntimeMetric(ABC):
         """Description of the metric, used as the y-axis label."""
 
     @property
+    @abstractmethod
+    def x_log(self) -> bool:
+        """Whether the x-axis should be logarithmic."""
+
+    @property
+    @abstractmethod
+    def y_log(self) -> bool:
+        """Whether the y-axis should be logarithmic."""
+
+    @property
     def update_interval(self) -> int:
         """
         Number of iterations between metric updates.
@@ -75,11 +90,6 @@ class RuntimeMetric(ABC):
 
         Returns:
             The computed metric value as a float.
-
-        Note:
-            This method should be efficient as it's called during algorithm execution.
-            Avoid expensive computations or operations that might significantly slow down
-            the algorithm.
 
         """
 
@@ -105,7 +115,9 @@ class RuntimeMetric(ABC):
         # The plotter will handle deduplication (won't create duplicate figures)
         if self._queue is not None:
             with contextlib.suppress(Exception):
-                self._queue.put(("init", self._metric_id, self.description, self._save_path), block=False)
+                self._queue.put(
+                    ("init", self._metric_id, self.description, self.x_log, self.y_log, self._save_path), block=False
+                )
 
     def update_plot(self, problem: "BenchmarkProblem", agents: Sequence["Agent"], iteration: int) -> None:
         """

@@ -495,23 +495,3 @@ def all_sorted_iterations(agents: Sequence[AgentMetricsView]) -> list[int]:
     """
     all_iters = set.union(*(set(a.x_history.keys()) for a in agents)) if agents else set()
     return sorted(all_iters)
-
-
-@cache
-def check_same_costs(costs: tuple[costs.Cost]) -> bool:
-    """
-    Check if all costs in *costs* are the same.
-
-    This is useful for metrics that can be computed more efficiently if all agents have the same cost function.
-
-    Args:
-        costs: sequence of costs to check
-
-    Returns:
-        True if all costs are the same, False otherwise
-
-    """
-    if len(costs) == 0:
-        return True
-    first_cost = costs[0]
-    return all(cost == first_cost for cost in costs)

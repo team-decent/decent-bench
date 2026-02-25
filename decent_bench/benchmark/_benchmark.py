@@ -93,16 +93,6 @@ def resume_benchmark(  # noqa: PLR0912
         If ``progress_step`` is too small performance may degrade due to the
         overhead of updating the progress bar too often.
 
-        Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
-        Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
-        weighted by the time or energy it takes to perform them on the specific hardware.
-
-        .. include:: snippets/computational_cost.rst
-
-        If ``computational_cost`` is provided and ``compare_iterations_and_computational_cost`` is ``True``, each metric
-        will be plotted twice: once against computational cost and once against iterations.
-        Computational cost plots will be shown on the left and iteration plots on the right.
-
     Raises:
         ValueError: If the checkpoint directory does not exist, is empty, or contains invalid metadata.
         ValueError: If increase_iterations or increase_trials is negative.
@@ -252,16 +242,6 @@ def benchmark(
         If ``progress_step`` is too small performance may degrade due to the
         overhead of updating the progress bar too often.
 
-        Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
-        Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
-        weighted by the time or energy it takes to perform them on the specific hardware.
-
-        .. include:: snippets/computational_cost.rst
-
-        If ``computational_cost`` is provided and ``compare_iterations_and_computational_cost`` is ``True``, each metric
-        will be plotted twice: once against computational cost and once against iterations.
-        Computational cost plots will be shown on the left and iteration plots on the right.
-
     Raises:
         ValueError: If the checkpoint directory is not empty when initializing the CheckpointManager.
 
@@ -366,16 +346,6 @@ def _benchmark(
     Note:
         If ``progress_step`` is too small performance may degrade due to the
         overhead of updating the progress bar too often.
-
-        Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
-        Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
-        weighted by the time or energy it takes to perform them on the specific hardware.
-
-        .. include:: snippets/computational_cost.rst
-
-        If ``computational_cost`` is provided and ``compare_iterations_and_computational_cost`` is ``True``, each metric
-        will be plotted twice: once against computational cost and once against iterations.
-        Computational cost plots will be shown on the left and iteration plots on the right.
 
     """
     LOGGER.info("Starting benchmark execution ")

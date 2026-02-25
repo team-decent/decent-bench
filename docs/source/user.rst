@@ -747,6 +747,8 @@ They are updated at a specified interval and can optionally save plots to disk a
         """Monitors how well agents agree on their decision variables."""
 
         description = "Consensus Error"
+        x_log = False
+        y_log = True
 
         def compute(self, problem: BenchmarkProblem, agents: Sequence[Agent], iteration: int) -> float:
             # Compute average x across all agents
@@ -755,6 +757,27 @@ They are updated at a specified interval and can optionally save plots to disk a
             # Compute average distance from the mean
             errors = [float(iop.norm(agent.x - x_avg)) for agent in agents]
             return sum(errors) / len(agents)
+
+    class RuntimeRegret(RuntimeMetric):
+        """Example how to cache computations"""
+
+        description = "Regret"
+        x_log = False
+        y_log = False
+
+        def compute(self, problem: BenchmarkProblem, agents: Sequence[Agent], iteration: int) -> float:
+            if problem.x_optimal is None:
+                return float("nan")
+
+            agent_cost = sum(agent.cost.function(agent.x) for agent in agents) / len(agents)
+
+            if hasattr(self, "_cached_optimal_cost"):
+                return agent_cost - self._cached_optimal_cost
+
+            # Since x_optimal is fixed for the problem, we can cache the optimal cost after computing it once
+            self._cached_optimal_cost: float = sum(agent.cost.function(problem.x_optimal) for agent in agents) / len(agents)
+
+            return agent_cost - self._cached_optimal_cost
 
     if __name__ == "__main__":
         benchmark_result = benchmark.benchmark(

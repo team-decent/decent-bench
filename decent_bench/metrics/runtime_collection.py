@@ -3,7 +3,6 @@
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
 from decent_bench.metrics._runtime_metric import RuntimeMetric
 
@@ -30,6 +29,8 @@ class RuntimeLoss(RuntimeMetric):
     """
 
     description = "Loss"
+    x_log = False
+    y_log = False
 
     def compute(self, _: "BenchmarkProblem", agents: Sequence["Agent"], __: int) -> float:  # noqa: D102
         total_loss = sum(agent.cost.function(agent.x) for agent in agents)
@@ -53,18 +54,21 @@ class RuntimeRegret(RuntimeMetric):
     """
 
     description = "Regret"
+    x_log = False
+    y_log = False
 
     def compute(self, problem: "BenchmarkProblem", agents: Sequence["Agent"], _: int) -> float:  # noqa: D102
         if problem.x_optimal is None:
             return float("nan")
 
         agent_cost = sum(agent.cost.function(agent.x) for agent in agents) / len(agents)
-        # If all agents have the same cost function, we can compute regret using the optimal value
-        if utils.check_same_costs(tuple(agent.cost for agent in agents)):
-            optimal_cost = agents[0].cost.function(problem.x_optimal)
-        else:
-            optimal_cost = sum(agent.cost.function(problem.x_optimal) for agent in agents) / len(agents)
-        return agent_cost - optimal_cost
+
+        if hasattr(self, "_cached_optimal_cost"):
+            return agent_cost - self._cached_optimal_cost
+
+        self._cached_optimal_cost: float = sum(agent.cost.function(problem.x_optimal) for agent in agents) / len(agents)
+
+        return agent_cost - self._cached_optimal_cost
 
 
 class RuntimeGradientNorm(RuntimeMetric):
@@ -78,7 +82,7 @@ class RuntimeGradientNorm(RuntimeMetric):
     The gradient norm is computed as:
 
     .. math::
-        \text{grad_norm} = \frac{1}{N} \sum_{i=1}^{N} \|\nabla f_i(\mathbf{x}_i)\|
+        \text{grad norm} = \frac{1}{N} \sum_{i=1}^{N} \|\nabla f_i(\mathbf{x}_i)\|
 
     where :math:`N` is the number of agents, :math:`f_i` is agent i's cost function,
     and :math:`\mathbf{x}_i` is agent i's current optimization variable.
@@ -86,6 +90,8 @@ class RuntimeGradientNorm(RuntimeMetric):
     """
 
     description = "Gradient Norm"
+    x_log = False
+    y_log = True
 
     def compute(self, _: "BenchmarkProblem", agents: Sequence["Agent"], __: int) -> float:  # noqa: D102
         grad_norms = sum(float(iop.norm(agent.cost.gradient(agent.x))) for agent in agents)
@@ -101,7 +107,7 @@ class RuntimeConsensusError(RuntimeMetric):
     The consensus error is computed as:
 
     .. math::
-        \text{consensus_error} = \frac{1}{N} \sum_{i=1}^{N} \|\mathbf{x}_i - \bar{\mathbf{x}}\|
+        \text{consensus error} = \frac{1}{N} \sum_{i=1}^{N} \|\mathbf{x}_i - \bar{\mathbf{x}}\|
 
     where :math:`N` is the number of agents, :math:`\mathbf{x}_i` is agent i's current optimization variable,
     and :math:`\bar{\mathbf{x}}` is the average of all agents' optimization variables.
@@ -109,6 +115,8 @@ class RuntimeConsensusError(RuntimeMetric):
     """
 
     description = "Consensus Error"
+    x_log = False
+    y_log = True
 
     def compute(self, _: "BenchmarkProblem", agents: Sequence["Agent"], __: int) -> float:  # noqa: D102
         # Compute average x across all agents

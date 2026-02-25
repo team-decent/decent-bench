@@ -116,13 +116,15 @@ class RuntimeMetricPlotter:
         finally:
             self._close_all()
 
-    def create_figure(self, metric_id: str, description: str, save_path: Path | None) -> None:
+    def create_figure(self, metric_id: str, description: str, x_log: bool, y_log: bool, save_path: Path | None) -> None:
         """
         Create a figure for a metric.
 
         Args:
             metric_id: Unique identifier for the metric
             description: Human-readable description for the y-axis label
+            x_log: Whether the x-axis should be logarithmic
+            y_log: Whether the y-axis should be logarithmic
             save_path: Path to save the plot when updated (if None, no saving is performed)
 
         """
@@ -136,7 +138,10 @@ class RuntimeMetricPlotter:
         ax.set_xlabel("Iteration")
         ax.set_ylabel(description)
         ax.set_title(f"{description} - All Trials")
+        ax.set_xscale("log" if x_log else "linear")
+        ax.set_yscale("log" if y_log else "linear")
         ax.grid(visible=True, alpha=0.3)
+        fig.tight_layout()
 
         self._figures[metric_id] = fig
         self._axes[metric_id] = ax
@@ -237,14 +242,14 @@ class RuntimeMetricPlotter:
                 return
 
             # Handle different message types
-            if len(data) == 4 and data[0] == "init":
-                # Initialization message: ("init", metric_id, description)
+            if len(data) == 6 and data[0] == "init":
+                # Initialization message: ("init", metric_id, description, x_log, y_log, save_path)
                 try:
-                    _, metric_id, description, save_path = data
+                    _, metric_id, description, x_log, y_log, save_path = data
                 except (TypeError, ValueError):
                     LOGGER.debug("Ignoring malformed init message: %r", data)
                     return
-                self.create_figure(metric_id, description, save_path)
+                self.create_figure(metric_id, description, x_log, y_log, save_path)
             elif len(data) == 5:
                 # Data update message: (metric_id, algorithm_name, trial, iteration, value)
                 try:
@@ -262,6 +267,7 @@ class RuntimeMetricPlotter:
         """Redraw all figures that were modified during batch processing."""
         for metric_id in self._modified_figures:
             if metric_id in self._figures:
+                self._figures[metric_id].tight_layout()
                 self._figures[metric_id].canvas.draw()
                 self._figures[metric_id].canvas.flush_events()
         self._modified_figures.clear()
@@ -289,6 +295,7 @@ class RuntimeMetricPlotter:
                 if metric_id in self._figures:
                     save_path = self._should_save_plots[metric_id]
                     save_path.mkdir(parents=True, exist_ok=True)
+                    self._figures[metric_id].tight_layout()
                     self._figures[metric_id].savefig(save_path / f"{metric_id}.png")
                     LOGGER.info(f"Saved plot for metric '{metric_id}' to {save_path / f'{metric_id}.png'}")
 

@@ -70,6 +70,16 @@ def display_metrics(
         is provided, only metrics which are present in the provided ``metrics_result`` will be displayed.
         If neither is provided, all metrics in the ``metrics_result`` will be displayed.
 
+        Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
+        Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
+        weighted by the time or energy it takes to perform them on the specific hardware.
+
+        .. include:: snippets/computational_cost.rst
+
+        If ``computational_cost`` is provided and ``compare_iterations_and_computational_cost`` is ``True``, each metric
+        will be plotted twice: once against computational cost and once against iterations.
+        Computational cost plots will be shown on the left and iteration plots on the right.
+
     """
     logger.start_logger(log_level=log_level)
 
