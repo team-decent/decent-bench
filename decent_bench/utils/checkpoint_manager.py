@@ -479,11 +479,17 @@ class CheckpointManager:  # noqa: PLR0904
         """
         Load checkpoint metadata.
 
+        If no metadata file exists, returns an empty dictionary.
+
         Returns:
             Dictionary containing benchmark_metadata and algorithms list.
 
         """
         metadata_path = self.checkpoint_dir / "metadata.json"
+
+        if not metadata_path.exists():
+            return {}
+
         with metadata_path.open(encoding="utf-8") as f:
             metadata: dict[str, Any] = json.load(f)
         return metadata
