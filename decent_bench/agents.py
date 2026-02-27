@@ -185,10 +185,6 @@ class AgentMetricsView:
     @staticmethod
     def from_agent(agent: Agent) -> AgentMetricsView:
         """Create from agent."""
-        # Append the last x if not already recorded
-        if agent._current_x is not None and agent._n_x_updates not in agent._x_history:  # noqa: SLF001
-            agent._x_history[agent._n_x_updates] = iop.copy(agent._current_x)  # noqa: SLF001
-
         return AgentMetricsView(
             cost=agent.cost,
             x_history=agent._x_history,  # noqa: SLF001
