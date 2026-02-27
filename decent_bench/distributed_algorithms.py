@@ -72,6 +72,11 @@ class Algorithm(ABC):
                 i.aux_vars.clear()
 
     @final
+    def _snapshot_agents(self, network: P2PNetwork, iteration: int) -> None:
+        for i in network.agents():
+            i.snapshot(iteration=iteration)
+
+    @final
     def run(
         self,
         network: P2PNetwork,
@@ -101,6 +106,11 @@ class Algorithm(ABC):
             Do not override this method. Instead, override :meth:`initialize`, :meth:`step` and :meth:`finalize`
             as needed.
 
+        Note:
+            Every algorithm iteration, the algorithm snapshots the agents' states using the global iteration by calling
+            :meth:`~decent_bench.agents.Agent.snapshot` method for each agent, which saves the current
+            optimization variable x based on the agent's :attr:`~decent_bench.agents.Agent.state_snapshot_period`.
+
         """
         if start_iteration < 0 or start_iteration > self.iterations:
             raise ValueError(
@@ -111,6 +121,7 @@ class Algorithm(ABC):
             self.initialize(network)
         for k in range(start_iteration, self.iterations):
             self.step(network, k)
+            self._snapshot_agents(network, k)
             if progress_callback is not None:
                 progress_callback(k)
 

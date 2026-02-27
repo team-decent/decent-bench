@@ -74,8 +74,20 @@ class Agent:
     def x(self, x: Array) -> None:
         self._n_x_updates += 1
         self._current_x = x
-        if self._n_x_updates % self._state_snapshot_period == 0:
-            self._x_history[self._n_x_updates] = iop.copy(x)
+
+    @property
+    def state_snapshot_period(self) -> int:
+        """Number of iterations between snapshots of the agent's state."""
+        return self._state_snapshot_period
+
+    def snapshot(self, iteration: int) -> None:
+        """
+        Snapshot the agent's state.
+
+        This saves the current optimization variable x every :attr:`state_snapshot_period` iterations.
+        """
+        if iteration % self.state_snapshot_period == 0 and self._current_x is not None:
+            self._x_history[iteration] = iop.copy(self._current_x)
 
     @property
     def messages(self) -> Mapping[Agent, Array]:
