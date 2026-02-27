@@ -29,11 +29,11 @@ def gradient_descent(
         stop_tol: early stopping criteria - stop if ``norm(x_new - x) <= stop_tol``
         max_tol: maximum tolerated ``norm(x_new - x)`` at the end
 
-    Raises:
-        RuntimeError: if ``norm(x_new - x) > max_tol`` at the end
-
     Returns:
         x that minimizes the cost function.
+
+    Raises:
+        RuntimeError: if ``norm(x_new - x) > max_tol`` at the end
 
     """
     delta = np.inf
@@ -71,12 +71,12 @@ def accelerated_gradient_descent(
         stop_tol: early stopping criteria - stop if ``norm(x_new - x) <= stop_tol``
         max_tol: maximum tolerated ``norm(x_new - x)`` at the end
 
+    Returns:
+        x that minimizes the cost function.
+
     Raises:
         RuntimeError: if ``norm(x_new - x) > max_tol`` at the end
         ValueError: if ``cost.m_smooth < 0``, ``cost.m_cvx < 0``, or cost function is affine
-
-    Returns:
-        x that minimizes the cost function.
 
     """
     if x0 is not None and iop.shape(x0) != cost.shape:

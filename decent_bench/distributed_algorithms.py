@@ -121,7 +121,9 @@ class Algorithm(ABC):
             self.initialize(network)
         for k in range(start_iteration, self.iterations):
             self.step(network, k)
-            self._snapshot_agents(network, k)
+            self._snapshot_agents(
+                network, k + 1
+            )  # Already completed the iteration, so snapshot with k+1 to indicate the state after iteration k
             if progress_callback is not None:
                 progress_callback(k)
 

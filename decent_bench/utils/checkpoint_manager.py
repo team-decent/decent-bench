@@ -126,6 +126,7 @@ class CheckpointManager:  # noqa: PLR0904
         self.checkpoint_step = checkpoint_step
         self.keep_n_checkpoints = keep_n_checkpoints
         self._metadata = benchmark_metadata
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     def is_empty(self) -> bool:
         """Check if checkpoint directory is empty or doesn't exist."""
