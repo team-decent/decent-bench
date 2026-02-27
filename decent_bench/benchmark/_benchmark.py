@@ -6,49 +6,43 @@ from copy import deepcopy
 from json import JSONDecodeError
 from logging.handlers import QueueListener
 from multiprocessing import Manager, get_context
-from multiprocessing.context import BaseContext
-from multiprocessing.managers import SyncManager
 from time import sleep
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any
 
 from rich.status import Status
 
-from decent_bench.agents import AgentMetricsView
+from decent_bench.benchmark._benchmark_result import BenchmarkResult
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.distributed_algorithms import Algorithm
-from decent_bench.metrics import ComputationalCost, Metric, create_plots, create_tables
-from decent_bench.metrics import metric_collection as mc
+from decent_bench.metrics import RuntimeMetricPlotter
 from decent_bench.networks import Network, P2PNetwork, create_distributed_network
 from decent_bench.utils import logger
-from decent_bench.utils.checkpoint_manager import CheckpointManager
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.progress_bar import ProgressBarController
 
 if TYPE_CHECKING:
+    import queue
+    from multiprocessing.context import SpawnContext
+    from multiprocessing.managers import SyncManager
+
+    from decent_bench.metrics import RuntimeMetric
+    from decent_bench.utils.checkpoint_manager import CheckpointManager
     from decent_bench.utils.progress_bar import ProgressBarHandle
 
 
 def resume_benchmark(  # noqa: PLR0912
-    checkpoint_manager: CheckpointManager,
+    checkpoint_manager: "CheckpointManager",
     increase_iterations: int = 0,
     increase_trials: int = 0,
     create_backup: bool = True,
     *,
-    plot_metrics: list[Metric] | list[list[Metric]] = mc.DEFAULT_PLOT_METRICS,
-    table_metrics: list[Metric] = mc.DEFAULT_TABLE_METRICS,
-    table_fmt: Literal["grid", "latex"] = "grid",
-    plot_grid: bool = True,
-    individual_plots: bool = False,
-    computational_cost: ComputationalCost | None = None,
-    x_axis_scaling: float = 1e-4,
-    confidence_level: float = 0.95,
-    log_level: int = logging.INFO,
     max_processes: int | None = 1,
-    progress_step: int | None = None,
+    progress_step: int | None = 100,
     show_speed: bool = False,
     show_trial: bool = False,
-    compare_iterations_and_computational_cost: bool = False,
-) -> None:
+    runtime_metrics: "list[RuntimeMetric] | None" = None,
+    log_level: int = logging.INFO,
+) -> BenchmarkResult:
     """
     Resume a benchmark from an existing checkpoint directory.
 
@@ -67,23 +61,6 @@ def resume_benchmark(  # noqa: PLR0912
             recommended to set this to True to avoid accidental data loss, as resuming will modify the checkpoint
             directory by adding new checkpoints and metadata. If True, a backup will be created with the name
             ``{checkpoint_manager.checkpoint_dir}_backup_{timestamp}.zip`` before resuming.
-        plot_metrics: metrics to plot after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_collection.DEFAULT_PLOT_METRICS`.
-            If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
-            metrics will be grouped and plotted in their own figure with subplots.
-        table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_collection.DEFAULT_TABLE_METRICS`
-        table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
-        plot_grid: whether to show grid lines on the plots
-        individual_plots: whether to plot each metric in a separate figure
-        computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
-            of computational cost
-        x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
-            manageable units for plotting. Only used if ``computational_cost`` is provided.
-        confidence_level: confidence level for computing confidence intervals of the table metrics, expressed as a value
-            between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
-            wider confidence intervals.
-        log_level: minimum level to log, e.g. :data:`logging.INFO`
         max_processes: maximum number of processes to use when running trials, multiprocessing improves performance
             but can be inhibiting when debugging or using a profiler, set to 1 to disable multiprocessing or ``None`` to
             use :class:`~concurrent.futures.ProcessPoolExecutor`'s default. If your algorithm is very lightweight you
@@ -93,8 +70,14 @@ def resume_benchmark(  # noqa: PLR0912
             If `None`, the progress bar uses 1 unit per trial.
         show_speed: whether to show speed (iterations/second) in the progress bar.
         show_trial: whether to show which trials are currently running in the progress bar.
-        compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
-            metric vs iterations. Only used if ``computational_cost`` is provided.
+        runtime_metrics: optional list of :class:`~decent_bench.metrics.RuntimeMetric` to compute and plot during
+            algorithm execution. Each metric will open a plot window for each trial showing live updates. Useful for
+            early stopping if convergence is not happening. Disabled by default. When using multiprocessing
+            (``max_processes > 1``), each trial will open its own plot windows in separate processes.
+        log_level: minimum level to log, e.g. :data:`logging.INFO`
+
+    Returns:
+        BenchmarkResult containing the results of the benchmark.
 
     Important:
         Multiprocessing with certain frameworks (e.g., PyTorch) can lead to unexpected behavior due to how they handle
@@ -110,16 +93,6 @@ def resume_benchmark(  # noqa: PLR0912
         If ``progress_step`` is too small performance may degrade due to the
         overhead of updating the progress bar too often.
 
-        Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
-        Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
-        weighted by the time or energy it takes to perform them on the specific hardware.
-
-        .. include:: snippets/computational_cost.rst
-
-        If ``computational_cost`` is provided and ``compare_iterations_and_computational_cost`` is ``True``, each metric
-        will be plotted twice: once against computational cost and once against iterations.
-        Computational cost plots will be shown on the left and iteration plots on the right.
-
     Raises:
         ValueError: If the checkpoint directory does not exist, is empty, or contains invalid metadata.
         ValueError: If increase_iterations or increase_trials is negative.
@@ -133,10 +106,6 @@ def resume_benchmark(  # noqa: PLR0912
         raise ValueError("increase_iterations must be a non-negative integer")
     if increase_trials < 0:
         raise ValueError("increase_trials must be a non-negative integer")
-
-    if create_backup:
-        backup_path = checkpoint_manager.create_backup()
-        LOGGER.info(f"Created backup of checkpoint directory at '{backup_path}'")
 
     with Status("Loading benchmark state from checkpoint..."):
         try:
@@ -163,6 +132,10 @@ def resume_benchmark(  # noqa: PLR0912
             raise ValueError(f"Invalid checkpoint directory: missing or corrupted metadata - {e}") from e
         except JSONDecodeError as e:
             raise ValueError(f"Invalid checkpoint directory: metadata is not valid JSON - {e}") from e
+
+    if create_backup:
+        backup_path = checkpoint_manager.create_backup()
+        LOGGER.info(f"Created backup of checkpoint directory at '{backup_path}'")
 
     LOGGER.info(
         f"Resuming benchmark from checkpoint '{checkpoint_manager.checkpoint_dir}' with {metadata['n_trials']} trials "
@@ -195,78 +168,47 @@ def resume_benchmark(  # noqa: PLR0912
             f"total increase is {total_increase_iterations}"
         )
 
-    _benchmark(
+    results = _benchmark(
         algorithms=algorithms,
         benchmark_problem=problem,
         nw_init_state=nw_init_state,
         log_listener=log_listener,
         manager=manager,
         mp_context=mp_context,
-        plot_metrics=plot_metrics,
-        table_metrics=table_metrics,
-        table_fmt=table_fmt,
-        plot_grid=plot_grid,
-        individual_plots=individual_plots,
-        computational_cost=computational_cost,
-        x_axis_scaling=x_axis_scaling,
         n_trials=n_trials,
-        confidence_level=confidence_level,
         max_processes=max_processes,
         progress_step=progress_step,
         show_speed=show_speed,
         show_trial=show_trial,
-        compare_iterations_and_computational_cost=compare_iterations_and_computational_cost,
         checkpoint_manager=checkpoint_manager,
+        runtime_metrics=runtime_metrics,
     )
+    log_listener.stop()
+    return results
 
 
 def benchmark(
     algorithms: list[Algorithm],
     benchmark_problem: BenchmarkProblem,
-    plot_metrics: list[Metric] | list[list[Metric]] = mc.DEFAULT_PLOT_METRICS,
-    table_metrics: list[Metric] = mc.DEFAULT_TABLE_METRICS,
-    table_fmt: Literal["grid", "latex"] = "grid",
     *,
-    plot_grid: bool = True,
-    individual_plots: bool = False,
-    computational_cost: ComputationalCost | None = None,
-    x_axis_scaling: float = 1e-4,
     n_trials: int = 30,
-    confidence_level: float = 0.95,
-    log_level: int = logging.INFO,
     max_processes: int | None = 1,
-    progress_step: int | None = None,
+    progress_step: int | None = 100,
     show_speed: bool = False,
     show_trial: bool = False,
-    compare_iterations_and_computational_cost: bool = False,
-    checkpoint_manager: CheckpointManager | None = None,
-) -> None:
+    checkpoint_manager: "CheckpointManager | None" = None,
+    runtime_metrics: "list[RuntimeMetric] | None" = None,
+    log_level: int = logging.INFO,
+) -> BenchmarkResult:
     """
     Benchmark decentralized algorithms.
 
     Args:
         algorithms: algorithms to benchmark
         benchmark_problem: problem to benchmark on, defines the network topology, cost functions, and communication
-            constraints
-        plot_metrics: metrics to plot after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_collection.DEFAULT_PLOT_METRICS`.
-            If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
-            metrics will be grouped and plotted in their own figure with subplots.
-        table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_collection.DEFAULT_TABLE_METRICS`
-        table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
-        plot_grid: whether to show grid lines on the plots
-        individual_plots: whether to plot each metric in a separate figure
-        computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
-            of computational cost
-        x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
-            manageable units for plotting. Only used if ``computational_cost`` is provided.
+            constraints.
         n_trials: number of times to run each algorithm on the benchmark problem, running more trials improves the
-            statistical results, at least 30 trials are recommended for the central limit theorem to apply
-        confidence_level: confidence level for computing confidence intervals of the table metrics, expressed as a value
-            between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
-            wider confidence intervals.
-        log_level: minimum level to log, e.g. :data:`logging.INFO`
+            statistical results, at least 30 trials are recommended for the central limit theorem to apply.
         max_processes: maximum number of processes to use when running trials, multiprocessing improves performance
             but can be inhibiting when debugging or using a profiler, set to 1 to disable multiprocessing or ``None`` to
             use :class:`~concurrent.futures.ProcessPoolExecutor`'s default. If your algorithm is very lightweight you
@@ -276,9 +218,15 @@ def benchmark(
             If `None`, the progress bar uses 1 unit per trial.
         show_speed: whether to show speed (iterations/second) in the progress bar.
         show_trial: whether to show which trials are currently running in the progress bar.
-        compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
-            metric vs iterations. Only used if ``computational_cost`` is provided.
         checkpoint_manager: if provided, will be used to save checkpoints during execution.
+        runtime_metrics: optional list of :class:`~decent_bench.metrics.RuntimeMetric` to compute and plot during
+            algorithm execution. Each metric will open a plot window for each trial showing live updates. Useful for
+            early stopping if convergence is not happening. Disabled by default. When using multiprocessing
+            (``max_processes > 1``), each trial will open its own plot windows in separate processes.
+        log_level: minimum level to log, e.g. :data:`logging.INFO`.
+
+    Returns:
+        BenchmarkResult containing the results of the benchmark.
 
     Important:
         Multiprocessing with certain frameworks (e.g., PyTorch) can lead to unexpected behavior due to how they handle
@@ -293,16 +241,6 @@ def benchmark(
     Note:
         If ``progress_step`` is too small performance may degrade due to the
         overhead of updating the progress bar too often.
-
-        Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
-        Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
-        weighted by the time or energy it takes to perform them on the specific hardware.
-
-        .. include:: snippets/computational_cost.rst
-
-        If ``computational_cost`` is provided and ``compare_iterations_and_computational_cost`` is ``True``, each metric
-        will be plotted twice: once against computational cost and once against iterations.
-        Computational cost plots will be shown on the left and iteration plots on the right.
 
     Raises:
         ValueError: If the checkpoint directory is not empty when initializing the CheckpointManager.
@@ -327,29 +265,23 @@ def benchmark(
             "Progress cannot be resumed if interrupted."
         )
 
-    _benchmark(
+    results = _benchmark(
         algorithms=algorithms,
         benchmark_problem=benchmark_problem,
         nw_init_state=nw_init_state,
         log_listener=log_listener,
         manager=manager,
         mp_context=mp_context,
-        plot_metrics=plot_metrics,
-        table_metrics=table_metrics,
-        table_fmt=table_fmt,
-        plot_grid=plot_grid,
-        individual_plots=individual_plots,
-        computational_cost=computational_cost,
-        x_axis_scaling=x_axis_scaling,
         n_trials=n_trials,
-        confidence_level=confidence_level,
         max_processes=max_processes,
         progress_step=progress_step,
         show_speed=show_speed,
         show_trial=show_trial,
-        compare_iterations_and_computational_cost=compare_iterations_and_computational_cost,
         checkpoint_manager=checkpoint_manager,
+        runtime_metrics=runtime_metrics,
     )
+    log_listener.stop()
+    return results
 
 
 def _benchmark(
@@ -357,54 +289,30 @@ def _benchmark(
     benchmark_problem: BenchmarkProblem,
     nw_init_state: Network,
     log_listener: QueueListener,
-    manager: SyncManager,
+    manager: "SyncManager",
     *,
-    mp_context: BaseContext | None = None,
-    plot_metrics: list[Metric] | list[list[Metric]] = mc.DEFAULT_PLOT_METRICS,
-    table_metrics: list[Metric] = mc.DEFAULT_TABLE_METRICS,
-    table_fmt: Literal["grid", "latex"] = "grid",
-    plot_grid: bool = True,
-    individual_plots: bool = False,
-    computational_cost: ComputationalCost | None = None,
-    x_axis_scaling: float = 1e-4,
+    mp_context: "SpawnContext | None" = None,
     n_trials: int = 30,
-    confidence_level: float = 0.95,
     max_processes: int | None = 1,
     progress_step: int | None = None,
     show_speed: bool = False,
     show_trial: bool = False,
-    compare_iterations_and_computational_cost: bool = False,
-    checkpoint_manager: CheckpointManager | None = None,
-) -> None:
+    checkpoint_manager: "CheckpointManager | None" = None,
+    runtime_metrics: "list[RuntimeMetric] | None" = None,
+) -> BenchmarkResult:
     """
     Benchmark decentralized algorithms.
 
     Args:
         algorithms: algorithms to benchmark
         benchmark_problem: problem to benchmark on, defines the network topology, cost functions, and communication
-            constraints
-        nw_init_state: initial state of the network to run the algorithms on
-        log_listener: multiprocessing logging listener to handle log messages from worker processes
-        manager: multiprocessing manager for sharing data between processes
-        mp_context: multiprocessing context to use for creating new processes
-        plot_metrics: metrics to plot after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_collection.DEFAULT_PLOT_METRICS`.
-            If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
-            metrics will be grouped and plotted in their own figure with subplots.
-        table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_collection.DEFAULT_TABLE_METRICS`
-        table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
-        plot_grid: whether to show grid lines on the plots
-        individual_plots: whether to plot each metric in a separate figure
-        computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
-            of computational cost
-        x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
-            manageable units for plotting. Only used if ``computational_cost`` is provided.
+            constraints.
+        nw_init_state: initial state of the network to run the algorithms on.
+        log_listener: multiprocessing logging listener to handle log messages from worker processes.
+        manager: multiprocessing manager for sharing data between processes.
+        mp_context: multiprocessing context to use for creating new processes.
         n_trials: number of times to run each algorithm on the benchmark problem, running more trials improves the
-            statistical results, at least 30 trials are recommended for the central limit theorem to apply
-        confidence_level: confidence level for computing confidence intervals of the table metrics, expressed as a value
-            between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
-            wider confidence intervals.
+            statistical results, at least 30 trials are recommended for the central limit theorem to apply.
         max_processes: maximum number of processes to use when running trials, multiprocessing improves performance
             but can be inhibiting when debugging or using a profiler, set to 1 to disable multiprocessing or ``None`` to
             use :class:`~concurrent.futures.ProcessPoolExecutor`'s default. If your algorithm is very lightweight you
@@ -414,11 +322,16 @@ def _benchmark(
             If `None`, the progress bar uses 1 unit per trial.
         show_speed: whether to show speed (iterations/second) in the progress bar.
         show_trial: whether to show which trials are currently running in the progress bar.
-        compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
-            metric vs iterations. Only used if ``computational_cost`` is provided.
         checkpoint_manager: if provided, will be used to save and load checkpoints during execution.
             If ``None``, no checkpoints will be saved and the benchmark will run from start to finish
             without resumption capability.
+        runtime_metrics: optional list of :class:`~decent_bench.metrics.RuntimeMetric` to compute and plot during
+            algorithm execution. Each metric will open a plot window for each trial showing live updates. Useful for
+            early stopping if convergence is not happening. Disabled by default. When using multiprocessing
+            (``max_processes > 1``), each trial will open its own plot windows in separate processes.
+
+    Returns:
+        BenchmarkResult containing the results of the benchmark.
 
     Important:
         Multiprocessing with certain frameworks (e.g., PyTorch) can lead to unexpected behavior due to how they handle
@@ -434,16 +347,6 @@ def _benchmark(
         If ``progress_step`` is too small performance may degrade due to the
         overhead of updating the progress bar too often.
 
-        Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
-        Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
-        weighted by the time or energy it takes to perform them on the specific hardware.
-
-        .. include:: snippets/computational_cost.rst
-
-        If ``computational_cost`` is provided and ``compare_iterations_and_computational_cost`` is ``True``, each metric
-        will be plotted twice: once against computational cost and once against iterations.
-        Computational cost plots will be shown on the left and iteration plots on the right.
-
     """
     LOGGER.info("Starting benchmark execution ")
     LOGGER.debug(f"Nr of agents: {len(nw_init_state.agents())}")
@@ -452,42 +355,23 @@ def _benchmark(
         algorithms,
         n_trials,
         nw_init_state,
+        benchmark_problem,
         prog_ctrl,
         log_listener,
         max_processes,
         mp_context,
         checkpoint_manager,
-    )
-    LOGGER.info("All trials complete")
-    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
-    for alg, networks in resulting_nw_states.items():
-        resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
-    create_tables(
-        resulting_agent_states,
-        benchmark_problem,
-        table_metrics,
-        confidence_level,
-        table_fmt,
-        table_path=checkpoint_manager.get_results_path("table.txt") if checkpoint_manager else None,
-    )
-    create_plots(
-        resulting_agent_states,
-        benchmark_problem,
-        plot_metrics,
-        computational_cost=computational_cost,
-        x_axis_scaling=x_axis_scaling,
-        compare_iterations_and_computational_cost=compare_iterations_and_computational_cost,
-        individual_plots=individual_plots,
-        plot_path=checkpoint_manager.get_results_path("plots.png") if checkpoint_manager else None,
-        plot_grid=plot_grid,
+        runtime_metrics,
     )
     LOGGER.info("Benchmark execution complete, thanks for using decent-bench")
-    log_listener.stop()
+    return BenchmarkResult(problem=benchmark_problem, states=resulting_nw_states)
 
 
 def _init_logging_and_multiprocessing(
-    log_level: int, max_processes: int | None, benchmark_problem: BenchmarkProblem
-) -> tuple[QueueListener, SyncManager, BaseContext | None]:
+    log_level: int,
+    max_processes: int | None,
+    benchmark_problem: BenchmarkProblem,
+) -> tuple[QueueListener, "SyncManager", "SpawnContext | None"]:
     # Detect if PyTorch costs are being used to determine multiprocessing context
     if max_processes != 1:
         use_spawn = _should_use_spawn_context(benchmark_problem)
@@ -509,14 +393,27 @@ def _run_trials(  # noqa: PLR0917
     algorithms: list[Algorithm],
     n_trials: int,
     nw_init_state: Network,
+    problem: BenchmarkProblem,
     progress_bar_ctrl: ProgressBarController,
     log_listener: QueueListener,
     max_processes: int | None,
-    mp_context: BaseContext | None = None,
-    checkpoint_manager: CheckpointManager | None = None,
+    mp_context: "SpawnContext | None" = None,
+    checkpoint_manager: "CheckpointManager | None" = None,
+    runtime_metrics: "list[RuntimeMetric] | None" = None,
 ) -> dict[Algorithm, list[Network]]:
     results: dict[Algorithm, list[Network]] = defaultdict(list)
     progress_bar_handle = progress_bar_ctrl.get_handle()
+
+    # Create centralized plotter process and queue for runtime metrics
+    runtime_plotter = None
+    runtime_plotter_queue = None
+    if runtime_metrics:
+        ctx = mp_context if mp_context is not None else get_context()
+        runtime_plotter_queue = ctx.Manager().Queue()
+
+        # Create and start plotter in separate process using the same context
+        runtime_plotter = RuntimeMetricPlotter(runtime_plotter_queue, ctx)
+        runtime_plotter.start()
 
     # Filter out completed trials if checkpoint manager is provided, and load their results, otherwise run all trials
     # Used when resuming from a previous benchmark run, so that only incomplete trials are run and completed trial
@@ -551,7 +448,17 @@ def _run_trials(  # noqa: PLR0917
     if max_processes == 1:
         partial_result = {
             alg: [
-                _run_trial(alg, nw_init_state, progress_bar_handle, trial, alg_idx, checkpoint_manager)
+                _run_trial(
+                    alg,
+                    nw_init_state,
+                    problem,
+                    progress_bar_handle,
+                    trial,
+                    alg_idx,
+                    checkpoint_manager,
+                    runtime_metrics,
+                    runtime_plotter_queue,
+                )
                 for trial in to_run[alg]
             ]
             for alg_idx, alg in enumerate(algorithms)
@@ -567,7 +474,16 @@ def _run_trials(  # noqa: PLR0917
             all_futures = {
                 alg: [
                     executor.submit(
-                        _run_trial, alg, nw_init_state, progress_bar_handle, trial, alg_idx, checkpoint_manager
+                        _run_trial,
+                        alg,
+                        nw_init_state,
+                        problem,
+                        progress_bar_handle,
+                        trial,
+                        alg_idx,
+                        checkpoint_manager,
+                        runtime_metrics,
+                        runtime_plotter_queue,
                     )
                     for trial in to_run[alg]
                 ]
@@ -579,16 +495,23 @@ def _run_trials(  # noqa: PLR0917
     for alg in partial_result:
         results[alg].extend(partial_result[alg])
 
+    # Clean up runtime plotter process
+    if runtime_plotter is not None:
+        runtime_plotter.shutdown()
+
     return results
 
 
 def _run_trial(  # noqa: PLR0917
     algorithm: Algorithm,
     nw_init_state: Network,
+    problem: BenchmarkProblem,
     progress_bar_handle: "ProgressBarHandle",
     trial: int,
     alg_idx: int,
-    checkpoint_manager: CheckpointManager | None = None,
+    checkpoint_manager: "CheckpointManager | None" = None,
+    runtime_metrics: "list[RuntimeMetric] | None" = None,
+    runtime_plotter_queue: "queue.Queue[Any] | None" = None,
 ) -> Network:
     if checkpoint_manager is not None:
         checkpoint = checkpoint_manager.load_checkpoint(alg_idx, trial)
@@ -615,10 +538,21 @@ def _run_trial(  # noqa: PLR0917
 
     progress_bar_handle.start_progress_bar(algorithm, trial, start_iteration)
 
+    trial_runtime_metrics = _get_runtime_metrics(runtime_metrics, algorithm, trial, runtime_plotter_queue)
+
     def progress_callback(iteration: int) -> None:
         progress_bar_handle.advance_progress_bar(algorithm, iteration)
         if checkpoint_manager is not None and checkpoint_manager.should_checkpoint(iteration):
             checkpoint_manager.save_checkpoint(alg_idx, trial, iteration, alg, network)
+
+        for metric in trial_runtime_metrics:
+            if metric.should_update(iteration):
+                try:
+                    metric.update_plot(problem, network.agents(), iteration)
+                except Exception as e:
+                    LOGGER.warning(
+                        f"Failed to update runtime metric {metric.description} at iteration {iteration}: {e}"
+                    )
 
     if not isinstance(network, P2PNetwork):
         # Update this when support for federated learning or other types of networks is added
@@ -637,6 +571,31 @@ def _run_trial(  # noqa: PLR0917
             LOGGER.exception(f"An error or warning occurred when running {alg.name}: {type(e).__name__}: {e}")
 
     return network
+
+
+def _get_runtime_metrics(
+    runtime_metrics: "list[RuntimeMetric] | None",
+    algorithm: Algorithm,
+    trial: int,
+    runtime_queue: "queue.Queue[Any] | None" = None,
+) -> list["RuntimeMetric"]:
+    # Initialize runtime metrics if provided
+    if runtime_metrics:
+        if runtime_queue is None:
+            LOGGER.warning("Runtime metrics provided but no runtime queue available, metrics will not be plotted")
+            return []
+
+        # Create deep copies to avoid sharing state between trials
+        trial_runtime_metrics = [deepcopy(metric) for metric in runtime_metrics]
+        for metric in trial_runtime_metrics:
+            try:
+                metric.initialize_plot(algorithm.name, trial, runtime_queue)
+            except Exception as e:
+                LOGGER.warning(f"Failed to initialize runtime metric {metric.description}: {e}")
+    else:
+        trial_runtime_metrics = []
+
+    return trial_runtime_metrics
 
 
 def _should_use_spawn_context(benchmark_problem: BenchmarkProblem) -> bool:

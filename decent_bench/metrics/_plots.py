@@ -1,8 +1,9 @@
 import math
 import warnings
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING, Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,6 +18,9 @@ from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics._computational_cost import ComputationalCost
 from decent_bench.metrics._metric import Metric, X, Y
 from decent_bench.utils.logger import LOGGER
+
+if TYPE_CHECKING:
+    from decent_bench.benchmark import MetricResult
 
 X_LABELS = {
     "iterations": "iterations",
@@ -41,39 +45,38 @@ MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p", "P", "X"]
 STYLES = ["-", ":", "--", "-.", (5, (10, 3)), (0, (5, 10)), (0, (3, 1, 1, 1))]
 
 
-def create_plots(
-    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
-    problem: BenchmarkProblem,
-    metrics: list[Metric] | list[list[Metric]],
+def display_plots(
+    metrics_result: "MetricResult",
     *,
     computational_cost: ComputationalCost | None,
     x_axis_scaling: float = 1e-4,
     compare_iterations_and_computational_cost: bool = False,
     individual_plots: bool = False,
     plot_grid: bool = True,
+    plot_format: Literal["png", "pdf", "svg"] = "png",
     plot_path: Path | None = None,
 ) -> None:
     """
-    Plot the execution results with one subplot per metric.
+    Display plots for the metric results.
 
     Each algorithm's curve is its mean across the trials. The surrounding envelope is the min and max across the trials.
+    If metrics is a list of lists, each inner list will be plotted in a separate figure. Otherwise groups of 3 metrics
+    will be plotted together in subplots of the same figure.
 
     Args:
-        resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
-        problem: benchmark problem whose properties, e.g.
-            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.x_optimal`, are used for metric calculations
-        metrics: metrics to calculate and plot. If a list of lists is provided, each inner list will be plotted in a
-            separate figure. Otherwise groups of 3 metrics will be plotted together in subplots of the same figure
+        metrics_result: result of metrics computation containing the metrics to plot and the data to plot them with.
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
-            of computational cost
+            of computational cost.
         x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
-            manageable units for plotting. Only used if ``computational_cost`` is provided
+            manageable units for plotting. Only used if ``computational_cost`` is provided.
         compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
-            metric vs iterations. Only used if ``computational_cost`` is provided
-        individual_plots: whether to create individual plots for each metric instead of subplots
-        plot_grid: whether to show grid lines on the plots
-        plot_path: optional file path to save the generated plot as an image file (e.g., "plots.png"). If ``None``,
-            the plot will only be displayed
+            metric vs iterations. Only used if ``computational_cost`` is provided.
+        individual_plots: whether to create individual plots for each metric instead of subplots.
+        plot_grid: whether to show grid lines on the plots.
+        plot_format: format to save plots in, defaults to ``png``. Can be ``png``, ``pdf``, or ``svg``.
+        plot_path: optional directory path to save the generated plots as image files.
+            Will be saved as "plot.png" or "plot_fig1.png", "plot_fig2.png", etc. if multiple figures.
+            If not provided, the plots will only be displayed.
 
     Note:
         Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
@@ -83,8 +86,13 @@ def create_plots(
         .. include:: snippets/computational_cost.rst
 
     """
-    if not metrics:
+    if not metrics_result.plot_results or not metrics_result.plot_metrics:
+        LOGGER.warning("No plot metrics to display.")
         return
+
+    plot_results = metrics_result.plot_results
+    metrics = metrics_result.plot_metrics
+    agent_metrics = metrics_result.agent_metrics
 
     # Normalize metrics into list of groups (each group will be one figure)
     metric_groups = _organize_metrics_into_groups(metrics, individual_plots)
@@ -92,7 +100,122 @@ def create_plots(
     use_cost = computational_cost is not None
     two_columns = use_cost and compare_iterations_and_computational_cost
 
-    # Track all figures to display at the end
+    # Create figures and plot data
+    all_figures = _create_and_plot_figures(
+        metric_groups,
+        plot_results,
+        agent_metrics,
+        use_cost,
+        two_columns,
+        computational_cost=computational_cost,
+        x_axis_scaling=x_axis_scaling,
+        plot_grid=plot_grid,
+    )
+
+    if not all_figures:
+        LOGGER.warning("No plots were generated due to invalid data.")
+        return
+
+    # Save and show figures
+    _save_and_show_figures(all_figures, two_columns, plot_path=plot_path, plot_format=plot_format)
+
+
+def compute_plots(
+    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
+    problem: BenchmarkProblem,
+    metrics: list[Metric] | list[list[Metric]],
+) -> Mapping[Algorithm, Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]]:
+    """
+    Compute plot data for metrics.
+
+    Each algorithm's curve is its mean across the trials. The surrounding envelope is the min and max across the trials.
+
+    Args:
+        resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
+        problem: benchmark problem whose properties, e.g.
+            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.x_optimal`, are used for metric calculations
+        metrics: metrics to calculate and plot. If a list of lists is provided, each inner list will be plotted in a
+            separate figure. Otherwise groups of 3 metrics will be plotted together in subplots of the same figure
+
+    Returns:
+        A nested dictionary containing plot data for each algorithm and metric, structured as
+        {Algorithm: {Metric: (x, y_mean, y_min, y_max)}}, where x is the sequence of x values for the plot,
+        y_mean is the sequence of mean y values across trials for each x, and y_min and y_max are the sequences
+        of minimum and maximum y values across trials for each x, respectively.
+
+    """
+    if not metrics:
+        return {}
+
+    # Flatten metrics if needed
+    flat_metrics: list[Metric] = []
+    if any(isinstance(m, list) for m in metrics):
+        flat_metrics = [metric for group in metrics for metric in group]  # type: ignore[union-attr]
+    else:
+        flat_metrics = metrics  # type: ignore[assignment]
+
+    algs = list(resulting_agent_states)
+    results: dict[
+        Algorithm,
+        dict[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]],
+    ] = {alg: {} for alg in algs}
+
+    with utils.MetricProgressBar() as progress:
+        total_plots = len(flat_metrics) * len(resulting_agent_states)
+        plot_task = progress.add_task(
+            "Computing plot metrics",
+            total=total_plots,
+            status="",
+        )
+
+        for metric in flat_metrics:
+            progress.update(plot_task, status=f"Task: {metric.plot_description}")
+
+            for alg, agent_states in resulting_agent_states.items():
+                data_per_trial: list[Sequence[tuple[X, Y]]] = _plot_data_per_trial(
+                    agent_states,
+                    problem,
+                    metric,
+                )
+
+                if not _is_finite(data_per_trial):
+                    msg = (
+                        f"Skipping plot computation for {metric.plot_description} "
+                        f"and {alg.name}: found nan or inf in datapoints. "
+                        f"Test data or optimal x may be missing from the benchmark problem, got: "
+                        f"test_data={type(problem.test_data)}, x_optimal={type(problem.x_optimal)}"
+                    )
+                    LOGGER.warning(msg)
+                    progress.advance(plot_task)
+                    continue
+
+                mean_curve: Sequence[tuple[X, Y]] = _calculate_mean_curve(data_per_trial)
+                x, y_mean = zip(*mean_curve, strict=True)
+                y_min, y_max = _calculate_envelope(data_per_trial)
+
+                results[alg][metric] = (x, y_mean, y_min, y_max)
+                progress.advance(plot_task)
+
+        progress.update(plot_task, status="Plot computation complete")
+
+    return results
+
+
+def _create_and_plot_figures(
+    metric_groups: list[list[Metric]],
+    plot_results: Mapping[
+        Algorithm,
+        Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]],
+    ],
+    resulting_agent_states: Mapping[Algorithm, Sequence[Sequence[AgentMetricsView]]] | None,
+    use_cost: bool,
+    two_columns: bool,
+    *,
+    computational_cost: ComputationalCost | None,
+    x_axis_scaling: float,
+    plot_grid: bool,
+) -> list[tuple[Figure, list[SubPlot]]]:
+    """Create figures, plot data, and return non-empty figures."""
     all_figures: list[tuple[Figure, list[SubPlot]]] = []
 
     # Create a figure for each metric group
@@ -100,94 +223,71 @@ def create_plots(
         fig, metric_subplots = _create_metric_subplots(
             metric_group,
             use_cost,
-            compare_iterations_and_computational_cost,
+            two_columns,
             plot_grid,
         )
         all_figures.append((fig, metric_subplots))
 
     # Now plot all the data
-    did_plot = False
-    with utils.MetricProgressBar() as progress:
-        total_plots = (
-            sum(len(group) for group in metric_groups) * len(resulting_agent_states) * (2 if two_columns else 1)
-        )
-        plot_task = progress.add_task(
-            "Generating plots",
-            total=total_plots,
-            status="",
-        )
-        x_label = X_LABELS["computational_cost" if use_cost else "iterations"]
+    algs = list(plot_results.keys())
 
-        for group_idx, metric_group in enumerate(metric_groups):
-            fig, metric_subplots = all_figures[group_idx]
+    for group_idx, metric_group in enumerate(metric_groups):
+        fig, metric_subplots = all_figures[group_idx]
 
-            for metric_index_in_group, metric in enumerate(metric_group):
-                progress.update(
-                    plot_task,
-                    status=f"Task: {metric.plot_description} vs {x_label}",
-                )
-                for alg_idx, (alg, agent_states) in enumerate(resulting_agent_states.items()):
-                    data_per_trial: list[Sequence[tuple[X, Y]]] = _plot_data_per_trial(
-                        agent_states,
-                        problem,
-                        metric,
-                    )
-                    if not _is_finite(data_per_trial):
-                        msg = (
-                            f"Skipping plot {metric.plot_description}/{x_label} "
-                            f"for {alg.name}: found nan or inf in datapoints. "
-                            f"Test data or optimal x may be missing from the benchmark problem, got: "
-                            f"test_data={type(problem.test_data)}, x_optimal={type(problem.x_optimal)}"
-                        )
-                        LOGGER.warning(msg)
-                        progress.advance(plot_task, 2 if two_columns else 1)
-                        continue
-                    _plot(
-                        metric_subplots,
-                        data_per_trial,
-                        computational_cost,
-                        compare_iterations_and_computational_cost,
-                        x_axis_scaling,
-                        agent_states,
-                        alg,
-                        metric_index_in_group,
-                        alg_idx,
-                    )
-                    did_plot = True
-                    progress.advance(plot_task, 2 if two_columns else 1)
-        progress.update(plot_task, status="Finalizing plots")
+        for metric_index_in_group, metric in enumerate(metric_group):
+            for alg_idx, alg in enumerate(algs):
+                # Skip if no data for this metric/algorithm combination
+                if metric not in plot_results[alg]:
+                    continue
 
-    if not did_plot:
-        LOGGER.warning("No plots were generated due to invalid data.")
-        return
+                x, y_mean, y_min, y_max = plot_results[alg][metric]
+
+                # Determine subplot index
+                subplot_idx = metric_index_in_group * (2 if two_columns else 1)
+
+                # Transform x-axis for computational cost if needed
+                x_to_plot = x
+                if use_cost and computational_cost is not None and resulting_agent_states is not None:
+                    agent_states_for_alg = [list(trial) for trial in resulting_agent_states[alg]]
+                    total_computational_cost = _calc_total_cost(agent_states_for_alg, computational_cost)
+                    x_to_plot = tuple(val * total_computational_cost * x_axis_scaling for val in x)
+
+                # Plot iterations version if comparing
+                if two_columns:
+                    iter_idx = metric_index_in_group * 2 + 1
+                    _plot_subplot(metric_subplots[iter_idx], x, y_mean, y_min, y_max, alg.name, alg_idx)
+
+                # Plot main version (cost or iterations)
+                _plot_subplot(metric_subplots[subplot_idx], x_to_plot, y_mean, y_min, y_max, alg.name, alg_idx)
 
     # Filter out empty figures (ones with no data plotted in any subplot)
-    figures_to_show = [
+    return [
         (fig, metric_subplots)
         for fig, metric_subplots in all_figures
-        if any(sp.get_legend_handles_labels()[0] for sp in metric_subplots)  # Check if any subplot has data
+        if any(sp.get_legend_handles_labels()[0] for sp in metric_subplots)
     ]
 
-    if not figures_to_show:
-        LOGGER.warning("All figures are empty, nothing to display.")
-        return
 
-    # Add legends and save all non-empty figures
+def _save_and_show_figures(
+    figures_to_show: list[tuple[Figure, list[SubPlot]]],
+    two_columns: bool,
+    *,
+    plot_path: Path | None,
+    plot_format: Literal["png", "pdf", "svg"],
+) -> None:
+    """Add legends, save figures to files, and display them."""
     for fig_idx, (fig, metric_subplots) in enumerate(figures_to_show):
-        # Append figure number to plot_path if there are multiple figures
-        current_plot_path = plot_path
-        if plot_path is not None and len(figures_to_show) > 1:
-            # Split the path into name and extension
-            current_plot_path = plot_path.with_stem(f"{plot_path.stem}_fig{fig_idx + 1}")
+        # Determine the save path for this figure
+        current_plot_path = None
+        if plot_path is not None:
+            if len(figures_to_show) > 1:
+                current_plot_path = plot_path / f"plot_fig{fig_idx + 1}.{plot_format}"
+            else:
+                current_plot_path = plot_path / f"plot.{plot_format}"
 
         _add_legend_and_save(fig, metric_subplots, two_columns, current_plot_path)
 
-    # Close empty figures to free memory
-    for fig, metric_subplots in all_figures:
-        if (fig, metric_subplots) not in figures_to_show:
-            plt.close(fig)
-
-    # Show all non-empty figures at once
+    # Show all figures at once
     plt.show()
 
 
@@ -325,34 +425,6 @@ def _is_finite(data_per_trial: list[Sequence[tuple[X, Y]]]) -> bool:
     return np.isfinite(flattened_data).all().item()
 
 
-def _plot(  # noqa: PLR0917
-    metric_subplots: list[SubPlot],
-    data_per_trial: list[Sequence[tuple[X, Y]]],
-    computational_cost: ComputationalCost | None,
-    compare_iterations_and_computational_cost: bool,
-    x_axis_scaling: float,
-    agent_states: list[list[AgentMetricsView]],
-    alg: Algorithm,
-    metric_index: int,
-    iteration: int,
-) -> None:
-    use_cost = computational_cost is not None
-    subplot_idx = metric_index * (2 if use_cost and compare_iterations_and_computational_cost else 1)
-
-    mean_curve: Sequence[tuple[X, Y]] = _calculate_mean_curve(data_per_trial)
-    x, y_mean = zip(*mean_curve, strict=True)
-    y_min, y_max = _calculate_envelope(data_per_trial)
-    if computational_cost is not None:
-        total_computational_cost = _calc_total_cost(agent_states, computational_cost)
-        x_computational = tuple(val * total_computational_cost * x_axis_scaling for val in x)
-        if compare_iterations_and_computational_cost:
-            # Plot value vs iterations subplot first
-            iter_idx = metric_index * 2 + 1
-            _plot_subplot(metric_subplots[iter_idx], x, y_mean, y_min, y_max, alg.name, iteration)
-        x = x_computational
-    _plot_subplot(metric_subplots[subplot_idx], x, y_mean, y_min, y_max, alg.name, iteration)
-
-
 def _plot_subplot(  # noqa: PLR0917
     subplot: SubPlot,
     x: Sequence[float],
@@ -370,7 +442,7 @@ def _plot_subplot(  # noqa: PLR0917
         color=color,
         marker=marker,
         linestyle=linestyle,
-        markevery=max(1, int(len(x) / 10)),
+        markevery=0.1,
     )
     subplot.fill_between(x, y_min, y_max, color=color, alpha=0.1)
 
