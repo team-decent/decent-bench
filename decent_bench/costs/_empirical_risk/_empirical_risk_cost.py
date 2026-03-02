@@ -91,10 +91,11 @@ class EmpiricalRiskCost(Cost, ABC):
         Evaluate function at x using datapoints at the given indices.
 
         Supported values for indices are:
-            - int: the corresponding datapoint is used.
-            - list[int]: corresponding datapoints are used.
-            - "all": the full dataset is used.
-            - "batch": a batch is drawn with :attr:`batch_size` samples.
+            - int: datapoint to use.
+            - list[int]: datapoints to use.
+            - "all": use the full dataset.
+            - "batch": draw a batch with :attr:`batch_size` samples.
+
         """
 
     def evaluate(self, x: Array, indices: EmpiricalRiskIndices = "batch", **kwargs: Any) -> float:  # noqa: ANN401
@@ -121,10 +122,10 @@ class EmpiricalRiskCost(Cost, ABC):
         Gradient at x using datapoints at the given indices.
 
         Supported values for indices are:
-            - int: the corresponding datapoint is used.
-            - list[int]: corresponding datapoints are used.
-            - "all": the full dataset is used.
-            - "batch": a batch is drawn with :attr:`batch_size` samples.
+            - int: datapoint to use.
+            - list[int]: datapoints to use.
+            - "all": use the full dataset.
+            - "batch": draw a batch with :attr:`batch_size` samples.
 
         Supported values for reduction are:
             - "mean": average the gradients over the samples.
@@ -143,10 +144,11 @@ class EmpiricalRiskCost(Cost, ABC):
         Hessian at x using datapoints at the given indices.
 
         Supported values for indices are:
-            - int: the corresponding datapoint is used.
-            - list[int]: corresponding datapoints are used.
-            - "all": the full dataset is used.
-            - "batch": a batch is drawn with :attr:`batch_size` samples.
+            - int: datapoint to use.
+            - list[int]: datapoints to use.
+            - "all": use the full dataset.
+            - "batch": draw a batch with :attr:`batch_size` samples.
+
         """
 
     def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
@@ -170,10 +172,10 @@ class EmpiricalRiskCost(Cost, ABC):
         Sample a batch of indices uniformly without replacement if indices is "batch", otherwise use the given indices.
 
         Supported values for indices are:
-            - int: the corresponding datapoint is used.
-            - list[int]: corresponding datapoints are used.
-            - "all": the full dataset is used.
-            - "batch": a batch is drawn with :attr:`batch_size` samples.
+            - int: datapoint to use.
+            - list[int]: datapoints to use.
+            - "all": use the full dataset.
+            - "batch": draw a batch with :attr:`batch_size` samples.
 
         This method uses :attr:`batch_size` to determine the size of the batch. Once a batch is sampled, it is also
         stored in :attr:`batch_used` for later reference.
@@ -223,10 +225,11 @@ class EmpiricalRiskCost(Cost, ABC):
         Get training data corresponding to the given batch indices.
 
         Supported values for indices are:
-            - int: the corresponding datapoint is used.
-            - list[int]: corresponding datapoints are used.
-            - "all": the full dataset is used.
-            - "batch": a batch is drawn with :attr:`batch_size` samples.
+            - int: datapoint to use.
+            - list[int]: datapoints to use.
+            - "all": use the full dataset.
+            - "batch": draw a batch with :attr:`batch_size` samples.
 
         Make sure to call :meth:`_sample_batch_indices` (indices) to handle batch sampling and tracking.
+
         """
