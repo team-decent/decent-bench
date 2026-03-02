@@ -9,6 +9,6 @@ decent\_bench.metrics
 .. toctree::
    :maxdepth: 2
 
-   decent_bench.metrics.metric_collection
-   decent_bench.metrics.runtime_collection
+   decent_bench.metrics.metric_library
+   decent_bench.metrics.runtime_library
    decent_bench.metrics.metric_utils

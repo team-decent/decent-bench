@@ -546,7 +546,7 @@ def _run_trial(  # noqa: PLR0917
             checkpoint_manager.save_checkpoint(alg_idx, trial, iteration, alg, network)
 
         for metric in trial_runtime_metrics:
-            if metric.should_update(iteration):
+            if metric.should_update(iteration) or iteration + 1 == alg.iterations:
                 try:
                     metric.update_plot(problem, network.agents(), iteration)
                 except Exception as e:

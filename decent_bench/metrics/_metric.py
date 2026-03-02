@@ -42,10 +42,6 @@ class Metric(ABC):
             See :meth:`str.format` documentation for details on the format string options.
         x_log: whether to apply log scaling to the x-axis in plots.
         y_log: whether to apply log scaling to the y-axis in plots.
-        common_iterations: whether to only plot iterations that are common to all agents. If True then only the
-            intersection of all iterations reached by all agents will be plotted. If False then the union of all
-            iterations reached by any agent will be plotted, and missing samples for agents that did not sample
-            at those iterations will be replaced by the most recent previous sample for that agent.
 
     """
 
@@ -56,13 +52,11 @@ class Metric(ABC):
         fmt: str = ".2e",
         x_log: bool = False,
         y_log: bool = True,
-        common_iterations: bool = False,
     ) -> None:
         self.statistics = statistics
         self.x_log = x_log
         self.y_log = y_log
         self.fmt = fmt
-        self._common_iterations = common_iterations
 
     @property
     @abstractmethod
@@ -84,21 +78,6 @@ class Metric(ABC):
         """
         return True
 
-    @property
-    def common_iterations(self) -> bool:
-        """
-        Whether to only plot iterations that are common to all agents.
-
-        If True then only the intersection of all iterations reached by all agents will be plotted.
-        If False then the union of all iterations reached by any agent will be plotted, and missing samples for
-        agents that did not sample at those iterations will be replaced by the most recent previous sample for that
-        agent.
-
-        This only affects which iterations are plotted, it does not affect the data that is shown in the table or
-        whether the metric is calculated at the last iteration or not.
-        """
-        return self._common_iterations
-
     @abstractmethod
     def get_data_from_trial(
         self,
@@ -117,15 +96,6 @@ class Metric(ABC):
         Returns:
             a list of floats, one for each agent
 
-        Note:
-            If :attr:`~decent_bench.metrics.Metric.common_iterations` is True then *iteration* will be one of the
-            iterations that any agents has reached, therefore it might not be present in all agents' x_history.
-            In this case, the implementation of this method should handle this scenario appropriately by calling
-            :func:`~decent_bench.metrics.metric_utils.find_closest_iteration`.
-            If :attr:`~decent_bench.metrics.Metric.common_iterations` is False then *iteration* will be one of the
-            iterations that all agents have reached, so it should be present in all agents' x_history but the
-            implementation should be able to handle both cases.
-
         """
 
     def get_table_data(self, agents: Sequence[AgentMetricsView], problem: BenchmarkProblem) -> Sequence[float]:
@@ -143,11 +113,10 @@ class Metric(ABC):
         Extract trial data to be used in plots for this metric.
 
         This is used by :func:`~decent_bench.metrics.compute_plots` to generate plots for this metric.
-        By default, it calculates statistics (mean) on the intersection of all the iterations
-        reached by all agents, but it can be overridden to perform additional
-        processing on the data before it is used in plots.
+        By default, it calculates the mean value of all the agents results at each iteration.
+        This method can be overridden to perform additional processing on the data before it is used in plots.
         """
-        iterations = (
-            utils.common_sorted_iterations(agents) if self.common_iterations else utils.all_sorted_iterations(agents)
-        )
-        return [(i, float(np.mean(self.get_data_from_trial(agents, problem, i)))) for i in iterations]
+        return [
+            (i, float(np.mean(self.get_data_from_trial(agents, problem, i))))
+            for i in utils.all_sorted_iterations(agents)
+        ]

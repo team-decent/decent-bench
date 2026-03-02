@@ -80,13 +80,19 @@ class Agent:
         """Number of iterations between snapshots of the agent's state."""
         return self._state_snapshot_period
 
-    def snapshot(self, iteration: int) -> None:
+    def snapshot(self, iteration: int, force: bool = False) -> None:
         """
         Snapshot the agent's state.
 
         This saves the current optimization variable x every :attr:`state_snapshot_period` iterations.
+
+        Args:
+            iteration: Algorithm iteration
+            force: If true, skip :attr:`state_snapshot_period` and forcefully snapshot the agent state.
+                Useful when saving the agents final state.
+
         """
-        if iteration % self.state_snapshot_period == 0 and self._current_x is not None:
+        if (force or iteration % self.state_snapshot_period == 0) and self._current_x is not None:
             self._x_history[iteration] = iop.copy(self._current_x)
 
     @property

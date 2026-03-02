@@ -1,4 +1,4 @@
-from . import metric_collection, metric_utils, runtime_collection
+from . import metric_library, metric_utils, runtime_library
 from ._computational_cost import ComputationalCost
 from ._metric import Metric, X, Y
 from ._plots import compute_plots, display_plots
@@ -17,7 +17,7 @@ __all__ = [
     "compute_tables",
     "display_plots",
     "display_tables",
-    "metric_collection",
+    "metric_library",
     "metric_utils",
-    "runtime_collection",
+    "runtime_library",
 ]

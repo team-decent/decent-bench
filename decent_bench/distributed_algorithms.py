@@ -74,7 +74,8 @@ class Algorithm(ABC):
     @final
     def _snapshot_agents(self, network: P2PNetwork, iteration: int) -> None:
         for i in network.agents():
-            i.snapshot(iteration=iteration)
+            # Forcefully save a snapshot on the final iteration
+            i.snapshot(iteration=iteration, force=iteration == self.iterations)
 
     @final
     def run(
@@ -107,9 +108,8 @@ class Algorithm(ABC):
             as needed.
 
         Note:
-            Every algorithm iteration, the algorithm snapshots the agents' states using the global iteration by calling
-            :meth:`~decent_bench.agents.Agent.snapshot` method for each agent, which saves the current
-            optimization variable x based on the agent's :attr:`~decent_bench.agents.Agent.state_snapshot_period`.
+            The algorithm saves the agents' states every :attr:`~decent_bench.agents.Agent.state_snapshot_period`,
+            by calling :meth:~decent_bench.agents.Agent.snapshot for each agent.
 
         """
         if start_iteration < 0 or start_iteration > self.iterations:
@@ -121,9 +121,8 @@ class Algorithm(ABC):
             self.initialize(network)
         for k in range(start_iteration, self.iterations):
             self.step(network, k)
-            self._snapshot_agents(
-                network, k + 1
-            )  # Already completed the iteration, so snapshot with k+1 to indicate the state after iteration k
+            # Already completed the iteration, so snapshot with k+1 to indicate the state after iteration k
+            self._snapshot_agents(network, k + 1)
             if progress_callback is not None:
                 progress_callback(k)
 

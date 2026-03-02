@@ -71,8 +71,8 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
     from decent_bench.metrics import ComputationalCost
-    from decent_bench.metrics.metric_collection import GradientCalls, Regret
-    from decent_bench.metrics.runtime_collection import RuntimeLoss, RuntimeRegret
+    from decent_bench.metrics.metric_library import GradientCalls, Regret
+    from decent_bench.metrics.runtime_library import RuntimeLoss, RuntimeRegret
 
     if __name__ == "__main__":
         regret = Regret([utils.single], x_log=False, y_log=True)
@@ -361,7 +361,7 @@ where 3. and 4. are true if ``save_path`` is set to the checkpoint manager's res
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
-    from decent_bench.metrics.runtime_collection import RuntimeLoss, RuntimeRegret
+    from decent_bench.metrics.runtime_library import RuntimeLoss, RuntimeRegret
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
     if __name__ == "__main__":
@@ -698,7 +698,7 @@ Create your own metrics to tabulate and/or plot.
             if iteration == -1:
                 return [float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[max(a.x_history)]))) for a in agents]
             return [
-                float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[utils.find_closest_iteration(a, iteration)])))
+                float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[iteration])))
                 for a in agents
             ]
 
@@ -708,7 +708,6 @@ Create your own metrics to tabulate and/or plot.
             fmt=".4e",
             x_log=False,
             y_log=True,
-            common_iterations=True, # Only plot at iterations common to all agents
         )
 
         benchmark_result = benchmark.benchmark(

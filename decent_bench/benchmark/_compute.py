@@ -11,7 +11,7 @@ from decent_bench.metrics import (
     compute_plots,
     compute_tables,
 )
-from decent_bench.metrics import metric_collection as mc
+from decent_bench.metrics import metric_library as ml
 from decent_bench.utils import logger
 
 if TYPE_CHECKING:
@@ -22,8 +22,8 @@ def compute_metrics(
     benchmark_result: BenchmarkResult | None = None,
     checkpoint_manager: "CheckpointManager | None" = None,
     *,
-    table_metrics: list[Metric] = mc.DEFAULT_TABLE_METRICS,
-    plot_metrics: list[Metric] | list[list[Metric]] = mc.DEFAULT_PLOT_METRICS,
+    table_metrics: list[Metric] = ml.DEFAULT_TABLE_METRICS,
+    plot_metrics: list[Metric] | list[list[Metric]] = ml.DEFAULT_PLOT_METRICS,
     confidence_level: float = 0.95,
     log_level: int = logging.INFO,
 ) -> MetricResult:
@@ -36,9 +36,9 @@ def compute_metrics(
         checkpoint_manager: if provided, will be used to save results of metrics computation and/or load benchmark
             result.
         table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_collection.DEFAULT_TABLE_METRICS`
+            :const:`~decent_bench.metrics.metric_library.DEFAULT_TABLE_METRICS`
         plot_metrics: metrics to plot after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_collection.DEFAULT_PLOT_METRICS`.
+            :const:`~decent_bench.metrics.metric_library.DEFAULT_PLOT_METRICS`.
             If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
             metrics will be grouped and plotted in their own figure with subplots.
         confidence_level: confidence level for computing confidence intervals of the table metrics, expressed as a value

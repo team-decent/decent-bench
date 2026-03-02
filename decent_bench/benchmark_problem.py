@@ -90,7 +90,7 @@ def create_classification_problem(
 
     Note:
         If cost_cls is :class:`~decent_bench.costs.PyTorchCost`, x_optimal is not computed and set to None.
-        Be aware that metrics that rely on x_optimal (e.g. :class:`~decent_bench.metrics.metric_collection.Regret`)
+        Be aware that metrics that rely on x_optimal (e.g. :class:`~decent_bench.metrics.metric_library.Regret`)
         will not be available when using PyTorchCost.
 
     Raises:
@@ -202,7 +202,7 @@ def create_regression_problem(
 
     Note:
         If cost_cls is :class:`~decent_bench.costs.PyTorchCost`, x_optimal is not computed and set to None.
-        Be aware that metrics that rely on x_optimal (e.g. :class:`~decent_bench.metrics.metric_collection.Regret`)
+        Be aware that metrics that rely on x_optimal (e.g. :class:`~decent_bench.metrics.metric_library.Regret`)
         will not be available when using PyTorchCost.
 
     Raises:
