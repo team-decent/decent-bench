@@ -34,6 +34,7 @@ class Network(ABC):  # noqa: B024
         self._message_noise = message_noise
         self._message_compression = message_compression
         self._message_drop = message_drop
+        self._active_agents_cache: dict[int, list[Agent]] = {}
 
     @property
     def graph(self) -> AgentGraph:
@@ -66,7 +67,12 @@ class Network(ABC):  # noqa: B024
         Whether an :class:`~decent_bench.agents.Agent` is active or not at a given time is defined by its
         :class:`~decent_bench.schemes.AgentActivationScheme`.
         """
-        return [a for a in self.agents() if a._activation.is_active(iteration)]  # noqa: SLF001
+        if iteration not in self._active_agents_cache:
+            # Cache the active agents for each iterations in case the same iteration is queried multiple times
+            # so that we preserve the activated agents for the iteration even if the underlying activation schemes
+            # are non-deterministic.
+            self._active_agents_cache[iteration] = [a for a in self.agents() if a._activation.is_active(iteration)]  # noqa: SLF001
+        return self._active_agents_cache[iteration]
 
     def connected_agents(self, agent: Agent) -> list[Agent]:
         """Agents directly connected to ``agent`` in the underlying graph."""
