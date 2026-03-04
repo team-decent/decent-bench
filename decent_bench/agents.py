@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import bisect
 import contextlib
-from collections.abc import Generator, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
@@ -186,7 +186,7 @@ class Agent:
 
     @staticmethod
     @contextlib.contextmanager
-    def no_count(agents: Sequence[Agent]) -> Generator[None]:
+    def no_count(agents: Sequence[Agent]) -> Iterator[None]:
         """
         Context manager that disables call counting for a sequence of agents.
 
@@ -251,11 +251,11 @@ class AgentHistory:
             raise ValueError("No history available")
         return self._sorted_keys[0]
 
-    def items(self) -> Generator[tuple[int, Array]]:
+    def items(self) -> Iterator[tuple[int, Array]]:
         """Yield ``(iteration, x)`` pairs for every snapshot, in ascending iteration order."""
         return ((iteration, self._x_history[iteration]) for iteration in self._sorted_keys)
 
-    def values(self) -> Generator[Array]:
+    def values(self) -> Iterator[Array]:
         """Yield the x snapshot for every recorded iteration, in ascending iteration order."""
         return (self._x_history[iteration] for iteration in self._sorted_keys)
 
