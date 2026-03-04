@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import bisect
-from collections.abc import Generator, Iterator, Mapping
+import contextlib
+from collections.abc import Generator, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
@@ -35,6 +36,7 @@ class Agent:
         self._n_gradient_calls: float = 0
         self._n_hessian_calls: float = 0
         self._n_proximal_calls: float = 0
+        self._no_count_depth: int = 0  # Nesting counter; counting disabled when > 0
         cost.function = self._call_counting_function  # type: ignore[method-assign]
         cost.gradient = self._call_counting_gradient  # type: ignore[method-assign]
         cost.hessian = self._call_counting_hessian  # type: ignore[method-assign]
@@ -75,6 +77,32 @@ class Agent:
     def x(self, x: Array) -> None:
         self._n_x_updates += 1
         self._current_x = x
+
+    @staticmethod
+    @contextlib.contextmanager
+    def no_count(agents: Sequence[Agent]) -> Generator[None]:
+        """
+        Context manager that disables call counting for a sequence of agents.
+
+        Use this when computing metrics or other operations that should not
+        be counted as algorithm function/gradient calls.
+
+        Args:
+            agents: sequence of agents to disable call counting for
+
+        Example::
+
+            with Agent.no_count(agents):
+                value = metric.compute(problem, agents, iteration)
+
+        """
+        for agent in agents:
+            agent._no_count_depth += 1  # noqa: SLF001
+        try:
+            yield
+        finally:
+            for agent in agents:
+                agent._no_count_depth -= 1  # noqa: SLF001
 
     @property
     def state_snapshot_period(self) -> int:
@@ -140,6 +168,8 @@ class Agent:
     def _call_counting_function(self, x: Array, *args: Any, **kwargs: Any) -> float:  # noqa: ANN401
         # Call the function first so "batch_used" is populated for EmpiricalRiskCost before counting function calls
         res = self._cost.__class__.function(self.cost, x, *args, **kwargs)
+        if self._no_count_depth > 0:
+            return res
         if isinstance(self._cost, EmpiricalRiskCost):
             self._n_function_calls += len(self._cost.batch_used) / self._cost.n_samples
         else:
@@ -148,6 +178,8 @@ class Agent:
 
     def _call_counting_gradient(self, x: Array, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         res = self._cost.__class__.gradient(self.cost, x, *args, **kwargs)
+        if self._no_count_depth > 0:
+            return res
         if isinstance(self._cost, EmpiricalRiskCost):
             self._n_gradient_calls += len(self._cost.batch_used) / self._cost.n_samples
         else:
@@ -156,6 +188,8 @@ class Agent:
 
     def _call_counting_hessian(self, x: Array, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         res = self._cost.__class__.hessian(self.cost, x, *args, **kwargs)
+        if self._no_count_depth > 0:
+            return res
         if isinstance(self._cost, EmpiricalRiskCost):
             self._n_hessian_calls += len(self._cost.batch_used) / self._cost.n_samples
         else:
@@ -164,6 +198,8 @@ class Agent:
 
     def _call_counting_proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         res = self._cost.__class__.proximal(self.cost, x, rho, *args, **kwargs)
+        if self._no_count_depth > 0:
+            return res
         if isinstance(self._cost, EmpiricalRiskCost):
             self._n_proximal_calls += len(self._cost.batch_used) / self._cost.n_samples
         else:

@@ -4,12 +4,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from decent_bench.agents import Agent
 from decent_bench.benchmark_problem import BenchmarkProblem
 
 if TYPE_CHECKING:
     import queue
-
-    from decent_bench.agents import Agent
 
 
 class RuntimeMetric(ABC):
@@ -131,8 +130,9 @@ class RuntimeMetric(ABC):
             iteration: current iteration number
 
         """
-        # Compute metric value
-        value = self.compute(problem, agents, iteration)
+        # Compute metric value without counting calls made by the metric
+        with Agent.no_count(agents):
+            value = self.compute(problem, agents, iteration)
 
         # Send data to plotter process queue
         if self._queue is not None:
