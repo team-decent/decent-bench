@@ -78,32 +78,6 @@ class Agent:
         self._n_x_updates += 1
         self._current_x = x
 
-    @staticmethod
-    @contextlib.contextmanager
-    def no_count(agents: Sequence[Agent]) -> Generator[None]:
-        """
-        Context manager that disables call counting for a sequence of agents.
-
-        Use this when computing metrics or other operations that should not
-        be counted as algorithm function/gradient calls.
-
-        Args:
-            agents: sequence of agents to disable call counting for
-
-        Example::
-
-            with Agent.no_count(agents):
-                value = metric.compute(problem, agents, iteration)
-
-        """
-        for agent in agents:
-            agent._no_count_depth += 1  # noqa: SLF001
-        try:
-            yield
-        finally:
-            for agent in agents:
-                agent._no_count_depth -= 1  # noqa: SLF001
-
     @property
     def state_snapshot_period(self) -> int:
         """Number of iterations between snapshots of the agent's state."""
@@ -209,6 +183,32 @@ class Agent:
     def __index__(self) -> int:
         """Enable using agent as index, for example ``W[a1, a2]`` instead of ``W[a1.id, a2.id]``."""
         return self._id
+
+    @staticmethod
+    @contextlib.contextmanager
+    def no_count(agents: Sequence[Agent]) -> Generator[None]:
+        """
+        Context manager that disables call counting for a sequence of agents.
+
+        Use this when computing metrics or other operations that should not
+        be counted as algorithm function/gradient calls.
+
+        Args:
+            agents: sequence of agents to disable call counting for
+
+        Example::
+
+            with Agent.no_count(agents):
+                value = metric.compute(problem, agents, iteration)
+
+        """
+        for agent in agents:
+            agent._no_count_depth += 1  # noqa: SLF001
+        try:
+            yield
+        finally:
+            for agent in agents:
+                agent._no_count_depth -= 1  # noqa: SLF001
 
 
 class AgentHistory:
