@@ -2,27 +2,27 @@ import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, Final, cast, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
-from decent_bench.utils.types import BatchingMode, BatchSize, ClientWeights, ResolvedBatchSize
+from decent_bench.utils.types import ClientWeights
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
     from decent_bench.utils.array import Array
 
 
-class DecAlgorithm[NetworkT: Network](ABC):
+class Algorithm[NetworkT: Network](ABC):
     """Base class for decentralized algorithms."""
 
     @property
     @abstractmethod
     def iterations(self) -> int:
-        """Number of iterations or rounds to run the algorithm for."""
+        """Number of iterations to run the algorithm for."""
 
     @iterations.setter
     @abstractmethod
@@ -70,7 +70,7 @@ class DecAlgorithm[NetworkT: Network](ABC):
         Finalize the algorithm.
 
         Note:
-            Override :meth:`~decent_bench.distributed_algorithms.DecAlgorithm._finalize_agents` to control which
+            Override :meth:`~decent_bench.distributed_algorithms.Algorithm._finalize_agents` to control which
             agents are finalized.
 
         Args:
@@ -128,54 +128,69 @@ class DecAlgorithm[NetworkT: Network](ABC):
             self.finalize(network)
 
 
-class P2PAlgorithm(DecAlgorithm[P2PNetwork]):
-    """Distributed algorithm - agents collaborate to solve an optimization problem using peer-to-peer communication."""
+class P2PAlgorithm(Algorithm[P2PNetwork]):
+    """Distributed algorithm - agents collaborate using peer-to-peer communication."""
 
     def _finalize_agents(self, network: P2PNetwork) -> Iterable["Agent"]:
         return network.agents()
 
 
-class FedAlgorithm(DecAlgorithm[FedNetwork]):
-    """Federated algorithm - clients collaborate via a central server."""
+class FedAlgorithm(Algorithm[FedNetwork]):
+    r"""
+    Federated algorithm - clients collaborate via a central server.
+
+    Note:
+        ``client_weights`` only affects how updates are aggregated at the server; it does not change the objective
+        function being optimized (the goal is still to solve :math:`\min \sum_i f_i(x)`). To optimize a weighted
+        objective :math:`\min \sum_i w_i f_i(x)`, scale each client's cost by ``w_i`` in the problem definition.
+
+    """
+
+    selection_scheme: ClientSelectionScheme | None = None
+    _DEFAULT_SELECTION_SCHEME: Final[object] = object()
+    client_weights: ClientWeights | None = None
+    _DEFAULT_CLIENT_WEIGHTS: Final[object] = object()
 
     def _finalize_agents(self, network: FedNetwork) -> Iterable["Agent"]:
         return [network.server, *network.clients]
 
-    @staticmethod
-    def _select_clients(
+    def finalize(self, network: FedNetwork) -> None:
+        """
+        Finalize the algorithm and sync the final server model to clients.
+
+        This performs one last server-to-client send/receive so that clients store the final model.
+        """
+        if network.clients:
+            network.broadcast(msg=network.server.x)
+            for client in network.clients:
+                network.receive(receiver=client, sender=network.server)
+                if network.server in client.messages:
+                    client.x = iop.copy(client.messages[network.server])
+
+        super().finalize(network)
+
+    def select_clients(
+        self,
         clients: Sequence["Agent"],
         iteration: int,
-        selection_scheme: ClientSelectionScheme | None,
+        selection_scheme: ClientSelectionScheme | object | None = _DEFAULT_SELECTION_SCHEME,
     ) -> list["Agent"]:
+        """
+        Select participating clients from an eligible pool.
+
+        Args:
+            clients: eligible clients to select from.
+            iteration: current round index.
+            selection_scheme: optional override for this call. If omitted, uses ``self.selection_scheme``.
+                Pass ``None`` to force selecting all clients.
+
+        """
+        if selection_scheme is self._DEFAULT_SELECTION_SCHEME:
+            selection_scheme = self.selection_scheme
         if selection_scheme is None:
             return list(clients)
-        return selection_scheme.select(clients, iteration)
-
-    @staticmethod
-    def _infer_client_weight(client: "Agent") -> float:
-        cost = client.cost
-        if hasattr(cost, "A"):
-            try:
-                size = iop.shape(cost.A)[0]
-            except Exception:
-                size = None
-            if size is not None:
-                return float(size)
-        if hasattr(cost, "b"):
-            try:
-                size = iop.shape(cost.b)[0]
-            except Exception:
-                size = None
-            if size is not None:
-                return float(size)
-        if hasattr(cost, "n_samples"):
-            n_samples = cost.n_samples
-            if n_samples is not None:
-                return float(n_samples)
-        raise ValueError(
-            "Cannot infer client data size. Provide client_weights to the algorithm or add a size "
-            "attribute to the cost."
-        )
+        scheme = cast("ClientSelectionScheme", selection_scheme)
+        return scheme.select(clients, iteration)
 
     @classmethod
     def _weights_for_clients(
@@ -184,7 +199,7 @@ class FedAlgorithm(DecAlgorithm[FedNetwork]):
         client_weights: ClientWeights | None,
     ) -> list[float]:
         if client_weights is None:
-            weights = [cls._infer_client_weight(client) for client in clients]
+            weights = [alg_helpers.infer_client_weight(client) for client in clients]
         elif isinstance(client_weights, dict):
             weights = []
             for client in clients:
@@ -200,13 +215,45 @@ class FedAlgorithm(DecAlgorithm[FedNetwork]):
             raise ValueError("Client weights must be non-negative")
         return weights
 
-    @staticmethod
-    def _require_empirical_risk(client: "Agent") -> EmpiricalRiskCost:
-        if not isinstance(client.cost, EmpiricalRiskCost):
-            raise TypeError(
-                'Mini-batch federated algorithms require EmpiricalRiskCost; set batch_size="all" for generic costs.'
-            )
-        return client.cost
+    def aggregate(
+        self,
+        network: FedNetwork,
+        server: "Agent",
+        selected_clients: Sequence["Agent"],
+        client_weights: ClientWeights | object | None = _DEFAULT_CLIENT_WEIGHTS,
+    ) -> None:
+        """
+        Aggregate client updates at the server.
+
+        By default, this performs a weighted average of the received client models. If ``client_weights`` is not
+        provided, ``self.client_weights`` is used. If weights are ``None``, they are inferred from client data size.
+
+        Override this method for custom aggregation strategies (e.g., robust aggregation).
+
+        Raises:
+            ValueError: if the sum of client weights is non-positive.
+
+        """
+        if client_weights is self._DEFAULT_CLIENT_WEIGHTS:
+            client_weights = self.client_weights
+
+        network.receive(receiver=server, sender=selected_clients)
+        received_clients = [client for client in selected_clients if client in server.messages]
+        if not received_clients:
+            return
+        updates = [server.messages[client] for client in received_clients]
+        weights = self._weights_for_clients(received_clients, cast("ClientWeights | None", client_weights))
+        total_weight = sum(weights)
+        if total_weight <= 0:
+            raise ValueError("Sum of client weights must be positive")
+        weighted_updates = [update * weight for update, weight in zip(updates, weights, strict=True)]
+        server.x = iop.sum(iop.stack(weighted_updates, dim=0), dim=0) / total_weight
+
+    def _selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
+        active_clients = network.active_clients(iteration)
+        if not active_clients:
+            return []
+        return self.select_clients(active_clients, iteration)
 
 
 @dataclass(eq=False)
@@ -220,21 +267,21 @@ class FedAvg(FedAlgorithm):
     .. math::
         \mathbf{x}_{k+1} = \frac{1}{|S_k|} \sum_{i \in S_k} \mathbf{x}_{i, k}^{(E)}
 
-    where :math:`E` is the number of local epochs per round, :math:`\eta` is the step size, and :math:`S_k` is the set
-    of participating clients at round :math:`k`. The aggregation uses client weights, defaulting to data-size weights
-    when ``client_weights`` is not provided. Client selection (subsampling) defaults to uniform sampling with
-    fraction 1.0 (all active clients) and can be customized via ``selection_scheme``. Local updates use stochastic
-    gradients computed over all minibatches of size ``batch_size`` per epoch. Mini-batching requires each client cost
-    to be an :class:`~decent_bench.costs.EmpiricalRiskCost`. Set ``batch_size="all"`` for full-batch gradients or
-    ``batch_size="cost"`` to use each client's configured batch size.
+    where :math:`t` indexes the local training epochs on each client and :math:`E` is the number of local epochs per
+    round (``num_local_epochs``), :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients at
+    round :math:`k`. In FedAvg, each selected client performs ``num_local_epochs`` local SGD epochs, then the server
+    aggregates the final local models to form :math:`\mathbf{x}_{k+1}`. The aggregation uses client weights, defaulting
+    to data-size weights when ``client_weights`` is not provided. Client selection (subsampling) defaults to uniform
+    sampling with fraction 1.0 (all active clients) and can be customized via ``selection_scheme``. For
+    :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
+    :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; for generic costs, local
+    updates use full-batch gradients.
     """
 
     # C=0.1; batch size= inf/10/50 (dataset sizes are bigger; normally 1/10 of the total dataset).
     # E= 5/20 (num local epochs).
     step_size: float
-    local_epochs: int = 1
-    batch_size: BatchSize = "cost"
-    batching: BatchingMode = "epoch"
+    num_local_epochs: int = 1
     sgd_seed: int | None = None
     client_weights: ClientWeights | None = None
     selection_scheme: ClientSelectionScheme | None = field(
@@ -248,57 +295,22 @@ class FedAvg(FedAlgorithm):
     def initialize(self, network: FedNetwork) -> None:  # noqa: D102
         self._validate_hyperparams()
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
-        server = network.server
-        clients = network.clients
-        self._validate_batching(clients)
-        self._setup_rngs(clients)
-        server.initialize(x=self.x0, received_msgs=dict.fromkeys(clients, self.x0))
-        for client in clients:
-            client.initialize(x=self.x0, received_msgs={server: self.x0})
+        self._setup_rngs(network.clients)
+        network.server.initialize(x=self.x0, received_msgs=dict.fromkeys(network.clients, self.x0))
+        for client in network.clients:
+            client.initialize(x=self.x0, received_msgs={network.server: self.x0})
 
     def _validate_hyperparams(self) -> None:
         if self.step_size <= 0:
             raise ValueError("step_size must be positive")
-        if self.local_epochs <= 0:
-            raise ValueError("local_epochs must be positive")
-        if isinstance(self.batch_size, int) and self.batch_size <= 0:
-            raise ValueError("batch_size must be positive")
-
-    def _validate_batching(self, clients: Sequence["Agent"]) -> None:
-        if self.batch_size is None:
-            raise ValueError('batch_size cannot be None; use "all" or "cost" for full-batch updates.')
-        if isinstance(self.batch_size, int):
-            for client in clients:
-                self._require_empirical_risk(client)
-        if self.batching not in {"epoch", "random"}:
-            raise ValueError("batching must be 'epoch' or 'random'")
-        if self.batch_size == "cost":
-            for client in clients:
-                if isinstance(client.cost, EmpiricalRiskCost) and client.cost.batch_size <= 0:
-                    raise ValueError("EmpiricalRiskCost.batch_size must be positive")
+        if self.num_local_epochs <= 0:
+            raise ValueError("num_local_epochs must be positive")
 
     def _setup_rngs(self, clients: Sequence["Agent"]) -> None:
         if self.sgd_seed is not None:
             self._sgd_rngs = {client.id: random.Random(self.sgd_seed + client.id) for client in clients}
         else:
             self._sgd_rngs = None
-
-    def _resolve_batching(self, client: "Agent") -> tuple[ResolvedBatchSize, EmpiricalRiskCost | None]:
-        # Batching policy:
-        # - "cost": defer to EmpiricalRiskCost.batch_size; non-empirical costs fall back to full-batch.
-        # - "all": always full-batch.
-        # - int: explicit mini-batch size (requires EmpiricalRiskCost).
-        if self.batch_size == "cost":
-            if isinstance(client.cost, EmpiricalRiskCost):
-                return client.cost.batch_size, client.cost
-            return "all", None
-
-        if self.batch_size == "all":
-            if isinstance(client.cost, EmpiricalRiskCost):
-                return "all", client.cost
-            return "all", None
-
-        return self.batch_size, self._require_empirical_risk(client)
 
     def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
         server = network.server
@@ -308,13 +320,7 @@ class FedAvg(FedAlgorithm):
 
         self._sync_server_to_clients(network, server, selected_clients)
         self._run_local_updates(network, server, selected_clients)
-        self._aggregate_updates(network, server, selected_clients)
-
-    def _selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
-        active_clients = network.active_clients(iteration)
-        if not active_clients:
-            return []
-        return self._select_clients(active_clients, iteration, self.selection_scheme)
+        self.aggregate(network, server, selected_clients)
 
     def _sync_server_to_clients(
         self, network: FedNetwork, server: "Agent", selected_clients: Sequence["Agent"]
@@ -330,32 +336,18 @@ class FedAvg(FedAlgorithm):
 
     def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
         local_x = iop.copy(client.messages[server])
-        per_client_batch, cost = self._resolve_batching(client)
-        if per_client_batch == "all":
-            return self._full_batch_update(client, cost, local_x)
-        return self._mini_batch_update(client, cost, local_x, per_client_batch)
+        if isinstance(client.cost, EmpiricalRiskCost):
+            cost = client.cost
+            n_samples = cost.n_samples
+            if n_samples <= 0:
+                raise ValueError("Client dataset size must be positive")
+            rng = self._client_rng(client)
+            return self._epoch_minibatch_update(cost, local_x, cost.batch_size, n_samples, rng)
 
-    def _full_batch_update(self, client: "Agent", cost: EmpiricalRiskCost | None, local_x: "Array") -> "Array":
-        for _ in range(self.local_epochs):
-            grad = cost.gradient(local_x, indices="all") if cost is not None else client.cost.gradient(local_x)
+        for _ in range(self.num_local_epochs):
+            grad = client.cost.gradient(local_x)
             local_x -= self.step_size * grad
         return local_x
-
-    def _mini_batch_update(
-        self,
-        client: "Agent",
-        cost: EmpiricalRiskCost | None,
-        local_x: "Array",
-        per_client_batch: int,
-    ) -> "Array":
-        cost = cost or self._require_empirical_risk(client)
-        n_samples = cost.n_samples
-        if n_samples <= 0:
-            raise ValueError("Client dataset size must be positive")
-        rng = self._client_rng(client)
-        if self.batching == "epoch":
-            return self._epoch_minibatch_update(cost, local_x, per_client_batch, n_samples, rng)
-        return self._random_minibatch_update(cost, local_x, per_client_batch, n_samples, rng)
 
     def _client_rng(self, client: "Agent") -> random.Random:
         if self._sgd_rngs is None:
@@ -370,7 +362,7 @@ class FedAvg(FedAlgorithm):
         n_samples: int,
         rng: random.Random,
     ) -> "Array":
-        for _ in range(self.local_epochs):
+        for _ in range(self.num_local_epochs):
             indices = list(range(n_samples))
             rng.shuffle(indices)
             for start in range(0, n_samples, per_client_batch):
@@ -378,39 +370,6 @@ class FedAvg(FedAlgorithm):
                 grad = cost.gradient(local_x, indices=batch_indices)
                 local_x -= self.step_size * grad
         return local_x
-
-    def _random_minibatch_update(
-        self,
-        cost: EmpiricalRiskCost,
-        local_x: "Array",
-        per_client_batch: int,
-        n_samples: int,
-        rng: random.Random,
-    ) -> "Array":
-        n_steps = max(1, n_samples // per_client_batch)
-        use_cost_batch = self.batch_size == "cost"
-        for _ in range(self.local_epochs):
-            for _ in range(n_steps):
-                if use_cost_batch:
-                    grad = cost.gradient(local_x)
-                else:
-                    batch_indices = rng.sample(range(n_samples), per_client_batch)
-                    grad = cost.gradient(local_x, indices=batch_indices)
-                local_x -= self.step_size * grad
-        return local_x
-
-    def _aggregate_updates(self, network: FedNetwork, server: "Agent", selected_clients: Sequence["Agent"]) -> None:
-        network.receive(receiver=server, sender=selected_clients)
-        received_clients = [client for client in selected_clients if client in server.messages]
-        if not received_clients:
-            return
-        updates = [server.messages[client] for client in received_clients]
-        weights = self._weights_for_clients(received_clients, self.client_weights)
-        total_weight = sum(weights)
-        if total_weight <= 0:
-            raise ValueError("Sum of client weights must be positive")
-        weighted_updates = [update * weight for update, weight in zip(updates, weights, strict=True)]
-        server.x = iop.sum(iop.stack(weighted_updates, dim=0), dim=0) / total_weight
 
 
 @dataclass(eq=False)

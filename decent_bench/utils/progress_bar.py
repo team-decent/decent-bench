@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from math import ceil
 from multiprocessing.managers import SyncManager
@@ -10,7 +10,6 @@ from rich.progress import (
     BarColumn,
     Progress,
     ProgressColumn,
-    TaskID,
     TaskProgressColumn,
     TextColumn,
     TimeRemainingColumn,
@@ -18,10 +17,12 @@ from rich.progress import (
 from rich.table import Column, Table
 from rich.text import Text
 
-from decent_bench.distributed_algorithms import P2PAlgorithm
+from decent_bench.distributed_algorithms import Algorithm
 
 if TYPE_CHECKING:
-    from rich.progress import Task
+    from rich.progress import Task, TaskID
+else:
+    TaskID = int
 
 
 @dataclass(eq=False)
@@ -127,12 +128,12 @@ class ProgressBarHandle:
     """
 
     _progress_increment_queue: Queue[Any]
-    _progress_bar_ids: dict[Any, Any]
+    _progress_bar_ids: dict[Algorithm[Any], TaskID]
     _progress_step: int | None
 
-    def start_progress_bar(self, algorithm: P2PAlgorithm, trial: int, initial_progress: int) -> None:
+    def start_progress_bar(self, algorithm: Algorithm[Any], trial: int, initial_progress: int) -> None:
         """
-        Start the clock of *algorithm*'s progress bar without incrementing it.
+         Start the clock of *algorithm*'s progress bar without incrementing it.
 
         Internally, this is done through sending an increment of 0 to the progress listener. The progress listener
         recognizes that the algorithm's execution just started and resets its clock, which started when the progress bar
@@ -147,7 +148,7 @@ class ProgressBarHandle:
             )
         )
 
-    def advance_progress_bar(self, algorithm: P2PAlgorithm, iteration: int) -> None:
+    def advance_progress_bar(self, algorithm: Algorithm[Any], iteration: int) -> None:
         """Advance *algorithm*'s progress bar by an amount (units)."""
         if self._progress_step is None:
             if (iteration + 1) < algorithm.iterations:
@@ -182,7 +183,7 @@ class ProgressBarController:
     def __init__(  # noqa: PLR0917
         self,
         manager: SyncManager,
-        algorithms: list[P2PAlgorithm],
+        algorithms: Sequence[Algorithm[Any]],
         n_trials: int,
         progress_step: int | None,
         show_speed: bool = False,
@@ -229,7 +230,7 @@ class ProgressBarController:
             _progress_step=self.progress_step,
         )
 
-    def mark_one_trial_as_complete(self, algorithm: P2PAlgorithm, trial: int) -> None:
+    def mark_one_trial_as_complete(self, algorithm: Algorithm[Any], trial: int) -> None:
         """Mark a trial of *algorithm* as complete in the progress bar."""
         progress_bar_id = self._progress_bar_ids[algorithm]
         increment = 1 if self.progress_step is None else self.steps_per_trial[algorithm]
