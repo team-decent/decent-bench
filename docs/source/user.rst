@@ -645,6 +645,11 @@ when you compose them with empirical risk costs.
     the ``predict`` method. If you need those, keep a reference to the original empirical risk cost and use
     it directly when calling those APIs. We plan to address this limitation in a future release.
 
+.. note::
+
+    When using :class:`~decent_bench.costs.PyTorchCost`, prefer PyTorch's built-in loss regularizers for better
+    efficiency; iop regularizers remain available for cross-framework compatibility.
+
 .. code-block:: python
 
     from numpy import float64
