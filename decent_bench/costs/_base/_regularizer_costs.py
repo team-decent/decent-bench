@@ -4,12 +4,11 @@ from functools import cached_property
 from typing import Any
 
 import numpy as np
-from numpy import float64
-from numpy.typing import NDArray
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
+from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 __all__ = [
@@ -23,13 +22,22 @@ __all__ = [
 class BaseRegularizerCost(Cost):
     """Base class for element-wise regularizers defined over a vector x."""
 
-    def __init__(self, shape: tuple[int, ...]):
+    def __init__(
+        self,
+        shape: tuple[int, ...],
+        *,
+        framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
+        device: SupportedDevices = SupportedDevices.CPU,
+    ):
         if len(shape) == 0:
             raise ValueError("Regularizer shape must be non-empty.")
         if any(dim <= 0 for dim in shape):
             raise ValueError(f"Regularizer shape must be positive, got {shape}.")
         self._shape = shape
         self._dim = int(np.prod(shape))
+        self._framework = framework
+        self._device = device
+        self._hessian_cache: Array | None = None
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -37,11 +45,11 @@ class BaseRegularizerCost(Cost):
 
     @property
     def framework(self) -> SupportedFrameworks:
-        return SupportedFrameworks.NUMPY
+        return self._framework
 
     @property
     def device(self) -> SupportedDevices:
-        return SupportedDevices.CPU
+        return self._device
 
     def __add__(self, other: Cost) -> Cost:
         """
@@ -72,22 +80,25 @@ class L1RegularizerCost(BaseRegularizerCost):
         return 0.0
 
     @iop.autodecorate_cost_method(Cost.function)
-    def function(self, x: NDArray[float64], **kwargs: Any) -> float:  # noqa: ARG002, ANN401
-        return float(np.sum(np.abs(x)))
+    def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ARG002, ANN401
+        return float(iop.astype(iop.sum(iop.absolute(x)), float))
 
     @iop.autodecorate_cost_method(Cost.gradient)
-    def gradient(self, x: NDArray[float64], **kwargs: Any) -> NDArray[float64]:  # noqa: ARG002, ANN401
-        return np.sign(x)
+    def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
+        return iop.sign(x)
 
     @iop.autodecorate_cost_method(Cost.hessian)
-    def hessian(self, x: NDArray[float64], **kwargs: Any) -> NDArray[float64]:  # noqa: ARG002, ANN401
-        return np.zeros((self._dim, self._dim), dtype=float64)
+    def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
+        if self._hessian_cache is None:
+            self._hessian_cache = iop.zeros((self._dim, self._dim), framework=self.framework, device=self.device)
+        return self._hessian_cache
 
     @iop.autodecorate_cost_method(Cost.proximal)
-    def proximal(self, x: NDArray[float64], rho: float, **kwargs: Any) -> NDArray[float64]:  # noqa: ARG002, ANN401
+    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if rho <= 0:
             raise ValueError("The penalty parameter rho must be positive.")
-        return np.sign(x) * np.maximum(np.abs(x) - rho, 0.0)
+        shrink = iop.maximum(iop.absolute(x) - rho, 0.0)
+        return iop.sign(x) * shrink
 
 
 class L2RegularizerCost(BaseRegularizerCost):
@@ -106,19 +117,21 @@ class L2RegularizerCost(BaseRegularizerCost):
         return 1.0
 
     @iop.autodecorate_cost_method(Cost.function)
-    def function(self, x: NDArray[float64], **kwargs: Any) -> float:  # noqa: ARG002, ANN401
-        return float(0.5 * np.sum(x * x))
+    def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ARG002, ANN401
+        return float(iop.astype(0.5 * iop.sum(iop.mul(x, x)), float))
 
     @iop.autodecorate_cost_method(Cost.gradient)
-    def gradient(self, x: NDArray[float64], **kwargs: Any) -> NDArray[float64]:  # noqa: ARG002, ANN401
+    def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         return x
 
     @iop.autodecorate_cost_method(Cost.hessian)
-    def hessian(self, x: NDArray[float64], **kwargs: Any) -> NDArray[float64]:  # noqa: ARG002, ANN401
-        return np.eye(self._dim, dtype=float64)
+    def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
+        if self._hessian_cache is None:
+            self._hessian_cache = iop.eye(self._dim, framework=self.framework, device=self.device)
+        return self._hessian_cache
 
     @iop.autodecorate_cost_method(Cost.proximal)
-    def proximal(self, x: NDArray[float64], rho: float, **kwargs: Any) -> NDArray[float64]:  # noqa: ARG002, ANN401
+    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if rho <= 0:
             raise ValueError("The penalty parameter rho must be positive.")
         return x / (1.0 + rho)
@@ -135,10 +148,12 @@ class FractionalQuadraticRegularizerCost(BaseRegularizerCost):
         self,
         shape: tuple[int, ...],
         *,
+        framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
+        device: SupportedDevices = SupportedDevices.CPU,
         prox_max_iter: int = 100,
         prox_tol: float | None = 1e-10,
     ):
-        super().__init__(shape)
+        super().__init__(shape, framework=framework, device=device)
         if prox_max_iter <= 0:
             raise ValueError("prox_max_iter must be positive.")
         self._prox_max_iter = prox_max_iter
@@ -153,35 +168,35 @@ class FractionalQuadraticRegularizerCost(BaseRegularizerCost):
         return np.nan
 
     @iop.autodecorate_cost_method(Cost.function)
-    def function(self, x: NDArray[float64], **kwargs: Any) -> float:  # noqa: ARG002, ANN401
+    def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ARG002, ANN401
         x2 = x * x
-        return float(np.sum(x2 / (1.0 + x2)))
+        return float(iop.astype(iop.sum(x2 / (1.0 + x2)), float))
 
     @iop.autodecorate_cost_method(Cost.gradient)
-    def gradient(self, x: NDArray[float64], **kwargs: Any) -> NDArray[float64]:  # noqa: ARG002, ANN401
+    def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         x2 = x * x
         denom = (1.0 + x2) ** 2
         return 2.0 * x / denom
 
     @iop.autodecorate_cost_method(Cost.hessian)
-    def hessian(self, x: NDArray[float64], **kwargs: Any) -> NDArray[float64]:  # noqa: ARG002, ANN401
+    def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         x2 = x * x
         denom = (1.0 + x2) ** 3
         second = 2.0 * (1.0 - 3.0 * x2) / denom
-        return np.diag(second.reshape(-1))
+        return iop.diag(iop.reshape(second, (self._dim,)))
 
     @iop.autodecorate_cost_method(Cost.proximal)
-    def proximal(self, x: NDArray[float64], rho: float, **kwargs: Any) -> NDArray[float64]:  # noqa: ARG002, ANN401
+    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if rho <= 0:
             raise ValueError("The penalty parameter rho must be positive.")
         step_size = 1.0 / (2.0 + 1.0 / rho)
-        current = x.copy()
+        current = iop.copy(x)
         for _ in range(self._prox_max_iter):
             x2 = current * current
             denom = (1.0 + x2) ** 2
             grad = 2.0 * current / denom + (current - x) / rho
             next_x = current - step_size * grad
-            if self._prox_tol is not None and np.linalg.norm(next_x - current) <= self._prox_tol:
+            if self._prox_tol is not None and iop.astype(iop.norm(next_x - current), float) <= self._prox_tol:
                 return next_x
             current = next_x
         return current

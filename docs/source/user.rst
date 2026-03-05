@@ -638,6 +638,13 @@ when you compose them with empirical risk costs.
 
     regularized = cost + l1 + l2 + fq
 
+.. note::
+
+    Composing empirical risk costs (e.g., ``cost + l1``) returns a :class:`~decent_bench.costs.SumCost`.
+    At the moment, :class:`~decent_bench.costs.SumCost` does not expose empirical-risk-specific properties or
+    the ``predict`` method. If you need those, keep a reference to the original empirical risk cost and use
+    it directly when calling those APIs. We plan to address this limitation in a future release.
+
 .. code-block:: python
 
     from numpy import float64

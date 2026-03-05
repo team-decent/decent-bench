@@ -554,6 +554,7 @@ def zeros_like(array: Array) -> Array:
     Raises:
         TypeError: if the framework type of `array` is unsupported.
 
+
     """
     value = array.value if isinstance(array, Array) else array
 
@@ -1015,5 +1016,48 @@ def squeeze(array: Array, dim: int | tuple[int, ...] | None = None) -> Array:
         return _return_array(tf.squeeze(value, axis=dim))
     if jnp and isinstance(value, jnp.ndarray | jnp.generic):
         return _return_array(jnp.squeeze(value, axis=dim))
+
+    raise TypeError(f"Unsupported framework type: {type(value)}")
+
+
+def diag(array: Array) -> Array:
+    """
+    Create a diagonal matrix from a vector or extract a diagonal from a matrix.
+
+    Args:
+        array (Array): Input array.
+
+    Returns:
+        Array: Diagonal matrix or diagonal vector in the same framework type as the input.
+
+    Raises:
+        TypeError: if the framework type of `array` is unsupported.
+        ValueError: if the input does not have rank 1 or 2.
+
+    """
+    value = array.value if isinstance(array, Array) else array
+
+    if isinstance(value, np.ndarray | np.generic):
+        return _return_array(np.diag(value))
+    if torch and isinstance(value, torch.Tensor):
+        return _return_array(torch.diag(value))
+    if tf and isinstance(value, tf.Tensor):
+        if value.shape.ndim == 1:
+            return _return_array(tf.linalg.diag(value))
+        if value.shape.ndim == 2:
+            return _return_array(tf.linalg.diag_part(value))
+        if value.shape.ndim is not None:
+            raise ValueError("Input must be 1- or 2-d for diag.")
+        rank = tf.rank(value)
+        tf.debugging.assert_rank_in(value, [1, 2])
+        return _return_array(
+            tf.cond(
+                rank == 1,
+                lambda: tf.linalg.diag(value),
+                lambda: tf.linalg.diag_part(value),
+            )
+        )
+    if jnp and isinstance(value, jnp.ndarray | jnp.generic):
+        return _return_array(jnp.diag(value))
 
     raise TypeError(f"Unsupported framework type: {type(value)}")
