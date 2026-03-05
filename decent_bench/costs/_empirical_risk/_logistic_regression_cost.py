@@ -177,10 +177,10 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         Evaluate function at x using datapoints at the given indices.
 
         Supported values for indices are:
-            - int: the corresponding datapoint is used.
-            - list[int]: corresponding datapoints are used.
-            - "all": the full dataset is used.
-            - "batch": a batch is drawn with :attr:`batch_size` samples.
+            - int: datapoint to use.
+            - list[int]: datapoints to use.
+            - "all": use the full dataset.
+            - "batch": draw a batch with :attr:`batch_size` samples.
 
         If no batching is used, this is:
 
@@ -217,10 +217,10 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         Gradient at x using datapoints at the given indices.
 
         Supported values for indices are:
-            - int: the corresponding datapoint is used.
-            - list[int]: corresponding datapoints are used.
-            - "all": the full dataset is used.
-            - "batch": a batch is drawn with :attr:`batch_size` samples.
+            - int: datapoint to use.
+            - list[int]: datapoints to use.
+            - "all": use the full dataset.
+            - "batch": draw a batch with :attr:`batch_size` samples.
 
         Supported values for reduction are:
             - "mean": average the gradients over the samples.
@@ -270,10 +270,10 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         Hessian at x using datapoints at the given indices.
 
         Supported values for indices are:
-            - int: the corresponding datapoint is used.
-            - list[int]: corresponding datapoints are used.
-            - "all": the full dataset is used.
-            - "batch": a batch is drawn with :attr:`batch_size` samples.
+            - int: datapoint to use.
+            - list[int]: datapoints to use.
+            - "all": use the full dataset.
+            - "batch": draw a batch with :attr:`batch_size` samples.
 
         If no batching is used, this is:
 
