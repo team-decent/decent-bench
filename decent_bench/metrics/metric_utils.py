@@ -61,7 +61,7 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
 
     """
     if iteration == -1:
-        all_x_at_iter = [a.x_history[max(a.x_history)] for a in agents if len(a.x_history) > 0]
+        all_x_at_iter = [a.x_history[a.x_history.max()] for a in agents]
     else:
         all_x_at_iter = [a.x_history[iteration] for a in agents]
 
@@ -228,7 +228,7 @@ def accuracy(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iter
     ret: list[float] = []
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
-            agent_iteration = max(agent.x_history) if iteration == -1 else iteration
+            agent_iteration = agent.x_history.max() if iteration == -1 else iteration
             preds = predict_agent(agent, agent_iteration, problem)
             ret.append(float(sk_metrics.accuracy_score(test_y, preds)))
         else:
@@ -268,7 +268,7 @@ def mse(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration
     _, test_y = split_dataset(problem.test_data)
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
-            agent_iteration = max(agent.x_history) if iteration == -1 else iteration
+            agent_iteration = agent.x_history.max() if iteration == -1 else iteration
             preds = predict_agent(agent, agent_iteration, problem)
             ret.append(sk_metrics.mean_squared_error(test_y, preds))
         else:
@@ -318,7 +318,7 @@ def precision(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, ite
     ret: list[float] = []
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
-            agent_iteration = max(agent.x_history) if iteration == -1 else iteration
+            agent_iteration = agent.x_history.max() if iteration == -1 else iteration
             preds = predict_agent(agent, agent_iteration, problem)
             ret.append(float(sk_metrics.precision_score(test_y, preds, average="micro")))
         else:
@@ -367,7 +367,7 @@ def recall(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iterat
     ret: list[float] = []
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
-            agent_iteration = max(agent.x_history) if iteration == -1 else iteration
+            agent_iteration = agent.x_history.max() if iteration == -1 else iteration
             preds = predict_agent(agent, agent_iteration, problem)
             ret.append(float(sk_metrics.recall_score(test_y, preds, average="micro")))
         else:
@@ -410,9 +410,6 @@ def predict_agent(agent: AgentMetricsView, iteration: int, problem: BenchmarkPro
     Raises:
         TypeError: if *agent* does not have an :class:`~decent_bench.costs.EmpiricalRiskCost` cost
         ValueError: if *problem* does not have test data
-
-    Note:
-        Make sure the *iteration* is present in the agent's x_history.
 
     """
     if not isinstance(agent.cost, costs.EmpiricalRiskCost):
