@@ -218,7 +218,6 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     def aggregate(
         self,
         network: FedNetwork,
-        server: "Agent",
         selected_clients: Sequence["Agent"],
         client_weights: ClientWeights | object | None = _DEFAULT_CLIENT_WEIGHTS,
     ) -> None:
@@ -237,17 +236,17 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         if client_weights is self._DEFAULT_CLIENT_WEIGHTS:
             client_weights = self.client_weights
 
-        network.receive(receiver=server, sender=selected_clients)
-        received_clients = [client for client in selected_clients if client in server.messages]
+        network.receive(receiver=network.server, sender=selected_clients)
+        received_clients = [client for client in selected_clients if client in network.server.messages]
         if not received_clients:
             return
-        updates = [server.messages[client] for client in received_clients]
+        updates = [network.server.messages[client] for client in received_clients]
         weights = self._weights_for_clients(received_clients, cast("ClientWeights | None", client_weights))
         total_weight = sum(weights)
         if total_weight <= 0:
             raise ValueError("Sum of client weights must be positive")
         weighted_updates = [update * weight for update, weight in zip(updates, weights, strict=True)]
-        server.x = iop.sum(iop.stack(weighted_updates, dim=0), dim=0) / total_weight
+        network.server.x = iop.sum(iop.stack(weighted_updates, dim=0), dim=0) / total_weight
 
     def _selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
         active_clients = network.active_clients(iteration)
@@ -313,34 +312,29 @@ class FedAvg(FedAlgorithm):
             self._sgd_rngs = None
 
     def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
-        server = network.server
         selected_clients = self._selected_clients_for_round(network, iteration)
         if not selected_clients:
             return
 
-        self._sync_server_to_clients(network, server, selected_clients)
-        self._run_local_updates(network, server, selected_clients)
-        self.aggregate(network, server, selected_clients)
+        self._sync_server_to_clients(network, selected_clients)
+        self._run_local_updates(network, selected_clients)
+        self.aggregate(network, selected_clients)
 
-    def _sync_server_to_clients(
-        self, network: FedNetwork, server: "Agent", selected_clients: Sequence["Agent"]
-    ) -> None:
-        network.send(sender=server, receiver=selected_clients, msg=server.x)
+    def _sync_server_to_clients(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
+        network.send(sender=network.server, receiver=selected_clients, msg=network.server.x)
         for client in selected_clients:
-            network.receive(receiver=client, sender=server)
+            network.receive(receiver=client, sender=network.server)
 
-    def _run_local_updates(self, network: FedNetwork, server: "Agent", selected_clients: Sequence["Agent"]) -> None:
+    def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
         for client in selected_clients:
-            client.x = self._compute_local_update(client, server)
-            network.send(sender=client, receiver=server, msg=client.x)
+            client.x = self._compute_local_update(client, network.server)
+            network.send(sender=client, receiver=network.server, msg=client.x)
 
     def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
         local_x = iop.copy(client.messages[server])
         if isinstance(client.cost, EmpiricalRiskCost):
             cost = client.cost
             n_samples = cost.n_samples
-            if n_samples <= 0:
-                raise ValueError("Client dataset size must be positive")
             rng = self._client_rng(client)
             return self._epoch_minibatch_update(cost, local_x, cost.batch_size, n_samples, rng)
 
