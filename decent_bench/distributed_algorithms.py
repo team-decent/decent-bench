@@ -280,6 +280,7 @@ class FedAvg(FedAlgorithm):
 
     # C=0.1; batch size= inf/10/50 (dataset sizes are bigger; normally 1/10 of the total dataset).
     # E= 5/20 (num local epochs).
+    iterations: int = field()
     step_size: float
     num_local_epochs: int = 1
     sgd_seed: int | None = None
@@ -289,7 +290,6 @@ class FedAvg(FedAlgorithm):
     )
     x0: "Array | None" = None
     _sgd_rngs: dict[int, random.Random] | None = field(init=False, repr=False, default=None)
-    iterations: int = 100
     name: str = "FedAvg"
 
     def initialize(self, network: FedNetwork) -> None:  # noqa: D102
@@ -389,9 +389,9 @@ class DGD(P2PAlgorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "DGD"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -438,9 +438,9 @@ class ATC(P2PAlgorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "ATC"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -498,9 +498,9 @@ class SimpleGT(P2PAlgorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "SimpleGT"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -553,9 +553,9 @@ class ED(P2PAlgorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "ED"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -620,9 +620,9 @@ class AugDGM(P2PAlgorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "Aug-DGM"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -708,9 +708,9 @@ class WangElia(P2PAlgorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "Wang-Elia"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -785,9 +785,9 @@ class EXTRA(P2PAlgorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "EXTRA"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -875,9 +875,9 @@ class ATCTracking(P2PAlgorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "ATC-Tracking"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -961,9 +961,9 @@ class NIDS(P2PAlgorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "NIDS"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -1035,10 +1035,10 @@ class ADMM(P2PAlgorithm):
 
     """
 
+    iterations: int = field()
     rho: float
     alpha: float
     z0: "Array | None" = None
-    iterations: int = 100
     name: str = "ADMM"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -1112,12 +1112,12 @@ class ATG(P2PAlgorithm):
 
     """
 
+    iterations: int = field()
     rho: float
     alpha: float
     gamma: float = 0.1
     delta: float = 0.1
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "ATG"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -1208,10 +1208,10 @@ class DLM(P2PAlgorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     penalty: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "DLM"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102

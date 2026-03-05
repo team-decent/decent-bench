@@ -450,6 +450,19 @@ algorithms framework-agnostic, always use the interoperability layer :class:`~de
     If a method to create your specific array/tensor is not available, see the implementation of :attr:`~decent_bench.networks.P2PNetwork.weights` as en example.
 
 
+Philosophy
+----------
+To keep algorithm definitions consistent and easy to scan, we recommend using the following order for algorithm
+dataclass fields:
+
+1. ``iterations`` (required)
+2. Hyperparameters (step size, penalty, number of local epochs, etc.)
+3. Initialization parameters (e.g., ``x0``), with defaults
+4. ``name``
+
+This is a style guideline only; we do not enforce it programmatically.
+
+
 Algorithms
 ----------
 Create a new algorithm to benchmark against existing ones.
@@ -491,9 +504,9 @@ defining the problem.
     from decent_bench.utils.array import Array
 
     class MyNewAlgorithm(P2PAlgorithm):
+        iterations: int
         step_size: float
         x0: Array | None = None
-        iterations: int = 100
         name: str = "MNA"
 
         # Initialize agents with Array values using the interoperability layer
