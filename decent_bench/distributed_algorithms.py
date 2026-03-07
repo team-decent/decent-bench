@@ -132,7 +132,7 @@ class Algorithm[NetworkT: Network](ABC):
         for k in range(start_iteration, self.iterations):
             self.step(network, k)
             # Already completed the iteration, so snapshot with k+1 to indicate the state after iteration k
-            self._snapshot_agents(network, k + 1)
+            self._snapshot_agents(network, k + 1)  # type: ignore[arg-type]
             if progress_callback is not None:
                 progress_callback(k)
 

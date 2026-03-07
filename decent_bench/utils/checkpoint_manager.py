@@ -510,7 +510,7 @@ class CheckpointManager:  # noqa: PLR0904
         algorithms = self.load_initial_algorithms()
         metadata = self.load_metadata()
         n_trials = metadata["n_trials"]
-        states: dict[Algorithm, list[Network]] = {}
+        states: dict[P2PAlgorithm, list[Network]] = {}
         for idx, alg in enumerate(algorithms):
             completed_trials = self.get_completed_trials(idx, n_trials)
             if len(completed_trials) != n_trials:
