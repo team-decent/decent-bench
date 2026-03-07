@@ -990,7 +990,7 @@ class DLM(Algorithm):
 
             # compute and store \sum_j (\mathbf{x}_{i,0} - \mathbf{x}_{j,0})
             for i in network.active_agents(0):
-                s = iop.stack([i.x - x_j for _, x_j in i.messages.items()])
+                s = iop.stack([i.x - x_j for x_j in i.messages.values()])
                 i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
         else:
             # step 1: update primal variable
@@ -1008,7 +1008,7 @@ class DLM(Algorithm):
 
             # compute and store \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
             for i in network.active_agents(iteration):
-                s = iop.stack([i.x - x_j for _, x_j in i.messages.items()])
+                s = iop.stack([i.x - x_j for x_j in i.messages.values()])
                 i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
 
             # step 3: update dual variable
