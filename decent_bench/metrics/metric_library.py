@@ -108,6 +108,46 @@ class XError(Metric):
         return [float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[iteration]))) for a in agents]
 
 
+class ConsensusError(Metric):
+    r"""
+    Distance to consensus.
+
+    Table:
+        Distance of the agents states from their current average.
+
+    Plot:
+        Distance to consensus (y-axis) per iteration (x-axis).
+
+    The consensus error per agent is defined as:
+
+    .. math::
+        \{ \|\mathbf{x}_i - \bar{\mathbf{x}}\|, \|\mathbf{x}_j - \bar{\mathbf{x}}\|, ... \}
+
+    where :math:`\mathbf{x}_i` is agent i's current state,
+    and :math:`\bar{\mathbf{x}}` is the average of all agents' states.
+
+    .. seealso::
+        :class:`~decent_bench.metrics.runtime_library.RuntimeConsensusError` for the runtime version.
+
+    """
+
+    table_description: str = "consensus error"
+    plot_description: str = "consensus error"
+
+    def get_data_from_trial(  # noqa: D102
+        self,
+        agents: Sequence[AgentMetricsView],
+        _: BenchmarkProblem,
+        iteration: int,
+    ) -> list[float]:
+
+        x_mean = iop.to_numpy(utils.x_mean(tuple(agents), iteration))
+
+        if iteration == -1:
+            return [float(la.norm(x_mean - iop.to_numpy(a.x_history[a.x_history.max()]))) for a in agents]
+        return [float(la.norm(x_mean - iop.to_numpy(a.x_history[iteration]))) for a in agents]
+
+
 class XUpdates(Metric):
     r"""
     Number of x iterations/updates.
@@ -485,6 +525,7 @@ DEFAULT_TABLE_METRICS: list[Metric] = [
     Regret([utils.single]),
     GradientNorm([utils.single]),
     XError([min, np.average, max]),
+    ConsensusError([min, np.average, max]),
     XUpdates([np.average, sum]),
     FunctionCalls([np.average, sum]),
     GradientCalls([np.average, sum]),
@@ -498,6 +539,7 @@ DEFAULT_TABLE_METRICS: list[Metric] = [
 - :class:`Regret` - :func:`~.metric_utils.single`
 - :class:`GradientNorm` - :func:`~.metric_utils.single`
 - :class:`XError` - :func:`min`, :func:`~numpy.average`, :func:`max`
+- :class:`ConsensusError` - :func:`min`, :func:`~numpy.average`, :func:`max`
 - :class:`XUpdates` - :func:`~numpy.average`, :func:`sum`
 - :class:`FunctionCalls` - :func:`~numpy.average`, :func:`sum`
 - :class:`GradientCalls` - :func:`~numpy.average`, :func:`sum`
@@ -538,10 +580,12 @@ CLASSIFICATION_TABLE_METRICS: list[Metric] = [
 DEFAULT_PLOT_METRICS: list[Metric] = [
     Regret([], x_log=False, y_log=True),
     GradientNorm([], x_log=False, y_log=True),
+    ConsensusError([], x_log=False, y_log=True),
 ]
 """
 - :class:`Regret` (semi-log)
 - :class:`GradientNorm` (semi-log)
+- :class:`ConsensusError` (semi-log)
 
 :meta hide-value:
 """

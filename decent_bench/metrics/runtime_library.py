@@ -112,6 +112,9 @@ class RuntimeConsensusError(RuntimeMetric):
     where :math:`N` is the number of agents, :math:`\mathbf{x}_i` is agent i's current optimization variable,
     and :math:`\bar{\mathbf{x}}` is the average of all agents' optimization variables.
 
+    .. seealso::
+        :class:`~decent_bench.metrics.metric_library.ConsensusError`.
+
     """
 
     description = "Consensus Error"
