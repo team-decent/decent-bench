@@ -4,7 +4,6 @@ from functools import cache
 import numpy as np
 from numpy import float64
 from numpy import linalg as la
-from numpy.linalg import LinAlgError
 from numpy.typing import NDArray
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 from sklearn import metrics as sk_metrics
@@ -128,64 +127,6 @@ def x_error(agent: AgentMetricsView, problem: BenchmarkProblem, up_to_iteration:
     opt_x = iop.to_numpy(problem.x_optimal)
     errors: NDArray[float64] = la.norm(x_per_iteration - opt_x, axis=tuple(range(1, x_per_iteration.ndim)))
     return errors
-
-
-@cache
-def asymptotic_convergence_rate_and_order(
-    agent: AgentMetricsView,
-    problem: BenchmarkProblem,
-    up_to_iteration: int,
-) -> tuple[float, float]:
-    r"""
-    Estimate the asymptotic convergence rate and order as defined below (until up_to_iteration iteration).
-
-    If *up_to_iteration* is -1, all iterations are taken into account. Otherwise,
-    only iterations up to and including *up_to_iteration* are taken into account, subsequent iterations are disregarded.
-
-    .. include:: snippets/asymptotic_convergence_rate_and_order.rst
-    """
-    errors = x_error(agent, problem, up_to_iteration)
-    if not np.isfinite(errors).all():
-        return np.nan, np.nan
-    errors = errors[errors > 0]
-    log_errors = np.log(errors)
-    x = log_errors[:-1]
-    y = log_errors[1:]
-    try:
-        slope, intercept = np.polyfit(x, y, 1)
-        rate, order = np.exp(intercept), slope
-    except LinAlgError:
-        rate, order = np.nan, np.nan
-    return rate, order
-
-
-@cache
-def iterative_convergence_rate_and_order(
-    agent: AgentMetricsView,
-    problem: BenchmarkProblem,
-    up_to_iteration: int,
-) -> tuple[float, float]:
-    r"""
-    Estimate the iterative convergence rate and order as defined below (until up_to_iteration iteration).
-
-    If *up_to_iteration* is -1, all iterations are taken into account. Otherwise,
-    only iterations up to and including *up_to_iteration* are taken into account, subsequent iterations are disregarded.
-
-    .. include:: snippets/iterative_convergence_rate_and_order.rst
-    """
-    errors = x_error(agent, problem, up_to_iteration)
-    if not np.isfinite(errors).all():
-        return np.nan, np.nan
-    iterations_and_errors = [(i + 1, e) for i, e in enumerate(errors)]
-    iterations_and_errors = [ie for ie in iterations_and_errors if ie[1] > 0]
-    log_errors = np.log([ie[1] for ie in iterations_and_errors])
-    log_iterations = np.log([ie[0] for ie in iterations_and_errors])
-    try:
-        slope, intercept = np.polyfit(log_errors, log_iterations, 1)
-        rate, order = np.exp(intercept), -slope
-    except LinAlgError:
-        rate, order = np.nan, np.nan
-    return rate, order
 
 
 def accuracy(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
@@ -436,3 +377,170 @@ def all_sorted_iterations(agents: Sequence[AgentMetricsView]) -> list[int]:
     """
     all_iters = set.union(*(set(a.x_history.keys()) for a in agents)) if agents else set()
     return sorted(all_iters)
+
+
+def linear_convergence_rate(y: Sequence[float]) -> float:
+    r"""
+    Compute the linear (a.k.a. exponential or geometric) convergence rate from a given trajectory.
+
+    Fits a piecewise linear model to the log10-scaled trajectory to identify
+    the transitory phase and extract its slope. The convergence rate is then computed
+    as :math:`10^{\text{slope}}`, giving the multiplicative factor by which the error
+    decreases per iteration during the transitory phase. A convergence rate below :math:`1`
+    indicates convergence, while above :math:`1` indicates divergence. The smaller the
+    convergence rate, the faster the convergence.
+
+    Args:
+        y: sequence of error values from optimization trajectory (assumed to be positive)
+
+    Returns:
+        the convergence rate (multiplicative factor per iteration)
+
+    Example:
+        >>> print("Convergence rate of:")
+        >>> for alg, results in metric_results.plot_results.items():
+        >>>     for metric, stat_results in results.items():
+        >>>         if type(metric) == metric_library.GradientNorm:
+        >>>             print(f"\t- {alg.name}: {metric_utils.linear_convergence_rate(stat_results[1])}")
+
+    """
+    y_array: NDArray[float64] = np.asarray(y, dtype=float64)
+    log_y: NDArray[float64] = np.log10(y_array)
+    results = fit_elbow_curve(log_y)
+
+    return float(10 ** results[1])
+
+
+def fit_elbow_curve(
+    y: NDArray[float64], max_trials: int = 10, tol: float = 1e-5, num_grid_points: int = 10
+) -> tuple[float, float, int]:
+    r"""
+    Fit a piecewise linear "elbow curve" to data.
+
+    Fits two connected line segments to the input data: one with a slope for
+    the transitory phase and one horizontal for the steady-state phase. Formally, the elbow curve is defined as
+
+    .. math::
+            f(x) = \begin{cases}
+                        s x + y_0 & \text{if } x \leq b \\
+                        s b + y_0 & \text{if } x > b
+                   \end{cases}
+
+    where :math:`s` is the slope, :math:`y_0` is the intercept, :math:`b` the breakpoint.
+    The parameters :math:`s`, :math:`y_0`, and :math:`b` are fitted to the input data using
+    linear regression with an analytical solution (for efficiency), and grid search to find the optimal breakpoint.
+
+    Args:
+        y: 1D array of data points to fit
+        max_trials: maximum number of refinement iterations for grid search
+        tol: grid search stops when fit of residual is less than this value
+        num_grid_points: number of candidate breakpoints to evaluate in each grid search iteration
+
+    Returns:
+        the *intercept*, *slope*, and *breakpoint* fitted to the data
+
+    Note:
+        A large value of *max_trials*, a small value of *tol*, a large value of *num_grid_points* will increase
+        the accuracy of the fit, but will require longer computational time.
+
+    Note:
+        `numpy.nan`, `numpy.inf` or `-numpy.inf` values in *y* are disregarded during the fit. These values might
+        occur in case of divergence (there is only a transient phase, with positive slope), and discarding them
+        allows to still fit the slope.
+
+    Raises:
+        ValueError: if the input arguments are invalid
+
+    """
+    # validate arguments
+    if len(y) < 2:
+        raise ValueError("At least 2 data points are required to fit an elbow curve")
+
+    if max_trials < 1:
+        raise ValueError("max_trials must be at least 1")
+    if tol < 0:
+        raise ValueError("tol must be non-negative")
+    if num_grid_points < 2:
+        raise ValueError("num_grid_points must be at least 2")
+
+    # discard inf and nan
+    mask: NDArray[np.bool_] = np.isfinite(y)
+    y = y[mask]
+    m: int = int(y.size)  # num. datapoints
+
+    # define search space for breakpoint b
+    b_1: int = 1
+    b_2: int = m - 1
+    # initialize residual of current best fit
+    best_res: float = float("inf")
+
+    x_hat: NDArray[float64] = np.zeros((2, num_grid_points), dtype=float64)
+    grid: NDArray[np.int_] = np.zeros(num_grid_points, dtype=int)
+
+    for _ in range(max_trials):
+        # build search grid for b
+        grid = np.linspace(b_1, b_2, num=num_grid_points, dtype=int)
+
+        x_hat = np.zeros((2, num_grid_points), dtype=float64)  # fitted parameters for each candidate breakpoint
+        res: NDArray[float64] = np.zeros(num_grid_points, dtype=float64)  # residual for each candidate breakpoint
+
+        # solve linear regression for points in grid
+        for i, b in enumerate(grid):
+            x_hat[:, i], res[i] = _fit_elbow_curve_given_breakpoint(y, b)
+        best_idx: int = int(np.argmin(res))  # best candidate breakpoint
+
+        # zoom in on region containing the best candidate
+        b_1, b_2 = grid[max(0, best_idx - 1)], grid[min(num_grid_points - 1, best_idx + 1)]
+
+        # stop if best residual did not improve significantly
+        if best_res - res[best_idx] < tol:
+            break
+
+        best_res = res[best_idx]
+
+    return float(x_hat[:, best_idx][1]), float(x_hat[:, best_idx][0]), int(grid[best_idx] - 1)
+
+
+def _fit_elbow_curve_given_breakpoint(y: NDArray[float64], b: int) -> tuple[NDArray[float64], float]:
+    """
+    Perform least squares fit for piecewise linear model with fixed breakpoint.
+
+    Fits a piecewise linear model where the first segment (0 to b) has a slope
+    and intercept, and the second segment (b+1 to end) is horizontal at the
+    same intercept value. Uses analytical solution for efficiency.
+
+    Args:
+        y: 1D array of data points to fit, as column of shape (m, 1)
+        b: breakpoint index (0-based)
+
+    Returns:
+        the fitted parameters *x_hat* and *residual* of the fit
+
+    Note:
+        It is assumed that *y* does not contain `numpy.nan`, `numpy.inf` or `-numpy.inf`.
+
+    """
+    m = len(y)  # num. datapoints
+
+    # build the regression matrix, assuming the breakpoint is b
+    R: NDArray[float64] = np.hstack((  # noqa: N806
+        np.vstack((
+            np.arange(0, b + 1, 1).reshape((b + 1, 1)),
+            b * np.ones((m - b - 1, 1)),
+        )),
+        np.ones((m, 1)),
+    ))
+
+    # analytical expression for inverse of R.T @ R
+    S_00 = b * (b + 1) * (2 * b + 1) / 6.0 + (m - b - 1) * b**2  # noqa: N806
+    S_01 = b * (b + 1) / 2.0 + (m - b - 1) * b  # noqa: N806
+    S_11 = m  # noqa: N806
+
+    S_inv: NDArray[float64] = np.array([[S_11, -S_01], [-S_01, S_00]]) / (S_00 * S_11 - S_01**2)  # noqa: N806
+
+    # fit parameters and compute residual
+    x_hat: NDArray[float64] = S_inv @ (R.T @ y)
+    res = float(la.norm(R @ x_hat - y))
+
+    # return fitted parameters and residual of fit
+    return x_hat, res

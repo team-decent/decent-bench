@@ -108,118 +108,6 @@ class XError(Metric):
         return [float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[iteration]))) for a in agents]
 
 
-class AsymptoticConvergenceOrder(Metric):
-    r"""
-    Asymptotic convergence order.
-
-    Table:
-        Asymptotic convergence order per agent as defined below.
-
-    Plot:
-        Asymptotic convergence order (y-axis) per iteration (x-axis).
-
-    Asymptotic convergence order is defined as:
-
-    .. include:: snippets/asymptotic_convergence_rate_and_order.rst
-
-    """
-
-    table_description: str = "asymptotic convergence order"
-    plot_description: str = "asymptotic convergence order"
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
-        iteration: int,
-    ) -> list[float]:
-        return [utils.asymptotic_convergence_rate_and_order(a, problem, iteration)[1] for a in agents]
-
-
-class AsymptoticConvergenceRate(Metric):
-    r"""
-    Asymptotic convergence rate.
-
-    Table:
-        Asymptotic convergence rate per agent as defined below.
-
-    Plot:
-        Asymptotic convergence rate (y-axis) per iteration (x-axis).
-
-    Asymptotic convergence rate is defined as:
-
-    .. include:: snippets/asymptotic_convergence_rate_and_order.rst
-
-    """
-
-    table_description: str = "asymptotic convergence rate"
-    plot_description: str = "asymptotic convergence rate"
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
-        iteration: int,
-    ) -> list[float]:
-        return [utils.asymptotic_convergence_rate_and_order(a, problem, iteration)[0] for a in agents]
-
-
-class IterativeConvergenceOrder(Metric):
-    r"""
-    Iterative convergence order.
-
-    Table:
-        Iterative convergence order per agent as defined below.
-
-    Plot:
-        Iterative convergence order (y-axis) per iteration (x-axis).
-
-    Iterative convergence order is defined as:
-
-    .. include:: snippets/iterative_convergence_rate_and_order.rst
-
-    """
-
-    table_description: str = "iterative convergence order"
-    plot_description: str = "iterative convergence order"
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
-        iteration: int,
-    ) -> list[float]:
-        return [utils.iterative_convergence_rate_and_order(a, problem, iteration)[1] for a in agents]
-
-
-class IterativeConvergenceRate(Metric):
-    r"""
-    Iterative convergence rate.
-
-    Table:
-        Iterative convergence rate per agent as defined below.
-
-    Plot:
-        Iterative convergence rate (y-axis) per iteration (x-axis).
-
-    Iterative convergence rate is defined as:
-
-    .. include:: snippets/iterative_convergence_rate_and_order.rst
-
-    """
-
-    table_description: str = "iterative convergence rate"
-    plot_description: str = "iterative convergence rate"
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
-        iteration: int,
-    ) -> list[float]:
-        return [utils.iterative_convergence_rate_and_order(a, problem, iteration)[0] for a in agents]
-
-
 class XUpdates(Metric):
     r"""
     Number of x iterations/updates.
@@ -597,10 +485,6 @@ DEFAULT_TABLE_METRICS: list[Metric] = [
     Regret([utils.single]),
     GradientNorm([utils.single]),
     XError([min, np.average, max]),
-    AsymptoticConvergenceOrder([np.average]),
-    AsymptoticConvergenceRate([np.average]),
-    IterativeConvergenceOrder([np.average]),
-    IterativeConvergenceRate([np.average]),
     XUpdates([np.average, sum]),
     FunctionCalls([np.average, sum]),
     GradientCalls([np.average, sum]),
@@ -614,10 +498,6 @@ DEFAULT_TABLE_METRICS: list[Metric] = [
 - :class:`Regret` - :func:`~.metric_utils.single`
 - :class:`GradientNorm` - :func:`~.metric_utils.single`
 - :class:`XError` - :func:`min`, :func:`~numpy.average`, :func:`max`
-- :class:`AsymptoticConvergenceOrder` - :func:`~numpy.average`
-- :class:`AsymptoticConvergenceRate` - :func:`~numpy.average`
-- :class:`IterativeConvergenceOrder` - :func:`~numpy.average`
-- :class:`IterativeConvergenceRate` - :func:`~numpy.average`
 - :class:`XUpdates` - :func:`~numpy.average`, :func:`sum`
 - :class:`FunctionCalls` - :func:`~numpy.average`, :func:`sum`
 - :class:`GradientCalls` - :func:`~numpy.average`, :func:`sum`
