@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from enum import Enum
-from typing import TYPE_CHECKING, Literal, SupportsIndex, TypeAlias, Union
+from typing import TYPE_CHECKING, Literal, SupportsIndex, TypeAlias, TypeVar, Union
 
 if TYPE_CHECKING:
     import jax
@@ -11,6 +12,7 @@ if TYPE_CHECKING:
     import tensorflow as tf
     import torch
 
+    from decent_bench.networks import Network
     from decent_bench.utils.array import Array
 
 ArrayLike: TypeAlias = Union["numpy.ndarray", "torch.Tensor", "tf.Tensor", "jax.Array"]  # noqa: UP040
@@ -25,6 +27,14 @@ Type alias for supported types for optimization variables in decent-bench,
 including array-like types and scalars.
 """
 
+if TYPE_CHECKING:
+    NetworkT = TypeVar("NetworkT", bound=Network)
+else:
+    NetworkT = TypeVar("NetworkT")
+"""
+Type variable for algorithms operating on a :class:`~decent_bench.networks.Network`.
+"""
+
 ArrayKey: TypeAlias = SupportsIndex | slice | tuple[SupportsIndex | slice, ...]  # noqa: UP040
 """
 Type alias for valid keys used to index into supported array types.
@@ -36,6 +46,12 @@ type EmpiricalRiskIndices = list[int] | Literal["all", "batch"] | int
 Type alias for specifying indices in empirical risk computations.
 Can be a list of integers, the string "all" for full dataset, the string "batch" for a mini-batch,
 or an integer specifying a single datapoint.
+"""
+
+type ClientWeights = dict[int, float] | Sequence[float]
+"""
+Type alias for client weighting configuration.
+Use a dict keyed by client id, or a sequence indexed by client id.
 """
 
 type EmpiricalRiskReduction = Literal["mean"] | None

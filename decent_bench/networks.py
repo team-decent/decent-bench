@@ -48,6 +48,11 @@ class Network(ABC):  # noqa: B024
 
     def agents(self) -> list[Agent]:
         """Get all agents in the network."""
+        return self._agents_cache
+
+    @cached_property
+    def _agents_cache(self) -> list[Agent]:
+        """Cached list of agents; assumes the underlying graph is not mutated after construction."""
         return list(self.graph)
 
     @property
@@ -318,6 +323,11 @@ class FedNetwork(Network):
 
     def agents(self) -> list[Agent]:
         """Get all client agents (excludes the server/coordinator)."""
+        return self._clients_cache
+
+    @cached_property
+    def _clients_cache(self) -> list[Agent]:
+        """Cached list of clients; assumes the underlying graph is not mutated after construction."""
         return [agent for agent in self.graph if agent is not self.server]
 
     def active_agents(self, iteration: int) -> list[Agent]:

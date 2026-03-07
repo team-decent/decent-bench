@@ -10,7 +10,7 @@ from scipy import stats
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.distributed_algorithms import P2PAlgorithm
 from decent_bench.metrics._metric import Metric
 from decent_bench.utils.logger import LOGGER
 
@@ -74,11 +74,11 @@ def display_tables(
 
 
 def compute_tables(
-    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
+    resulting_agent_states: dict[P2PAlgorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[Metric],
     confidence_level: float,
-) -> Mapping[Algorithm, Mapping[Metric, Mapping[str, tuple[float, float]]]]:
+) -> Mapping[P2PAlgorithm, Mapping[Metric, Mapping[str, tuple[float, float]]]]:
     """
     Compute table metrics with confidence intervals.
 
@@ -101,7 +101,7 @@ def compute_tables(
         return {}
 
     algs = list(resulting_agent_states)
-    results: dict[Algorithm, dict[Metric, dict[str, tuple[float, float]]]] = {a: {} for a in algs}
+    results: dict[P2PAlgorithm, dict[Metric, dict[str, tuple[float, float]]]] = {a: {} for a in algs}
 
     with warnings.catch_warnings(action="ignore"), utils.MetricProgressBar() as progress:
         table_task = progress.add_task(

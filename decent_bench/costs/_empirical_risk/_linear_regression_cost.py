@@ -116,7 +116,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
         .. math::
             \max_{i} \left| \frac{1}{m} \lambda_i \right|
 
-        where :math:`\lambda_i` are the eigenvalues of :math:`\mathbf{A}^T \mathbf{A}`.
+        where :math:`\lambda_i` are the eigenvalues of :math:`\frac{1}{m}\mathbf{A}^T \mathbf{A}`.
 
         For the general definition, see
         :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
@@ -137,7 +137,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
                 \text{NaN}, & \text{if } \min_i \lambda_i < 0
             \end{array}
 
-        where :math:`\lambda_i` are the eigenvalues of :math:`\mathbf{A}^T \mathbf{A}`.
+        where :math:`\lambda_i` are the eigenvalues of :math:`\frac{1}{m}\mathbf{A}^T \mathbf{A}`.
 
         For the general definition, see
         :attr:`Cost.m_cvx <decent_bench.costs.Cost.m_cvx>`.
@@ -294,9 +294,10 @@ class LinearRegressionCost(EmpiricalRiskCost):
 
         """
         A, ATA, b = self._get_batch_data("all")  # noqa: N806
-        lhs = rho * ATA + np.eye(A.shape[1])
-        rhs = x + rho * A.T @ b
-        return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64) / self.n_samples
+        scale = 1 / self.n_samples
+        lhs = rho * scale * ATA + np.eye(A.shape[1])
+        rhs = x + rho * scale * A.T @ b
+        return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
 
     def _get_batch_data(
         self,
