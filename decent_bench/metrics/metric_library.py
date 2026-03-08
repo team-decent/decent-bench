@@ -141,11 +141,11 @@ class ConsensusError(Metric):
         iteration: int,
     ) -> list[float]:
 
-        x_mean = iop.to_numpy(utils.x_mean(tuple(agents), iteration))
+        x_mean = utils.x_mean(tuple(agents), iteration)
 
         if iteration == -1:
-            return [float(la.norm(x_mean - iop.to_numpy(a.x_history[a.x_history.max()]))) for a in agents]
-        return [float(la.norm(x_mean - iop.to_numpy(a.x_history[iteration]))) for a in agents]
+            return [float(iop.norm(x_mean - a.x_history[a.x_history.max()])) for a in agents]
+        return [float(iop.norm(x_mean - a.x_history[iteration])) for a in agents]
 
 
 class XUpdates(Metric):
