@@ -28,9 +28,9 @@ class Network(ABC):  # noqa: B024
     def __init__(
         self,
         graph: AgentGraph,
-        message_noise: NoiseScheme | Sequence[NoiseScheme] | None = None,
-        message_compression: CompressionScheme | Sequence[CompressionScheme] | None = None,
-        message_drop: DropScheme | Sequence[DropScheme] | None = None
+        message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
+        message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
+        message_drop: DropScheme | dict[Agent, DropScheme] | None = None
     ) -> None:
         # check that graph is connected and not a multi-graph
         if graph.is_multigraph():
@@ -50,14 +50,14 @@ class Network(ABC):  # noqa: B024
         scheme_name: str,
         scheme_class: Callable[[], Any],
         default_factory: Callable[[], Any] = None
-    ) -> dict[Any, Any]:
+    ) -> dict[Agent, Any]:
         """
         Create dictionary of message schemes.
 
         Given the value of `scheme`, the method creates the dictionary as follows:
         - `None`: use `default_factory()` for every agent
         - a single `scheme_class` instance: apply it to every agent
-        - a `Sequence` of scheme instances: one-per-agent (provided the length matches the number of agents)
+        - uses the given dictionary (provided it contains a value for each agent)
 
         Args:
             scheme: None, a single scheme instance, or a sequence of scheme instances.
@@ -75,10 +75,11 @@ class Network(ABC):  # noqa: B024
             return {agent: default_factory() for agent in self.graph}
         if isinstance(scheme, scheme_class):  # one scheme, use for all agents
             return {agent: scheme for agent in self.graph}
-        if isinstance(scheme, Sequence):  # one scheme per agent
-            if len(self.graph) != len(scheme):
-                raise ValueError(f"Expected {len(self.graph)} {scheme_name} schemes, got {len(scheme)}")
-            return {agent: scheme for agent, scheme in zip(self.graph, scheme)}
+        if isinstance(scheme, dict):  # one scheme per agent
+            for agent in self.graph:
+                if agent not in scheme:
+                    raise ValueError(f"{scheme_name} scheme not provided for agent {agent}")
+            return {agent: scheme[agent] for agent in self.graph}
 
     @property
     def graph(self) -> AgentGraph:
@@ -240,9 +241,9 @@ class P2PNetwork(Network):
         self,
         graph: AnyGraph,
         agents: Sequence[Agent] | None = None,
-        message_noise: NoiseScheme | Sequence[NoiseScheme] | None = None,
-        message_compression: CompressionScheme | Sequence[CompressionScheme] | None = None,
-        message_drop: DropScheme | Sequence[DropScheme] | None = None
+        message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
+        message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
+        message_drop: DropScheme | dict[Agent, DropScheme] | None = None
     ) -> None:
         if all(isinstance(node, Agent) for node in graph.nodes()):  # pass directly to super().__init__
             super().__init__(
@@ -347,11 +348,11 @@ class FedNetwork(Network):
 
     def __init__(
         self,
-        server: Agent | None,
         clients: Sequence[Agent],
-        message_noise: NoiseScheme | Sequence[NoiseScheme] | None = None,
-        message_compression: CompressionScheme | Sequence[CompressionScheme] | None = None,
-        message_drop: DropScheme | Sequence[DropScheme] | None = None
+        server: Agent | None = None,
+        message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
+        message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
+        message_drop: DropScheme | dict[Agent, DropScheme] | None = None
     ) -> None:
         if server is None:
             server = Server(len(clients)+1,
@@ -359,6 +360,18 @@ class FedNetwork(Network):
                             state_snapshot_period=min([c._state_snapshot_period for c in clients])
                     )
         graph = nx.star_graph([server] + [c for c in clients])  # create AgentGraph
+
+        # specify the server's message schemes if not provided
+        if isinstance(message_noise, dict):
+            if server not in message_noise:
+                message_noise[server] = NoNoise()
+        if isinstance(message_compression, dict):
+            if server not in message_compression:
+                message_compression[server] = NoCompression()
+        if isinstance(message_drop, dict):
+            if server not in message_drop:
+                message_drop[server] = NoDrops()
+
         super().__init__(
             graph=graph,
             message_noise=message_noise,
