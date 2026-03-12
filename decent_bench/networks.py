@@ -358,7 +358,7 @@ class FedNetwork(Network):
         if server is None:
             # get cost info from one of the clients
             shape, framework, device = clients[0].cost.shape, clients[0].cost.framework, clients[0].cost.device
-            server = Agent(len(clients)+1,
+            server = Agent(max([c.id for c in clients])+1,
                            ZeroCost(shape, framework, device),
                            AlwaysActive(),
                            min([c._state_snapshot_period for c in clients])
