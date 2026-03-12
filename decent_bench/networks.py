@@ -3,20 +3,22 @@ from __future__ import annotations
 from abc import ABC
 from collections.abc import Collection, Sequence
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, Callable
 
 import networkx as nx
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.agents import Agent
+from decent_bench.agents import Agent, Server
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme
+from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme, NoNoise, NoCompression, NoDrops, AlwaysActive
 from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
+    AnyGraph = nx.Graph[Any]
     AgentGraph = nx.Graph[Agent]
 else:
+    AnyGraph = nx.Graph
     AgentGraph = nx.Graph
 
 
@@ -26,15 +28,57 @@ class Network(ABC):  # noqa: B024
     def __init__(
         self,
         graph: AgentGraph,
-        message_noise: NoiseScheme,
-        message_compression: CompressionScheme,
-        message_drop: DropScheme,
+        message_noise: NoiseScheme | Sequence[NoiseScheme] | None = None,
+        message_compression: CompressionScheme | Sequence[CompressionScheme] | None = None,
+        message_drop: DropScheme | Sequence[DropScheme] | None = None
     ) -> None:
+        # check that graph is connected and not a multi-graph
+        if graph.is_multigraph():
+            raise NotImplementedError("Support for multi-graphs is not available")
+        if not nx.is_connected(graph):
+            raise ValueError("The graph needs to be connected")
+
         self._graph = graph
-        self._message_noise = message_noise
-        self._message_compression = message_compression
-        self._message_drop = message_drop
+        self._message_noise = self._initialize_message_schemes(message_noise, "noise", NoiseScheme, NoNoise)
+        self._message_compression = self._initialize_message_schemes(message_compression, "compression", CompressionScheme, NoCompression)
+        self._message_drop = self._initialize_message_schemes(message_drop, "drop", DropScheme, NoDrops)
         self._active_agents_cache: dict[int, list[Agent]] = {}
+
+    def _initialize_message_schemes(
+        self,
+        scheme: Any,
+        scheme_name: str,
+        scheme_class: Callable[[], Any],
+        default_factory: Callable[[], Any] = None
+    ) -> dict[Any, Any]:
+        """
+        Create dictionary of message schemes.
+
+        Given the value of `scheme`, the method creates the dictionary as follows:
+        - `None`: use `default_factory()` for every agent
+        - a single `scheme_class` instance: apply it to every agent
+        - a `Sequence` of scheme instances: one-per-agent (provided the length matches the number of agents)
+
+        Args:
+            scheme: None, a single scheme instance, or a sequence of scheme instances.
+            scheme_name: human-readable scheme category for error messages (e.g. "noise").
+            scheme_class: expected class for single-object validation.
+            default_factory: factory to call per agent when `scheme is None`.
+
+        Returns:
+            dict[Agent, scheme]: mapping each agent in `self.graph` to its scheme instance.
+
+        Raises:
+            ValueError: if `scheme` is a sequence and length != number of agents in network.
+        """
+        if scheme is None:  # no scheme, use default
+            return {agent: default_factory() for agent in self.graph}
+        if isinstance(scheme, scheme_class):  # one scheme, use for all agents
+            return {agent: scheme for agent in self.graph}
+        if isinstance(scheme, Sequence):  # one scheme per agent
+            if len(self.graph) != len(scheme):
+                raise ValueError(f"Expected {len(self.graph)} {scheme_name} schemes, got {len(scheme)}")
+            return {agent: scheme for agent, scheme in zip(self.graph, scheme)}
 
     @property
     def graph(self) -> AgentGraph:
@@ -96,11 +140,11 @@ class Network(ABC):  # noqa: B024
         same receiver. After being received or replaced, the message is destroyed.
         """
         sender._n_sent_messages += 1  # noqa: SLF001
-        if self._message_drop.should_drop():
+        if self._message_drop[sender].should_drop():
             sender._n_sent_messages_dropped += 1  # noqa: SLF001
             return
-        msg = self._message_compression.compress(msg)
-        msg = self._message_noise.make_noise(msg)
+        msg = self._message_compression[sender].compress(msg)
+        msg = self._message_noise[sender].make_noise(msg)
         self.graph.edges[sender, receiver][str(receiver.id)] = msg
 
     def send(
@@ -194,17 +238,32 @@ class P2PNetwork(Network):
 
     def __init__(
         self,
-        graph: AgentGraph,
-        message_noise: NoiseScheme,
-        message_compression: CompressionScheme,
-        message_drop: DropScheme,
+        graph: AnyGraph,
+        agents: Sequence[Agent] | None = None,
+        message_noise: NoiseScheme | Sequence[NoiseScheme] | None = None,
+        message_compression: CompressionScheme | Sequence[CompressionScheme] | None = None,
+        message_drop: DropScheme | Sequence[DropScheme] | None = None
     ) -> None:
-        super().__init__(
-            graph=graph,
-            message_noise=message_noise,
-            message_compression=message_compression,
-            message_drop=message_drop,
-        )
+        if all(isinstance(node, Agent) for node in graph.nodes()):  # pass directly to super().__init__
+            super().__init__(
+                graph=graph,
+                message_noise=message_noise,
+                message_compression=message_compression,
+                message_drop=message_drop,
+            )
+        else:  # create AgentGraph from graph (which defines the topology) and list of agents
+            if agents is None:
+                raise ValueError("Provide `agents` if `graph` is not a Graph with Agent nodes")
+            if len(agents) != len(graph):
+                raise ValueError(f"Expected {len(graph)} agents but got {len(agents)}")
+            agent_node_map = {node: agents[i] for i, node in enumerate(graph.nodes())}
+            graph = nx.relabel_nodes(graph, agent_node_map)
+            super().__init__(
+                graph=graph,
+                message_noise=message_noise,
+                message_compression=message_compression,
+                message_drop=message_drop,
+            )
         self.W: Array | None = None
 
     def set_weights(self, weights: Array) -> None:
@@ -288,28 +347,25 @@ class FedNetwork(Network):
 
     def __init__(
         self,
-        graph: AgentGraph,
-        message_noise: NoiseScheme,
-        message_compression: CompressionScheme,
-        message_drop: DropScheme,
+        server: Agent | None,
+        clients: Sequence[Agent],
+        message_noise: NoiseScheme | Sequence[NoiseScheme] | None = None,
+        message_compression: CompressionScheme | Sequence[CompressionScheme] | None = None,
+        message_drop: DropScheme | Sequence[DropScheme] | None = None
     ) -> None:
+        if server is None:
+            server = Server(len(clients)+1,
+                            AlwaysActive(),
+                            state_snapshot_period=min([c._state_snapshot_period for c in clients])
+                    )
+        graph = nx.star_graph([server] + [c for c in clients])  # create AgentGraph
         super().__init__(
             graph=graph,
             message_noise=message_noise,
             message_compression=message_compression,
             message_drop=message_drop,
         )
-        self._server = self._identify_server()
-
-    def _identify_server(self) -> Agent:
-        degrees = dict(self.graph.degree())
-        if not degrees:
-            raise ValueError("FedNetwork requires at least one agent")
-        server, max_degree = max(degrees.items(), key=lambda item: item[1])  # noqa: FURB118
-        n = len(degrees)
-        if max_degree != n - 1 or any(deg != 1 for node, deg in degrees.items() if node != server):
-            raise ValueError("FedNetwork expects a star topology with one server connected to all clients")
-        return server
+        self._server = server
 
     @property
     def server(self) -> Agent:

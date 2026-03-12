@@ -8,7 +8,7 @@ from types import MappingProxyType
 from typing import Any
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.costs import Cost, EmpiricalRiskCost
+from decent_bench.costs import Cost, EmpiricalRiskCost, ZeroCost
 from decent_bench.schemes import AgentActivationScheme
 from decent_bench.utils.array import Array
 
@@ -356,3 +356,9 @@ class AgentMetricsView:
             n_received_messages=agent._n_received_messages,  # noqa: SLF001
             n_sent_messages_dropped=agent._n_sent_messages_dropped,  # noqa: SLF001
         )
+
+class Server(Agent):
+    """Server for federated networks, with unique id, activation scheme and state snapshot period."""
+
+    def __init__(self, agent_id: int, activation: AgentActivationScheme, state_snapshot_period: int):
+        super().__init__(agent_id, ZeroCost(), activation, state_snapshot_period)
