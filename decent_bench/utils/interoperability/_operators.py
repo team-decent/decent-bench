@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import cast
+from numbers import Real
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 
@@ -9,6 +10,9 @@ from decent_bench.utils.types import SupportedArrayTypes
 
 from ._helpers import _return_array
 from ._imports_types import _jnp_types, _np_types, _tf_types, _torch_types, jnp, tf, torch
+
+if TYPE_CHECKING:
+    from torch import Tensor as TorchTensor
 
 
 def add(array1: Array | SupportedArrayTypes, array2: Array | SupportedArrayTypes) -> Array:
@@ -481,3 +485,84 @@ def sqrt(array: Array | SupportedArrayTypes) -> Array:
         return _return_array(jnp.sqrt(value))
 
     raise TypeError(f"Unsupported type: {type(value)}")
+
+
+def sign(array: Array | SupportedArrayTypes) -> Array:
+    """
+    Return the sign of a tensor.
+
+    Args:
+        array (Array | SupportedArrayTypes): The tensor.
+
+    Returns:
+        Array: The sign tensor.
+
+    Raises:
+        TypeError: If the type is not supported.
+
+    """
+    value = array.value if isinstance(array, Array) else array
+
+    if isinstance(value, np.ndarray | np.generic):
+        return _return_array(np.sign(value))
+    if torch and isinstance(value, torch.Tensor):
+        return _return_array(torch.sign(value))
+    if tf and isinstance(value, tf.Tensor):
+        return _return_array(tf.sign(value))
+    if jnp and isinstance(value, jnp.ndarray | jnp.generic):
+        return _return_array(jnp.sign(value))
+
+    raise TypeError(f"Unsupported type: {type(value)}")
+
+
+def maximum(array1: Array | SupportedArrayTypes, array2: Array | SupportedArrayTypes) -> Array:
+    """
+    Element-wise maximum of two arrays.
+
+    Args:
+        array1 (Array | SupportedArrayTypes): First input array.
+        array2 (Array | SupportedArrayTypes): Second input array.
+
+    Returns:
+        Array: Result of element-wise maximum in the same framework type as the inputs.
+
+    Raises:
+        TypeError: if the framework type of the input arrays is unsupported
+            or if the input arrays are not of the same framework type.
+
+    """
+    value1 = array1.value if isinstance(array1, Array) else array1
+    value2 = array2.value if isinstance(array2, Array) else array2
+
+    def _is_scalar(value: object) -> bool:
+        return isinstance(value, Real) and not isinstance(value, bool)
+
+    result = None
+
+    if (isinstance(value1, _np_types) and (isinstance(value2, _np_types) or _is_scalar(value2))) or (
+        isinstance(value2, _np_types) and _is_scalar(value1)
+    ):
+        result = np.maximum(value1, value2)
+    elif torch and (isinstance(value1, torch.Tensor) or isinstance(value2, torch.Tensor)):
+        tensor = value1 if isinstance(value1, torch.Tensor) else value2
+        other = value2 if tensor is value1 else value1
+        tensor_t = cast("TorchTensor", tensor)
+        if isinstance(other, _torch_types):
+            result = torch.maximum(tensor_t, other)
+        elif _is_scalar(other):
+            result = torch.maximum(tensor_t, torch.tensor(other, device=tensor_t.device, dtype=tensor_t.dtype))
+    elif tf and (isinstance(value1, _tf_types) or isinstance(value2, _tf_types)):
+        tensor = value1 if isinstance(value1, _tf_types) else value2
+        other = value2 if tensor is value1 else value1
+        if isinstance(other, _tf_types) or _is_scalar(other):
+            result = tf.maximum(tensor, other)
+    elif jnp and (isinstance(value1, _jnp_types) or isinstance(value2, _jnp_types)):
+        tensor = value1 if isinstance(value1, _jnp_types) else value2
+        other = value2 if tensor is value1 else value1
+        if isinstance(other, _jnp_types) or _is_scalar(other):
+            result = jnp.maximum(tensor, other)
+
+    if result is None:
+        raise TypeError(f"Unsupported framework type: {type(value1)} and {type(value2)}")
+
+    return _return_array(result)
