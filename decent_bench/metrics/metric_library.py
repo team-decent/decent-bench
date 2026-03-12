@@ -108,116 +108,44 @@ class XError(Metric):
         return [float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[iteration]))) for a in agents]
 
 
-class AsymptoticConvergenceOrder(Metric):
+class ConsensusError(Metric):
     r"""
-    Asymptotic convergence order.
+    Distance to consensus.
 
     Table:
-        Asymptotic convergence order per agent as defined below.
+        Distance of the agents states from their current average.
 
     Plot:
-        Asymptotic convergence order (y-axis) per iteration (x-axis).
+        Distance to consensus (y-axis) per iteration (x-axis).
 
-    Asymptotic convergence order is defined as:
+    The consensus error per agent is defined as:
 
-    .. include:: snippets/asymptotic_convergence_rate_and_order.rst
+    .. math::
+        \{ \|\mathbf{x}_i - \bar{\mathbf{x}}\|, \|\mathbf{x}_j - \bar{\mathbf{x}}\|, ... \}
+
+    where :math:`\mathbf{x}_i` is agent i's current state,
+    and :math:`\bar{\mathbf{x}}` is the average of all agents' states.
+
+    .. seealso::
+        :class:`~decent_bench.metrics.runtime_library.RuntimeConsensusError` for the runtime version.
 
     """
 
-    table_description: str = "asymptotic convergence order"
-    plot_description: str = "asymptotic convergence order"
+    table_description: str = "consensus error"
+    plot_description: str = "consensus error"
 
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
+        _: BenchmarkProblem,
         iteration: int,
     ) -> list[float]:
-        return [utils.asymptotic_convergence_rate_and_order(a, problem, iteration)[1] for a in agents]
 
+        x_mean = utils.x_mean(tuple(agents), iteration)
 
-class AsymptoticConvergenceRate(Metric):
-    r"""
-    Asymptotic convergence rate.
-
-    Table:
-        Asymptotic convergence rate per agent as defined below.
-
-    Plot:
-        Asymptotic convergence rate (y-axis) per iteration (x-axis).
-
-    Asymptotic convergence rate is defined as:
-
-    .. include:: snippets/asymptotic_convergence_rate_and_order.rst
-
-    """
-
-    table_description: str = "asymptotic convergence rate"
-    plot_description: str = "asymptotic convergence rate"
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
-        iteration: int,
-    ) -> list[float]:
-        return [utils.asymptotic_convergence_rate_and_order(a, problem, iteration)[0] for a in agents]
-
-
-class IterativeConvergenceOrder(Metric):
-    r"""
-    Iterative convergence order.
-
-    Table:
-        Iterative convergence order per agent as defined below.
-
-    Plot:
-        Iterative convergence order (y-axis) per iteration (x-axis).
-
-    Iterative convergence order is defined as:
-
-    .. include:: snippets/iterative_convergence_rate_and_order.rst
-
-    """
-
-    table_description: str = "iterative convergence order"
-    plot_description: str = "iterative convergence order"
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
-        iteration: int,
-    ) -> list[float]:
-        return [utils.iterative_convergence_rate_and_order(a, problem, iteration)[1] for a in agents]
-
-
-class IterativeConvergenceRate(Metric):
-    r"""
-    Iterative convergence rate.
-
-    Table:
-        Iterative convergence rate per agent as defined below.
-
-    Plot:
-        Iterative convergence rate (y-axis) per iteration (x-axis).
-
-    Iterative convergence rate is defined as:
-
-    .. include:: snippets/iterative_convergence_rate_and_order.rst
-
-    """
-
-    table_description: str = "iterative convergence rate"
-    plot_description: str = "iterative convergence rate"
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
-        iteration: int,
-    ) -> list[float]:
-        return [utils.iterative_convergence_rate_and_order(a, problem, iteration)[0] for a in agents]
+        if iteration == -1:
+            return [float(iop.norm(x_mean - a.x_history[a.x_history.max()])) for a in agents]
+        return [float(iop.norm(x_mean - a.x_history[iteration])) for a in agents]
 
 
 class XUpdates(Metric):
@@ -597,10 +525,7 @@ DEFAULT_TABLE_METRICS: list[Metric] = [
     Regret([utils.single]),
     GradientNorm([utils.single]),
     XError([min, np.average, max]),
-    AsymptoticConvergenceOrder([np.average]),
-    AsymptoticConvergenceRate([np.average]),
-    IterativeConvergenceOrder([np.average]),
-    IterativeConvergenceRate([np.average]),
+    ConsensusError([min, np.average, max]),
     XUpdates([np.average, sum]),
     FunctionCalls([np.average, sum]),
     GradientCalls([np.average, sum]),
@@ -614,10 +539,7 @@ DEFAULT_TABLE_METRICS: list[Metric] = [
 - :class:`Regret` - :func:`~.metric_utils.single`
 - :class:`GradientNorm` - :func:`~.metric_utils.single`
 - :class:`XError` - :func:`min`, :func:`~numpy.average`, :func:`max`
-- :class:`AsymptoticConvergenceOrder` - :func:`~numpy.average`
-- :class:`AsymptoticConvergenceRate` - :func:`~numpy.average`
-- :class:`IterativeConvergenceOrder` - :func:`~numpy.average`
-- :class:`IterativeConvergenceRate` - :func:`~numpy.average`
+- :class:`ConsensusError` - :func:`min`, :func:`~numpy.average`, :func:`max`
 - :class:`XUpdates` - :func:`~numpy.average`, :func:`sum`
 - :class:`FunctionCalls` - :func:`~numpy.average`, :func:`sum`
 - :class:`GradientCalls` - :func:`~numpy.average`, :func:`sum`
@@ -658,10 +580,12 @@ CLASSIFICATION_TABLE_METRICS: list[Metric] = [
 DEFAULT_PLOT_METRICS: list[Metric] = [
     Regret([], x_log=False, y_log=True),
     GradientNorm([], x_log=False, y_log=True),
+    ConsensusError([], x_log=False, y_log=True),
 ]
 """
 - :class:`Regret` (semi-log)
 - :class:`GradientNorm` (semi-log)
+- :class:`ConsensusError` (semi-log)
 
 :meta hide-value:
 """
