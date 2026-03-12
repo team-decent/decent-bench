@@ -13,6 +13,7 @@ from decent_bench.agents import Agent, Server
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme, NoNoise, NoCompression, NoDrops, AlwaysActive
 from decent_bench.utils.array import Array
+from decent_bench.costs import ZeroCost
 
 if TYPE_CHECKING:
     AnyGraph = nx.Graph[Any]
@@ -355,9 +356,12 @@ class FedNetwork(Network):
         message_drop: DropScheme | dict[Agent, DropScheme] | None = None
     ) -> None:
         if server is None:
-            server = Server(len(clients)+1,
-                            AlwaysActive(),
-                            state_snapshot_period=min([c._state_snapshot_period for c in clients])
+            # get cost info from one of the clients
+            shape, framework, device = clients[0].cost.shape, clients[0].cost.framework, clients[0].cost.device
+            server = Agent(len(clients)+1,
+                           ZeroCost(shape, framework, device),
+                           AlwaysActive(),
+                           min([c._state_snapshot_period for c in clients])
                     )
         graph = nx.star_graph([server] + [c for c in clients])  # create AgentGraph
 
