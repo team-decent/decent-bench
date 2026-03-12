@@ -5,6 +5,13 @@ decent\_bench.distributed\_algorithms
 
 .. autoclass:: Algorithm
    :members:
+   :private-members:
+   :show-inheritance:
+   :undoc-members:
+
+.. autoclass:: P2PAlgorithm
+   :members:
+   :inherited-members:
    :show-inheritance:
    :undoc-members:
 
@@ -14,6 +21,7 @@ decent\_bench.distributed\_algorithms
    :undoc-members:
    :exclude-members:
       Algorithm,
+      P2PAlgorithm,
       initialize,
       step,
       finalize,

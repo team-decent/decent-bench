@@ -32,7 +32,7 @@ Generally benchmark execution involves three steps:
         # Run algorithms and get results in a BenchmarkResult object
         benchmark_result = benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
@@ -79,7 +79,7 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
         gradient_calls = GradientCalls([min, np.average, max, sum])
 
         benchmark_result = benchmark.benchmark(
-            algorithms=[DGD(iterations=1000, step_size=0.001), ADMM(iterations=1000, rho=10, alpha=0.3)],
+            algorithms=[DGD(iterations=1000, step_size=0.01), ADMM(iterations=1000, rho=10, alpha=0.3)],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
             n_trials=10,
             max_processes=1,
@@ -152,8 +152,8 @@ This also speeds up metric calulation and plotting, which can be significant for
     if __name__ == "__main__":
         benchmark_result = benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
-                ED(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
+                ED(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=problem,
@@ -192,8 +192,8 @@ Change the settings of an already created benchmark problem, for example, the ne
     if __name__ == "__main__":
         benchmark_result = benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
-                ED(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
+                ED(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=problem,
@@ -250,8 +250,8 @@ Create a custom benchmark problem using existing resources.
     if __name__ == "__main__":
         benchmark_result = benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
-                ED(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
+                ED(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=problem,
@@ -310,7 +310,7 @@ corresponding abstracts.
 
     if __name__ == "__main__":
         benchmark_result = benchmark.benchmark(
-            algorithms=[DGD(iterations=1000, step_size=0.001), SimpleGT(iterations=1000, step_size=0.001)],
+            algorithms=[DGD(iterations=1000, step_size=0.01), SimpleGT(iterations=1000, step_size=0.01)],
             benchmark_problem=problem,
         )
         metrics_result = benchmark.compute_metrics(benchmark_result)
@@ -570,6 +570,19 @@ algorithms framework-agnostic, always use the interoperability layer :class:`~de
     If a method to create your specific array/tensor is not available, see the implementation of :attr:`~decent_bench.networks.P2PNetwork.weights` as en example.
 
 
+Philosophy
+----------
+To keep algorithm definitions consistent and easy to scan, we recommend using the following order for algorithm
+dataclass fields:
+
+1. ``iterations`` (required)
+2. Hyperparameters (step size, penalty, number of local epochs, etc.)
+3. Initialization parameters (e.g., ``x0``), with defaults
+4. ``name``
+
+This is a style guideline only; we do not enforce it programmatically.
+
+
 Algorithms
 ----------
 Create a new algorithm to benchmark against existing ones.
@@ -595,6 +608,10 @@ Similarly, in order for the benchmark problem's communication schemes to be appl
 Be sure to use :meth:`~decent_bench.networks.Network.active_agents` during algorithm runtime so that asynchrony is properly handled.
 You can also inspect :attr:`~decent_bench.networks.Network.graph` to use NetworkX utilities (e.g., plotting or listing edges); mutating this graph changes the network topology.
 In :class:`~decent_bench.networks.FedNetwork`, :meth:`~decent_bench.networks.Network.agents` and :meth:`~decent_bench.networks.Network.active_agents` refer to clients (the server is available via :attr:`~decent_bench.networks.FedNetwork.server`/ :attr:`~decent_bench.networks.FedNetwork.coordinator`).
+The agents/clients lists are cached for efficiency, so the network graph should be treated as immutable after construction.
+Client weights (``client_weights``) are used only during aggregation and do not change the objective being optimized.
+If you want to optimize a weighted objective :math:`\min \sum_i w_i f_i(x)`, scale each local cost by ``w_i`` when
+defining the problem.
 
 .. code-block:: python
 
@@ -602,14 +619,14 @@ In :class:`~decent_bench.networks.FedNetwork`, :meth:`~decent_bench.networks.Net
     import decent_bench.utils.interoperability as iop
     from decent_bench import benchmark, benchmark_problem
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import ADMM, DGD, Algorithm
+    from decent_bench.distributed_algorithms import ADMM, DGD, P2PAlgorithm
     from decent_bench.networks import P2PNetwork
     from decent_bench.utils.array import Array
 
-    class MyNewAlgorithm(Algorithm):
+    class MyNewAlgorithm(P2PAlgorithm):
+        iterations: int
         step_size: float
         x0: Array | None = None
-        iterations: int = 100
         name: str = "MNA"
 
         # Initialize agents with Array values using the interoperability layer
@@ -649,8 +666,8 @@ In :class:`~decent_bench.networks.FedNetwork`, :meth:`~decent_bench.networks.Net
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[
-                MyNewAlgorithm(iterations=1000, step_size=0.001),
-                DGD(iterations=1000, step_size=0.001),
+                MyNewAlgorithm(iterations=1000, step_size=0.01),
+                DGD(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
@@ -712,7 +729,7 @@ Create your own metrics to tabulate and/or plot.
 
         benchmark_result = benchmark.benchmark(
             algorithms=[
-                DGD(iterations=1000, step_size=0.001),
+                DGD(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
             benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),

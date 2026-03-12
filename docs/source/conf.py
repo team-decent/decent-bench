@@ -30,7 +30,11 @@ extensions = [
 autodoc_default_options = {}
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True
-autodoc_type_aliases = {}
+autodoc_type_aliases = {
+    "ClientWeights": "decent_bench.utils.types.ClientWeights",
+    "Network": "decent_bench.networks.Network",
+    "NetworkT": "decent_bench.utils.types.NetworkT",
+}
 
 nitpicky = True
 nitpick_ignore = [
@@ -43,6 +47,8 @@ nitpick_ignore = [
     ("py:class", "TensorFlowTensor"),
     ("py:class", "JaxArray"),
 ]
+
+suppress_warnings = ["toc.duplicate"]
 
 intersphinx_mapping = {
     "networkx": ("https://networkx.org/documentation/stable/", None),

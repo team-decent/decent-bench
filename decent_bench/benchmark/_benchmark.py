@@ -13,7 +13,7 @@ from rich.status import Status
 
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
 from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.distributed_algorithms import P2PAlgorithm
 from decent_bench.metrics import RuntimeMetricPlotter
 from decent_bench.networks import Network, P2PNetwork, create_distributed_network
 from decent_bench.utils import logger
@@ -188,7 +188,7 @@ def resume_benchmark(  # noqa: PLR0912
 
 
 def benchmark(
-    algorithms: list[Algorithm],
+    algorithms: list[P2PAlgorithm],
     benchmark_problem: BenchmarkProblem,
     *,
     n_trials: int = 30,
@@ -285,7 +285,7 @@ def benchmark(
 
 
 def _benchmark(
-    algorithms: list[Algorithm],
+    algorithms: list[P2PAlgorithm],
     benchmark_problem: BenchmarkProblem,
     nw_init_state: Network,
     log_listener: QueueListener,
@@ -390,7 +390,7 @@ def _init_logging_and_multiprocessing(
 
 
 def _run_trials(  # noqa: PLR0917
-    algorithms: list[Algorithm],
+    algorithms: list[P2PAlgorithm],
     n_trials: int,
     nw_init_state: Network,
     problem: BenchmarkProblem,
@@ -400,8 +400,8 @@ def _run_trials(  # noqa: PLR0917
     mp_context: "SpawnContext | None" = None,
     checkpoint_manager: "CheckpointManager | None" = None,
     runtime_metrics: "list[RuntimeMetric] | None" = None,
-) -> dict[Algorithm, list[Network]]:
-    results: dict[Algorithm, list[Network]] = defaultdict(list)
+) -> dict[P2PAlgorithm, list[Network]]:
+    results: dict[P2PAlgorithm, list[Network]] = defaultdict(list)
     progress_bar_handle = progress_bar_ctrl.get_handle()
 
     # Create centralized plotter process and queue for runtime metrics
@@ -418,7 +418,7 @@ def _run_trials(  # noqa: PLR0917
     # Filter out completed trials if checkpoint manager is provided, and load their results, otherwise run all trials
     # Used when resuming from a previous benchmark run, so that only incomplete trials are run and completed trial
     # results are loaded from the checkpoint directory
-    to_run: dict[Algorithm, list[int]] = defaultdict(list)
+    to_run: dict[P2PAlgorithm, list[int]] = defaultdict(list)
     if checkpoint_manager is not None:
         for alg_idx, alg in enumerate(algorithms):
             completed_trials = checkpoint_manager.get_completed_trials(alg_idx, n_trials)
@@ -503,7 +503,7 @@ def _run_trials(  # noqa: PLR0917
 
 
 def _run_trial(  # noqa: PLR0917
-    algorithm: Algorithm,
+    algorithm: P2PAlgorithm,
     nw_init_state: Network,
     problem: BenchmarkProblem,
     progress_bar_handle: "ProgressBarHandle",
@@ -575,7 +575,7 @@ def _run_trial(  # noqa: PLR0917
 
 def _get_runtime_metrics(
     runtime_metrics: "list[RuntimeMetric] | None",
-    algorithm: Algorithm,
+    algorithm: P2PAlgorithm,
     trial: int,
     runtime_queue: "queue.Queue[Any] | None" = None,
 ) -> list["RuntimeMetric"]:

@@ -1,22 +1,23 @@
+import random
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, final
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Final, cast, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
-from decent_bench.networks import P2PNetwork
+from decent_bench.costs import EmpiricalRiskCost
+from decent_bench.networks import FedNetwork, Network, P2PNetwork
+from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
+from decent_bench.utils.types import ClientWeights
 
 if TYPE_CHECKING:
+    from decent_bench.agents import Agent
     from decent_bench.utils.array import Array
 
 
-class Algorithm(ABC):
-    """
-    Decentralized algorithm.
-
-    Agents collaborate to solve an optimization problem using peer-to-peer communication.
-    """
+class Algorithm[NetworkT: Network](ABC):
+    """Base class for decentralized algorithms."""
 
     @property
     @abstractmethod
@@ -34,42 +35,51 @@ class Algorithm(ABC):
         """Name of the algorithm."""
 
     @abstractmethod
-    def initialize(self, network: P2PNetwork) -> None:
+    def initialize(self, network: NetworkT) -> None:
         """
         Initialize the algorithm.
 
         Args:
-            network: provides agents, neighbors etc.
+            network: provides the agents and topology for this algorithm.
 
         """
 
     @abstractmethod
-    def step(self, network: P2PNetwork, iteration: int) -> None:
+    def step(self, network: NetworkT, iteration: int) -> None:
         """
         Perform one iteration of the algorithm.
 
         Args:
-            network: provides agents, neighbors etc.
-            iteration: current iteration number
+            network: provides the agents and topology for this algorithm.
+            iteration: current iteration number.
 
         """
 
-    def finalize(self, network: P2PNetwork) -> None:
+    @abstractmethod
+    def _finalize_agents(self, network: NetworkT) -> Iterable["Agent"]:
+        """
+        Return the agents whose auxiliary variables should be cleared.
+
+        Args:
+            network: provides the agents and topology for this algorithm.
+
+        """
+
+    def finalize(self, network: NetworkT) -> None:
         """
         Finalize the algorithm.
 
         Note:
-            Override method as needed.
-            Does not need to be implemented if no finalization is required.
-            By default it is used to clean up auxiliary variables to free memory.
+            Override :meth:`~decent_bench.distributed_algorithms.Algorithm._finalize_agents` to control which
+            agents are finalized.
 
         Args:
-            network: provides agents, neighbors etc.
+            network: provides the agents and topology for this algorithm.
 
         """
-        for i in network.agents():
-            if i.aux_vars is not None:
-                i.aux_vars.clear()
+        for agent in self._finalize_agents(network):
+            if agent.aux_vars is not None:
+                agent.aux_vars.clear()
 
     @final
     def _snapshot_agents(self, network: P2PNetwork, iteration: int) -> None:
@@ -80,7 +90,7 @@ class Algorithm(ABC):
     @final
     def run(
         self,
-        network: P2PNetwork,
+        network: NetworkT,
         start_iteration: int = 0,
         progress_callback: Callable[[int], None] | None = None,
         skip_finalize: bool = False,
@@ -92,7 +102,7 @@ class Algorithm(ABC):
         and finally :meth:`finalize`.
 
         Args:
-            network: provides agents, neighbors etc.
+            network: provides the agents and topology for this algorithm.
             start_iteration: iteration number to start from, used when resuming from a checkpoint. If greater than 0,
                 :meth:`initialize` will be skipped.
             progress_callback: optional callback to report progress after each iteration.
@@ -122,7 +132,7 @@ class Algorithm(ABC):
         for k in range(start_iteration, self.iterations):
             self.step(network, k)
             # Already completed the iteration, so snapshot with k+1 to indicate the state after iteration k
-            self._snapshot_agents(network, k + 1)
+            self._snapshot_agents(network, k + 1)  # type: ignore[arg-type]
             if progress_callback is not None:
                 progress_callback(k)
 
@@ -130,8 +140,246 @@ class Algorithm(ABC):
             self.finalize(network)
 
 
+class P2PAlgorithm(Algorithm[P2PNetwork]):
+    """Distributed algorithm - agents collaborate using peer-to-peer communication."""
+
+    def _finalize_agents(self, network: P2PNetwork) -> Iterable["Agent"]:
+        return network.agents()
+
+
+class FedAlgorithm(Algorithm[FedNetwork]):
+    r"""
+    Federated algorithm - clients collaborate via a central server.
+
+    Note:
+        ``client_weights`` only affects how updates are aggregated at the server; it does not change the objective
+        function being optimized (the goal is still to solve :math:`\min \sum_i f_i(x)`). To optimize a weighted
+        objective :math:`\min \sum_i w_i f_i(x)`, scale each client's cost by ``w_i`` in the problem definition.
+
+    """
+
+    selection_scheme: ClientSelectionScheme | None = None
+    _DEFAULT_SELECTION_SCHEME: Final[object] = object()
+    client_weights: ClientWeights | None = None
+    _DEFAULT_CLIENT_WEIGHTS: Final[object] = object()
+
+    def _finalize_agents(self, network: FedNetwork) -> Iterable["Agent"]:
+        return [network.server, *network.clients]
+
+    def finalize(self, network: FedNetwork) -> None:
+        """
+        Finalize the algorithm and sync the final server model to clients.
+
+        This performs one last server-to-client send/receive so that clients store the final model.
+        """
+        if network.clients:
+            network.broadcast(msg=network.server.x)
+            for client in network.clients:
+                network.receive(receiver=client, sender=network.server)
+                if network.server in client.messages:
+                    client.x = iop.copy(client.messages[network.server])
+
+        super().finalize(network)
+
+    def select_clients(
+        self,
+        clients: Sequence["Agent"],
+        iteration: int,
+        selection_scheme: ClientSelectionScheme | object | None = _DEFAULT_SELECTION_SCHEME,
+    ) -> list["Agent"]:
+        """
+        Select participating clients from an eligible pool.
+
+        Args:
+            clients: eligible clients to select from.
+            iteration: current round index.
+            selection_scheme: optional override for this call. If omitted, uses ``self.selection_scheme``.
+                Pass ``None`` to force selecting all clients.
+
+        """
+        if selection_scheme is self._DEFAULT_SELECTION_SCHEME:
+            selection_scheme = self.selection_scheme
+        if selection_scheme is None:
+            return list(clients)
+        scheme = cast("ClientSelectionScheme", selection_scheme)
+        return scheme.select(clients, iteration)
+
+    @classmethod
+    def _weights_for_clients(
+        cls,
+        clients: Sequence["Agent"],
+        client_weights: ClientWeights | None,
+    ) -> list[float]:
+        if client_weights is None:
+            weights = [alg_helpers.infer_client_weight(client) for client in clients]
+        elif isinstance(client_weights, dict):
+            weights = []
+            for client in clients:
+                if client.id not in client_weights:
+                    raise ValueError(f"Missing weight for client id {client.id}")
+                weights.append(float(client_weights[client.id]))
+        else:
+            max_id = max(client.id for client in clients)
+            if len(client_weights) <= max_id:
+                raise ValueError("client_weights sequence must be indexed by client id")
+            weights = [float(client_weights[client.id]) for client in clients]
+        if any(weight < 0 for weight in weights):
+            raise ValueError("Client weights must be non-negative")
+        return weights
+
+    def aggregate(
+        self,
+        network: FedNetwork,
+        selected_clients: Sequence["Agent"],
+        client_weights: ClientWeights | object | None = _DEFAULT_CLIENT_WEIGHTS,
+    ) -> None:
+        """
+        Aggregate client updates at the server.
+
+        By default, this performs a weighted average of the received client models. If ``client_weights`` is not
+        provided, ``self.client_weights`` is used. If weights are ``None``, they are inferred from client data size.
+
+        Override this method for custom aggregation strategies (e.g., robust aggregation).
+
+        Raises:
+            ValueError: if the sum of client weights is non-positive.
+
+        """
+        if client_weights is self._DEFAULT_CLIENT_WEIGHTS:
+            client_weights = self.client_weights
+
+        network.receive(receiver=network.server, sender=selected_clients)
+        received_clients = [client for client in selected_clients if client in network.server.messages]
+        if not received_clients:
+            return
+        updates = [network.server.messages[client] for client in received_clients]
+        weights = self._weights_for_clients(received_clients, cast("ClientWeights | None", client_weights))
+        total_weight = sum(weights)
+        if total_weight <= 0:
+            raise ValueError("Sum of client weights must be positive")
+        weighted_updates = [update * weight for update, weight in zip(updates, weights, strict=True)]
+        network.server.x = iop.sum(iop.stack(weighted_updates, dim=0), dim=0) / total_weight
+
+    def _selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
+        active_clients = network.active_clients(iteration)
+        if not active_clients:
+            return []
+        return self.select_clients(active_clients, iteration)
+
+
 @dataclass(eq=False)
-class DGD(Algorithm):
+class FedAvg(FedAlgorithm):
+    r"""
+    Federated Averaging (FedAvg) with local SGD epochs.
+
+    .. math::
+        \mathbf{x}_{i, k}^{(t+1)} = \mathbf{x}_{i, k}^{(t)} - \eta \nabla f_i(\mathbf{x}_{i, k}^{(t)})
+
+    .. math::
+        \mathbf{x}_{k+1} = \frac{1}{|S_k|} \sum_{i \in S_k} \mathbf{x}_{i, k}^{(E)}
+
+    where :math:`t` indexes the local training epochs on each client and :math:`E` is the number of local epochs per
+    round (``num_local_epochs``), :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients at
+    round :math:`k`. In FedAvg, each selected client performs ``num_local_epochs`` local SGD epochs, then the server
+    aggregates the final local models to form :math:`\mathbf{x}_{k+1}`. The aggregation uses client weights, defaulting
+    to data-size weights when ``client_weights`` is not provided. Client selection (subsampling) defaults to uniform
+    sampling with fraction 1.0 (all active clients) and can be customized via ``selection_scheme``. For
+    :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
+    :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; for generic costs, local
+    updates use full-batch gradients.
+    """
+
+    # C=0.1; batch size= inf/10/50 (dataset sizes are bigger; normally 1/10 of the total dataset).
+    # E= 5/20 (num local epochs).
+    iterations: int = field()
+    step_size: float
+    num_local_epochs: int = 1
+    sgd_seed: int | None = None
+    client_weights: ClientWeights | None = None
+    selection_scheme: ClientSelectionScheme | None = field(
+        default_factory=lambda: UniformClientSelection(client_fraction=1.0)
+    )
+    x0: "Array | None" = None
+    _sgd_rngs: dict[int, random.Random] | None = field(init=False, repr=False, default=None)
+    name: str = "FedAvg"
+
+    def initialize(self, network: FedNetwork) -> None:  # noqa: D102
+        self._validate_hyperparams()
+        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        self._setup_rngs(network.clients)
+        network.server.initialize(x=self.x0, received_msgs=dict.fromkeys(network.clients, self.x0))
+        for client in network.clients:
+            client.initialize(x=self.x0, received_msgs={network.server: self.x0})
+
+    def _validate_hyperparams(self) -> None:
+        if self.step_size <= 0:
+            raise ValueError("step_size must be positive")
+        if self.num_local_epochs <= 0:
+            raise ValueError("num_local_epochs must be positive")
+
+    def _setup_rngs(self, clients: Sequence["Agent"]) -> None:
+        if self.sgd_seed is not None:
+            self._sgd_rngs = {client.id: random.Random(self.sgd_seed + client.id) for client in clients}
+        else:
+            self._sgd_rngs = None
+
+    def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
+        selected_clients = self._selected_clients_for_round(network, iteration)
+        if not selected_clients:
+            return
+
+        self._sync_server_to_clients(network, selected_clients)
+        self._run_local_updates(network, selected_clients)
+        self.aggregate(network, selected_clients)
+
+    def _sync_server_to_clients(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
+        network.send(sender=network.server, receiver=selected_clients, msg=network.server.x)
+        for client in selected_clients:
+            network.receive(receiver=client, sender=network.server)
+
+    def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
+        for client in selected_clients:
+            client.x = self._compute_local_update(client, network.server)
+            network.send(sender=client, receiver=network.server, msg=client.x)
+
+    def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
+        local_x = iop.copy(client.messages[server])
+        if isinstance(client.cost, EmpiricalRiskCost):
+            cost = client.cost
+            n_samples = cost.n_samples
+            rng = self._client_rng(client)
+            return self._epoch_minibatch_update(cost, local_x, cost.batch_size, n_samples, rng)
+
+        for _ in range(self.num_local_epochs):
+            grad = client.cost.gradient(local_x)
+            local_x -= self.step_size * grad
+        return local_x
+
+    def _client_rng(self, client: "Agent") -> random.Random:
+        if self._sgd_rngs is None:
+            return random.Random()
+        return self._sgd_rngs[client.id]
+
+    def _epoch_minibatch_update(
+        self,
+        cost: EmpiricalRiskCost,
+        local_x: "Array",
+        per_client_batch: int,
+        n_samples: int,
+        rng: random.Random,
+    ) -> "Array":
+        for _ in range(self.num_local_epochs):
+            indices = list(range(n_samples))
+            rng.shuffle(indices)
+            for start in range(0, n_samples, per_client_batch):
+                batch_indices = indices[start : start + per_client_batch]
+                grad = cost.gradient(local_x, indices=batch_indices)
+                local_x -= self.step_size * grad
+        return local_x
+
+
+@dataclass(eq=False)
+class DGD(P2PAlgorithm):
     r"""
     Distributed gradient descent characterized by the update step below.
 
@@ -147,9 +395,9 @@ class DGD(Algorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "DGD"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -174,7 +422,7 @@ class DGD(Algorithm):
 
 
 @dataclass(eq=False)
-class ATC(Algorithm):
+class ATC(P2PAlgorithm):
     r"""
     Adapt-Then-Combine (ATC) distributed gradient descent characterized by the update below [r1]_.
 
@@ -196,9 +444,9 @@ class ATC(Algorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "ATC"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -236,7 +484,7 @@ AdaptThenCombine = ATC  # alias
 
 
 @dataclass(eq=False)
-class SimpleGT(Algorithm):
+class SimpleGT(P2PAlgorithm):
     r"""
     Gradient tracking algorithm characterized by the update step below.
 
@@ -256,9 +504,9 @@ class SimpleGT(Algorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "SimpleGT"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -290,7 +538,7 @@ SimpleGradientTracking = SimpleGT  # Alias
 
 
 @dataclass(eq=False)
-class ED(Algorithm):
+class ED(P2PAlgorithm):
     r"""
     Gradient tracking algorithm characterized by the update step below.
 
@@ -311,9 +559,9 @@ class ED(Algorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "ED"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -350,7 +598,7 @@ ExactDiffusion = ED  # alias
 
 
 @dataclass(eq=False)
-class AugDGM(Algorithm):
+class AugDGM(P2PAlgorithm):
     r"""
     Aug-DGM [r2]_ or ATC-DIGing [r3]_ gradient tracking algorithm, characterized by the updates below.
 
@@ -378,9 +626,9 @@ class AugDGM(Algorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "Aug-DGM"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -437,7 +685,7 @@ ATCDIGing = AugDGM  # alias
 
 
 @dataclass(eq=False)
-class WangElia(Algorithm):
+class WangElia(P2PAlgorithm):
     r"""
     Wang-Elia gradient tracking algorithm characterized by the updates below, see [r4]_ and [r5]_.
 
@@ -466,9 +714,9 @@ class WangElia(Algorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "Wang-Elia"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -519,7 +767,7 @@ class WangElia(Algorithm):
 
 
 @dataclass(eq=False)
-class EXTRA(Algorithm):
+class EXTRA(P2PAlgorithm):
     r"""
     EXTRA [r6]_ gradient tracking algorithm characterized by the update steps below.
 
@@ -543,9 +791,9 @@ class EXTRA(Algorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "EXTRA"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -601,7 +849,7 @@ class EXTRA(Algorithm):
 
 
 @dataclass(eq=False)
-class ATCTracking(Algorithm):
+class ATCTracking(P2PAlgorithm):
     r"""
     ATC-Tracking [r7]_, [r8]_, [r9]_ gradient tracking algorithm, characterized by the updates below.
 
@@ -633,9 +881,9 @@ class ATCTracking(Algorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "ATC-Tracking"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -694,7 +942,7 @@ ATCT = ATCTracking  # alias
 
 
 @dataclass(eq=False)
-class NIDS(Algorithm):
+class NIDS(P2PAlgorithm):
     r"""
     NIDS [r10]_ gradient tracking algorithm characterized by the update steps below.
 
@@ -719,9 +967,9 @@ class NIDS(Algorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "NIDS"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -767,7 +1015,7 @@ class NIDS(Algorithm):
 
 
 @dataclass(eq=False)
-class ADMM(Algorithm):
+class ADMM(P2PAlgorithm):
     r"""
     Distributed Alternating Direction Method of Multipliers characterized by the update step below.
 
@@ -793,10 +1041,10 @@ class ADMM(Algorithm):
 
     """
 
+    iterations: int = field()
     rho: float
     alpha: float
     z0: "Array | None" = None
-    iterations: int = 100
     name: str = "ADMM"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -832,7 +1080,7 @@ class ADMM(Algorithm):
 
 
 @dataclass(eq=False)
-class ATG(Algorithm):
+class ATG(P2PAlgorithm):
     r"""
     ADMM-Tracking Gradient (ATG) [r11]_ characterized by the update steps below.
 
@@ -870,12 +1118,12 @@ class ATG(Algorithm):
 
     """
 
+    iterations: int = field()
     rho: float
     alpha: float
     gamma: float = 0.1
     delta: float = 0.1
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "ATG"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -937,7 +1185,7 @@ ADMMTrackingGradient = ATG  # alias
 
 
 @dataclass(eq=False)
-class DLM(Algorithm):
+class DLM(P2PAlgorithm):
     r"""
     Decentralized Linearized ADMM (DLM) [r12]_ characterized by the update steps below (see also [r13]_).
 
@@ -966,10 +1214,10 @@ class DLM(Algorithm):
 
     """
 
+    iterations: int = field()
     step_size: float
     penalty: float
     x0: "Array | None" = None
-    iterations: int = 100
     name: str = "DLM"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -990,7 +1238,7 @@ class DLM(Algorithm):
 
             # compute and store \sum_j (\mathbf{x}_{i,0} - \mathbf{x}_{j,0})
             for i in network.active_agents(0):
-                s = iop.stack([i.x - x_j for _, x_j in i.messages.items()])
+                s = iop.stack([i.x - x_j for x_j in i.messages.values()])
                 i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
         else:
             # step 1: update primal variable
@@ -1008,7 +1256,7 @@ class DLM(Algorithm):
 
             # compute and store \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
             for i in network.active_agents(iteration):
-                s = iop.stack([i.x - x_j for _, x_j in i.messages.items()])
+                s = iop.stack([i.x - x_j for x_j in i.messages.values()])
                 i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
 
             # step 3: update dual variable
