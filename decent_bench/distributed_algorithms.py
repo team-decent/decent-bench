@@ -2,7 +2,7 @@ import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Final, cast, final
+from typing import TYPE_CHECKING, Any, Final, cast, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
@@ -18,6 +18,28 @@ if TYPE_CHECKING:
 
 class Algorithm[NetworkT: Network](ABC):
     """Base class for decentralized algorithms."""
+
+    @abstractmethod
+    def __post_init__(self) -> None:
+        """Optional hook to be called by dataclasses after __init__."""  # noqa: D401
+
+    def __init_subclass__(cls, **kwargs: dict[str, Any]) -> None:
+        """Validate `iterations` for all subclasses."""
+        super().__init_subclass__(**kwargs)
+
+        # override __post_init__ to inject `iterations` validation
+        original_post_init: Callable[[Algorithm[NetworkT]], None] | None = getattr(cls, "__post_init__", None)
+
+        def __post_init__(self: "Algorithm[NetworkT]") -> None:  # noqa: N807
+            # inject `iterations` validation
+            if self.iterations <= 0:
+                raise ValueError("`iterations` must be positive")
+
+            # add subclass's __post_init__ if any
+            if original_post_init:
+                original_post_init(self)
+
+        setattr(cls, "__post_init__", __post_init__)  # noqa: B010
 
     @property
     @abstractmethod
@@ -291,8 +313,8 @@ class FedAvg(FedAlgorithm):
 
     # C=0.1; batch size= inf/10/50 (dataset sizes are bigger; normally 1/10 of the total dataset).
     # E= 5/20 (num local epochs).
-    iterations: int = field()
-    step_size: float
+    iterations: int = 100
+    step_size: float = 0.001
     num_local_epochs: int = 1
     sgd_seed: int | None = None
     client_weights: ClientWeights | None = None
@@ -303,19 +325,25 @@ class FedAvg(FedAlgorithm):
     _sgd_rngs: dict[int, random.Random] | None = field(init=False, repr=False, default=None)
     name: str = "FedAvg"
 
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
+        if self.num_local_epochs <= 0:
+            raise ValueError("`num_local_epochs` must be positive")
+
     def initialize(self, network: FedNetwork) -> None:  # noqa: D102
-        self._validate_hyperparams()
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
         self._setup_rngs(network.clients)
         network.server.initialize(x=self.x0, received_msgs=dict.fromkeys(network.clients, self.x0))
         for client in network.clients:
             client.initialize(x=self.x0, received_msgs={network.server: self.x0})
-
-    def _validate_hyperparams(self) -> None:
-        if self.step_size <= 0:
-            raise ValueError("step_size must be positive")
-        if self.num_local_epochs <= 0:
-            raise ValueError("num_local_epochs must be positive")
 
     def _setup_rngs(self, clients: Sequence["Agent"]) -> None:
         if self.sgd_seed is not None:
@@ -395,10 +423,21 @@ class DGD(P2PAlgorithm):
 
     """
 
-    iterations: int = field()
-    step_size: float
+    iterations: int = 100
+    step_size: float = 0.001
     x0: "Array | None" = None
     name: str = "DGD"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
@@ -444,10 +483,21 @@ class ATC(P2PAlgorithm):
 
     """
 
-    iterations: int = field()
-    step_size: float
+    iterations: int = 100
+    step_size: float = 0.001
     x0: "Array | None" = None
     name: str = "ATC"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
@@ -504,10 +554,21 @@ class SimpleGT(P2PAlgorithm):
 
     """
 
-    iterations: int = field()
-    step_size: float
+    iterations: int = 100
+    step_size: float = 0.001
     x0: "Array | None" = None
     name: str = "SimpleGT"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
@@ -559,10 +620,21 @@ class ED(P2PAlgorithm):
 
     """
 
-    iterations: int = field()
-    step_size: float
+    iterations: int = 100
+    step_size: float = 0.001
     x0: "Array | None" = None
     name: str = "ED"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
@@ -626,10 +698,21 @@ class AugDGM(P2PAlgorithm):
 
     """
 
-    iterations: int = field()
-    step_size: float
+    iterations: int = 100
+    step_size: float = 0.001
     x0: "Array | None" = None
     name: str = "Aug-DGM"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
@@ -714,10 +797,21 @@ class WangElia(P2PAlgorithm):
 
     """
 
-    iterations: int = field()
-    step_size: float
+    iterations: int = 100
+    step_size: float = 0.001
     x0: "Array | None" = None
     name: str = "Wang-Elia"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
@@ -791,10 +885,21 @@ class EXTRA(P2PAlgorithm):
 
     """
 
-    iterations: int = field()
-    step_size: float
+    iterations: int = 100
+    step_size: float = 0.001
     x0: "Array | None" = None
     name: str = "EXTRA"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
@@ -881,10 +986,21 @@ class ATCTracking(P2PAlgorithm):
 
     """
 
-    iterations: int = field()
-    step_size: float
+    iterations: int = 100
+    step_size: float = 0.001
     x0: "Array | None" = None
     name: str = "ATC-Tracking"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
@@ -967,10 +1083,21 @@ class NIDS(P2PAlgorithm):
 
     """
 
-    iterations: int = field()
-    step_size: float
+    iterations: int = 100
+    step_size: float = 0.001
     x0: "Array | None" = None
     name: str = "NIDS"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
@@ -1041,11 +1168,24 @@ class ADMM(P2PAlgorithm):
 
     """
 
-    iterations: int = field()
-    rho: float
-    alpha: float
+    iterations: int = 100
+    rho: float = 1
+    alpha: float = 0.5
     z0: "Array | None" = None
     name: str = "ADMM"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.rho <= 0:
+            raise ValueError("`rho` must be positive")
+        if not (0 < self.alpha < 1):
+            raise ValueError("`alpha` must be in (0, 1)")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
@@ -1118,13 +1258,30 @@ class ATG(P2PAlgorithm):
 
     """
 
-    iterations: int = field()
-    rho: float
-    alpha: float
+    iterations: int = 100
+    rho: float = 1
+    alpha: float = 0.5
     gamma: float = 0.1
-    delta: float = 0.1
+    delta: float = 0.001
     x0: "Array | None" = None
     name: str = "ATG"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.rho <= 0:
+            raise ValueError("`rho` must be positive")
+        if not (0 < self.alpha < 1):
+            raise ValueError("`alpha` must be in (0, 1)")
+        if self.gamma <= 0:
+            raise ValueError("`gamma` must be positive")
+        if self.delta <= 0:
+            raise ValueError("`delta` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
@@ -1214,11 +1371,24 @@ class DLM(P2PAlgorithm):
 
     """
 
-    iterations: int = field()
-    step_size: float
-    penalty: float
+    iterations: int = 100
+    step_size: float = 0.001
+    penalty: float = 1
     x0: "Array | None" = None
     name: str = "DLM"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
+        if self.penalty <= 0:
+            raise ValueError("`penalty` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
