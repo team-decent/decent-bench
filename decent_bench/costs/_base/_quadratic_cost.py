@@ -24,7 +24,7 @@ class QuadraticCost(Cost):
         self,
         A: Array,  # noqa: N803
         b: Array,
-        c: float,
+        c: float = 0,
     ):
         self.A: NDArray[float64] = iop.to_numpy(A)
         self.b: NDArray[float64] = iop.to_numpy(b)
