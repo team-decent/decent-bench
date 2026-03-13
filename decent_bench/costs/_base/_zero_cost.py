@@ -57,6 +57,10 @@ class ZeroCost(Cost):
         self._check_shape(x)
         return iop.zeros(self.shape, self.framework, self.device)
 
+    def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ANN401
+        self._check_shape(x)
+        return iop.zeros(self.shape + self.shape, self.framework, self.device)
+
     def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
         if rho <= 0:
             raise ValueError("The penalty parameter rho must be positive.")
