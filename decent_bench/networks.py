@@ -9,7 +9,7 @@ import networkx as nx
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.agents import Agent, Server
+from decent_bench.agents import Agent
 from decent_bench.benchmark_problem import BenchmarkProblem
 from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme, NoNoise, NoCompression, NoDrops, AlwaysActive
 from decent_bench.utils.array import Array
