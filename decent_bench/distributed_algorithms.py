@@ -19,7 +19,6 @@ if TYPE_CHECKING:
 class Algorithm[NetworkT: Network](ABC):
     """Base class for decentralized algorithms."""
 
-    @abstractmethod
     def __post_init__(self) -> None:
         """Optional hook to be called by dataclasses after __init__."""  # noqa: D401
 
