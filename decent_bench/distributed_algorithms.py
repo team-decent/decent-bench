@@ -21,6 +21,7 @@ class Algorithm[NetworkT: Network](ABC):
 
     def __post_init__(self) -> None:
         """Optional hook to be called by dataclasses after __init__."""  # noqa: D401
+        return
 
     def __init_subclass__(cls, **kwargs: dict[str, Any]) -> None:
         """Validate `iterations` for all subclasses."""
