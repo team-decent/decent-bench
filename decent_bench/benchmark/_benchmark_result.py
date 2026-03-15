@@ -25,4 +25,4 @@ class BenchmarkResult:
     """
 
     problem: BenchmarkProblem
-    states: Mapping[Algorithm, Sequence[Network]]
+    states: Mapping[Algorithm[Network], Sequence[Network]]

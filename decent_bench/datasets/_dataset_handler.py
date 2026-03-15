@@ -24,8 +24,8 @@ class DatasetHandler(ABC):
     - Provide local datasets to each agent in the network via :meth:`get_partitions`
     - Define the overall optimization problem (e.g., empirical risk minimization)
     - Serve as a test set for evaluating decentralized algorithms on the full dataset
-      (e.g. via :meth:`get_datapoints`) by assigning a :class:`~decent_bench.utils.types.Dataset`
-      to the test data of the :class:`~decent_bench.benchmark_problem.BenchmarkProblem`.
+      (e.g. via :meth:`get_datapoints`) by adding a :class:`~decent_bench.utils.types.Dataset`
+      field to :class:`~decent_bench.benchmark.BenchmarkProblem` subclass.
 
     Data Structure:
         The dataset consists of datapoints, where each datapoint is a tuple of

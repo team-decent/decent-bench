@@ -52,8 +52,7 @@ class PyTorchCost(EmpiricalRiskCost):
     Supports batch-based training and gradient computation for decentralized learning scenarios.
 
     Note:
-        It is generally recommended to set `agent_state_snapshot_period` in
-        :class:`~decent_bench.benchmark_problem.BenchmarkProblem` to a value greater than 1
+        It is generally recommended to set `agent_state_snapshot_period` to a value greater than 1
         when using PyTorchCost, as recording the full model parameters at every iteration can be expensive.
 
     """

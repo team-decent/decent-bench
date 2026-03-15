@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
-from decent_bench.benchmark import BenchmarkProblem
+
+if TYPE_CHECKING:
+    from decent_bench.benchmark import BenchmarkProblem
+
 
 Statistic = Callable[[Sequence[float]], float]
 
@@ -82,7 +86,7 @@ class Metric(ABC):
     def get_data_from_trial(
         self,
         agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
+        problem: "BenchmarkProblem",
         iteration: int,
     ) -> Sequence[float]:
         """
@@ -98,7 +102,7 @@ class Metric(ABC):
 
         """
 
-    def get_table_data(self, agents: Sequence[AgentMetricsView], problem: BenchmarkProblem) -> Sequence[float]:
+    def get_table_data(self, agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem") -> Sequence[float]:
         """
         Extract trial data to be used in the table for this metric.
 
@@ -108,7 +112,7 @@ class Metric(ABC):
         """
         return self.get_data_from_trial(agents, problem, -1)
 
-    def get_plot_data(self, agents: Sequence[AgentMetricsView], problem: BenchmarkProblem) -> Sequence[tuple[X, Y]]:
+    def get_plot_data(self, agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem") -> Sequence[tuple[X, Y]]:
         """
         Extract trial data to be used in plots for this metric.
 

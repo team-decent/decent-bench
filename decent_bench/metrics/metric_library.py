@@ -1,6 +1,7 @@
 """Collection of pre-defined table and plot metrics."""
 
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy import linalg as la
@@ -8,8 +9,10 @@ from numpy import linalg as la
 import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
-from decent_bench.benchmark import BenchmarkProblem
 from decent_bench.metrics._metric import Metric
+
+if TYPE_CHECKING:
+    from decent_bench.benchmark import BenchmarkProblem
 
 
 class Regret(Metric):
@@ -34,7 +37,7 @@ class Regret(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
+        problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
         return (utils.regret(agents, problem, iteration),)
@@ -62,7 +65,7 @@ class GradientNorm(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        _: BenchmarkProblem,
+        _: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
         return (utils.gradient_norm(agents, iteration),)
@@ -95,13 +98,13 @@ class XError(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
+        problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
         if "x_optimal" not in problem.__dataclass_fields__:
             return [float("nan") for _ in agents]
 
-        x_optimal_np = iop.to_numpy(problem.x_optimal)
+        x_optimal_np = iop.to_numpy(problem.x_optimal)  # type: ignore[attr-defined]
 
         if iteration == -1:
             return [float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[a.x_history.max()]))) for a in agents]
@@ -137,7 +140,7 @@ class ConsensusError(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        _: BenchmarkProblem,
+        _: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
 
@@ -168,7 +171,7 @@ class XUpdates(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        _: BenchmarkProblem,
+        _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
         return [a.n_x_updates for a in agents]
@@ -198,7 +201,7 @@ class FunctionCalls(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        _: BenchmarkProblem,
+        _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
         return [a.n_function_calls for a in agents]
@@ -228,7 +231,7 @@ class GradientCalls(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        _: BenchmarkProblem,
+        _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
         return [a.n_gradient_calls for a in agents]
@@ -258,7 +261,7 @@ class HessianCalls(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        _: BenchmarkProblem,
+        _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
         return [a.n_hessian_calls for a in agents]
@@ -284,7 +287,7 @@ class ProximalCalls(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        _: BenchmarkProblem,
+        _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
         return [a.n_proximal_calls for a in agents]
@@ -310,7 +313,7 @@ class SentMessages(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        _: BenchmarkProblem,
+        _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
         return [a.n_sent_messages for a in agents]
@@ -336,7 +339,7 @@ class ReceivedMessages(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        _: BenchmarkProblem,
+        _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
         return [a.n_received_messages for a in agents]
@@ -362,7 +365,7 @@ class SentMessagesDropped(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        _: BenchmarkProblem,
+        _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
         return [a.n_sent_messages_dropped for a in agents]
@@ -400,7 +403,7 @@ class Accuracy(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
+        problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
         return utils.accuracy(agents, problem, iteration)
@@ -439,7 +442,7 @@ class MSE(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
+        problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
         return utils.mse(agents, problem, iteration=iteration)
@@ -477,7 +480,7 @@ class Precision(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
+        problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
         return utils.precision(agents, problem, iteration=iteration)
@@ -515,7 +518,7 @@ class Recall(Metric):
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
-        problem: BenchmarkProblem,
+        problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
         return utils.recall(agents, problem, iteration=iteration)

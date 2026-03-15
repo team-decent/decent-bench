@@ -17,7 +17,7 @@ def create_classification_problem(
     cost_cls: type[LogisticRegressionCost | PyTorchCost] = LogisticRegressionCost,
     n_agents: int = 100,
     batch_size: EmpiricalRiskBatchSize = "all",
-) -> tuple[Sequence[Cost], Array, Dataset]:
+) -> tuple[Sequence[Cost], Array | None, Dataset]:
     """
     Create out-of-the-box classification problems.
 
@@ -101,7 +101,7 @@ def create_regression_problem(
     cost_cls: type[LinearRegressionCost | PyTorchCost] = LinearRegressionCost,
     n_agents: int = 100,
     batch_size: EmpiricalRiskBatchSize = "all",
-) -> tuple[Sequence[Cost], Array, Dataset]:
+) -> tuple[Sequence[Cost], Array | None, Dataset]:
     """
     Create out-of-the-box regression problems.
 
@@ -176,7 +176,7 @@ def create_regression_problem(
 def create_quadratic_problem(
     size: int = 10,
     n_agents: int = 100,
-) -> tuple[Sequence[Cost], Array, Dataset]:
+) -> tuple[Sequence[Cost], Array]:
     """
     Create out-of-the-box quadratic problems.
 
@@ -191,7 +191,7 @@ def create_quadratic_problem(
         A.append((A_i + A_i.T) / 2 + size * np.eye(size))
         b.append(ran.normal(scale=10, size=(size,)))
 
-    costs = [QuadraticCost(A[i], b[i]) for i in range(n_agents)]
+    costs = [QuadraticCost(Array(A[i]), Array(b[i])) for i in range(n_agents)]
     sum_cost = reduce(add, costs)
     x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
 

@@ -5,10 +5,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from decent_bench.agents import Agent
-from decent_bench.benchmark import BenchmarkProblem
 
 if TYPE_CHECKING:
     import queue
+
+    from decent_bench.benchmark import BenchmarkProblem
 
 
 class RuntimeMetric(ABC):

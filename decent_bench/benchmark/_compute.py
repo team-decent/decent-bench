@@ -12,6 +12,7 @@ from decent_bench.metrics import (
     compute_tables,
 )
 from decent_bench.metrics import metric_library as ml
+from decent_bench.networks import Network
 from decent_bench.utils import logger
 
 if TYPE_CHECKING:
@@ -81,7 +82,7 @@ def compute_metrics(
         if len(benchmark_result.states) == 0:
             raise ValueError("No benchmark result found in checkpoint manager to compute metrics")
 
-    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
+    resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
     for alg, networks in benchmark_result.states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
     table_results = compute_tables(resulting_agent_states, benchmark_result.problem, table_metrics, confidence_level)

@@ -183,7 +183,7 @@ def resume_benchmark(  # noqa: PLR0912
 
 
 def benchmark(
-    algorithms: list[Algorithm],
+    algorithms: list[Algorithm[Network]],
     benchmark_problem: BenchmarkProblem,
     *,
     n_trials: int = 30,
@@ -276,7 +276,7 @@ def benchmark(
 
 
 def _benchmark(
-    algorithms: list[Algorithm],
+    algorithms: list[Algorithm[Network]],
     benchmark_problem: BenchmarkProblem,
     log_listener: QueueListener,
     manager: "SyncManager",
@@ -378,7 +378,7 @@ def _init_logging_and_multiprocessing(
 
 
 def _run_trials(  # noqa: PLR0917
-    algorithms: list[Algorithm],
+    algorithms: list[Algorithm[Network]],
     n_trials: int,
     problem: BenchmarkProblem,
     progress_bar_ctrl: ProgressBarController,
@@ -387,8 +387,8 @@ def _run_trials(  # noqa: PLR0917
     mp_context: "SpawnContext | None" = None,
     checkpoint_manager: "CheckpointManager | None" = None,
     runtime_metrics: "list[RuntimeMetric] | None" = None,
-) -> dict[Algorithm, list[Network]]:
-    results: dict[Algorithm, list[Network]] = defaultdict(list)
+) -> dict[Algorithm[Network], list[Network]]:
+    results: dict[Algorithm[Network], list[Network]] = defaultdict(list)
     progress_bar_handle = progress_bar_ctrl.get_handle()
 
     # Create centralized plotter process and queue for runtime metrics
@@ -405,7 +405,7 @@ def _run_trials(  # noqa: PLR0917
     # Filter out completed trials if checkpoint manager is provided, and load their results, otherwise run all trials
     # Used when resuming from a previous benchmark run, so that only incomplete trials are run and completed trial
     # results are loaded from the checkpoint directory
-    to_run: dict[Algorithm, list[int]] = defaultdict(list)
+    to_run: dict[Algorithm[Network], list[int]] = defaultdict(list)
     if checkpoint_manager is not None:
         for alg_idx, alg in enumerate(algorithms):
             completed_trials = checkpoint_manager.get_completed_trials(alg_idx, n_trials)
@@ -488,7 +488,7 @@ def _run_trials(  # noqa: PLR0917
 
 
 def _run_trial(  # noqa: PLR0917
-    algorithm: Algorithm,
+    algorithm: Algorithm[Network],
     problem: BenchmarkProblem,
     progress_bar_handle: "ProgressBarHandle",
     trial: int,
@@ -555,7 +555,7 @@ def _run_trial(  # noqa: PLR0917
 
 def _get_runtime_metrics(
     runtime_metrics: "list[RuntimeMetric] | None",
-    algorithm: Algorithm,
+    algorithm: Algorithm[Network],
     trial: int,
     runtime_queue: "queue.Queue[Any] | None" = None,
 ) -> list["RuntimeMetric"]:

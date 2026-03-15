@@ -41,7 +41,7 @@ class RuntimeRegret(RuntimeMetric):
     r"""
     Runtime regret metric.
 
-    Requires that the benchmark problem has field :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.x_optimal`.
+    Requires a :class:`~decent_bench.benchmark.BenchmarkProblem` subblass with field `x_optimal`.
 
     Regret is computed as:
 
@@ -66,7 +66,7 @@ class RuntimeRegret(RuntimeMetric):
         if hasattr(self, "_cached_optimal_cost"):
             return agent_cost - self._cached_optimal_cost
 
-        self._cached_optimal_cost: float = sum(agent.cost.function(problem.x_optimal) for agent in agents) / len(agents)
+        self._cached_optimal_cost: float = sum(agent.cost.function(problem.x_optimal) for agent in agents) / len(agents)  # type: ignore[attr-defined,misc]
 
         return agent_cost - self._cached_optimal_cost
 

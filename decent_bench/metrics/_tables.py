@@ -9,13 +9,13 @@ from scipy import stats
 
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
-from decent_bench.benchmark import BenchmarkProblem
 from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics._metric import Metric
+from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:
-    from decent_bench.benchmark import MetricResult
+    from decent_bench.benchmark import BenchmarkProblem, MetricResult
 
 STATISTICS_ABBR = {"average": "avg", "median": "mdn"}
 
@@ -74,11 +74,11 @@ def display_tables(
 
 
 def compute_tables(
-    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
-    problem: BenchmarkProblem,
+    resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]],
+    problem: "BenchmarkProblem",
     metrics: list[Metric],
     confidence_level: float,
-) -> Mapping[Algorithm, Mapping[Metric, Mapping[str, tuple[float, float]]]]:
+) -> Mapping[Algorithm[Network], Mapping[Metric, Mapping[str, tuple[float, float]]]]:
     """
     Compute table metrics with confidence intervals.
 
@@ -99,7 +99,7 @@ def compute_tables(
         return {}
 
     algs = list(resulting_agent_states)
-    results: dict[Algorithm, dict[Metric, dict[str, tuple[float, float]]]] = {a: {} for a in algs}
+    results: dict[Algorithm[Network], dict[Metric, dict[str, tuple[float, float]]]] = {a: {} for a in algs}
 
     with warnings.catch_warnings(action="ignore"), utils.MetricProgressBar() as progress:
         table_task = progress.add_task(
@@ -129,7 +129,7 @@ def compute_tables(
 
 def _table_data_per_trial(
     agents_per_trial: list[list[AgentMetricsView]],
-    problem: BenchmarkProblem,
+    problem: "BenchmarkProblem",
     metric: Metric,
 ) -> list[Sequence[float]]:
     data_per_trial: list[Sequence[float]] = []

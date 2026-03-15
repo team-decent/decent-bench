@@ -1,14 +1,6 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
-import networkx as nx
-
-from decent_bench.agents import Agent
-
-if TYPE_CHECKING:
-    AgentGraph = nx.Graph[Agent]
-else:
-    AgentGraph = nx.Graph
+from decent_bench.networks import Network
 
 
 @dataclass(eq=False)
@@ -34,4 +26,4 @@ class BenchmarkProblem:
 
     """
 
-    network: AgentGraph
+    network: Network

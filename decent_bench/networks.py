@@ -38,7 +38,7 @@ class Network(ABC):  # noqa: B024
         graph: AgentGraph,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
-        message_drop: DropScheme | dict[Agent, DropScheme] | None = None
+        message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
     ) -> None:
         # check that graph is connected and not a multi-graph
         if graph.is_multigraph():
@@ -48,19 +48,14 @@ class Network(ABC):  # noqa: B024
 
         self._graph = graph
         self._message_noise = self._initialize_message_schemes(message_noise, "noise", NoiseScheme, NoNoise)
-        self._message_compression = self._initialize_message_schemes(message_compression,
-                                                                     "compression",
-                                                                     CompressionScheme,
-                                                                     NoCompression)
+        self._message_compression = self._initialize_message_schemes(
+            message_compression, "compression", CompressionScheme, NoCompression
+        )
         self._message_drop = self._initialize_message_schemes(message_drop, "drop", DropScheme, NoDrops)
         self._active_agents_cache: dict[int, list[Agent]] = {}
 
     def _initialize_message_schemes(
-        self,
-        scheme: object,
-        scheme_name: str,
-        scheme_class: Callable[[], Any],
-        default_factory: Callable[[], Any] | None = None
+        self, scheme: object, scheme_name: str, scheme_class: type, default_factory: Callable[[], Any] | None = None
     ) -> dict[Agent, Any]:
         """
         Create dictionary of message schemes.
@@ -84,6 +79,8 @@ class Network(ABC):  # noqa: B024
 
         """
         if scheme is None:  # no scheme, use default
+            if default_factory is None:
+                raise ValueError(f"default_factory must be provided for {scheme_name}")
             return {agent: default_factory() for agent in self.graph}
         if isinstance(scheme, scheme_class):  # one scheme, use for all agents
             return dict.fromkeys(self.graph, scheme)
@@ -92,8 +89,10 @@ class Network(ABC):  # noqa: B024
                 if agent not in scheme:
                     raise ValueError(f"{scheme_name} scheme not provided for agent {agent}")
             return {agent: scheme[agent] for agent in self.graph}
-        raise ValueError(f"Invalid {scheme_name} scheme: expected None, a {scheme_class.__name__} instance, ",
-                         " or a dict, got {type(scheme)}")
+        raise ValueError(
+            f"Invalid {scheme_name} scheme: expected None, a {scheme_class.__name__} instance, ",
+            " or a dict, got {type(scheme)}",
+        )
 
     @property
     def graph(self) -> AgentGraph:
@@ -257,7 +256,7 @@ class P2PNetwork(Network):
         agents: Sequence[Agent] | None = None,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
-        message_drop: DropScheme | dict[Agent, DropScheme] | None = None
+        message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
     ) -> None:
         if all(isinstance(node, Agent) for node in graph.nodes()):  # pass directly to super().__init__
             super().__init__(
@@ -366,16 +365,17 @@ class FedNetwork(Network):
         server: Agent | None = None,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
-        message_drop: DropScheme | dict[Agent, DropScheme] | None = None
+        message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
     ) -> None:
         if server is None:
             # get cost info from one of the clients
             shape, framework, device = clients[0].cost.shape, clients[0].cost.framework, clients[0].cost.device
-            server = Agent(max(c.id for c in clients) + 1,
-                           ZeroCost(shape, framework, device),
-                           AlwaysActive(),
-                           min(c.state_snapshot_period for c in clients)
-                    )
+            server = Agent(
+                max(c.id for c in clients) + 1,
+                ZeroCost(shape, framework, device),
+                AlwaysActive(),
+                min(c.state_snapshot_period for c in clients),
+            )
         graph = nx.star_graph([server, *list(clients)])  # create AgentGraph
 
         # specify the server's message schemes if not provided

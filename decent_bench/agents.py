@@ -16,12 +16,14 @@ from decent_bench.utils.array import Array
 class Agent:
     """Agent with unique id, local cost function, activation scheme and state snapshot period."""
 
-    def __init__(self,
-                 agent_id: int,
-                 cost: Cost,
-                 activation: AgentActivationScheme | None = None,
-                 state_snapshot_period: int = 1,
-                 data: dict[Any] | None = None):
+    def __init__(
+        self,
+        agent_id: int,
+        cost: Cost,
+        activation: AgentActivationScheme | None = None,
+        state_snapshot_period: int = 1,
+        data: dict[str, Any] | None = None,
+    ):
         if state_snapshot_period <= 0:
             raise ValueError("state_snapshot_period must be a positive integer")
 

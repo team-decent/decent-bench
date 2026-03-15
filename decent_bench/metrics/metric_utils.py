@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from functools import cache
+from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy import float64
@@ -11,10 +12,12 @@ from sklearn import metrics as sk_metrics
 import decent_bench.utils.interoperability as iop
 from decent_bench import costs
 from decent_bench.agents import AgentMetricsView
-from decent_bench.benchmark import BenchmarkProblem
 from decent_bench.utils.array import Array
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import Dataset
+
+if TYPE_CHECKING:
+    from decent_bench.benchmark import BenchmarkProblem
 
 
 class MetricProgressBar(Progress):
@@ -70,7 +73,7 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
     return iop.mean(iop.stack(all_x_at_iter), dim=0)
 
 
-def regret(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int = -1) -> float:
+def regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
     r"""
     Calculate the global regret at *iteration* (or using the agents' final x if *iteration* is -1).
 
@@ -81,7 +84,7 @@ def regret(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iterat
     if "x_optimal" not in problem.__dataclass_fields__:
         return float("nan")
 
-    x_opt = problem.x_optimal
+    x_opt = problem.x_optimal  # type: ignore[attr-defined]
     mean_x = x_mean(tuple(agents), iteration)
     optimal_cost = sum(a.cost.function(x_opt) for a in agents)
     actual_cost = sum(a.cost.function(mean_x) for a in agents)
@@ -102,7 +105,7 @@ def gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> fl
 
 
 @cache
-def x_error(agent: AgentMetricsView, problem: BenchmarkProblem, up_to_iteration: int) -> NDArray[float64]:
+def x_error(agent: AgentMetricsView, problem: "BenchmarkProblem", up_to_iteration: int) -> NDArray[float64]:
     r"""
     Calculate the x error per iteration as defined below (until up_to_iteration iteration).
 
@@ -124,12 +127,12 @@ def x_error(agent: AgentMetricsView, problem: BenchmarkProblem, up_to_iteration:
     x_per_iteration = np.asarray([
         iop.to_numpy(x) for iteration, x in sorted(agent.x_history.items()) if iteration <= up_to_iteration
     ])
-    opt_x = iop.to_numpy(problem.x_optimal)
+    opt_x = iop.to_numpy(problem.x_optimal)  # type: ignore[attr-defined]
     errors: NDArray[float64] = la.norm(x_per_iteration - opt_x, axis=tuple(range(1, x_per_iteration.ndim)))
     return errors
 
 
-def accuracy(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
+def accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the accuracy per agent.
 
@@ -157,7 +160,7 @@ def accuracy(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iter
         )
         return [np.nan for _ in agents]
 
-    _, test_y = split_dataset(problem.test_data)
+    _, test_y = split_dataset(problem.test_data)  # type: ignore[attr-defined]
 
     if test_y.dtype.kind not in {"i", "u"}:
         LOGGER.warning(
@@ -177,7 +180,7 @@ def accuracy(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iter
     return ret
 
 
-def mse(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
+def mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the mean squared error (MSE) per agent.
 
@@ -206,7 +209,7 @@ def mse(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration
         return [np.nan for _ in agents]
 
     ret: list[float] = []
-    _, test_y = split_dataset(problem.test_data)
+    _, test_y = split_dataset(problem.test_data)  # type: ignore[attr-defined]
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
             agent_iteration = agent.x_history.max() if iteration == -1 else iteration
@@ -217,7 +220,7 @@ def mse(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration
     return ret
 
 
-def precision(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
+def precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the precision per agent.
 
@@ -247,7 +250,7 @@ def precision(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, ite
         )
         return [np.nan for _ in agents]
 
-    _, test_y = split_dataset(problem.test_data)
+    _, test_y = split_dataset(problem.test_data)  # type: ignore[attr-defined]
 
     if test_y.dtype.kind not in {"i", "u"}:
         LOGGER.warning(
@@ -267,7 +270,7 @@ def precision(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, ite
     return ret
 
 
-def recall(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration: int) -> list[float]:
+def recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the recall per agent.
 
@@ -296,7 +299,7 @@ def recall(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iterat
         )
         return [np.nan for _ in agents]
 
-    _, test_y = split_dataset(problem.test_data)
+    _, test_y = split_dataset(problem.test_data)  # type: ignore[attr-defined]
 
     if test_y.dtype.kind not in {"i", "u"}:
         LOGGER.warning(
@@ -334,7 +337,7 @@ def split_dataset(data: Dataset) -> tuple[tuple[Array, ...], NDArray[float64]]:
 
 
 @cache
-def predict_agent(agent: AgentMetricsView, iteration: int, problem: BenchmarkProblem) -> NDArray[float64]:
+def predict_agent(agent: AgentMetricsView, iteration: int, problem: "BenchmarkProblem") -> NDArray[float64]:
     """
     Get the predictions of *agent* at *iteration* on *test_x*.
 
@@ -359,7 +362,7 @@ def predict_agent(agent: AgentMetricsView, iteration: int, problem: BenchmarkPro
     if "test_data" not in problem.__dataclass_fields__:
         raise ValueError("Test data is required to get predictions but is not provided in the problem")
 
-    test_x, _ = split_dataset(problem.test_data)
+    test_x, _ = split_dataset(problem.test_data)  # type: ignore[attr-defined]
 
     return iop.to_numpy(agent.cost.predict(agent.x_history[iteration], list(test_x)))
 

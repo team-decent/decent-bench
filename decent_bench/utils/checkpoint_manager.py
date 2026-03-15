@@ -133,7 +133,7 @@ class CheckpointManager:  # noqa: PLR0904
 
     def initialize(
         self,
-        algorithms: list[Algorithm],
+        algorithms: list[Algorithm[Network]],
         problem: BenchmarkProblem,
         n_trials: int,
     ) -> None:
@@ -214,7 +214,7 @@ class CheckpointManager:  # noqa: PLR0904
         self._save_metadata(metadata)
         return metadata
 
-    def load_initial_algorithms(self) -> list[Algorithm]:
+    def load_initial_algorithms(self) -> list[Algorithm[Network]]:
         """
         Load initial algorithm states from checkpoint.
 
@@ -224,7 +224,7 @@ class CheckpointManager:  # noqa: PLR0904
         """
         initial_path = self.checkpoint_dir / "initial_algorithms.pkl"
         with initial_path.open("rb") as f:
-            ret: list[Algorithm] = pickle.load(f)  # noqa: S301
+            ret: list[Algorithm[Network]] = pickle.load(f)  # noqa: S301
         return ret
 
     def load_benchmark_problem(self) -> BenchmarkProblem:
@@ -270,7 +270,7 @@ class CheckpointManager:  # noqa: PLR0904
         alg_idx: int,
         trial: int,
         iteration: int,
-        algorithm: Algorithm,
+        algorithm: Algorithm[Network],
         network: Network,
     ) -> Path:
         """
@@ -311,7 +311,7 @@ class CheckpointManager:  # noqa: PLR0904
         self._cleanup_old_checkpoints(alg_idx, trial)
         return checkpoint_path
 
-    def load_checkpoint(self, alg_idx: int, trial: int) -> tuple[Algorithm, Network, int] | None:
+    def load_checkpoint(self, alg_idx: int, trial: int) -> tuple[Algorithm[Network], Network, int] | None:
         """
         Load the latest checkpoint for a specific algorithm trial.
 
@@ -340,7 +340,7 @@ class CheckpointManager:  # noqa: PLR0904
         with checkpoint_path.open("rb") as f:
             checkpoint_data = pickle.load(f)  # noqa: S301
 
-        algorithm: Algorithm = checkpoint_data["algorithm"]
+        algorithm: Algorithm[Network] = checkpoint_data["algorithm"]
         network: Network = checkpoint_data["network"]
 
         LOGGER.debug(f"Loaded checkpoint: alg={alg_idx}, trial={trial}, iter={last_iteration}")
@@ -351,7 +351,7 @@ class CheckpointManager:  # noqa: PLR0904
         alg_idx: int,
         trial: int,
         iteration: int,
-        algorithm: Algorithm,
+        algorithm: Algorithm[Network],
         network: Network,
     ) -> Path:
         """
@@ -416,7 +416,7 @@ class CheckpointManager:  # noqa: PLR0904
         trial_dir = self._get_trial_dir(alg_idx, trial)
         return (trial_dir / "complete.json").exists()
 
-    def load_trial_result(self, alg_idx: int, trial: int) -> tuple[Algorithm, Network]:
+    def load_trial_result(self, alg_idx: int, trial: int) -> tuple[Algorithm[Network], Network]:
         """
         Load final result of a completed trial.
 
@@ -438,7 +438,7 @@ class CheckpointManager:  # noqa: PLR0904
         with final_path.open("rb") as f:
             checkpoint_data = pickle.load(f)  # noqa: S301
 
-        alg: Algorithm = checkpoint_data["algorithm"]
+        alg: Algorithm[Network] = checkpoint_data["algorithm"]
         network: Network = checkpoint_data["network"]
         return alg, network
 
@@ -491,7 +491,7 @@ class CheckpointManager:  # noqa: PLR0904
         algorithms = self.load_initial_algorithms()
         metadata = self.load_metadata()
         n_trials = metadata["n_trials"]
-        states: dict[Algorithm, list[Network]] = {}
+        states: dict[Algorithm[Network], list[Network]] = {}
         for idx, alg in enumerate(algorithms):
             completed_trials = self.get_completed_trials(idx, n_trials)
             if len(completed_trials) != n_trials:
@@ -582,7 +582,7 @@ class CheckpointManager:  # noqa: PLR0904
             json.dump(metadata, f)
         LOGGER.debug(f"Saved metadata to {metadata_path}")
 
-    def _save_initial_algorithms(self, algorithms: list[Algorithm]) -> None:
+    def _save_initial_algorithms(self, algorithms: list[Algorithm[Network]]) -> None:
         """Save initial algorithm states before any trials run."""
         initial_path = self.checkpoint_dir / "initial_algorithms.pkl"
         with initial_path.open("wb") as f:

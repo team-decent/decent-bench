@@ -18,13 +18,13 @@ Benchmark algorithms on a regression problem without any communication constrain
 
 Generally benchmark execution involves three steps:
 
-1. Run algorithms on a :class:`~decent_bench.benchmark_problem.BenchmarkProblem` object and get results in a :class:`~decent_bench.benchmark.BenchmarkResult` object.
+1. Run algorithms on a :class:`~decent_bench.benchmark.BenchmarkProblem` object and get results in a :class:`~decent_bench.benchmark.BenchmarkResult` object.
 2. Compute metrics from the benchmark results, which returns a :class:`~decent_bench.benchmark.MetricResult` object.
 3. Display the computed metrics in tables and plots.
 
 .. code-block:: python
 
-    from decent_bench import benchmark, benchmark_problem
+    from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
 
@@ -35,7 +35,7 @@ Generally benchmark execution involves three steps:
                 DGD(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
-            benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
+            benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
         )
 
         # Compute metrics from the benchmark results
@@ -67,7 +67,7 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
     import numpy as np
 
     import decent_bench.metrics.metric_utils as utils
-    from decent_bench import benchmark, benchmark_problem
+    from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
     from decent_bench.metrics import ComputationalCost
@@ -80,7 +80,7 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
 
         benchmark_result = benchmark.benchmark(
             algorithms=[DGD(iterations=1000, step_size=0.01), ADMM(iterations=1000, rho=10, alpha=0.3)],
-            benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
+            benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
             n_trials=10,
             max_processes=1,
             progress_step=200,
@@ -134,11 +134,11 @@ This also speeds up metric calulation and plotting, which can be significant for
 
 .. code-block:: python
 
-    from decent_bench import benchmark, benchmark_problem
+    from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD, ED
 
-    problem = benchmark_problem.create_regression_problem(
+    problem = benchmark.create_regression_problem(
         LinearRegressionCost,
         n_agents=100,
         agent_state_snapshot_period=10, # Record metrics every 10 iterations
@@ -170,14 +170,14 @@ Change the settings of an already created benchmark problem, for example, the ne
 
     import networkx as nx
 
-    from decent_bench import benchmark, benchmark_problem
+    from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD, ED
 
     n_agents = 100
     n_neighbors_per_agent = 3
 
-    problem = benchmark_problem.create_regression_problem(
+    problem = benchmark.create_regression_problem(
         LinearRegressionCost,
         n_agents=n_agents,
         n_neighbors_per_agent=n_neighbors_per_agent,
@@ -212,7 +212,7 @@ Create a custom benchmark problem using existing resources.
 
     from decent_bench import benchmark
     from decent_bench import centralized_algorithms as ca
-    from decent_bench.benchmark_problem import BenchmarkProblem
+    from decent_bench.benchmark import BenchmarkProblem
     from decent_bench.costs import LogisticRegressionCost
     from decent_bench.datasets import SyntheticClassificationData
     from decent_bench.distributed_algorithms import ADMM, DGD, ED
@@ -271,7 +271,7 @@ corresponding abstracts.
 
     from decent_bench import benchmark
     from decent_bench import centralized_algorithms as ca
-    from decent_bench.benchmark_problem import BenchmarkProblem
+    from decent_bench.benchmark import BenchmarkProblem
     from decent_bench.costs import Cost
     from decent_bench.datasets import DatasetHandler
     from decent_bench.distributed_algorithms import DGD, SimpleGT
@@ -324,11 +324,11 @@ Plot a network explicitly when you need it:
 .. code-block:: python
 
     import networkx as nx
-    from decent_bench import benchmark_problem
+    from decent_bench import benchmark
     from decent_bench.utils import network_utils
     from decent_bench.costs import LinearRegressionCost
 
-    problem = benchmark_problem.create_regression_problem(LinearRegressionCost, n_agents=25, n_neighbors_per_agent=3)
+    problem = benchmark.create_regression_problem(LinearRegressionCost, n_agents=25, n_neighbors_per_agent=3)
 
     # Plot using decent-bench helper (wraps :func:`networkx.drawing.nx_pylab.draw_networkx`)
     network_utils.plot_network(problem.network_structure, layout="circular", with_labels=True)
@@ -358,7 +358,7 @@ where 3. and 4. are true if ``save_path`` is set to the checkpoint manager's res
 
 .. code-block:: python
 
-    from decent_bench import benchmark, benchmark_problem
+    from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
     from decent_bench.metrics.runtime_library import RuntimeLoss, RuntimeRegret
@@ -373,7 +373,7 @@ where 3. and 4. are true if ``save_path`` is set to the checkpoint manager's res
                 DGD(iterations=10000, step_size=0.001),
                 ADMM(iterations=10000, rho=10, alpha=0.3),
             ],
-            benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
+            benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
             checkpoint_manager=checkpoint_manager,
             runtime_metrics=[
                 RuntimeLoss(update_interval=100, save_path=checkpoint_manager.get_results_path()),
@@ -398,7 +398,6 @@ The checkpoint directory structure:
     ├── metadata.json                   # Run configuration and algorithm metadata
     ├── benchmark_problem.pkl           # Initial benchmark problem state (before any trials)
     ├── initial_algorithms.pkl          # Initial algorithm states (before any trials)
-    ├── initial_network.pkl             # Initial network state (before any trials)
     ├── metric_computation.pkl          # Computed metrics results (after all trials complete)
     ├── algorithm_0/                    # Directory for first algorithm
     │   ├── trial_0/                    # Directory for trial 0
@@ -430,7 +429,7 @@ Control checkpoint behavior with these parameters:
 
     import platform
 
-    from decent_bench import benchmark, benchmark_problem
+    from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import DGD
     from decent_bench.utils.checkpoint_manager import CheckpointManager
@@ -438,7 +437,7 @@ Control checkpoint behavior with these parameters:
     if __name__ == "__main__":
         benchmark.benchmark(
             algorithms=[DGD(iterations=50000, step_size=0.001)],
-            benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
+            benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
             checkpoint_manager=CheckpointManager(
                 checkpoint_dir="benchmark_results/long_run",
                 checkpoint_step=5000,      # Checkpoint every 5000 iterations
@@ -496,7 +495,7 @@ This is useful when you want to modify plot settings, table formatting or :class
 
 .. code-block:: python
 
-    from decent_bench import benchmark, benchmark_problem
+    from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import DGD
     from decent_bench.utils.checkpoint_manager import CheckpointManager
@@ -507,7 +506,7 @@ This is useful when you want to modify plot settings, table formatting or :class
 
         benchmark_result = benchmark.benchmark(
             algorithms=[DGD(iterations=1000, step_size=0.001)],
-            benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
+            benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
             checkpoint_manager=checkpoint_manager,
         )
 
@@ -617,7 +616,7 @@ defining the problem.
 
     import decent_bench.utils.algorithm_helpers as alg_helpers
     import decent_bench.utils.interoperability as iop
-    from decent_bench import benchmark, benchmark_problem
+    from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD, P2PAlgorithm
     from decent_bench.networks import P2PNetwork
@@ -670,7 +669,7 @@ defining the problem.
                 DGD(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
-            benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
+            benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
         )
 
 
@@ -689,9 +688,9 @@ Create your own metrics to tabulate and/or plot.
     import decent_bench.utils.interoperability as iop
 
     import decent_bench.metrics.metric_utils as utils
-    from decent_bench import benchmark, benchmark_problem
+    from decent_bench import benchmark
     from decent_bench.agents import AgentMetricsView
-    from decent_bench.benchmark_problem import BenchmarkProblem
+    from decent_bench.benchmark import BenchmarkProblem
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
     from decent_bench.metrics import Metric
@@ -732,7 +731,7 @@ Create your own metrics to tabulate and/or plot.
                 DGD(iterations=1000, step_size=0.01),
                 ADMM(iterations=1000, rho=10, alpha=0.3),
             ],
-            benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
+            benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
         )
 
         metrics_result = benchmark.compute_metrics(benchmark_result, table_metrics=[x_error], plot_metrics=[x_error])
@@ -752,9 +751,9 @@ They are updated at a specified interval and can optionally save plots to disk a
     from collections.abc import Sequence
 
     import decent_bench.utils.interoperability as iop
-    from decent_bench import benchmark, benchmark_problem
+    from decent_bench import benchmark
     from decent_bench.agents import Agent
-    from decent_bench.benchmark_problem import BenchmarkProblem
+    from decent_bench.benchmark import BenchmarkProblem
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import DGD
     from decent_bench.metrics import RuntimeMetric
@@ -798,7 +797,7 @@ They are updated at a specified interval and can optionally save plots to disk a
     if __name__ == "__main__":
         benchmark_result = benchmark.benchmark(
             algorithms=[DGD(iterations=10000, step_size=0.001)],
-            benchmark_problem=benchmark_problem.create_regression_problem(LinearRegressionCost),
+            benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
             runtime_metrics=[
                 RuntimeConsensusError(
                     update_interval=100,  # Compute and plot every 100 iterations
