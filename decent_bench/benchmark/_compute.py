@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
 from decent_bench.benchmark._metric_result import MetricResult
-from decent_bench.distributed_algorithms import P2PAlgorithm
+from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics import (
     Metric,
     compute_plots,
@@ -81,7 +81,7 @@ def compute_metrics(
         if len(benchmark_result.states) == 0:
             raise ValueError("No benchmark result found in checkpoint manager to compute metrics")
 
-    resulting_agent_states: dict[P2PAlgorithm, list[list[AgentMetricsView]]] = {}
+    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]] = {}
     for alg, networks in benchmark_result.states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
     table_results = compute_tables(resulting_agent_states, benchmark_result.problem, table_metrics, confidence_level)

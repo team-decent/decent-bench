@@ -18,10 +18,10 @@ class Agent:
 
     def __init__(self,
                  agent_id: int,
-                 cost: Cost, 
+                 cost: Cost,
                  activation: AgentActivationScheme | None = None,
                  state_snapshot_period: int = 1,
-                 data: dict[Any] = {}):
+                 data: dict[Any] | None = None):
         if state_snapshot_period <= 0:
             raise ValueError("state_snapshot_period must be a positive integer")
 
@@ -29,7 +29,7 @@ class Agent:
         self._cost = cost
         self._activation = AlwaysActive() if activation is None else activation
         self._state_snapshot_period = state_snapshot_period
-        self.data = data
+        self.data = {} if data is None else data
         self._current_x: Array | None = None
         self._x_history: AgentHistory = AgentHistory()
         self._auxiliary_variables: dict[str, Array] = {}

@@ -13,8 +13,8 @@ from matplotlib.figure import Figure
 
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
-from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import P2PAlgorithm
+from decent_bench.benchmark import BenchmarkProblem
+from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics._computational_cost import ComputationalCost
 from decent_bench.metrics._metric import Metric, X, Y
 from decent_bench.utils.logger import LOGGER
@@ -121,10 +121,10 @@ def display_plots(
 
 
 def compute_plots(
-    resulting_agent_states: dict[P2PAlgorithm, list[list[AgentMetricsView]]],
+    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[Metric] | list[list[Metric]],
-) -> Mapping[P2PAlgorithm, Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]]:
+) -> Mapping[Algorithm, Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]]:
     """
     Compute plot data for metrics.
 
@@ -132,8 +132,7 @@ def compute_plots(
 
     Args:
         resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
-        problem: benchmark problem whose properties, e.g.
-            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.x_optimal`, are used for metric calculations
+        problem: benchmark problem whose properties are used for metric calculations
         metrics: metrics to calculate and plot. If a list of lists is provided, each inner list will be plotted in a
             separate figure. Otherwise groups of 3 metrics will be plotted together in subplots of the same figure
 
@@ -156,7 +155,7 @@ def compute_plots(
 
     algs = list(resulting_agent_states)
     results: dict[
-        P2PAlgorithm,
+        Algorithm,
         dict[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]],
     ] = {alg: {} for alg in algs}
 
@@ -204,10 +203,10 @@ def compute_plots(
 def _create_and_plot_figures(
     metric_groups: list[list[Metric]],
     plot_results: Mapping[
-        P2PAlgorithm,
+        Algorithm,
         Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]],
     ],
-    resulting_agent_states: Mapping[P2PAlgorithm, Sequence[Sequence[AgentMetricsView]]] | None,
+    resulting_agent_states: Mapping[Algorithm, Sequence[Sequence[AgentMetricsView]]] | None,
     use_cost: bool,
     two_columns: bool,
     *,

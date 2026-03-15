@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from decent_bench.agents import Agent
-from decent_bench.benchmark_problem import BenchmarkProblem
+from decent_bench.benchmark import BenchmarkProblem
 
 if TYPE_CHECKING:
     import queue

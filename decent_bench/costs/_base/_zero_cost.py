@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
@@ -49,19 +48,19 @@ class ZeroCost(Cost):
         if iop.shape(x) != self.shape:
             raise ValueError(f"Mismatching domain shapes: {iop.shape(x)} vs {self.shape}")
 
-    def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ANN401
+    def function(self, x: Array) -> float:
         self._check_shape(x)
         return 0.0
 
-    def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ANN401
+    def gradient(self, x: Array) -> Array:
         self._check_shape(x)
         return iop.zeros(self.shape, self.framework, self.device)
 
-    def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ANN401
+    def hessian(self, x: Array) -> Array:
         self._check_shape(x)
         return iop.zeros(self.shape + self.shape, self.framework, self.device)
 
-    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
+    def proximal(self, x: Array, rho: float) -> Array:
         if rho <= 0:
             raise ValueError("The penalty parameter rho must be positive.")
         self._check_shape(x)

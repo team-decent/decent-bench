@@ -11,7 +11,7 @@ from sklearn import metrics as sk_metrics
 import decent_bench.utils.interoperability as iop
 from decent_bench import costs
 from decent_bench.agents import AgentMetricsView
-from decent_bench.benchmark_problem import BenchmarkProblem
+from decent_bench.benchmark import BenchmarkProblem
 from decent_bench.utils.array import Array
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import Dataset
@@ -78,7 +78,7 @@ def regret(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iterat
 
     .. include:: snippets/global_cost_error.rst
     """
-    if problem.x_optimal is None:
+    if "x_optimal" not in problem.__dataclass_fields__:
         return float("nan")
 
     x_opt = problem.x_optimal
@@ -118,7 +118,7 @@ def x_error(agent: AgentMetricsView, problem: BenchmarkProblem, up_to_iteration:
     if up_to_iteration == -1:
         up_to_iteration = int(1e100)
 
-    if problem.x_optimal is None:
+    if "x_optimal" not in problem.__dataclass_fields__:
         return np.array([np.nan for iteration, _ in sorted(agent.x_history.items()) if iteration <= up_to_iteration])
 
     x_per_iteration = np.asarray([
@@ -144,7 +144,7 @@ def accuracy(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iter
         list of accuracies per agent at *iteration*
 
     """
-    if problem.test_data is None:
+    if "test_data" not in problem.__dataclass_fields__:
         LOGGER.warning(
             "Test data is required to calculate accuracy but is not provided in the problem, returning NaN for accuracy"
         )
@@ -192,7 +192,7 @@ def mse(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iteration
         list of MSE per agent
 
     """
-    if problem.test_data is None:
+    if "test_data" not in problem.__dataclass_fields__:
         LOGGER.warning(
             "Test data is required to calculate MSE but is not provided in the problem, returning NaN for MSE"
         )
@@ -233,7 +233,7 @@ def precision(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, ite
         list of precision per agent at *iteration*
 
     """
-    if problem.test_data is None:
+    if "test_data" not in problem.__dataclass_fields__:
         LOGGER.warning(
             "Test data is required to calculate precision but is not provided "
             "in the problem, returning NaN for precision"
@@ -283,7 +283,7 @@ def recall(agents: Sequence[AgentMetricsView], problem: BenchmarkProblem, iterat
         list of recall per agent at *iteration*
 
     """
-    if problem.test_data is None:
+    if "test_data" not in problem.__dataclass_fields__:
         LOGGER.warning(
             "Test data is required to calculate recall but is not provided in the problem, returning NaN for recall"
         )
@@ -356,7 +356,7 @@ def predict_agent(agent: AgentMetricsView, iteration: int, problem: BenchmarkPro
     if not isinstance(agent.cost, costs.EmpiricalRiskCost):
         raise TypeError("Predictions can only be obtained for agents with EmpiricalRiskCost")
 
-    if problem.test_data is None:
+    if "test_data" not in problem.__dataclass_fields__:
         raise ValueError("Test data is required to get predictions but is not provided in the problem")
 
     test_x, _ = split_dataset(problem.test_data)

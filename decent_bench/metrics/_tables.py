@@ -9,8 +9,8 @@ from scipy import stats
 
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
-from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import P2PAlgorithm
+from decent_bench.benchmark import BenchmarkProblem
+from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics._metric import Metric
 from decent_bench.utils.logger import LOGGER
 
@@ -74,19 +74,17 @@ def display_tables(
 
 
 def compute_tables(
-    resulting_agent_states: dict[P2PAlgorithm, list[list[AgentMetricsView]]],
+    resulting_agent_states: dict[Algorithm, list[list[AgentMetricsView]]],
     problem: BenchmarkProblem,
     metrics: list[Metric],
     confidence_level: float,
-) -> Mapping[P2PAlgorithm, Mapping[Metric, Mapping[str, tuple[float, float]]]]:
+) -> Mapping[Algorithm, Mapping[Metric, Mapping[str, tuple[float, float]]]]:
     """
     Compute table metrics with confidence intervals.
 
     Args:
         resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
-        problem: benchmark problem whose properties, e.g.
-            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.x_optimal`,
-            are used for metric calculations
+        problem: benchmark problem whose properties are used for metric calculations
         metrics: metrics to calculate
         confidence_level: confidence level for computing confidence intervals of the metrics, expressed as a value
             between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
@@ -101,7 +99,7 @@ def compute_tables(
         return {}
 
     algs = list(resulting_agent_states)
-    results: dict[P2PAlgorithm, dict[Metric, dict[str, tuple[float, float]]]] = {a: {} for a in algs}
+    results: dict[Algorithm, dict[Metric, dict[str, tuple[float, float]]]] = {a: {} for a in algs}
 
     with warnings.catch_warnings(action="ignore"), utils.MetricProgressBar() as progress:
         table_task = progress.add_task(

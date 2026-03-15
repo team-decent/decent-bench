@@ -1,8 +1,8 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import P2PAlgorithm
+from decent_bench.benchmark._benchmark_problem import BenchmarkProblem
+from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.networks import Network
 
 
@@ -25,4 +25,4 @@ class BenchmarkResult:
     """
 
     problem: BenchmarkProblem
-    states: Mapping[P2PAlgorithm, Sequence[Network]]
+    states: Mapping[Algorithm, Sequence[Network]]

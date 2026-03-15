@@ -5,7 +5,7 @@ import numpy as np
 
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
-from decent_bench.benchmark_problem import BenchmarkProblem
+from decent_bench.benchmark import BenchmarkProblem
 
 Statistic = Callable[[Sequence[float]], float]
 

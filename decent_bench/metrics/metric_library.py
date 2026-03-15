@@ -8,7 +8,7 @@ from numpy import linalg as la
 import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
-from decent_bench.benchmark_problem import BenchmarkProblem
+from decent_bench.benchmark import BenchmarkProblem
 from decent_bench.metrics._metric import Metric
 
 
@@ -98,7 +98,7 @@ class XError(Metric):
         problem: BenchmarkProblem,
         iteration: int,
     ) -> list[float]:
-        if problem.x_optimal is None:
+        if "x_optimal" not in problem.__dataclass_fields__:
             return [float("nan") for _ in agents]
 
         x_optimal_np = iop.to_numpy(problem.x_optimal)

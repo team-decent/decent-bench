@@ -3,12 +3,12 @@ from . import _empirical_risk as empirical_risk
 from ._base import (
     BaseRegularizerCost,
     Cost,
-    ZeroCost,
     FractionalQuadraticRegularizerCost,
     L1RegularizerCost,
     L2RegularizerCost,
     QuadraticCost,
     SumCost,
+    ZeroCost,
 )
 from ._empirical_risk import EmpiricalRiskCost, LinearRegressionCost, LogisticRegressionCost, PyTorchCost
 
@@ -23,8 +23,8 @@ __all__ = [
     "LogisticRegressionCost",
     "PyTorchCost",
     "QuadraticCost",
-    "ZeroCost",
     "SumCost",
+    "ZeroCost",
     "base",
     "empirical_risk",
 ]

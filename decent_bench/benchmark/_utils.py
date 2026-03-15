@@ -3,14 +3,14 @@ from functools import reduce
 from operator import add
 
 import numpy as np
-ran = np.random.default_rng()  # replace with iop tool
 
-import decent_bench.centralized_algorithms as ca
+from decent_bench import centralized_algorithms as ca
 from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCost, PyTorchCost, QuadraticCost
 from decent_bench.datasets import SyntheticClassificationDatasetHandler, SyntheticRegressionDatasetHandler
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import Dataset, EmpiricalRiskBatchSize, SupportedDevices, SupportedFrameworks
 
+ran = np.random.default_rng()  # replace with iop tool
 
 
 def create_classification_problem(
@@ -185,9 +185,9 @@ def create_quadratic_problem(
         n_agents: number of agents
 
     """
-    A, b = [], []
+    A, b = [], []  # noqa: N806
     for _ in range(n_agents):
-        A_i = ran.random((size, size))
+        A_i = ran.random((size, size))  # noqa: N806
         A.append((A_i + A_i.T) / 2 + size * np.eye(size))
         b.append(ran.normal(scale=10, size=(size,)))
 
@@ -195,4 +195,4 @@ def create_quadratic_problem(
     sum_cost = reduce(add, costs)
     x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
 
-    return costs, x_optimal, None
+    return costs, x_optimal

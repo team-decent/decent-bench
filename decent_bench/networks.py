@@ -1,19 +1,26 @@
 from __future__ import annotations
 
 from abc import ABC
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, cast, Callable
+from typing import TYPE_CHECKING, Any, cast
 
 import networkx as nx
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
-from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.schemes import CompressionScheme, DropScheme, NoiseScheme, NoNoise, NoCompression, NoDrops, AlwaysActive
-from decent_bench.utils.array import Array
 from decent_bench.costs import ZeroCost
+from decent_bench.schemes import (
+    AlwaysActive,
+    CompressionScheme,
+    DropScheme,
+    NoCompression,
+    NoDrops,
+    NoiseScheme,
+    NoNoise,
+)
+from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
     AnyGraph = nx.Graph[Any]
@@ -41,16 +48,19 @@ class Network(ABC):  # noqa: B024
 
         self._graph = graph
         self._message_noise = self._initialize_message_schemes(message_noise, "noise", NoiseScheme, NoNoise)
-        self._message_compression = self._initialize_message_schemes(message_compression, "compression", CompressionScheme, NoCompression)
+        self._message_compression = self._initialize_message_schemes(message_compression,
+                                                                     "compression",
+                                                                     CompressionScheme,
+                                                                     NoCompression)
         self._message_drop = self._initialize_message_schemes(message_drop, "drop", DropScheme, NoDrops)
         self._active_agents_cache: dict[int, list[Agent]] = {}
 
     def _initialize_message_schemes(
         self,
-        scheme: Any,
+        scheme: object,
         scheme_name: str,
         scheme_class: Callable[[], Any],
-        default_factory: Callable[[], Any] = None
+        default_factory: Callable[[], Any] | None = None
     ) -> dict[Agent, Any]:
         """
         Create dictionary of message schemes.
@@ -71,16 +81,19 @@ class Network(ABC):  # noqa: B024
 
         Raises:
             ValueError: if `scheme` is a sequence and length != number of agents in network.
+
         """
         if scheme is None:  # no scheme, use default
             return {agent: default_factory() for agent in self.graph}
         if isinstance(scheme, scheme_class):  # one scheme, use for all agents
-            return {agent: scheme for agent in self.graph}
+            return dict.fromkeys(self.graph, scheme)
         if isinstance(scheme, dict):  # one scheme per agent
             for agent in self.graph:
                 if agent not in scheme:
                     raise ValueError(f"{scheme_name} scheme not provided for agent {agent}")
             return {agent: scheme[agent] for agent in self.graph}
+        raise ValueError(f"Invalid {scheme_name} scheme: expected None, a {scheme_class.__name__} instance, ",
+                         " or a dict, got {type(scheme)}")
 
     @property
     def graph(self) -> AgentGraph:
@@ -358,23 +371,20 @@ class FedNetwork(Network):
         if server is None:
             # get cost info from one of the clients
             shape, framework, device = clients[0].cost.shape, clients[0].cost.framework, clients[0].cost.device
-            server = Agent(max([c.id for c in clients])+1,
+            server = Agent(max(c.id for c in clients) + 1,
                            ZeroCost(shape, framework, device),
                            AlwaysActive(),
-                           min([c._state_snapshot_period for c in clients])
+                           min(c.state_snapshot_period for c in clients)
                     )
-        graph = nx.star_graph([server] + [c for c in clients])  # create AgentGraph
+        graph = nx.star_graph([server, *list(clients)])  # create AgentGraph
 
         # specify the server's message schemes if not provided
-        if isinstance(message_noise, dict):
-            if server not in message_noise:
-                message_noise[server] = NoNoise()
-        if isinstance(message_compression, dict):
-            if server not in message_compression:
-                message_compression[server] = NoCompression()
-        if isinstance(message_drop, dict):
-            if server not in message_drop:
-                message_drop[server] = NoDrops()
+        if isinstance(message_noise, dict) and server not in message_noise:
+            message_noise[server] = NoNoise()
+        if isinstance(message_compression, dict) and server not in message_compression:
+            message_compression[server] = NoCompression()
+        if isinstance(message_drop, dict) and server not in message_drop:
+            message_drop[server] = NoDrops()
 
         super().__init__(
             graph=graph,
@@ -488,75 +498,3 @@ class FedNetwork(Network):
     def receive_all(self) -> None:
         """Receive messages at the server from every client (synchronous FL pull)."""
         self.receive(receiver=self.server, sender=None)
-
-
-def create_distributed_network(problem: BenchmarkProblem) -> P2PNetwork:
-    """
-    Create a distributed network - a network with peer-to-peer communication only, no coordinator.
-
-    Raises:
-        ValueError: if there are less agent activation schemes or cost functions than agents
-
-    """
-    n_agents = len(problem.network_structure)
-    if len(problem.agent_activations) < n_agents:
-        raise ValueError("Insufficient number of agent activation schemes, please provide one per agent")
-    if len(problem.costs) < n_agents:
-        raise ValueError("Insufficient number of cost functions, please provide one per agent")
-    if problem.network_structure.is_directed():
-        raise NotImplementedError("Support for directed graphs has not been implemented yet")
-    if problem.network_structure.is_multigraph():
-        raise NotImplementedError("Support for multi-graphs has not been implemented yet")
-    if not nx.is_connected(problem.network_structure):
-        raise NotImplementedError("Support for disconnected graphs has not been implemented yet")
-    agents = [
-        Agent(i, problem.costs[i], problem.agent_activations[i], problem.agent_state_snapshot_period)
-        for i in range(n_agents)
-    ]
-    agent_node_map = {node: agents[i] for i, node in enumerate(problem.network_structure.nodes())}
-    graph = nx.relabel_nodes(problem.network_structure, agent_node_map)
-    return P2PNetwork(
-        graph=graph,
-        message_noise=problem.message_noise,
-        message_compression=problem.message_compression,
-        message_drop=problem.message_drop,
-    )
-
-
-def create_federated_network(problem: BenchmarkProblem) -> FedNetwork:
-    """
-    Create a federated learning network with a single server and multiple clients (star topology).
-
-    Raises:
-        ValueError: if there are fewer activation schemes or cost functions than agents
-        ValueError: if the provided graph is not a star (one server connected to all clients)
-
-    """
-    n_agents = len(problem.network_structure)
-    if len(problem.agent_activations) < n_agents:
-        raise ValueError("Insufficient number of agent activation schemes, please provide one per agent")
-    if len(problem.costs) < n_agents:
-        raise ValueError("Insufficient number of cost functions, please provide one per agent")
-    if problem.network_structure.is_directed():
-        raise NotImplementedError("Support for directed graphs has not been implemented yet")
-    if problem.network_structure.is_multigraph():
-        raise NotImplementedError("Support for multi-graphs has not been implemented yet")
-    if not nx.is_connected(problem.network_structure):
-        raise NotImplementedError("Support for disconnected graphs has not been implemented yet")
-    degrees = dict(problem.network_structure.degree())
-    if n_agents:
-        server, max_degree = max(degrees.items(), key=lambda item: item[1])  # noqa: FURB118
-        if max_degree != n_agents - 1 or any(deg != 1 for node, deg in degrees.items() if node != server):
-            raise ValueError("Federated network requires a star topology (one server connected to all clients)")
-    agents = [
-        Agent(i, problem.costs[i], problem.agent_activations[i], problem.agent_state_snapshot_period)
-        for i in range(n_agents)
-    ]
-    agent_node_map = {node: agents[i] for i, node in enumerate(problem.network_structure.nodes())}
-    graph = nx.relabel_nodes(problem.network_structure, agent_node_map)
-    return FedNetwork(
-        graph=graph,
-        message_noise=problem.message_noise,
-        message_compression=problem.message_compression,
-        message_drop=problem.message_drop,
-    )
