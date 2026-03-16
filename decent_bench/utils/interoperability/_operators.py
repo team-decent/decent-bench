@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from numbers import Real
 from typing import TYPE_CHECKING, cast
 
@@ -9,7 +10,7 @@ from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedArrayTypes
 
 from ._helpers import _return_array
-from ._imports_types import _jnp_types, _np_types, _tf_types, _torch_types, jnp, tf, torch
+from ._imports_types import _jnp_types, _np_types, _tf_types, _torch_types, jax, jnp, tf, torch
 
 if TYPE_CHECKING:
     from torch import Tensor as TorchTensor
@@ -537,6 +538,13 @@ def maximum(array1: Array | SupportedArrayTypes, array2: Array | SupportedArrayT
     def _is_scalar(value: object) -> bool:
         return isinstance(value, Real) and not isinstance(value, bool)
 
+    def _is_jax_array(value: object) -> bool:
+        return (
+            isinstance(value, _jnp_types)
+            or (jax is not None and hasattr(jax, "Array") and isinstance(value, jax.Array))
+            or type(value).__module__.startswith(("jax", "jaxlib"))
+        )
+
     result = None
 
     if (isinstance(value1, _np_types) and (isinstance(value2, _np_types) or _is_scalar(value2))) or (
@@ -547,20 +555,21 @@ def maximum(array1: Array | SupportedArrayTypes, array2: Array | SupportedArrayT
         tensor = value1 if isinstance(value1, torch.Tensor) else value2
         other = value2 if tensor is value1 else value1
         tensor_t = cast("TorchTensor", tensor)
-        if isinstance(other, _torch_types):
+        if isinstance(other, torch.Tensor):
             result = torch.maximum(tensor_t, other)
         elif _is_scalar(other):
             result = torch.maximum(tensor_t, torch.tensor(other, device=tensor_t.device, dtype=tensor_t.dtype))
-    elif tf and (isinstance(value1, _tf_types) or isinstance(value2, _tf_types)):
-        tensor = value1 if isinstance(value1, _tf_types) else value2
+    elif tf and (isinstance(value1, tf.Tensor) or isinstance(value2, tf.Tensor)):
+        tensor = value1 if isinstance(value1, tf.Tensor) else value2
         other = value2 if tensor is value1 else value1
         if isinstance(other, _tf_types) or _is_scalar(other):
             result = tf.maximum(tensor, other)
-    elif jnp and (isinstance(value1, _jnp_types) or isinstance(value2, _jnp_types)):
-        tensor = value1 if isinstance(value1, _jnp_types) else value2
+    elif _is_jax_array(value1) or _is_jax_array(value2):
+        jnp_module = jnp or importlib.import_module("jax.numpy")
+        tensor = value1 if not _is_scalar(value1) else value2
         other = value2 if tensor is value1 else value1
-        if isinstance(other, _jnp_types) or _is_scalar(other):
-            result = jnp.maximum(tensor, other)
+        if _is_jax_array(other) or _is_scalar(other):
+            result = jnp_module.maximum(tensor, other)
 
     if result is None:
         raise TypeError(f"Unsupported framework type: {type(value1)} and {type(value2)}")

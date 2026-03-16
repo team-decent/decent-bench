@@ -1042,11 +1042,11 @@ def diag(array: Array) -> Array:
     if torch and isinstance(value, torch.Tensor):
         return _return_array(torch.diag(value))
     if tf and isinstance(value, tf.Tensor):
-        if value.shape.ndim == 1:
+        if value.shape.ndims == 1:
             return _return_array(tf.linalg.diag(value))
-        if value.shape.ndim == 2:
+        if value.shape.ndims == 2:
             return _return_array(tf.linalg.diag_part(value))
-        if value.shape.ndim is not None:
+        if value.shape.ndims is not None:
             raise ValueError("Input must be 1- or 2-d for diag.")
         rank = tf.rank(value)
         tf.debugging.assert_rank_in(value, [1, 2])
