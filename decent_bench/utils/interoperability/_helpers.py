@@ -79,12 +79,14 @@ def framework_device_of_array(array: Array) -> tuple[SupportedFrameworks, Suppor
     if torch and isinstance(value, _torch_types):
         device_type = SupportedDevices.GPU if value.device.type == "cuda" else SupportedDevices.CPU  # type: ignore[union-attr]
         return SupportedFrameworks.PYTORCH, device_type
+
     if tf and isinstance(value, _tf_types):
         device_str = value.device.lower()  # type: ignore[union-attr]
         device_type = SupportedDevices.GPU if "gpu" in device_str or "cuda" in device_str else SupportedDevices.CPU
         return SupportedFrameworks.TENSORFLOW, device_type
+
     if jnp and isinstance(value, _jnp_types):
-        backend = value.device.platform  # type: ignore[union-attr]
+        backend = value.device.platform
         device_type = SupportedDevices.GPU if backend == "gpu" else SupportedDevices.CPU
         return SupportedFrameworks.JAX, device_type
 

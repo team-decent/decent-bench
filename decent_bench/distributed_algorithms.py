@@ -41,15 +41,8 @@ class Algorithm[NetworkT: Network](ABC):
 
         setattr(cls, "__post_init__", __post_init__)  # noqa: B010
 
-    @property
-    @abstractmethod
-    def iterations(self) -> int:
-        """Number of iterations to run the algorithm for."""
-
-    @iterations.setter
-    @abstractmethod
-    def iterations(self, value: int) -> None:
-        """Set the number of iterations to run the algorithm for."""
+    iterations: int
+    """Number of iterations to run the algorithm for."""
 
     @property
     @abstractmethod

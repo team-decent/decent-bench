@@ -36,7 +36,18 @@ with contextlib.suppress(ImportError, ModuleNotFoundError):
 _np_types = (np.ndarray, np.generic, float, int)
 _torch_types = (torch.Tensor, float, int) if torch else (float,)
 _tf_types = (tf.Tensor, float, int) if tf else (float,)
-_jnp_types = (jnp.ndarray, jnp.generic, float, int) if jnp else (float,)
+if jax and jnp:
+    _jnp_array_types = tuple(
+        dict.fromkeys((
+            jnp.ndarray,
+            jnp.generic,
+            type(jnp.array(0)),
+            *((jax.Array,) if hasattr(jax, "Array") else ()),
+        ))
+    )
+else:
+    _jnp_array_types = ()
+_jnp_types = (*_jnp_array_types, float, int) if jnp else (float,)
 
 _jax_key = jax.random.key(random.randint(0, 2**32 - 1)) if jax else None
 
