@@ -101,7 +101,7 @@ class XError(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        if "x_optimal" not in problem.__dataclass_fields__:
+        if getattr(problem, "x_optimal", None) is None:
             return [float("nan") for _ in agents]
 
         x_optimal_np = iop.to_numpy(problem.x_optimal)  # type: ignore[attr-defined]

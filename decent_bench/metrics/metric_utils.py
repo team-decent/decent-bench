@@ -81,7 +81,7 @@ def regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iter
 
     .. include:: snippets/global_cost_error.rst
     """
-    if "x_optimal" not in problem.__dataclass_fields__:
+    if getattr(problem, "x_optimal", None) is None:
         return float("nan")
 
     x_opt = problem.x_optimal  # type: ignore[attr-defined]
@@ -121,7 +121,7 @@ def x_error(agent: AgentMetricsView, problem: "BenchmarkProblem", up_to_iteratio
     if up_to_iteration == -1:
         up_to_iteration = int(1e100)
 
-    if "x_optimal" not in problem.__dataclass_fields__:
+    if getattr(problem, "x_optimal", None) is None:
         return np.array([np.nan for iteration, _ in sorted(agent.x_history.items()) if iteration <= up_to_iteration])
 
     x_per_iteration = np.asarray([
@@ -147,7 +147,7 @@ def accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", it
         list of accuracies per agent at *iteration*
 
     """
-    if "test_data" not in problem.__dataclass_fields__:
+    if getattr(problem, "test_data", None) is None:
         LOGGER.warning(
             "Test data is required to calculate accuracy but is not provided in the problem, returning NaN for accuracy"
         )
@@ -195,7 +195,7 @@ def mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iterati
         list of MSE per agent
 
     """
-    if "test_data" not in problem.__dataclass_fields__:
+    if getattr(problem, "test_data", None) is None:
         LOGGER.warning(
             "Test data is required to calculate MSE but is not provided in the problem, returning NaN for MSE"
         )
@@ -236,7 +236,7 @@ def precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", i
         list of precision per agent at *iteration*
 
     """
-    if "test_data" not in problem.__dataclass_fields__:
+    if getattr(problem, "test_data", None) is None:
         LOGGER.warning(
             "Test data is required to calculate precision but is not provided "
             "in the problem, returning NaN for precision"
@@ -286,7 +286,7 @@ def recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iter
         list of recall per agent at *iteration*
 
     """
-    if "test_data" not in problem.__dataclass_fields__:
+    if getattr(problem, "test_data", None) is None:
         LOGGER.warning(
             "Test data is required to calculate recall but is not provided in the problem, returning NaN for recall"
         )
@@ -359,7 +359,7 @@ def predict_agent(agent: AgentMetricsView, iteration: int, problem: "BenchmarkPr
     if not isinstance(agent.cost, costs.EmpiricalRiskCost):
         raise TypeError("Predictions can only be obtained for agents with EmpiricalRiskCost")
 
-    if "test_data" not in problem.__dataclass_fields__:
+    if getattr(problem, "test_data", None) is None:
         raise ValueError("Test data is required to get predictions but is not provided in the problem")
 
     test_x, _ = split_dataset(problem.test_data)  # type: ignore[attr-defined]

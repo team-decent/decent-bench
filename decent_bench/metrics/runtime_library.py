@@ -41,7 +41,7 @@ class RuntimeRegret(RuntimeMetric):
     r"""
     Runtime regret metric.
 
-    Requires a :class:`~decent_bench.benchmark.BenchmarkProblem` subblass with field `x_optimal`.
+    Requires a :class:`~decent_bench.benchmark.BenchmarkProblem` with `x_optimal` not None.
 
     Regret is computed as:
 
@@ -58,7 +58,7 @@ class RuntimeRegret(RuntimeMetric):
     y_log = False
 
     def compute(self, problem: "BenchmarkProblem", agents: Sequence["Agent"], _: int) -> float:  # noqa: D102
-        if "x_optimal" not in problem.__dataclass_fields__:
+        if getattr(problem, "x_optimal", None) is None:
             return float("nan")
 
         agent_cost = sum(agent.cost.function(agent.x) for agent in agents) / len(agents)
