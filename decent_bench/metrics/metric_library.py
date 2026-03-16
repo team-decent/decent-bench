@@ -104,7 +104,7 @@ class XError(Metric):
         if getattr(problem, "x_optimal", None) is None:
             return [float("nan") for _ in agents]
 
-        x_optimal_np = iop.to_numpy(problem.x_optimal)  # type: ignore[attr-defined]
+        x_optimal_np = iop.to_numpy(problem.x_optimal)  # type: ignore[arg-type]
 
         if iteration == -1:
             return [float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[a.x_history.max()]))) for a in agents]

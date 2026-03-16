@@ -84,9 +84,9 @@ def regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iter
     if getattr(problem, "x_optimal", None) is None:
         return float("nan")
 
-    x_opt = problem.x_optimal  # type: ignore[attr-defined]
+    x_opt = problem.x_optimal
     mean_x = x_mean(tuple(agents), iteration)
-    optimal_cost = sum(a.cost.function(x_opt) for a in agents)
+    optimal_cost = sum(a.cost.function(x_opt) for a in agents)  # type: ignore[arg-type, misc]
     actual_cost = sum(a.cost.function(mean_x) for a in agents)
     return actual_cost - optimal_cost
 
@@ -127,7 +127,7 @@ def x_error(agent: AgentMetricsView, problem: "BenchmarkProblem", up_to_iteratio
     x_per_iteration = np.asarray([
         iop.to_numpy(x) for iteration, x in sorted(agent.x_history.items()) if iteration <= up_to_iteration
     ])
-    opt_x = iop.to_numpy(problem.x_optimal)  # type: ignore[attr-defined]
+    opt_x = iop.to_numpy(problem.x_optimal)  # type: ignore[arg-type]
     errors: NDArray[float64] = la.norm(x_per_iteration - opt_x, axis=tuple(range(1, x_per_iteration.ndim)))
     return errors
 
@@ -160,7 +160,7 @@ def accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", it
         )
         return [np.nan for _ in agents]
 
-    _, test_y = split_dataset(problem.test_data)  # type: ignore[attr-defined]
+    _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
 
     if test_y.dtype.kind not in {"i", "u"}:
         LOGGER.warning(
@@ -209,7 +209,7 @@ def mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iterati
         return [np.nan for _ in agents]
 
     ret: list[float] = []
-    _, test_y = split_dataset(problem.test_data)  # type: ignore[attr-defined]
+    _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
             agent_iteration = agent.x_history.max() if iteration == -1 else iteration
@@ -250,7 +250,7 @@ def precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", i
         )
         return [np.nan for _ in agents]
 
-    _, test_y = split_dataset(problem.test_data)  # type: ignore[attr-defined]
+    _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
 
     if test_y.dtype.kind not in {"i", "u"}:
         LOGGER.warning(
@@ -299,7 +299,7 @@ def recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iter
         )
         return [np.nan for _ in agents]
 
-    _, test_y = split_dataset(problem.test_data)  # type: ignore[attr-defined]
+    _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
 
     if test_y.dtype.kind not in {"i", "u"}:
         LOGGER.warning(
@@ -362,7 +362,7 @@ def predict_agent(agent: AgentMetricsView, iteration: int, problem: "BenchmarkPr
     if getattr(problem, "test_data", None) is None:
         raise ValueError("Test data is required to get predictions but is not provided in the problem")
 
-    test_x, _ = split_dataset(problem.test_data)  # type: ignore[attr-defined]
+    test_x, _ = split_dataset(problem.test_data)  # type: ignore[arg-type]
 
     return iop.to_numpy(agent.cost.predict(agent.x_history[iteration], list(test_x)))
 

@@ -66,7 +66,7 @@ class RuntimeRegret(RuntimeMetric):
         if hasattr(self, "_cached_optimal_cost"):
             return agent_cost - self._cached_optimal_cost
 
-        self._cached_optimal_cost: float = sum(agent.cost.function(problem.x_optimal) for agent in agents) / len(agents)  # type: ignore[attr-defined,misc]
+        self._cached_optimal_cost: float = sum(agent.cost.function(problem.x_optimal) for agent in agents) / len(agents)  # type: ignore[arg-type,misc]
 
         return agent_cost - self._cached_optimal_cost
 
