@@ -13,7 +13,11 @@ class BenchmarkProblem:
     Subclass it to add more benchmark data (e.g. validation data).
 
     Args:
-        network: network of agents (each with a local cost function)
+        network: network of agents, each with a local cost function. This network represents the
+                 initial state of the network over which algorithms are executed. Specifically,
+                 algorithms are executed over *copies* of this network, and those copies are
+                 stored in :class:`~decent_bench.benchmark.BenchmarkResult`. `BenchmarkProblem.network`
+                 will never be modified, in order to preserve information on the initial state
         x_optimal: optional `Array` representing the optimal solution
         test_data: optional `Dataset` containing test data
 
