@@ -193,6 +193,6 @@ def create_quadratic_problem(
 
     costs = [QuadraticCost(Array(A[i]), Array(b[i])) for i in range(n_agents)]
     sum_cost = reduce(add, costs)
-    x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
+    x_optimal = Array(np.linalg.solve(sum_cost.A, -sum_cost.b))
 
     return costs, x_optimal
