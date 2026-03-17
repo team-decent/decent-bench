@@ -45,6 +45,40 @@ class UniformActivationRate(AgentActivationScheme):
         return random.random() < self.activation_probability
 
 
+class MarkovChainActivation(AgentActivationScheme):
+    """
+    Scheme modeling activation with a 2-state Markov chain.
+
+    The scheme models activation with a 2-state (active and inactive) Markov chain. The agent transitions
+    between the two states with the given probabilities.
+
+    Args:
+        inactive_to_active: transition probability from inactive to active
+        active_to_inactive: transition probability from active to inactive
+
+    Raises:
+        ValueError: if `inactive_to_active` or `active_to_inactive` are not in :math:`[0, 1]`
+
+    """
+
+    def __init__(self, inactive_to_active: float = 0.5, active_to_inactive: float = 0.5):
+        if (inactive_to_active < 0 or inactive_to_active > 1) or (active_to_inactive < 0 or active_to_inactive > 1):
+            raise ValueError("Transition probabilities must be in [0, 1]")
+        self.inactive_to_active = inactive_to_active
+        self.active_to_inactive = active_to_inactive
+        self._states = np.array([0, 1])  # inactive = 0, active = 1
+        self._P = np.array([
+            [1 - inactive_to_active, inactive_to_active],
+            [active_to_inactive, 1 - active_to_inactive],
+        ])  # transition matrix
+        self._current_state = rng.choice(self._states)  # initialize uniformly at random
+
+    def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
+        self._current_state = rng.choice(self._states, p=self._P[self._current_state])  # evolve the Markov chain
+
+        return bool(self._current_state)
+
+
 class ClientSelectionScheme(ABC):
     """Scheme defining how to select a subset of available clients."""
 
