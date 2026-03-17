@@ -55,7 +55,11 @@ def display_metrics(
             metric vs iterations. Only used if ``computational_cost`` is provided.
         save_path: optional directory path to save the tables and plots to. Tables will be saved as ``table.txt`` and
             ``table.tex`` while plots will be saved as ``plot_{#}.{format}`` in the specified directory.
-            If not provided, the tables and plots are not saved to files.
+            If checkpoint_manager is provided then the default save path will be the results path in the checkpoint
+            manager, which is determined by
+            :meth:`~decent_bench.utils.checkpoint_manager.CheckpointManager.get_results_path`. If both are provided,
+            the provided ``save_path`` will be used. If neither a checkpoint manager or a save path is provided,
+            the tables and plots are not saved to disk.
         plot_format: format to save plots in, defaults to ``png``. Can be ``png``, ``pdf``, or ``svg``.
         log_level: minimum level to log, e.g. :data:`logging.INFO`
 
@@ -106,7 +110,11 @@ def display_metrics(
     if plot_metrics is not None:
         new_metrics_result.plot_metrics = _get_new_plot_metrics(new_metrics_result, plot_metrics)
 
-    save_path = Path(save_path) if save_path is not None else None
+    if save_path is not None:
+        save_path = Path(save_path)
+    elif save_path is None and checkpoint_manager is not None:
+        save_path = checkpoint_manager.get_results_path()
+
     display_tables(new_metrics_result, table_fmt=table_fmt, table_path=save_path)
     display_plots(
         new_metrics_result,

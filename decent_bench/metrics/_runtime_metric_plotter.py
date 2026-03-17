@@ -57,7 +57,7 @@ class RuntimeMetricPlotter:
         self._process = self._context.Process(target=self.run, daemon=True)
         self._process.start()
 
-    def run(self) -> None:  # noqa: PLR0912
+    def run(self) -> None:
         """Process loop, continuously process queue updates."""
         # Set matplotlib to use a backend that works in a separate process
         plt.ion()
@@ -69,10 +69,6 @@ class RuntimeMetricPlotter:
                     # Block waiting for first message
                     data = self._queue.get(timeout=0.05)
 
-                    # Check for stop sentinel
-                    if data == "STOP":
-                        break
-
                     if data is not None:
                         self._process_message(data)
                         processed += 1
@@ -81,8 +77,7 @@ class RuntimeMetricPlotter:
                     while True:
                         try:
                             data = self._queue.get_nowait()
-                            if data == "STOP":
-                                return
+
                             if data is not None:
                                 self._process_message(data)
                                 processed += 1
@@ -103,12 +98,15 @@ class RuntimeMetricPlotter:
 
                 except KeyboardInterrupt:
                     # Allow graceful shutdown on Ctrl+C
-                    self.shutdown(dont_save=True)
-                    break
+                    self._close_all(dont_save=True)
+                    return
                 except queue.Empty:
                     # Timeout or other error - small pause to allow GUI updates
                     plt.pause(0.01)
                     continue
+                except queue.ShutDown:
+                    # Queue has been shut down, exit loop
+                    break
                 except Exception as e:
                     LOGGER.debug(f"Error in RuntimeMetricPlotter: {e}")
                     plt.pause(0.01)
@@ -212,12 +210,9 @@ class RuntimeMetricPlotter:
         ax.relim()
         ax.autoscale_view()
 
-    def shutdown(self, dont_save: bool = False) -> None:
+    def shutdown(self) -> None:
         """
         Signal the plotter process to stop and wait for it to finish.
-
-        Args:
-            dont_save: If True, do not save plots to files on shutdown even if save paths were provided.
 
         Note:
             This method can be called multiple times safely. If the process is already stopped, it will do nothing.
@@ -227,12 +222,21 @@ class RuntimeMetricPlotter:
         """
         if self._queue is not None:
             with contextlib.suppress(Exception):
-                self._queue.put("STOP")
+                self._queue.shutdown()
         if self._process is not None:
             self._process.join(timeout=2.0)
             if self._process.is_alive():
+                LOGGER.warning(
+                    "Runtime metrics did not complete rendering, consider lowering the update interval "
+                    "for the runtime metrics used. Forcing shutdown and saving current progress."
+                )
+                with contextlib.suppress(Exception):
+                    # Did not finish drawing in 2 seconds, force shutdown
+                    self._queue.shutdown(immediate=True)
+            self._process.join(timeout=1.0)
+            if self._process.is_alive():
+                # Process is still alive for some reason, force terminate
                 self._process.terminate()
-        self._close_all(dont_save=dont_save)
 
     def _process_message(self, data: Any) -> None:  # noqa: ANN401
         """Process a single message from the queue."""
