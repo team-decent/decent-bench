@@ -19,7 +19,7 @@ class Agent:
 
     Args:
         agent_id: agent's identifier
-        cost: local cost function
+        cost: local cost function; once assigned, it should not be modified
         activation: activation scheme to model synchrony/asynchrony; defaults to synchrony (activate at all iterations)
         state_snapshot_period: how often to record the agent's state when executing an algorithm
         data: dictionary for arbitrary agent data
