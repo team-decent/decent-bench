@@ -11,6 +11,8 @@ from decent_bench.utils.array import Array
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
 
+rng = np.random.default_rng()  # replace with iop tool?
+
 
 class AgentActivationScheme(ABC):
     """Scheme defining how agents go active/inactive over the course of the algorithm execution."""
@@ -144,6 +146,46 @@ class UniformDropRate(DropScheme):
 
     def should_drop(self) -> bool:  # noqa: D102
         return random.random() < self.drop_rate
+
+
+class GilbertElliott(DropScheme):
+    """
+    Drop scheme based on the Gilbert-Elliott model [r14]_.
+
+    The Gilbert-Elliott model is characterized by a Markov chain with two states (good and bad), which
+    can stay the same or transition into each other. In the bad state message drops occur with probability
+    `drop_rate`, while in the good state no message drops occur.
+
+    Args:
+        drop_rate: message drop rate while in the bad state
+        bad_to_good: transition probability from bad to good state
+        good_to_bad: transition probability from good to bad state
+
+    Raises:
+        ValueError: if `drop_rate`, `bad_to_good` or `good_to_bad` are not in :math:`[0, 1]`
+
+    .. [r14] G. Hasslinger and O. Hohlfeld, "The Gilbert-Elliott Model for Packet Loss in Real Time Services
+            on the Internet," in 14th GI/ITG Conference - Measurement, Modelling and Evalutation of Computer
+            and Communication Systems, 2008, pp. 1-15.
+
+    """
+
+    def __init__(self, drop_rate: float, bad_to_good: float = 0.5, good_to_bad: float = 0.5):
+        if drop_rate < 0 or drop_rate > 1:
+            raise ValueError("Drop rate must be in [0, 1]")
+        if (bad_to_good < 0 or bad_to_good > 1) or (good_to_bad < 0 or good_to_bad > 1):
+            raise ValueError("Transition probabilities `bad_to_good` and `good_to_bad` must be in [0, 1]")
+        self.drop_rate = drop_rate
+        self.bad_to_good = bad_to_good
+        self.good_to_bad = good_to_bad
+        self._states = np.array([0, 1])  # good = 0, bad = 1
+        self._P = np.array([[1 - good_to_bad, good_to_bad], [bad_to_good, 1 - bad_to_good]])  # transition matrix
+        self._current_state = rng.choice(self._states)  # initialize uniformly at random
+
+    def should_drop(self) -> bool:  # noqa: D102
+        self._current_state = rng.choice(self._states, p=self._P[self._current_state])  # evolve the Markov chain
+
+        return rng.random() < self.drop_rate if self._current_state else False
 
 
 class NoiseScheme(ABC):
