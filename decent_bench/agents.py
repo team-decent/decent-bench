@@ -14,7 +14,20 @@ from decent_bench.utils.array import Array
 
 
 class Agent:
-    """Agent with unique id, local cost function, activation scheme and state snapshot period."""
+    """
+    Agent with unique id, local cost function, activation scheme and state snapshot period.
+
+    Args:
+        agent_id: agent's identifier
+        cost: local cost function
+        activation: activation scheme to model synchrony/asynchrony; defaults to synchrony (activate at all iterations)
+        state_snapshot_period: how often to record the agent's state when executing an algorithm
+        data: dictionary for arbitrary agent data
+
+    Raises:
+        ValueError: if ``state_snapshot_period`` is not a positive int
+
+    """
 
     def __init__(
         self,

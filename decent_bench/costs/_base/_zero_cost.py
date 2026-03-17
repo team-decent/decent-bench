@@ -10,7 +10,11 @@ from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
 class ZeroCost(Cost):
-    """A cost function that is identically zero."""
+    """
+    A cost function that is identically zero.
+
+    This function is used as default for the server in :class:`~decent_bench.networks.FedNetwork`.
+    """
 
     def __init__(
         self,

@@ -280,23 +280,6 @@ class P2PNetwork(Network):
             )
         self.W: Array | None = None
 
-    def set_weights(self, weights: Array) -> None:
-        """
-        Set custom consensus weights matrix.
-
-        A simple way to create custom weights is to start using numpy and then
-        use :func:`~decent_bench.utils.interoperability.to_array` to convert to an
-        :class:`~decent_bench.utils.array.Array` object with the desired framework and device.
-        For an example see :func:`~decent_bench.utils.interoperability.zeros`.
-
-        Note:
-            If not set, the weights matrix is initialized using the Metropolis-Hastings method.
-            Weights will be overwritten if framework or device differ from
-            ``Agent.cost.framework`` or ``Agent.cost.device``.
-
-        """
-        self.W = weights
-
     @property
     def weights(self) -> Array:
         """
@@ -323,6 +306,38 @@ class P2PNetwork(Network):
 
         self.W = iop.to_array(W, agents[0].cost.framework, agents[0].cost.device)
         return self.W
+
+    @weights.setter
+    def weights(self, value: Array) -> None:
+        """
+        Set custom consensus weights matrix.
+
+        A simple way to create custom weights is to start using numpy and then
+        use :func:`~decent_bench.utils.interoperability.to_array` to convert to an
+        :class:`~decent_bench.utils.array.Array` object with the desired framework and device.
+        For an example see :func:`~decent_bench.utils.interoperability.zeros`.
+
+        Raises:
+            ValueError: if the shape, framework, and device are incompatible with the agents' cost functions
+
+        Note:
+            If not set, the weights matrix is initialized using the Metropolis-Hastings method.
+            Weights will be overwritten if framework or device differ from
+            ``Agent.cost.framework`` or ``Agent.cost.device``.
+
+        """
+        if iop.shape(value) != (len(self.agents()), len(self.agents())):
+            raise ValueError(f"Weights matrix must be of shape ({len(self.agents())}, {len(self.agents())})")
+
+        framework, device = iop.framework_device_of_array(value)
+
+        if framework != self.agents()[0].cost.framework or device != self.agents()[0].cost.device:
+            raise ValueError(
+                f"Weights matrix must be on the same framework and device as the agents' "
+                f"cost functions ({self.agents()[0].cost.framework}, {self.agents()[0].cost.device})"
+            )
+
+        self.W = value
 
     @cached_property
     def adjacency(self) -> Array:
