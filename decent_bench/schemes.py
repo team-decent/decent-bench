@@ -79,6 +79,34 @@ class MarkovChainActivation(AgentActivationScheme):
         return bool(self._current_state)
 
 
+class PoissonActivation(AgentActivationScheme):
+    """
+    Scheme modeling activation at random intervals determined by a Poisson distribution.
+
+    The agent activates at random intervals of length sampled from a Poisson distribution of given mean.
+
+    Args:
+        mean_interval: mean interval of inactivity
+
+    Raises:
+        ValueError: if `mean_interval` is negative
+
+    """
+
+    def __init__(self, mean_interval: float = 1.0):
+        if mean_interval < 0:
+            raise ValueError("`mean_interval` must be non-negative")
+        self.mean_interval = mean_interval
+        self._countdown = int(rng.poisson(self.mean_interval))
+
+    def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
+        if self._countdown == 0:
+            self._countdown = int(rng.poisson(self.mean_interval))
+            return True
+        self._countdown -= 1
+        return False
+
+
 class ClientSelectionScheme(ABC):
     """Scheme defining how to select a subset of available clients."""
 
