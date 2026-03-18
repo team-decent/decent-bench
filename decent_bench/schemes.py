@@ -183,6 +183,34 @@ class Quantization(CompressionScheme):
         return iop.to_array_like(res, msg)
 
 
+class TopK(CompressionScheme):
+    """Top-k compression which transmits only the k elements with largest magnitude."""
+
+    def __init__(self, k: int):
+        self.k = k
+
+    def compress(self, msg: Array) -> Array:  # noqa: D102
+        msg_np = iop.to_numpy(msg).ravel()
+        idx = np.argpartition(msg_np, -self.k, axis=None)[-self.k :]
+        mask = np.isin(np.arange(msg_np.size), idx)
+        msg_np[~mask] = 0
+        return iop.to_array_like(msg_np, msg)
+
+
+class RandK(CompressionScheme):
+    """Rand-k compression which transmits only k randomly selected elements."""
+
+    def __init__(self, k: int):
+        self.k = k
+
+    def compress(self, msg: Array) -> Array:  # noqa: D102
+        msg_np = iop.to_numpy(msg).ravel()
+        idx = rng.choice(msg_np.size, size=self.k, replace=False)
+        mask = np.isin(np.arange(msg_np.size), idx)
+        msg_np[~mask] = 0
+        return iop.to_array_like(msg_np, msg)
+
+
 class DropScheme(ABC):
     """Scheme defining how message drops occur over the network."""
 
