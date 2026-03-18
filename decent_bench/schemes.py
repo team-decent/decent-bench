@@ -191,7 +191,7 @@ class TopK(CompressionScheme):
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
         msg_np = iop.to_numpy(msg).ravel()
-        idx = np.argpartition(msg_np, -self.k, axis=None)[-self.k :]
+        idx = np.argpartition(np.abs(msg_np), -self.k, axis=None)[-self.k :]
         mask = np.isin(np.arange(msg_np.size), idx)
         msg_np[~mask] = 0
         return iop.to_array_like(msg_np, msg)
