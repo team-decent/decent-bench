@@ -22,7 +22,7 @@ Generally benchmark execution involves three steps:
 2. Compute metrics from the benchmark results, which returns a :class:`~decent_bench.benchmark.MetricResult` object.
 3. Display the computed metrics in tables and plots.
 
-**The following is a minimal working example. The remainder of the user guide will be updated soon.**
+**The following is a working example. The remainder of the user guide will be updated soon.**
 
 .. code-block:: python
 
@@ -41,7 +41,7 @@ Generally benchmark execution involves three steps:
 
     costs, x_optimal = create_quadratic_problem(10, n_agents)
 
-    agents = [Agent(i, costs[i]) for i in range(n_agents)]
+    agents = [Agent(i, cost) for i, cost in enumerate(costs)]
     graph = nx.complete_graph(n_agents)
     
     net = P2PNetwork(
@@ -52,7 +52,7 @@ Generally benchmark execution involves three steps:
     bp = benchmark.BenchmarkProblem(net, x_optimal)
 
     ## benchmarking
-    cm = CheckpointManager(checkpoint_dir="results", checkpoint_step=100, keep_n_checkpoints=2)
+    cm = CheckpointManager(checkpoint_dir="results/benchmark_1", checkpoint_step=100, keep_n_checkpoints=2)
 
     num_iter = 1000
     step = 0.001
