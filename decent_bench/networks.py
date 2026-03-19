@@ -43,6 +43,8 @@ class Network(ABC):  # noqa: B024
         # check that graph is connected and not a multi-graph
         if graph.is_multigraph():
             raise NotImplementedError("Support for multi-graphs is not available")
+        if graph.is_directed():
+            raise ValueError("Directed graphs are not supported; please provide an undirected graph")
         if not nx.is_connected(graph):
             raise ValueError("The graph needs to be connected")
 
@@ -90,8 +92,8 @@ class Network(ABC):  # noqa: B024
                     raise ValueError(f"{scheme_name} scheme not provided for agent {agent}")
             return {agent: scheme[agent] for agent in self.graph}
         raise ValueError(
-            f"Invalid {scheme_name} scheme: expected None, a {scheme_class.__name__} instance, ",
-            " or a dict, got {type(scheme)}",
+            f"Invalid {scheme_name} scheme: expected None, a {scheme_class.__name__} instance, "
+            f" or a dict, got {type(scheme)}",
         )
 
     @property
@@ -382,6 +384,8 @@ class FedNetwork(Network):
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
         message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
     ) -> None:
+        if len(clients) == 0:
+            raise ValueError("`clients` list must be non-empty")
         if server is None:
             # get cost info from one of the clients
             shape, framework, device = clients[0].cost.shape, clients[0].cost.framework, clients[0].cost.device

@@ -22,27 +22,53 @@ Generally benchmark execution involves three steps:
 2. Compute metrics from the benchmark results, which returns a :class:`~decent_bench.benchmark.MetricResult` object.
 3. Display the computed metrics in tables and plots.
 
+**The following is a minimal working example. The remainder of the user guide will be updated soon.**
+
 .. code-block:: python
 
+    from decent_bench.agents import Agent
     from decent_bench import benchmark
-    from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import ADMM, DGD
+    from decent_bench.metrics import runtime_library
+    from decent_bench.utils.checkpoint_manager import CheckpointManager
+    from decent_bench.distributed_algorithms import DGD, ATC
+    from decent_bench.networks import P2PNetwork
+    from decent_bench.benchmark import create_quadratic_problem
 
-    if __name__ == "__main__":
-        # Run algorithms and get results in a BenchmarkResult object
-        benchmark_result = benchmark.benchmark(
-            algorithms=[
-                DGD(iterations=1000, step_size=0.01),
-                ADMM(iterations=1000, rho=10, alpha=0.3),
-            ],
-            benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
+    import networkx as nx
+
+    ## problem definition
+    n_agents = 10
+
+    costs, x_optimal = create_quadratic_problem(10, n_agents)
+
+    agents = [Agent(i, costs[i]) for i in range(n_agents)]
+    graph = nx.complete_graph(n_agents)
+    
+    net = P2PNetwork(
+        graph=graph,
+        agents=agents,
+    )
+
+    bp = benchmark.BenchmarkProblem(net, x_optimal)
+
+    ## benchmarking
+    cm = CheckpointManager(checkpoint_dir="results", checkpoint_step=100, keep_n_checkpoints=2)
+
+    num_iter = 1000
+    step = 0.001
+
+    res = benchmark.benchmark(algorithms=[
+            DGD(iterations=num_iter, step_size=step),
+            ATC(iterations=num_iter, step_size=step),
+        ],
+        benchmark_problem=bp,
+        checkpoint_manager=cm,
+        n_trials=1,
         )
 
-        # Compute metrics from the benchmark results
-        metrics_result = benchmark.compute_metrics(benchmark_result)
+    metr = benchmark.compute_metrics(res, checkpoint_manager=cm)
 
-        # Display the computed metrics in tables and plots
-        benchmark.display_metrics(metrics_result)
+    benchmark.display_metrics(metr, checkpoint_manager=cm)
 
 
 Benchmark executions will have outputs like these:
@@ -56,6 +82,8 @@ Benchmark executions will have outputs like these:
           :align: center
           :height: 350px
 
+
+**The user guide from here on is outdated; it will be updated soon.**
 
 Execution settings
 ------------------

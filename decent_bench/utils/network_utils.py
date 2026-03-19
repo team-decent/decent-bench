@@ -61,7 +61,7 @@ def plot_network(
     draw_kwargs_dict: dict[str, Any] = dict(draw_kwargs)
     # use agents' ids as labels if custom labels are not specified by the user
     if "labels" not in draw_kwargs_dict:
-        draw_kwargs_dict["labels"] = {a: a.id for a in graph}
+        draw_kwargs_dict["labels"] = {a: getattr(a, "id", a) for a in graph}
 
     nx.drawing.nx_pylab.draw_networkx(
         graph,
