@@ -12,7 +12,13 @@ from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
 class ScaledCost(Cost):
-    """A scalar multiple of another cost function."""
+    """
+    Generic scalar wrapper for arbitrary costs.
+
+    ``ScaledCost`` is the fallback result of scalar arithmetic when no more specialized wrapper is available. It
+    delegates evaluation, gradient, Hessian, and metadata to the wrapped cost, and preserves proximal support only
+    for nonnegative scalars.
+    """
 
     def __init__(self, cost: Cost, scalar: float):
         self.cost: Cost

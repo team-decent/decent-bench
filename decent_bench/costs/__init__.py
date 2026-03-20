@@ -1,3 +1,29 @@
+"""
+Cost composition rules.
+
+Developer note:
+    Generic cost arithmetic falls back to :class:`SumCost` and :class:`ScaledCost`.
+
+    Regularizers preserve their abstraction under ``+``, ``-``, unary ``-``, ``*``, and ``/`` by returning
+    :class:`BaseRegularizerCost`-aware composites. Empirical-risk costs preserve their abstraction under scalar
+    scaling through :class:`EmpiricalScaledCost`, and under ``empirical + regularizer`` through
+    :class:`EmpiricalRegularizedCost`. Unsupported mixed compositions still fall back to the generic wrappers.
+
+    :class:`EmpiricalRegularizedCost.gradient` uses broadcast semantics when ``reduction=None``: it returns one
+    composite gradient per sample by adding the regularizer gradient to each per-sample empirical gradient. Averaging
+    over the leading sample dimension recovers the composite mean gradient.
+
+    Composition wrappers keep references to their underlying cost objects; they do not make implicit shallow or deep
+    copies at construction time. Mutating a wrapped cost after composition therefore affects the composite view as
+    well. Use :func:`copy.deepcopy` explicitly when an independent copy of a composed objective is needed.
+
+    Proximal support is intentionally conservative for the specialized wrappers:
+    concrete costs may implement specialized proximals, positive scalar scaling preserves proximal support, and a
+    single positively scaled regularizer term preserves regularizer proximal support. Multi-term regularizer
+    composites and :class:`EmpiricalRegularizedCost` do not provide a generic proximal. Use a specialized proximal if
+    one exists, or use :func:`decent_bench.centralized_algorithms.proximal_solver` when applicable.
+"""
+
 from . import _base as base
 from . import _empirical_risk as empirical_risk
 from ._base import (
@@ -10,12 +36,21 @@ from ._base import (
     SumCost,
     ZeroCost,
 )
-from ._empirical_risk import EmpiricalRiskCost, LinearRegressionCost, LogisticRegressionCost, PyTorchCost
+from ._empirical_risk import (
+    EmpiricalRegularizedCost,
+    EmpiricalRiskCost,
+    EmpiricalScaledCost,
+    LinearRegressionCost,
+    LogisticRegressionCost,
+    PyTorchCost,
+)
 
 __all__ = [
     "BaseRegularizerCost",
     "Cost",
+    "EmpiricalRegularizedCost",
     "EmpiricalRiskCost",
+    "EmpiricalScaledCost",
     "FractionalQuadraticRegularizerCost",
     "L1RegularizerCost",
     "L2RegularizerCost",

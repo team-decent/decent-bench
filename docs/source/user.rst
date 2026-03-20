@@ -861,15 +861,26 @@ Supported operations for cost objects:
 Regularization
 ~~~~~~~~~~~~~~
 Regularized objectives can be built by composing cost functions with arithmetic. Decent-Bench provides built-in
-regularizers and they can be scaled and added to empirical risk costs:
+regularizers and preserves specialized structure for the common regularized-ERM patterns:
+
+- ``regularizer_a + regularizer_b``, ``regularizer_a - regularizer_b``, ``scalar * regularizer``,
+  ``regularizer / scalar``, and ``-regularizer`` preserve a regularizer-aware cost.
+- ``scalar * empirical_cost`` preserves the empirical-risk interface through
+  :class:`~decent_bench.costs.EmpiricalScaledCost`.
+- ``empirical_cost + regularizer`` and ``empirical_cost - regularizer`` preserve the empirical-risk interface through
+  :class:`~decent_bench.costs.EmpiricalRegularizedCost`.
+- Unsupported combinations still fall back to the generic wrappers
+  :class:`~decent_bench.costs.SumCost` and :class:`~decent_bench.costs.ScaledCost`.
+
+Built-in regularizers:
 
 - :class:`~decent_bench.costs.L1RegularizerCost` for :math:`\|x\|_1`
 - :class:`~decent_bench.costs.L2RegularizerCost` for :math:`\frac{1}{2}\|x\|_2^2`
 - :class:`~decent_bench.costs.FractionalQuadraticRegularizerCost` for
   :math:`\sum_i \frac{x_i^2}{1 + x_i^2}` (nonconvex)
 
-All regularizers accept and ignore ERM-specific kwargs (e.g., ``indices="batch"``), so batching continues to work
-when you compose them with empirical risk costs.
+All built-in regularizers accept and ignore empirical-risk-specific kwargs (for example ``indices="batch"``), so
+batching continues to work when you compose them with empirical risk costs.
 
 .. code-block:: python
 
@@ -888,19 +899,60 @@ when you compose them with empirical risk costs.
     l2 = lam * L2RegularizerCost(shape=cost.shape)
     fq = eps * FractionalQuadraticRegularizerCost(shape=cost.shape)
 
-    regularized = cost + l1 + l2 + fq
+    regularizer = l1 + l2
+    objective = cost + regularizer
+    nonconvex_objective = objective + fq
+
+The objective above preserves empirical-risk-specific behavior such as ``predict``, ``dataset``, and batch metadata:
 
 .. note::
 
-    Composing empirical risk costs (e.g., ``cost + l1``) returns a :class:`~decent_bench.costs.SumCost`.
-    At the moment, :class:`~decent_bench.costs.SumCost` does not expose empirical-risk-specific properties or
-    the ``predict`` method. If you need those, keep a reference to the original empirical risk cost and use
-    it directly when calling those APIs. We plan to address this limitation in a future release.
+    ``objective = cost + regularizer`` returns an :class:`~decent_bench.costs.EmpiricalRegularizedCost`.
+    It keeps the empirical term's ``predict`` method, ``dataset``, ``n_samples``, ``batch_size``, and batch helpers,
+    while combining the empirical and regularizer contributions in ``function``, ``gradient``, and ``hessian``.
+
+.. code-block:: python
+
+    lambda_ = 0.05
+    objective = cost + lambda_ * L2RegularizerCost(shape=cost.shape)
+    value = objective.function(x, indices="all")
+    gradient = objective.gradient(x, indices="all")
+
+When a composition is not recognized as a specialized regularizer or empirical-risk combination, Decent-Bench falls
+back to a generic wrapper:
+
+.. code-block:: python
+
+    import numpy as np
+    from decent_bench.costs import QuadraticCost
+
+    arbitrary = QuadraticCost(np.eye(cost.shape[0]), np.zeros(cost.shape[0]))
+    generic = objective + arbitrary  # returns SumCost
 
 .. note::
 
     When using :class:`~decent_bench.costs.PyTorchCost`, prefer PyTorch's built-in loss regularizers for better
     efficiency; iop regularizers remain available for cross-framework compatibility.
+
+.. note::
+
+    :class:`~decent_bench.costs.EmpiricalRegularizedCost.gradient` uses broadcast semantics when
+    ``reduction=None``: the empirical term returns one gradient per selected sample, and the regularizer gradient is
+    added to each row. Averaging over the sample dimension recovers the same composite gradient returned by
+    ``reduction="mean"``.
+
+.. note::
+
+    Proximal support is intentionally conservative. Positive scalar scaling preserves proximal support, and a single
+    positively scaled regularizer term preserves the underlying regularizer proximal. Multi-term regularizer
+    composites and :class:`~decent_bench.costs.EmpiricalRegularizedCost` do not define a generic proximal. Use a
+    specialized proximal if one exists, or rely on :func:`decent_bench.centralized_algorithms.proximal_solver` when
+    its assumptions are satisfied.
+
+.. note::
+
+    :class:`~decent_bench.costs.SumCost.proximal` currently returns the sum of the proximal results of its terms for
+    compatibility. This should not be interpreted as the exact proximal of an arbitrary sum of functions in general.
 
 .. code-block:: python
 

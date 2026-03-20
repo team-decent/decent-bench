@@ -12,7 +12,13 @@ from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
 class SumCost(Cost):
-    """The sum of multiple cost functions."""
+    """
+    Generic additive fallback for cost composition.
+
+    ``SumCost`` is returned when two costs can be added but no more specialized composite is available. It preserves
+    the core :class:`~decent_bench.costs.Cost` interface, but does not preserve regularizer-specific or
+    empirical-risk-specific behavior.
+    """
 
     def __init__(self, costs: list[Cost]):
         if not all(costs[0].shape == cf.shape for cf in costs):
@@ -83,7 +89,13 @@ class SumCost(Cost):
         return iop.sum(iop.stack([cf.hessian(x, *args, **kwargs) for cf in self.costs]), dim=0)
 
     def proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        """Sum the :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>` of each cost function."""
+        """
+        Return the sum of the component proximal results.
+
+        This is the current compatibility behavior of ``SumCost``. In general, summing the proximal results of the
+        terms is not the exact proximal operator of a sum, so this method should not be interpreted as a generic
+        closed-form identity for arbitrary ``f + g`` compositions.
+        """
         return iop.sum(iop.stack([cf.proximal(x, rho, *args, **kwargs) for cf in self.costs]), dim=0)
 
     def __add__(self, other: Cost) -> SumCost:
