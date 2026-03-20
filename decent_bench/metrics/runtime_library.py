@@ -8,7 +8,7 @@ from decent_bench.metrics._runtime_metric import RuntimeMetric
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
-    from decent_bench.benchmark_problem import BenchmarkProblem
+    from decent_bench.benchmark import BenchmarkProblem
 
 
 class RuntimeLoss(RuntimeMetric):
@@ -41,7 +41,7 @@ class RuntimeRegret(RuntimeMetric):
     r"""
     Runtime regret metric.
 
-    Requires that the benchmark problem :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.x_optimal` is defined.
+    Requires a :class:`~decent_bench.benchmark.BenchmarkProblem` with `x_optimal` not None.
 
     Regret is computed as:
 
@@ -58,7 +58,7 @@ class RuntimeRegret(RuntimeMetric):
     y_log = False
 
     def compute(self, problem: "BenchmarkProblem", agents: Sequence["Agent"], _: int) -> float:  # noqa: D102
-        if problem.x_optimal is None:
+        if getattr(problem, "x_optimal", None) is None:
             return float("nan")
 
         agent_cost = sum(agent.cost.function(agent.x) for agent in agents) / len(agents)
@@ -66,7 +66,7 @@ class RuntimeRegret(RuntimeMetric):
         if hasattr(self, "_cached_optimal_cost"):
             return agent_cost - self._cached_optimal_cost
 
-        self._cached_optimal_cost: float = sum(agent.cost.function(problem.x_optimal) for agent in agents) / len(agents)
+        self._cached_optimal_cost: float = sum(agent.cost.function(problem.x_optimal) for agent in agents) / len(agents)  # type: ignore[arg-type,misc]
 
         return agent_cost - self._cached_optimal_cost
 

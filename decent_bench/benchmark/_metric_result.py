@@ -2,8 +2,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from decent_bench.agents import AgentMetricsView
-from decent_bench.distributed_algorithms import P2PAlgorithm
+from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics import Metric
+from decent_bench.networks import Network
 
 
 @dataclass
@@ -29,13 +30,14 @@ class MetricResult:
     benchmark problem.
     """
 
-    agent_metrics: Mapping[P2PAlgorithm, Sequence[Sequence[AgentMetricsView]]] | None
+    agent_metrics: Mapping[Algorithm[Network], Sequence[Sequence[AgentMetricsView]]] | None
     table_metrics: list[Metric] | None
     plot_metrics: list[Metric] | list[list[Metric]] | None
-    table_results: Mapping[P2PAlgorithm, Mapping[Metric, Mapping[str, tuple[float, float]]]] | None
+    table_results: Mapping[Algorithm[Network], Mapping[Metric, Mapping[str, tuple[float, float]]]] | None
     plot_results: (
         Mapping[
-            P2PAlgorithm, Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]
+            Algorithm[Network],
+            Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]],
         ]
         | None
     )

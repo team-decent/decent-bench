@@ -13,7 +13,6 @@ decent\_bench
 
    decent_bench.agents
    decent_bench.benchmark
-   decent_bench.benchmark_problem
    decent_bench.centralized_algorithms
    decent_bench.costs
    decent_bench.datasets

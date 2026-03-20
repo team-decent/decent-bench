@@ -1,92 +1,30 @@
 from collections.abc import Sequence
-from dataclasses import dataclass
 from functools import reduce
 from operator import add
-from typing import TYPE_CHECKING, Any
 
-import networkx as nx
 import numpy as np
 
-import decent_bench.centralized_algorithms as ca
-from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCost, PyTorchCost
+from decent_bench import centralized_algorithms as ca
+from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCost, PyTorchCost, QuadraticCost
 from decent_bench.datasets import SyntheticClassificationDatasetHandler, SyntheticRegressionDatasetHandler
-from decent_bench.schemes import (
-    AgentActivationScheme,
-    AlwaysActive,
-    CompressionScheme,
-    DropScheme,
-    GaussianNoise,
-    NoCompression,
-    NoDrops,
-    NoiseScheme,
-    NoNoise,
-    Quantization,
-    UniformActivationRate,
-    UniformDropRate,
-)
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import Dataset, EmpiricalRiskBatchSize, SupportedDevices, SupportedFrameworks
 
-if TYPE_CHECKING:
-    AnyGraph = nx.Graph[Any]
-else:
-    AnyGraph = nx.Graph
-
-
-@dataclass(eq=False)
-class BenchmarkProblem:
-    """
-    Benchmark problem to run algorithms on, defining settings such as communication constraints and topology.
-
-    Args:
-        network_structure: graph defining how agents are connected
-        x_optimal: solution that minimizes the sum of the cost functions, used for calculating metrics
-        costs: local cost functions, each one is given to one agent
-        agent_state_snapshot_period: period for recording agent state snapshots, used for plot metrics
-        agent_activations: setting for agent activation/participation, each scheme is applied to one agent
-        message_compression: message compression setting
-        message_noise: message noise setting
-        message_drop: message drops setting
-        test_data: optional test dataset for evaluating generalization performance
-
-    """
-
-    network_structure: AnyGraph
-    x_optimal: Array | None
-    costs: Sequence[Cost]
-    agent_state_snapshot_period: int
-    agent_activations: Sequence[AgentActivationScheme]
-    message_compression: CompressionScheme
-    message_noise: NoiseScheme
-    message_drop: DropScheme
-    test_data: Dataset | None = None
+ran = np.random.default_rng()  # replace with iop tool
 
 
 def create_classification_problem(
-    cost_cls: type[LogisticRegressionCost | PyTorchCost],
-    *,
+    cost_cls: type[LogisticRegressionCost | PyTorchCost] = LogisticRegressionCost,
     n_agents: int = 100,
-    agent_state_snapshot_period: int = 1,
-    n_neighbors_per_agent: int = 3,
     batch_size: EmpiricalRiskBatchSize = "all",
-    asynchrony: bool = False,
-    compression: bool = False,
-    noise: bool = False,
-    drops: bool = False,
-) -> BenchmarkProblem:
+) -> tuple[Sequence[Cost], Array | None, Dataset]:
     """
     Create out-of-the-box classification problems.
 
     Args:
         cost_cls: type of cost function
         n_agents: number of agents
-        agent_state_snapshot_period: period for recording agent state snapshots, used for plot metrics
-        n_neighbors_per_agent: number of neighbors per agent
         batch_size: size of mini-batches for stochastic methods, or "all" for full-batch
-        asynchrony: if true, agents only have a 50% probability of being active/participating at any given time
-        compression: if true, messages are rounded to 4 significant digits
-        noise: if true, messages are distorted by Gaussian noise
-        drops: if true, messages have a 50% probability of being dropped
 
     Note:
         If cost_cls is :class:`~decent_bench.costs.PyTorchCost`, x_optimal is not computed and set to None.
@@ -98,7 +36,6 @@ def create_classification_problem(
         ImportError: if PyTorchCost is selected but PyTorch is not installed
 
     """
-    network_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
     dataset = SyntheticClassificationDatasetHandler(
         n_targets=2,
         n_partitions=n_agents,
@@ -157,48 +94,21 @@ def create_classification_problem(
     else:
         raise ValueError(f"Unsupported cost class: {cost_cls}")
 
-    agent_activations = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
-    message_compression = Quantization(n_significant_digits=4) if compression else NoCompression()
-    message_noise = GaussianNoise(mean=0, sd=0.001) if noise else NoNoise()
-    message_drop = UniformDropRate(drop_rate=0.5) if drops else NoDrops()
-    return BenchmarkProblem(
-        network_structure=network_structure,
-        costs=costs,
-        agent_state_snapshot_period=agent_state_snapshot_period,
-        x_optimal=x_optimal,
-        agent_activations=agent_activations,
-        message_compression=message_compression,
-        message_noise=message_noise,
-        message_drop=message_drop,
-        test_data=test_data.get_datapoints(),
-    )
+    return costs, x_optimal, test_data.get_datapoints()
 
 
 def create_regression_problem(
-    cost_cls: type[LinearRegressionCost | PyTorchCost],
-    *,
+    cost_cls: type[LinearRegressionCost | PyTorchCost] = LinearRegressionCost,
     n_agents: int = 100,
-    agent_state_snapshot_period: int = 1,
-    n_neighbors_per_agent: int = 3,
     batch_size: EmpiricalRiskBatchSize = "all",
-    asynchrony: bool = False,
-    compression: bool = False,
-    noise: bool = False,
-    drops: bool = False,
-) -> BenchmarkProblem:
+) -> tuple[Sequence[Cost], Array | None, Dataset]:
     """
     Create out-of-the-box regression problems.
 
     Args:
         cost_cls: type of cost function
         n_agents: number of agents
-        agent_state_snapshot_period: period for recording agent state snapshots, used for plot metrics
-        n_neighbors_per_agent: number of neighbors per agent
         batch_size: size of mini-batches for stochastic methods, or "all" for full-batch
-        asynchrony: if true, agents only have a 50% probability of being active/participating at any given time
-        compression: if true, messages are rounded to 4 significant digits
-        noise: if true, messages are distorted by Gaussian noise
-        drops: if true, messages have a 50% probability of being dropped
 
     Note:
         If cost_cls is :class:`~decent_bench.costs.PyTorchCost`, x_optimal is not computed and set to None.
@@ -210,7 +120,6 @@ def create_regression_problem(
         ImportError: if PyTorchCost is selected but PyTorch is not installed
 
     """
-    network_structure = nx.random_regular_graph(n_neighbors_per_agent, n_agents, seed=0)
     dataset = SyntheticRegressionDatasetHandler(
         n_targets=1,
         n_partitions=n_agents,
@@ -261,18 +170,29 @@ def create_regression_problem(
     else:
         raise ValueError(f"Unsupported cost class: {cost_cls}")
 
-    agent_activations = [UniformActivationRate(0.5) if asynchrony else AlwaysActive()] * n_agents
-    message_compression = Quantization(n_significant_digits=4) if compression else NoCompression()
-    message_noise = GaussianNoise(mean=0, sd=0.001) if noise else NoNoise()
-    message_drop = UniformDropRate(drop_rate=0.5) if drops else NoDrops()
-    return BenchmarkProblem(
-        network_structure=network_structure,
-        costs=costs,
-        agent_state_snapshot_period=agent_state_snapshot_period,
-        x_optimal=x_optimal,
-        agent_activations=agent_activations,
-        message_compression=message_compression,
-        message_noise=message_noise,
-        message_drop=message_drop,
-        test_data=test_data.get_datapoints(),
-    )
+    return costs, x_optimal, test_data.get_datapoints()
+
+
+def create_quadratic_problem(
+    size: int = 10,
+    n_agents: int = 100,
+) -> tuple[Sequence[Cost], Array]:
+    """
+    Create out-of-the-box quadratic problems.
+
+    Args:
+        size: number of dimensions
+        n_agents: number of agents
+
+    """
+    A, b = [], []  # noqa: N806
+    for _ in range(n_agents):
+        A_i = ran.random((size, size))  # noqa: N806
+        A.append((A_i + A_i.T) / 2 + size * np.eye(size))
+        b.append(ran.normal(scale=10, size=(size,)))
+
+    costs = [QuadraticCost(Array(A[i]), Array(b[i])) for i in range(n_agents)]
+    sum_cost = reduce(add, costs)
+    x_optimal = Array(np.linalg.solve(sum_cost.A, -sum_cost.b))
+
+    return costs, x_optimal

@@ -9,21 +9,42 @@ from typing import Any
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs import Cost, EmpiricalRiskCost
-from decent_bench.schemes import AgentActivationScheme
+from decent_bench.schemes import AgentActivationScheme, AlwaysActive
 from decent_bench.utils.array import Array
 
 
 class Agent:
-    """Agent with unique id, local cost function, activation scheme and state snapshot period."""
+    """
+    Agent with unique id, local cost function, activation scheme and state snapshot period.
 
-    def __init__(self, agent_id: int, cost: Cost, activation: AgentActivationScheme, state_snapshot_period: int):
+    Args:
+        agent_id: agent's identifier
+        cost: local cost function; once assigned, it should not be modified
+        activation: activation scheme to model synchrony/asynchrony; defaults to synchrony (activate at all iterations)
+        state_snapshot_period: how often to record the agent's state when executing an algorithm
+        data: dictionary for arbitrary agent data
+
+    Raises:
+        ValueError: if ``state_snapshot_period`` is not a positive int
+
+    """
+
+    def __init__(
+        self,
+        agent_id: int,
+        cost: Cost,
+        activation: AgentActivationScheme | None = None,
+        state_snapshot_period: int = 1,
+        data: dict[str, Any] | None = None,
+    ):
         if state_snapshot_period <= 0:
             raise ValueError("state_snapshot_period must be a positive integer")
 
         self._id = agent_id
         self._cost = cost
-        self._activation = activation
+        self._activation = AlwaysActive() if activation is None else activation
         self._state_snapshot_period = state_snapshot_period
+        self.data = {} if data is None else data
         self._current_x: Array | None = None
         self._x_history: AgentHistory = AgentHistory()
         self._auxiliary_variables: dict[str, Array] = {}
