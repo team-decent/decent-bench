@@ -8,6 +8,7 @@ from ._base import (
     L2RegularizerCost,
     QuadraticCost,
     SumCost,
+    ZeroCost,
 )
 from ._empirical_risk import EmpiricalRiskCost, LinearRegressionCost, LogisticRegressionCost, PyTorchCost
 
@@ -23,6 +24,7 @@ __all__ = [
     "PyTorchCost",
     "QuadraticCost",
     "SumCost",
+    "ZeroCost",
     "base",
     "empirical_risk",
 ]

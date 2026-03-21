@@ -11,11 +11,11 @@ from typing import TYPE_CHECKING, Any
 
 from rich.status import Status
 
+from decent_bench.benchmark._benchmark_problem import BenchmarkProblem
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
-from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import P2PAlgorithm
+from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics import RuntimeMetricPlotter
-from decent_bench.networks import Network, P2PNetwork, create_distributed_network
+from decent_bench.networks import Network
 from decent_bench.utils import logger
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.progress_bar import ProgressBarController
@@ -121,10 +121,6 @@ def resume_benchmark(  # noqa: PLR0912
             if problem is None:
                 raise ValueError("Benchmark problem not found in checkpoint metadata")
 
-            nw_init_state = checkpoint_manager.load_initial_network()
-            if nw_init_state is None:
-                raise ValueError("Initial network state not found in checkpoint metadata")
-
             log_listener, manager, mp_context = _init_logging_and_multiprocessing(log_level, max_processes, problem)
 
             LOGGER.debug(f"Loaded checkpoint: algorithms={algorithms}")
@@ -171,7 +167,6 @@ def resume_benchmark(  # noqa: PLR0912
     results = _benchmark(
         algorithms=algorithms,
         benchmark_problem=problem,
-        nw_init_state=nw_init_state,
         log_listener=log_listener,
         manager=manager,
         mp_context=mp_context,
@@ -188,7 +183,7 @@ def resume_benchmark(  # noqa: PLR0912
 
 
 def benchmark(
-    algorithms: list[P2PAlgorithm],
+    algorithms: list[Algorithm[Network]],
     benchmark_problem: BenchmarkProblem,
     *,
     n_trials: int = 30,
@@ -248,9 +243,6 @@ def benchmark(
     """
     log_listener, manager, mp_context = _init_logging_and_multiprocessing(log_level, max_processes, benchmark_problem)
 
-    nw_init_state = create_distributed_network(benchmark_problem)
-    LOGGER.debug("Created initial network state from benchmark problem configuration")
-
     if checkpoint_manager is not None:
         if not checkpoint_manager.is_empty():
             raise ValueError(
@@ -258,7 +250,7 @@ def benchmark(
                 f"Please provide an empty or non-existent directory to save checkpoints."
             )
 
-        checkpoint_manager.initialize(algorithms, nw_init_state, benchmark_problem, n_trials)
+        checkpoint_manager.initialize(algorithms, benchmark_problem, n_trials)
     else:
         LOGGER.info(
             "No checkpoint manager provided, running benchmark without checkpointing. "
@@ -268,7 +260,6 @@ def benchmark(
     results = _benchmark(
         algorithms=algorithms,
         benchmark_problem=benchmark_problem,
-        nw_init_state=nw_init_state,
         log_listener=log_listener,
         manager=manager,
         mp_context=mp_context,
@@ -285,9 +276,8 @@ def benchmark(
 
 
 def _benchmark(
-    algorithms: list[P2PAlgorithm],
+    algorithms: list[Algorithm[Network]],
     benchmark_problem: BenchmarkProblem,
-    nw_init_state: Network,
     log_listener: QueueListener,
     manager: "SyncManager",
     *,
@@ -307,7 +297,6 @@ def _benchmark(
         algorithms: algorithms to benchmark
         benchmark_problem: problem to benchmark on, defines the network topology, cost functions, and communication
             constraints.
-        nw_init_state: initial state of the network to run the algorithms on.
         log_listener: multiprocessing logging listener to handle log messages from worker processes.
         manager: multiprocessing manager for sharing data between processes.
         mp_context: multiprocessing context to use for creating new processes.
@@ -349,12 +338,11 @@ def _benchmark(
 
     """
     LOGGER.info("Starting benchmark execution ")
-    LOGGER.debug(f"Nr of agents: {len(nw_init_state.agents())}")
+    LOGGER.debug(f"Nr of agents: {len(benchmark_problem.network.agents())}")
     prog_ctrl = ProgressBarController(manager, algorithms, n_trials, progress_step, show_speed, show_trial)
     resulting_nw_states = _run_trials(
         algorithms,
         n_trials,
-        nw_init_state,
         benchmark_problem,
         prog_ctrl,
         log_listener,
@@ -390,9 +378,8 @@ def _init_logging_and_multiprocessing(
 
 
 def _run_trials(  # noqa: PLR0917
-    algorithms: list[P2PAlgorithm],
+    algorithms: list[Algorithm[Network]],
     n_trials: int,
-    nw_init_state: Network,
     problem: BenchmarkProblem,
     progress_bar_ctrl: ProgressBarController,
     log_listener: QueueListener,
@@ -400,8 +387,8 @@ def _run_trials(  # noqa: PLR0917
     mp_context: "SpawnContext | None" = None,
     checkpoint_manager: "CheckpointManager | None" = None,
     runtime_metrics: "list[RuntimeMetric] | None" = None,
-) -> dict[P2PAlgorithm, list[Network]]:
-    results: dict[P2PAlgorithm, list[Network]] = defaultdict(list)
+) -> dict[Algorithm[Network], list[Network]]:
+    results: dict[Algorithm[Network], list[Network]] = defaultdict(list)
     progress_bar_handle = progress_bar_ctrl.get_handle()
 
     # Create centralized plotter process and queue for runtime metrics
@@ -418,7 +405,7 @@ def _run_trials(  # noqa: PLR0917
     # Filter out completed trials if checkpoint manager is provided, and load their results, otherwise run all trials
     # Used when resuming from a previous benchmark run, so that only incomplete trials are run and completed trial
     # results are loaded from the checkpoint directory
-    to_run: dict[P2PAlgorithm, list[int]] = defaultdict(list)
+    to_run: dict[Algorithm[Network], list[int]] = defaultdict(list)
     if checkpoint_manager is not None:
         for alg_idx, alg in enumerate(algorithms):
             completed_trials = checkpoint_manager.get_completed_trials(alg_idx, n_trials)
@@ -450,7 +437,6 @@ def _run_trials(  # noqa: PLR0917
             alg: [
                 _run_trial(
                     alg,
-                    nw_init_state,
                     problem,
                     progress_bar_handle,
                     trial,
@@ -476,7 +462,6 @@ def _run_trials(  # noqa: PLR0917
                     executor.submit(
                         _run_trial,
                         alg,
-                        nw_init_state,
                         problem,
                         progress_bar_handle,
                         trial,
@@ -503,8 +488,7 @@ def _run_trials(  # noqa: PLR0917
 
 
 def _run_trial(  # noqa: PLR0917
-    algorithm: P2PAlgorithm,
-    nw_init_state: Network,
+    algorithm: Algorithm[Network],
     problem: BenchmarkProblem,
     progress_bar_handle: "ProgressBarHandle",
     trial: int,
@@ -529,11 +513,11 @@ def _run_trial(  # noqa: PLR0917
             )
         else:
             start_iteration = 0
-            network = deepcopy(nw_init_state)
+            network = deepcopy(problem.network)
             alg = deepcopy(algorithm)
     else:
         start_iteration = 0
-        network = deepcopy(nw_init_state)
+        network = deepcopy(problem.network)
         alg = deepcopy(algorithm)
 
     progress_bar_handle.start_progress_bar(algorithm, trial, start_iteration)
@@ -554,10 +538,6 @@ def _run_trial(  # noqa: PLR0917
                         f"Failed to update runtime metric {metric.description} at iteration {iteration}: {e}"
                     )
 
-    if not isinstance(network, P2PNetwork):
-        # Update this when support for federated learning or other types of networks is added
-        raise TypeError(f"Expected network to be a P2PNetwork, got {type(network)}")
-
     with warnings.catch_warnings(action="error"):
         try:
             alg.run(network, start_iteration, progress_callback, skip_finalize=True)
@@ -575,7 +555,7 @@ def _run_trial(  # noqa: PLR0917
 
 def _get_runtime_metrics(
     runtime_metrics: "list[RuntimeMetric] | None",
-    algorithm: P2PAlgorithm,
+    algorithm: Algorithm[Network],
     trial: int,
     runtime_queue: "queue.Queue[Any] | None" = None,
 ) -> list["RuntimeMetric"]:
@@ -603,7 +583,7 @@ def _should_use_spawn_context(benchmark_problem: BenchmarkProblem) -> bool:
     try:
         from decent_bench.costs import PyTorchCost  # noqa: PLC0415
 
-        if any(isinstance(cost, PyTorchCost) for cost in benchmark_problem.costs):
+        if any(isinstance(agent.cost, PyTorchCost) for agent in benchmark_problem.network.agents()):
             LOGGER.warning(
                 "It is not recommended to use use multiprocessing with PyTorchCost, "
                 "may cause unexpected behavior. Consider setting max_processes=1 to disable multiprocessing.\n"

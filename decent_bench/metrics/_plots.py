@@ -13,14 +13,15 @@ from matplotlib.figure import Figure
 
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
-from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import P2PAlgorithm
+from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics._computational_cost import ComputationalCost
 from decent_bench.metrics._metric import Metric, X, Y
+from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:
-    from decent_bench.benchmark import MetricResult
+    from decent_bench.benchmark import BenchmarkProblem, MetricResult
+
 
 X_LABELS = {
     "iterations": "iterations",
@@ -121,10 +122,12 @@ def display_plots(
 
 
 def compute_plots(
-    resulting_agent_states: dict[P2PAlgorithm, list[list[AgentMetricsView]]],
-    problem: BenchmarkProblem,
+    resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]],
+    problem: "BenchmarkProblem",
     metrics: list[Metric] | list[list[Metric]],
-) -> Mapping[P2PAlgorithm, Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]]:
+) -> Mapping[
+    Algorithm[Network], Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]
+]:
     """
     Compute plot data for metrics.
 
@@ -132,8 +135,7 @@ def compute_plots(
 
     Args:
         resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
-        problem: benchmark problem whose properties, e.g.
-            :attr:`~decent_bench.benchmark_problem.BenchmarkProblem.x_optimal`, are used for metric calculations
+        problem: benchmark problem whose properties are used for metric calculations
         metrics: metrics to calculate and plot. If a list of lists is provided, each inner list will be plotted in a
             separate figure. Otherwise groups of 3 metrics will be plotted together in subplots of the same figure
 
@@ -156,7 +158,7 @@ def compute_plots(
 
     algs = list(resulting_agent_states)
     results: dict[
-        P2PAlgorithm,
+        Algorithm[Network],
         dict[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]],
     ] = {alg: {} for alg in algs}
 
@@ -182,8 +184,7 @@ def compute_plots(
                     msg = (
                         f"Skipping plot computation for {metric.plot_description} "
                         f"and {alg.name}: found nan or inf in datapoints. "
-                        f"Test data or optimal x may be missing from the benchmark problem, got: "
-                        f"test_data={type(problem.test_data)}, x_optimal={type(problem.x_optimal)}"
+                        f"Test data or optimal x may be missing from the benchmark problem."
                     )
                     LOGGER.warning(msg)
                     progress.advance(plot_task)
@@ -204,10 +205,10 @@ def compute_plots(
 def _create_and_plot_figures(
     metric_groups: list[list[Metric]],
     plot_results: Mapping[
-        P2PAlgorithm,
+        Algorithm[Network],
         Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]],
     ],
-    resulting_agent_states: Mapping[P2PAlgorithm, Sequence[Sequence[AgentMetricsView]]] | None,
+    resulting_agent_states: Mapping[Algorithm[Network], Sequence[Sequence[AgentMetricsView]]] | None,
     use_cost: bool,
     two_columns: bool,
     *,
@@ -488,7 +489,7 @@ def _calc_total_cost(agent_states: list[list[AgentMetricsView]], computational_c
 
 def _plot_data_per_trial(
     agents_per_trial: list[list[AgentMetricsView]],
-    problem: BenchmarkProblem,
+    problem: "BenchmarkProblem",
     metric: Metric,
 ) -> list[Sequence[tuple[X, Y]]]:
     data_per_trial: list[Sequence[tuple[X, Y]]] = []

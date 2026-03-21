@@ -5,9 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from decent_bench.benchmark import BenchmarkResult, MetricResult
-from decent_bench.benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import P2PAlgorithm
+from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, MetricResult
+from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 
@@ -27,7 +26,6 @@ class CheckpointManager:  # noqa: PLR0904
             ├── metadata.json                   # Run configuration and algorithm metadata
             ├── benchmark_problem.pkl           # Initial benchmark problem state (before any trials)
             ├── initial_algorithms.pkl          # Initial algorithm states (before any trials)
-            ├── initial_network.pkl             # Initial network state (before any trials)
             ├── metric_computation.pkl          # Computed metrics results (after all trials complete)
             ├── algorithm_0/                    # Directory for first algorithm
             │   ├── trial_0/                    # Directory for trial 0
@@ -52,18 +50,17 @@ class CheckpointManager:  # noqa: PLR0904
           :func:`~decent_bench.utils.checkpoint_manager.CheckpointManager.append_metadata`.
         - **benchmark_problem.pkl**: Initial benchmark problem state before any trials run.
         - **initial_algorithms.pkl**: Initial algorithm states before any trials run.
-        - **initial_network.pkl**: Starting network state before any algorithm execution.
         - **metric_computation.pkl**: Computed metrics results after :func:`~decent_bench.benchmark.compute_metrics`
           completes.
         - **checkpoint_NNNNNNN.pkl**: Combined checkpoint containing both algorithm and network state.
           This preserves shared object references and ensures consistency between algorithm and network
           states at each checkpoint. The checkpoint data is a dictionary with the following structure:
 
-            - algorithm: :class:`~decent_bench.distributed_algorithms.P2PAlgorithm`
+            - algorithm: :class:`~decent_bench.distributed_algorithms.Algorithm`
             - network: :class:`~decent_bench.networks.Network`
             - iteration: iteration
 
-          where "algorithm" is the :class:`~decent_bench.distributed_algorithms.P2PAlgorithm` object with its internal
+          where "algorithm" is the :class:`~decent_bench.distributed_algorithms.Algorithm` object with its internal
           state at the checkpoint, "network" is the :class:`~decent_bench.networks.Network` object with agent states
           at the checkpoint and "iteration" is the iteration number of the checkpoint.
         - **progress.json**: Tracks the last completed iteration within a trial.
@@ -136,8 +133,7 @@ class CheckpointManager:  # noqa: PLR0904
 
     def initialize(
         self,
-        algorithms: list[P2PAlgorithm],
-        network: Network,
+        algorithms: list[Algorithm[Network]],
         problem: BenchmarkProblem,
         n_trials: int,
     ) -> None:
@@ -146,7 +142,6 @@ class CheckpointManager:  # noqa: PLR0904
 
         Args:
             algorithms: List of Algorithm objects to be benchmarked.
-            network: Initial Network state before any trials run.
             problem: BenchmarkProblem configuration for the benchmark.
             n_trials: Total number of trials to run for each algorithm, used for resuming.
 
@@ -170,7 +165,6 @@ class CheckpointManager:  # noqa: PLR0904
 
         # Save initial state and metadata for resuming later if needed
         self._save_metadata(metadata)
-        self._save_initial_network(network)
         self._save_initial_algorithms(algorithms)
         self._save_benchmark_problem(problem)
 
@@ -220,20 +214,7 @@ class CheckpointManager:  # noqa: PLR0904
         self._save_metadata(metadata)
         return metadata
 
-    def load_initial_network(self) -> Network:
-        """
-        Load initial network state from checkpoint.
-
-        Returns:
-            Network object representing the initial network state.
-
-        """
-        initial_path = self.checkpoint_dir / "initial_network.pkl"
-        with initial_path.open("rb") as f:
-            ret: Network = pickle.load(f)  # noqa: S301
-        return ret
-
-    def load_initial_algorithms(self) -> list[P2PAlgorithm]:
+    def load_initial_algorithms(self) -> list[Algorithm[Network]]:
         """
         Load initial algorithm states from checkpoint.
 
@@ -243,7 +224,7 @@ class CheckpointManager:  # noqa: PLR0904
         """
         initial_path = self.checkpoint_dir / "initial_algorithms.pkl"
         with initial_path.open("rb") as f:
-            ret: list[P2PAlgorithm] = pickle.load(f)  # noqa: S301
+            ret: list[Algorithm[Network]] = pickle.load(f)  # noqa: S301
         return ret
 
     def load_benchmark_problem(self) -> BenchmarkProblem:
@@ -289,7 +270,7 @@ class CheckpointManager:  # noqa: PLR0904
         alg_idx: int,
         trial: int,
         iteration: int,
-        algorithm: P2PAlgorithm,
+        algorithm: Algorithm[Network],
         network: Network,
     ) -> Path:
         """
@@ -330,7 +311,7 @@ class CheckpointManager:  # noqa: PLR0904
         self._cleanup_old_checkpoints(alg_idx, trial)
         return checkpoint_path
 
-    def load_checkpoint(self, alg_idx: int, trial: int) -> tuple[P2PAlgorithm, Network, int] | None:
+    def load_checkpoint(self, alg_idx: int, trial: int) -> tuple[Algorithm[Network], Network, int] | None:
         """
         Load the latest checkpoint for a specific algorithm trial.
 
@@ -359,7 +340,7 @@ class CheckpointManager:  # noqa: PLR0904
         with checkpoint_path.open("rb") as f:
             checkpoint_data = pickle.load(f)  # noqa: S301
 
-        algorithm: P2PAlgorithm = checkpoint_data["algorithm"]
+        algorithm: Algorithm[Network] = checkpoint_data["algorithm"]
         network: Network = checkpoint_data["network"]
 
         LOGGER.debug(f"Loaded checkpoint: alg={alg_idx}, trial={trial}, iter={last_iteration}")
@@ -370,7 +351,7 @@ class CheckpointManager:  # noqa: PLR0904
         alg_idx: int,
         trial: int,
         iteration: int,
-        algorithm: P2PAlgorithm,
+        algorithm: Algorithm[Network],
         network: Network,
     ) -> Path:
         """
@@ -435,7 +416,7 @@ class CheckpointManager:  # noqa: PLR0904
         trial_dir = self._get_trial_dir(alg_idx, trial)
         return (trial_dir / "complete.json").exists()
 
-    def load_trial_result(self, alg_idx: int, trial: int) -> tuple[P2PAlgorithm, Network]:
+    def load_trial_result(self, alg_idx: int, trial: int) -> tuple[Algorithm[Network], Network]:
         """
         Load final result of a completed trial.
 
@@ -457,7 +438,7 @@ class CheckpointManager:  # noqa: PLR0904
         with final_path.open("rb") as f:
             checkpoint_data = pickle.load(f)  # noqa: S301
 
-        alg: P2PAlgorithm = checkpoint_data["algorithm"]
+        alg: Algorithm[Network] = checkpoint_data["algorithm"]
         network: Network = checkpoint_data["network"]
         return alg, network
 
@@ -510,7 +491,7 @@ class CheckpointManager:  # noqa: PLR0904
         algorithms = self.load_initial_algorithms()
         metadata = self.load_metadata()
         n_trials = metadata["n_trials"]
-        states: dict[P2PAlgorithm, list[Network]] = {}
+        states: dict[Algorithm[Network], list[Network]] = {}
         for idx, alg in enumerate(algorithms):
             completed_trials = self.get_completed_trials(idx, n_trials)
             if len(completed_trials) != n_trials:
@@ -601,14 +582,7 @@ class CheckpointManager:  # noqa: PLR0904
             json.dump(metadata, f)
         LOGGER.debug(f"Saved metadata to {metadata_path}")
 
-    def _save_initial_network(self, network: Network) -> None:
-        """Save initial network state before any trials run."""
-        initial_path = self.checkpoint_dir / "initial_network.pkl"
-        with initial_path.open("wb") as f:
-            pickle.dump(network, f)
-        LOGGER.debug(f"Saved initial network to {initial_path}")
-
-    def _save_initial_algorithms(self, algorithms: list[P2PAlgorithm]) -> None:
+    def _save_initial_algorithms(self, algorithms: list[Algorithm[Network]]) -> None:
         """Save initial algorithm states before any trials run."""
         initial_path = self.checkpoint_dir / "initial_algorithms.pkl"
         with initial_path.open("wb") as f:
