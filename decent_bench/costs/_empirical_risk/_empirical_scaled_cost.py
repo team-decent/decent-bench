@@ -5,7 +5,6 @@ from typing import Any
 
 import numpy as np
 
-from decent_bench.costs._base._cost import Cost
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import (
     Dataset,
@@ -26,7 +25,7 @@ class EmpiricalScaledCost(EmpiricalRiskCost):
     batch handling under scalar scaling. Scaling changes the objective value, gradient, Hessian, and proximal
     parameterization, but does not change the prediction map of the underlying model at a fixed parameter vector.
 
-    Instances keep references to the wrapped cost objects. No implicit copying is performed; use
+    Instances keep references to the wrapped cost object. No implicit copying is performed; use
     :func:`copy.deepcopy` explicitly if independent objects are required.
     """
 
@@ -115,6 +114,3 @@ class EmpiricalScaledCost(EmpiricalRiskCost):
 
     def _get_batch_data(self, indices: EmpiricalRiskIndices = "batch") -> Any:  # noqa: ANN401
         return self.cost._get_batch_data(indices)
-
-    def __add__(self, other: Cost) -> Cost:
-        return super().__add__(other)

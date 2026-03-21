@@ -59,7 +59,7 @@ class BaseRegularizerCost(Cost):
 
     def __add__(self, other: Cost) -> Cost:
         """
-        Add another cost function, returning a sum cost.
+        Add another cost, preserving the regularizer abstraction when possible.
 
         Raises:
             ValueError: if the domain shapes don't match.
