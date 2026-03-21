@@ -28,7 +28,7 @@ def tags(*tags: str) -> Callable[[type], type]:
     """
 
     def decorator(cls: type) -> type:
-        setattr(cls, "_tags", tuple(tags))
+        cls._tags = tuple(tags)  # type: ignore[attr-defined]
         return cls
 
     return decorator
