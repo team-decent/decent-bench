@@ -26,7 +26,12 @@ extensions = [
     "sphinx.ext.intersphinx",  # Link to types from external packages
     "sphinx.ext.napoleon",  # Parse Google style docstrings
     "sphinx.ext.viewcode",  # View source code
-    "algorithm_tagger",  # Tag-based algorithm index directives
+    "class_tagger",  # Tag-based class list directives
+]
+
+tagged_list_modules = [
+    "decent_bench.distributed_algorithms",
+    "decent_bench.costs",
 ]
 
 autodoc_default_options = {}

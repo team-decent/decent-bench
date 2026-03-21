@@ -85,6 +85,39 @@ Benchmark executions will have outputs like these:
 
 **The user guide from here on is outdated; it will be updated soon.**
 
+
+Available algorithms
+--------------------
+
+Peer-to-peer
+~~~~~~~~~~~~
+.. tagged-list::
+            :tag: peer-to-peer
+            :module: decent_bench.distributed_algorithms
+
+Federated
+~~~~~~~~~
+.. tagged-list::
+            :tag: federated
+            :module: decent_bench.distributed_algorithms
+
+
+Available costs
+---------------
+
+Regression
+~~~~~~~~~~
+.. tagged-list::
+           :tag: regression
+           :module: decent_bench.costs
+
+Classification
+~~~~~~~~~~~~~~
+.. tagged-list::
+           :tag: classification
+           :module: decent_bench.costs
+
+
 Execution settings
 ------------------
 Configure settings for metrics, trials, statistical confidence level, logging, and multiprocessing.

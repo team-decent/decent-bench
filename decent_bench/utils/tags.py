@@ -1,14 +1,14 @@
-"""Utilities for tagging algorithm classes with category labels."""
+"""Utilities for tagging classes, to build tag-based lists in the docs."""
 
 from collections.abc import Callable
 
 
-def algorithm_tags(*tags: str) -> Callable[[type], type]:
+def tags(*tags: str) -> Callable[[type], type]:
     """
-    Decorate an :class:`~decent_bench.distributed_algorithms.Algorithm` subclass with category tags.
+    Decorate any class with tags.
 
-    Tags are stored on the class as the ``_algorithm_tags`` attribute and are used
-    by the Sphinx ``algorithm_tagger`` extension to build per-tag index pages.
+    Tags are stored on the class as the ``_tags`` attribute and are used
+    by the Sphinx ``class_tagger`` extension to build per-tag lists in the docs.
 
     Args:
         *tags: One or more tag strings (e.g. ``"gradient-based"``, ``"federated"``).
@@ -19,16 +19,16 @@ def algorithm_tags(*tags: str) -> Callable[[type], type]:
     Example:
         .. code-block:: python
 
-            from decent_bench.utils.tags import algorithm_tags
+            from decent_bench.utils.tags import tags
 
-            @algorithm_tags("gradient-based", "decentralized")
+            @tags("gradient-based", "peer-to-peer")
             class DGD(P2PAlgorithm):
                 ...
 
     """
 
     def decorator(cls: type) -> type:
-        cls._algorithm_tags = tuple(tags)
+        cls._tags = tuple(tags)
         return cls
 
     return decorator

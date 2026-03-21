@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Final, cast, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
+from decent_bench.utils.tags import tags
 from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
@@ -282,6 +283,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         return self.select_clients(active_clients, iteration)
 
 
+@tags("federated")
 @dataclass(eq=False)
 class FedAvg(FedAlgorithm):
     r"""
@@ -399,6 +401,7 @@ class FedAvg(FedAlgorithm):
         return local_x
 
 
+@tags("peer-to-peer", "gradient-based")
 @dataclass(eq=False)
 class DGD(P2PAlgorithm):
     r"""
@@ -453,6 +456,7 @@ class DGD(P2PAlgorithm):
             network.receive_all(i)
 
 
+@tags("peer-to-peer", "gradient-based")
 @dataclass(eq=False)
 class ATC(P2PAlgorithm):
     r"""
@@ -526,6 +530,7 @@ class ATC(P2PAlgorithm):
 AdaptThenCombine = ATC  # alias
 
 
+@tags("peer-to-peer", "gradient tracking")
 @dataclass(eq=False)
 class SimpleGT(P2PAlgorithm):
     r"""
@@ -591,6 +596,7 @@ class SimpleGT(P2PAlgorithm):
 SimpleGradientTracking = SimpleGT  # Alias
 
 
+@tags("peer-to-peer", "gradient tracking")
 @dataclass(eq=False)
 class ED(P2PAlgorithm):
     r"""
@@ -662,6 +668,7 @@ class ED(P2PAlgorithm):
 ExactDiffusion = ED  # alias
 
 
+@tags("peer-to-peer", "gradient tracking")
 @dataclass(eq=False)
 class AugDGM(P2PAlgorithm):
     r"""
@@ -760,6 +767,7 @@ class AugDGM(P2PAlgorithm):
 ATCDIGing = AugDGM  # alias
 
 
+@tags("peer-to-peer", "gradient tracking")
 @dataclass(eq=False)
 class WangElia(P2PAlgorithm):
     r"""
@@ -853,6 +861,7 @@ class WangElia(P2PAlgorithm):
             i.aux_vars["z"] += neighborhood_avg
 
 
+@tags("peer-to-peer", "gradient tracking")
 @dataclass(eq=False)
 class EXTRA(P2PAlgorithm):
     r"""
@@ -946,6 +955,7 @@ class EXTRA(P2PAlgorithm):
                 i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
 
 
+@tags("peer-to-peer", "gradient tracking")
 @dataclass(eq=False)
 class ATCTracking(P2PAlgorithm):
     r"""
@@ -1050,6 +1060,7 @@ NEXT = ATCTracking  # alias
 ATCT = ATCTracking  # alias
 
 
+@tags("peer-to-peer", "gradient tracking")
 @dataclass(eq=False)
 class NIDS(P2PAlgorithm):
     r"""
@@ -1134,6 +1145,7 @@ class NIDS(P2PAlgorithm):
                 i.x = neighborhood_avg  # update x_{k+1}
 
 
+@tags("peer-to-peer", "dual method", "ADMM")
 @dataclass(eq=False)
 class ADMM(P2PAlgorithm):
     r"""
@@ -1212,6 +1224,7 @@ class ADMM(P2PAlgorithm):
                 i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (i.messages[j])
 
 
+@tags("peer-to-peer", "gradient tracking", "ADMM")
 @dataclass(eq=False)
 class ATG(P2PAlgorithm):
     r"""
@@ -1334,6 +1347,7 @@ ADMMTracking = ATG  # alias
 ADMMTrackingGradient = ATG  # alias
 
 
+@tags("peer-to-peer", "ADMM", "gradient-based")
 @dataclass(eq=False)
 class DLM(P2PAlgorithm):
     r"""
