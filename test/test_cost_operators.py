@@ -11,6 +11,18 @@ def _simple_quadratic(A_scale: float, b_scale: float, c: float = 0.0) -> Quadrat
     return QuadraticCost(A=A, b=b, c=c)
 
 
+def _assert_quadratic_matches(
+    actual: QuadraticCost,
+    expected: QuadraticCost,
+    x: np.ndarray,
+    rho: float,
+) -> None:
+    assert actual.function(x) == pytest.approx(expected.function(x))
+    np.testing.assert_allclose(iop.to_numpy(actual.gradient(x)), iop.to_numpy(expected.gradient(x)))
+    np.testing.assert_allclose(iop.to_numpy(actual.hessian(x)), iop.to_numpy(expected.hessian(x)))
+    np.testing.assert_allclose(iop.to_numpy(actual.proximal(x, rho)), iop.to_numpy(expected.proximal(x, rho)))
+
+
 def test_cost_scalar_multiplication_and_reverse_multiplication() -> None:
     cost = _simple_quadratic(A_scale=2.0, b_scale=1.0, c=3.0)
     x = np.array([1.0, -2.0])
@@ -34,21 +46,30 @@ def test_cost_scalar_division() -> None:
     np.testing.assert_allclose(iop.to_numpy(divided.hessian(x)), 0.5 * iop.to_numpy(cost.hessian(x)))
 
 
-def test_cost_subtraction_is_sum_with_negation() -> None:
+def test_quadratic_addition_preserves_type_and_exact_behavior() -> None:
     cost_a = _simple_quadratic(A_scale=1.0, b_scale=1.0, c=1.0)
     cost_b = _simple_quadratic(A_scale=3.0, b_scale=2.0, c=-1.0)
     x = np.array([1.0, 2.0])
+    rho = 0.4
+
+    added = cost_a + cost_b
+    expected = QuadraticCost(A=cost_a.A + cost_b.A, b=cost_a.b + cost_b.b, c=cost_a.c + cost_b.c)
+
+    assert isinstance(added, QuadraticCost)
+    _assert_quadratic_matches(added, expected, x, rho)
+
+
+def test_quadratic_subtraction_preserves_type_and_exact_behavior() -> None:
+    cost_a = _simple_quadratic(A_scale=1.0, b_scale=1.0, c=1.0)
+    cost_b = _simple_quadratic(A_scale=3.0, b_scale=2.0, c=-1.0)
+    x = np.array([1.0, 2.0])
+    rho = 0.4
 
     subtracted = cost_a - cost_b
-    assert isinstance(subtracted, SumCost)
+    expected = QuadraticCost(A=cost_a.A - cost_b.A, b=cost_a.b - cost_b.b, c=cost_a.c - cost_b.c)
 
-    expected_value = cost_a.function(x) - cost_b.function(x)
-    expected_grad = iop.to_numpy(cost_a.gradient(x)) - iop.to_numpy(cost_b.gradient(x))
-    expected_hess = iop.to_numpy(cost_a.hessian(x)) - iop.to_numpy(cost_b.hessian(x))
-
-    assert subtracted.function(x) == pytest.approx(expected_value)
-    np.testing.assert_allclose(iop.to_numpy(subtracted.gradient(x)), expected_grad)
-    np.testing.assert_allclose(iop.to_numpy(subtracted.hessian(x)), expected_hess)
+    assert isinstance(subtracted, QuadraticCost)
+    _assert_quadratic_matches(subtracted, expected, x, rho)
 
 
 def test_cost_radd_supports_sum() -> None:

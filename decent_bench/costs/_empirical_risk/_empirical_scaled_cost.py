@@ -25,6 +25,9 @@ class EmpiricalScaledCost(EmpiricalRiskCost):
     ``EmpiricalScaledCost`` preserves empirical-risk-specific behavior such as :meth:`predict`, dataset access, and
     batch handling under scalar scaling. Scaling changes the objective value, gradient, Hessian, and proximal
     parameterization, but does not change the prediction map of the underlying model at a fixed parameter vector.
+
+    Instances keep references to the wrapped cost objects. No implicit copying is performed; use
+    :func:`copy.deepcopy` explicitly if independent objects are required.
     """
 
     def __init__(self, cost: EmpiricalRiskCost, scalar: float):

@@ -18,6 +18,9 @@ class ScaledCost(Cost):
     ``ScaledCost`` is the fallback result of scalar arithmetic when no more specialized wrapper is available. It
     delegates evaluation, gradient, Hessian, and metadata to the wrapped cost, and preserves proximal support only
     for nonnegative scalars.
+
+    Instances keep references to the wrapped cost objects. No implicit copying is performed; use
+    :func:`copy.deepcopy` explicitly if independent objects are required.
     """
 
     def __init__(self, cost: Cost, scalar: float):

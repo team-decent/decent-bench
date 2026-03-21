@@ -160,3 +160,25 @@ class QuadraticCost(Cost):
             )
 
         return SumCost([self, other])
+
+    def __sub__(self, other: Cost) -> Cost:
+        """
+        Subtract another cost function.
+
+        Preserves :class:`QuadraticCost` when subtracting another quadratic cost.
+
+        Raises:
+            TypeError: If other is not a Cost.
+
+        """
+        if not isinstance(other, Cost):
+            raise TypeError(f"Cost can only be subtracted by another Cost, got {type(other)}.")
+        if isinstance(other, QuadraticCost):
+            return self.__add__(
+                QuadraticCost(
+                    A=iop.to_array(-other.A, self.framework, self.device),
+                    b=iop.to_array(-other.b, self.framework, self.device),
+                    c=-other.c,
+                )
+            )
+        return super().__sub__(other)

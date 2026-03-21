@@ -29,6 +29,9 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
     When :meth:`gradient` is called with ``reduction=None``, the regularizer gradient is broadcast across the leading
     sample dimension so that averaging over samples recovers the composite mean gradient. A generic proximal is
     intentionally not implemented.
+
+    Instances keep references to the wrapped cost objects. No implicit copying is performed; use
+    :func:`copy.deepcopy` explicitly if independent objects are required.
     """
 
     def __init__(self, empirical_cost: EmpiricalRiskCost, regularizer: BaseRegularizerCost):

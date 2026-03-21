@@ -18,6 +18,9 @@ class SumCost(Cost):
     ``SumCost`` is returned when two costs can be added but no more specialized composite is available. It preserves
     the core :class:`~decent_bench.costs.Cost` interface, but does not preserve regularizer-specific or
     empirical-risk-specific behavior.
+
+    Instances keep references to the wrapped cost objects. No implicit copying is performed; use
+    :func:`copy.deepcopy` explicitly if independent objects are required.
     """
 
     def __init__(self, costs: list[Cost]):

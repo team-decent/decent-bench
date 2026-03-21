@@ -15,7 +15,9 @@ Developer note:
 
     Composition wrappers keep references to their underlying cost objects; they do not make implicit shallow or deep
     copies at construction time. Mutating a wrapped cost after composition therefore affects the composite view as
-    well. Use :func:`copy.deepcopy` explicitly when an independent copy of a composed objective is needed.
+    well. Agent-installed call-counting hooks on reused cost objects are therefore shared too. Use
+    :func:`copy.deepcopy` explicitly when an independent copy of a composed objective or independent counting behavior
+    is needed.
 
     Proximal support is intentionally conservative for the specialized wrappers:
     concrete costs may implement specialized proximals, positive scalar scaling preserves proximal support, and a

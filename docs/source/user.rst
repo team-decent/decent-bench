@@ -848,7 +848,10 @@ Cost Functions
 Create new cost functions by subclassing :class:`~decent_bench.costs.Cost` and using interoperability decorators to keep
 your implementation framework-agnostic. The decorators automatically wrap inputs/outputs as `Array` and ensure
 compatibility with the selected framework and device of your custom cost.
+Composition preserves specialized structure when possible, and otherwise falls back to generic wrappers.
 
+Basic Operations
+~~~~~~~~~~~~~~~~
 Supported operations for cost objects:
 
 - Addition: ``cost_a + cost_b``
@@ -858,10 +861,12 @@ Supported operations for cost objects:
 - Scalar division: ``cost / scalar``
 - Summation: ``sum(costs)`` (uses ``__radd__``)
 
-Regularization
-~~~~~~~~~~~~~~
-Regularized objectives can be built by composing cost functions with arithmetic. Decent-Bench provides built-in
-regularizers and preserves specialized structure for the common regularized-ERM patterns:
+Composition Rules
+~~~~~~~~~~~~~~~~~
+Cost arithmetic preserves specialized structure for the most common composition patterns and falls back to generic
+wrappers otherwise. When a composition falls back to :class:`~decent_bench.costs.SumCost` or
+:class:`~decent_bench.costs.ScaledCost`, the result only guarantees the base :class:`~decent_bench.costs.Cost`
+interface.
 
 - ``regularizer_a + regularizer_b``, ``regularizer_a - regularizer_b``, ``scalar * regularizer``,
   ``regularizer / scalar``, and ``-regularizer`` preserve a regularizer-aware cost.
@@ -872,7 +877,12 @@ regularizers and preserves specialized structure for the common regularized-ERM 
 - Unsupported combinations still fall back to the generic wrappers
   :class:`~decent_bench.costs.SumCost` and :class:`~decent_bench.costs.ScaledCost`.
 
-Built-in regularizers:
+Regularization
+~~~~~~~~~~~~~~
+Regularized objectives can be built by composing cost functions with arithmetic. Decent-Bench provides the following
+built-in regularizers:
+
+The canonical regularization pattern is ``objective = cost + lambda_ * regularizer``.
 
 - :class:`~decent_bench.costs.L1RegularizerCost` for :math:`\|x\|_1`
 - :class:`~decent_bench.costs.L2RegularizerCost` for :math:`\frac{1}{2}\|x\|_2^2`
@@ -882,6 +892,20 @@ Built-in regularizers:
 All built-in regularizers accept and ignore empirical-risk-specific kwargs (for example ``indices="batch"``), so
 batching continues to work when you compose them with empirical risk costs.
 
+Empirical Risk Composition
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+Supported empirical-risk compositions preserve empirical-risk-specific behavior such as ``predict``, ``dataset``,
+``n_samples``, ``batch_size``, and batch helpers.
+
+In particular, ``objective = cost + regularizer`` returns an
+:class:`~decent_bench.costs.EmpiricalRegularizedCost`, which combines the empirical and regularizer contributions in
+``function``, ``gradient``, and ``hessian`` while preserving the empirical interface of the base loss.
+
+When using :class:`~decent_bench.costs.PyTorchCost`, prefer PyTorch's built-in loss regularizers for better
+efficiency; iop regularizers remain available for cross-framework compatibility.
+
+Examples
+~~~~~~~~
 .. code-block:: python
 
     from decent_bench.costs import (
@@ -903,23 +927,12 @@ batching continues to work when you compose them with empirical risk costs.
     objective = cost + regularizer
     nonconvex_objective = objective + fq
 
-The objective above preserves empirical-risk-specific behavior such as ``predict``, ``dataset``, and batch metadata:
-
-.. note::
-
-    ``objective = cost + regularizer`` returns an :class:`~decent_bench.costs.EmpiricalRegularizedCost`.
-    It keeps the empirical term's ``predict`` method, ``dataset``, ``n_samples``, ``batch_size``, and batch helpers,
-    while combining the empirical and regularizer contributions in ``function``, ``gradient``, and ``hessian``.
-
 .. code-block:: python
 
     lambda_ = 0.05
     objective = cost + lambda_ * L2RegularizerCost(shape=cost.shape)
     value = objective.function(x, indices="all")
     gradient = objective.gradient(x, indices="all")
-
-When a composition is not recognized as a specialized regularizer or empirical-risk combination, Decent-Bench falls
-back to a generic wrapper:
 
 .. code-block:: python
 
@@ -929,19 +942,17 @@ back to a generic wrapper:
     arbitrary = QuadraticCost(np.eye(cost.shape[0]), np.zeros(cost.shape[0]))
     generic = objective + arbitrary  # returns SumCost
 
-.. note::
+Important Semantics
+~~~~~~~~~~~~~~~~~~~
+Reduction Semantics
+^^^^^^^^^^^^^^^^^^^
+:class:`~decent_bench.costs.EmpiricalRegularizedCost.gradient` uses broadcast semantics when ``reduction=None``: the
+empirical term returns one gradient per selected sample, and the regularizer gradient is added to each row. Averaging
+over the sample dimension recovers the same composite gradient returned by ``reduction="mean"``.
 
-    When using :class:`~decent_bench.costs.PyTorchCost`, prefer PyTorch's built-in loss regularizers for better
-    efficiency; iop regularizers remain available for cross-framework compatibility.
-
-.. note::
-
-    :class:`~decent_bench.costs.EmpiricalRegularizedCost.gradient` uses broadcast semantics when
-    ``reduction=None``: the empirical term returns one gradient per selected sample, and the regularizer gradient is
-    added to each row. Averaging over the sample dimension recovers the same composite gradient returned by
-    ``reduction="mean"``.
-
-.. note::
+Proximal Semantics
+^^^^^^^^^^^^^^^^^^
+.. warning::
 
     Proximal support is intentionally conservative. Positive scalar scaling preserves proximal support, and a single
     positively scaled regularizer term preserves the underlying regularizer proximal. Multi-term regularizer
@@ -949,11 +960,29 @@ back to a generic wrapper:
     specialized proximal if one exists, or rely on :func:`decent_bench.centralized_algorithms.proximal_solver` when
     its assumptions are satisfied.
 
-.. note::
+.. warning::
 
     :class:`~decent_bench.costs.SumCost.proximal` currently returns the sum of the proximal results of its terms for
     compatibility. This should not be interpreted as the exact proximal of an arbitrary sum of functions in general.
 
+Copy Semantics
+^^^^^^^^^^^^^^
+.. warning::
+
+    Composition wrappers keep references to the underlying cost objects; they do not make implicit copies. Mutating a
+    reused cost after composition therefore affects all wrappers that reference it. Agent-installed call-counting
+    hooks on reused cost objects are also shared. Use ``copy.deepcopy`` when independent composed objects or
+    independent counting behavior are required.
+
+.. code-block:: python
+
+    import copy
+
+    shared = cost + cost
+    independent = copy.deepcopy(shared)
+
+Custom Cost Example
+~~~~~~~~~~~~~~~~~~~
 .. code-block:: python
 
     from numpy import float64

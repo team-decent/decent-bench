@@ -107,6 +107,9 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
     This wrapper represents sums and scalar rescalings of regularizers while keeping the
     :class:`BaseRegularizerCost` interface. It combines function, gradient, and Hessian termwise. A generic proximal
     is intentionally not implemented except for the single positively scaled regularizer case.
+
+    Instances keep references to the wrapped cost objects. No implicit copying is performed; use
+    :func:`copy.deepcopy` explicitly if independent objects are required.
     """
 
     def __init__(self, regularizers: list[BaseRegularizerCost], weights: list[float] | None = None):
