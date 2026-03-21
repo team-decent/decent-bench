@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from docutils import nodes
 from docutils.parsers.rst import directives
 from sphinx.util.docutils import SphinxDirective
+from sphinx.util.logging import getLogger
 
 if TYPE_CHECKING:
     from sphinx.application import Sphinx
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 _TAGS_ATTR = "_tags"
+logger = getLogger(__name__)
 
 
 def _discover_tagged_classes(module_names: list[str]) -> list[dict[str, Any]]:
@@ -51,7 +53,8 @@ def _discover_tagged_classes(module_names: list[str]) -> list[dict[str, Any]]:
     for module_name in module_names:
         try:
             module = importlib.import_module(module_name)
-        except ImportError:
+        except ImportError as e:
+            logger.warning(f"Failed to import module '{module_name}': {e}")
             continue
 
         for _, obj in inspect.getmembers(module, inspect.isclass):
@@ -226,6 +229,6 @@ def setup(app: Sphinx) -> dict[str, Any]:
 
     return {
         "version": "0.1",
-        "parallel_read_safe": True,
-        "parallel_write_safe": True,
+        "parallel_read_safe": False,
+        "parallel_write_safe": False,
     }
