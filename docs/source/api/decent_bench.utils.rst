@@ -13,6 +13,7 @@ decent\_bench.utils
    decent_bench.utils.network_utils
    decent_bench.utils.progress_bar
    decent_bench.utils.pytorch_utils
+   decent_bench.utils.tags
    decent_bench.utils.types
 
 .. automodule:: decent_bench.utils
