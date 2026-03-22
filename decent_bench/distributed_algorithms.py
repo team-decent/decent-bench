@@ -71,7 +71,7 @@ class Algorithm[NetworkT: Network](ABC):
         """
 
     @abstractmethod
-    def _finalize_agents(self, network: NetworkT) -> Iterable["Agent"]:
+    def _cleanup_agents(self, network: NetworkT) -> Iterable["Agent"]:
         """
         Return the agents whose auxiliary variables should be cleared.
 
@@ -80,27 +80,75 @@ class Algorithm[NetworkT: Network](ABC):
 
         """
 
-    def finalize(self, network: NetworkT) -> None:
+    def finalize(self, network: NetworkT) -> None:  # noqa: ARG002
         """
         Finalize the algorithm.
 
-        Note:
-            Override :meth:`~decent_bench.distributed_algorithms.Algorithm._finalize_agents` to control which
-            agents are finalized.
+        Override this method if needed to perform any finalization steps after the last iteration, such as syncing
+        final models to clients in federated algorithms. By default, this does nothing.
 
         Args:
             network: provides the agents and topology for this algorithm.
 
         """
-        for agent in self._finalize_agents(network):
+        return
+
+    def cleanup(self, network: NetworkT) -> None:
+        """
+        Clean up the algorithm state by clearing auxiliary variables from agents.
+
+        This method is used to free up memory used by auxiliary variables that are not needed after training.
+        Can be overriden to control what gets cleaned up.
+
+        Note:
+            Override :meth:`~decent_bench.distributed_algorithms.Algorithm._cleanup_agents` to control which
+            agents are cleaned up.
+
+        Args:
+            network: provides the agents and topology for this algorithm.
+
+        """
+        for agent in self._cleanup_agents(network):
             if agent.aux_vars is not None:
                 agent.aux_vars.clear()
 
     @final
-    def _snapshot_agents(self, network: P2PNetwork, iteration: int) -> None:
+    def _snapshot_agents(self, network: NetworkT, iteration: int) -> None:
         for i in network.agents():
             # Forcefully save a snapshot on the final iteration
             i.snapshot(iteration=iteration, force=iteration == self.iterations)
+
+    @final
+    def _store_pre_finalization_states(self, network: NetworkT) -> None:
+        """
+        Store agent states before finalization.
+
+        This method is called at the end of :meth:`run`, after all iterations are completed but before finalization.
+        This method stores agent states before finalization so that resumed benchmarks can properly resume using the
+        training states and not final states.
+
+        Args:
+            network: provides the agents and topology for this algorithm.
+
+        """
+        for agent in network.agents():
+            agent.store_resume_state(agent.x)
+
+    @final
+    def _load_pre_finalization_states(self, network: NetworkT, iteration: int) -> None:
+        """
+        Load agent states stored by :meth:`_store_pre_finalization_states`.
+
+        This method is called at the beginning of :meth:`run` when resuming from a checkpoint with a positive
+        ``start_iteration``.
+
+        Args:
+            network: provides the agents and topology for this algorithm.
+            iteration: algorithm iteration to load the resume state for.
+
+        """
+        for agent in network.agents():
+            agent.load_resume_state(iteration)
 
     @final
     def run(
@@ -108,22 +156,19 @@ class Algorithm[NetworkT: Network](ABC):
         network: NetworkT,
         start_iteration: int = 0,
         progress_callback: Callable[[int], None] | None = None,
-        skip_finalize: bool = False,
     ) -> None:
         """
         Run the algorithm.
 
         This method first calls :meth:`initialize`, then :meth:`step` for the specified number of iterations
-        and finally :meth:`finalize`.
+        and finally :meth:`finalize`. Optionally call :meth:`cleanup` at the end to clear auxiliary variables
+        and free up memory.
 
         Args:
             network: provides the agents and topology for this algorithm.
             start_iteration: iteration number to start from, used when resuming from a checkpoint. If greater than 0,
                 :meth:`initialize` will be skipped.
             progress_callback: optional callback to report progress after each iteration.
-            skip_finalize: if True, skip calling :meth:`finalize` after running the iterations. This is needed
-                so that full agent states and training variables can be saved in checkpoints without being cleared
-                by :meth:`finalize`.
 
         Raises:
             ValueError: if start_iteration is not in [0, iterations]
@@ -134,7 +179,9 @@ class Algorithm[NetworkT: Network](ABC):
 
         Note:
             The algorithm saves the agents' states every :attr:`~decent_bench.agents.Agent.state_snapshot_period`,
-            by calling :meth:~decent_bench.agents.Agent.snapshot for each agent.
+            by calling :meth:~decent_bench.agents.Agent.snapshot for each agent. Agent states are also saved at the end
+            of algorithm execution but before finalization, so that resumed benchmarks can properly resume using the
+            training states and not final states.
 
         """
         if start_iteration < 0 or start_iteration > self.iterations:
@@ -144,21 +191,26 @@ class Algorithm[NetworkT: Network](ABC):
 
         if start_iteration == 0:
             self.initialize(network)
+        else:
+            self._load_pre_finalization_states(network, start_iteration)
+
         for k in range(start_iteration, self.iterations):
+            network.step(k)
             self.step(network, k)
             # Already completed the iteration, so snapshot with k+1 to indicate the state after iteration k
-            self._snapshot_agents(network, k + 1)  # type: ignore[arg-type]
+            self._snapshot_agents(network, k + 1)
             if progress_callback is not None:
                 progress_callback(k)
 
-        if not skip_finalize:
-            self.finalize(network)
+        self._store_pre_finalization_states(network)
+        self.finalize(network)
+        self._snapshot_agents(network, self.iterations)  # snapshot final state after finalize
 
 
 class P2PAlgorithm(Algorithm[P2PNetwork]):
     """Distributed algorithm - agents collaborate using peer-to-peer communication."""
 
-    def _finalize_agents(self, network: P2PNetwork) -> Iterable["Agent"]:
+    def _cleanup_agents(self, network: P2PNetwork) -> Iterable["Agent"]:
         return network.agents()
 
 
@@ -178,8 +230,8 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     client_weights: ClientWeights | None = None
     _DEFAULT_CLIENT_WEIGHTS: Final[object] = object()
 
-    def _finalize_agents(self, network: FedNetwork) -> Iterable["Agent"]:
-        return [network.server, *network.clients]
+    def _cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
+        return [network.server(), *network.clients()]
 
     def finalize(self, network: FedNetwork) -> None:
         """
@@ -187,20 +239,17 @@ class FedAlgorithm(Algorithm[FedNetwork]):
 
         This performs one last server-to-client send/receive so that clients store the final model.
         """
-        if network.clients:
-            network.broadcast(msg=network.server.x)
-            for client in network.clients:
-                network.receive(receiver=client, sender=network.server)
-                if network.server in client.messages:
-                    client.x = iop.copy(client.messages[network.server])
-
-        super().finalize(network)
+        if network.clients():
+            network.broadcast(msg=network.server().x)
+            for client in network.clients():
+                if network.server() in client.messages:
+                    client.x = iop.copy(client.messages[network.server()])
 
     def select_clients(
         self,
         clients: Sequence["Agent"],
         iteration: int,
-        selection_scheme: ClientSelectionScheme | object | None = _DEFAULT_SELECTION_SCHEME,
+        selection_scheme: (ClientSelectionScheme | object | None) = _DEFAULT_SELECTION_SCHEME,
     ) -> list["Agent"]:
         """
         Select participating clients from an eligible pool.
@@ -263,17 +312,16 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         if client_weights is self._DEFAULT_CLIENT_WEIGHTS:
             client_weights = self.client_weights
 
-        network.receive(receiver=network.server, sender=selected_clients)
-        received_clients = [client for client in selected_clients if client in network.server.messages]
+        received_clients = [client for client in selected_clients if client in network.server().messages]
         if not received_clients:
             return
-        updates = [network.server.messages[client] for client in received_clients]
+        updates = [network.server().messages[client] for client in received_clients]
         weights = self._weights_for_clients(received_clients, cast("ClientWeights | None", client_weights))
         total_weight = sum(weights)
         if total_weight <= 0:
             raise ValueError("Sum of client weights must be positive")
         weighted_updates = [update * weight for update, weight in zip(updates, weights, strict=True)]
-        network.server.x = iop.sum(iop.stack(weighted_updates, dim=0), dim=0) / total_weight
+        network.server().x = iop.sum(iop.stack(weighted_updates, dim=0), dim=0) / total_weight
 
     def _selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
         active_clients = network.active_clients(iteration)
@@ -333,10 +381,10 @@ class FedAvg(FedAlgorithm):
 
     def initialize(self, network: FedNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
-        self._setup_rngs(network.clients)
-        network.server.initialize(x=self.x0, received_msgs=dict.fromkeys(network.clients, self.x0))
-        for client in network.clients:
-            client.initialize(x=self.x0, received_msgs={network.server: self.x0})
+        self._setup_rngs(network.clients())
+        network.server().initialize(x=self.x0)
+        for client in network.clients():
+            client.initialize(x=self.x0)
 
     def _setup_rngs(self, clients: Sequence["Agent"]) -> None:
         if self.sgd_seed is not None:
@@ -354,14 +402,12 @@ class FedAvg(FedAlgorithm):
         self.aggregate(network, selected_clients)
 
     def _sync_server_to_clients(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        network.send(sender=network.server, receiver=selected_clients, msg=network.server.x)
-        for client in selected_clients:
-            network.receive(receiver=client, sender=network.server)
+        network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x)
 
     def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
         for client in selected_clients:
-            client.x = self._compute_local_update(client, network.server)
-            network.send(sender=client, receiver=network.server, msg=client.x)
+            client.x = self._compute_local_update(client, network.server())
+            network.send(sender=client, receiver=network.server(), msg=client.x)
 
     def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
         local_x = iop.copy(client.messages[server])
@@ -435,28 +481,25 @@ class DGD(P2PAlgorithm):
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            i.initialize(x=self.x0, received_msgs=dict.fromkeys(network.neighbors(i), self.x0))
+            i.initialize(x=self.x0)
 
         self.W = network.weights
 
     def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
+        for i in network.active_agents(iteration):
+            network.broadcast(i, i.x)
+
         for i in network.active_agents(iteration):
             s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
             neighborhood_avg += self.W[i, i] * i.x
             i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
 
-        for i in network.active_agents(iteration):
-            network.broadcast(i, i.x)
-
-        for i in network.active_agents(iteration):
-            network.receive_all(i)
-
 
 @dataclass(eq=False)
 class ATC(P2PAlgorithm):
     r"""
-    Adapt-Then-Combine (ATC) distributed gradient descent characterized by the update below [r1]_.
+    Adapt-Then-Combine (ATC) distributed gradient descent characterized by the update below :footcite:p:`Alg_ATC`.
 
     .. math::
         \mathbf{x}_{i, k+1} = (\sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k} - \rho \nabla f_j(\mathbf{x}_{j,k}))
@@ -469,10 +512,6 @@ class ATC(P2PAlgorithm):
     and :math:`f_i` is agent i's local cost function.
 
     Alias: :class:`AdaptThenCombine`
-
-    .. [r1] J. Chen and A. H. Sayed, "Diffusion Adaptation Strategies for Distributed Optimization and
-            Learning Over Networks," IEEE Trans. Signal Process., vol. 60, no. 8, pp. 4289-4305,
-            Aug. 2012, doi: 10.1109/TSP.2012.2198470.
 
     """
 
@@ -495,11 +534,7 @@ class ATC(P2PAlgorithm):
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            i.initialize(
-                x=self.x0,
-                received_msgs=dict.fromkeys(network.neighbors(i), self.x0),
-                aux_vars={"y": self.x0},
-            )
+            i.initialize(x=self.x0, aux_vars={"y": self.x0})
 
         self.W = network.weights
 
@@ -513,9 +548,6 @@ class ATC(P2PAlgorithm):
             network.broadcast(i, i.aux_vars["y"])
 
         # consensus (a.k.a. combine step)
-        for i in network.active_agents(iteration):
-            network.receive_all(i)
-
         for i in network.active_agents(iteration):
             s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
             neighborhood_avg = iop.sum(s, dim=0)
@@ -567,12 +599,14 @@ class SimpleGT(P2PAlgorithm):
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
             y0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            neighbors = network.neighbors(i)
-            i.initialize(x=self.x0, received_msgs=dict.fromkeys(neighbors, self.x0), aux_vars={"y": y0})
+            i.initialize(x=self.x0, aux_vars={"y": y0})
 
         self.W = network.weights
 
     def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
+        for i in network.active_agents(iteration):
+            network.broadcast(i, i.x)
+
         for i in network.active_agents(iteration):
             i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
             s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
@@ -580,12 +614,6 @@ class SimpleGT(P2PAlgorithm):
             neighborhood_avg += self.W[i, i] * i.x
             i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
             i.aux_vars["y"] = i.aux_vars["y_new"]
-
-        for i in network.active_agents(iteration):
-            network.broadcast(i, i.x)
-
-        for i in network.active_agents(iteration):
-            network.receive_all(i)
 
 
 SimpleGradientTracking = SimpleGT  # Alias
@@ -634,29 +662,20 @@ class ED(P2PAlgorithm):
         for i in network.agents():
             y0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
             y1 = self.x0 - self.step_size * i.cost.gradient(self.x0)
-            # note: msg0's y1 is an approximation of the neighbors' y1 (x0 and y0 are exact: all agents start with same)
-            msg0 = self.x0 + y1 - y0
-            i.initialize(
-                x=self.x0,
-                aux_vars={"y": y0, "y_new": y1},
-                received_msgs=dict.fromkeys(network.neighbors(i), msg0),
-            )
+            i.initialize(x=self.x0, aux_vars={"y": y0, "y_new": y1})
 
         self.W = network.weights
         self.W = 0.5 * (iop.eye_like(self.W) + self.W)
 
     def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         for i in network.active_agents(iteration):
+            network.broadcast(i, i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
+
+        for i in network.active_agents(iteration):
             s = iop.stack([self.W[i, j] * msg for j, msg in i.messages.items()])
             i.x = iop.sum(s, dim=0) + self.W[i, i] * (i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
             i.aux_vars["y"] = i.aux_vars["y_new"]
             i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
-
-        for i in network.active_agents(iteration):
-            network.broadcast(i, i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
-
-        for i in network.active_agents(iteration):
-            network.receive_all(i)
 
 
 ExactDiffusion = ED  # alias
@@ -665,7 +684,9 @@ ExactDiffusion = ED  # alias
 @dataclass(eq=False)
 class AugDGM(P2PAlgorithm):
     r"""
-    Aug-DGM [r2]_ or ATC-DIGing [r3]_ gradient tracking algorithm, characterized by the updates below.
+    Aug-DGM :footcite:p:`Alg_Aug_DMG` or ATC-DIGing :footcite:p:`Alg_ATC_DIG` gradient tracking algorithm.
+
+    The algorithm is characterized by the updates below.
 
     .. math::
         \mathbf{x}_{i, k+1} = \sum_j \mathbf{W}_{ij} (\mathbf{x}_{j, k} - \rho \mathbf{y}_{j, k})
@@ -681,13 +702,6 @@ class AugDGM(P2PAlgorithm):
     and :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j.
 
     Alias: :class:`ATCDIGing`
-
-    .. [r2] J. Xu, S. Zhu, Y. C. Soh, and L. Xie, "Augmented distributed gradient methods for multi-agent
-            optimization under uncoordinated constant stepsizes," in 2015 54th IEEE Conference on Decision
-            and Control (CDC), Osaka, Japan: IEEE, Dec. 2015, pp. 2055-2060. doi: 10.1109/CDC.2015.7402509.
-    .. [r3] A. Nedic, A. Olshevsky, W. Shi, and C. A. Uribe, "Geometrically convergent distributed
-            optimization with uncoordinated step-sizes," in 2017 American Control Conference (ACC), Seattle,
-            WA, USA: IEEE, May 2017, pp. 3950-3955. doi: 10.23919/ACC.2017.7963560.
 
     """
 
@@ -711,12 +725,7 @@ class AugDGM(P2PAlgorithm):
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
             y0 = i.cost.gradient(self.x0)
-            neighbors = network.neighbors(i)
-            i.initialize(
-                x=self.x0,
-                received_msgs=dict.fromkeys(neighbors, self.x0),
-                aux_vars={"y": y0, "g": y0, "g_new": self.x0, "s": self.x0},
-            )
+            i.initialize(x=self.x0, aux_vars={"y": y0, "g": y0, "g_new": self.x0, "s": self.x0})
 
         self.W = network.weights
 
@@ -731,9 +740,6 @@ class AugDGM(P2PAlgorithm):
 
         #     step 2: update state and compute new local gradient
         for i in network.active_agents(iteration):
-            network.receive_all(i)
-
-        for i in network.active_agents(iteration):
             s = iop.stack([self.W[i, j] * s_j for j, s_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
             neighborhood_avg += self.W[i, i] * i.aux_vars["s"]
@@ -746,9 +752,6 @@ class AugDGM(P2PAlgorithm):
             network.broadcast(i, i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
 
         #     step 2: update y (global gradient estimator)
-        for i in network.active_agents(iteration):
-            network.receive_all(i)
-
         for i in network.active_agents(iteration):
             s = iop.stack([self.W[i, j] * q_j for j, q_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
@@ -763,7 +766,7 @@ ATCDIGing = AugDGM  # alias
 @dataclass(eq=False)
 class WangElia(P2PAlgorithm):
     r"""
-    Wang-Elia gradient tracking algorithm characterized by the updates below, see [r4]_ and [r5]_.
+    Wang-Elia gradient tracking algorithm characterized by the updates below, see :footcite:p:`Alg_Wang_1, Alg_Wang_2`.
 
     .. math::
         \mathbf{x}_{i, k+1} = \mathbf{x}_{i, k} - \sum_j \mathbf{K}_{ij} (\mathbf{x}_{j, k} + \mathbf{z}_{j, k})
@@ -779,14 +782,6 @@ class WangElia(P2PAlgorithm):
     and :math:`\mathbf{K}_{ij}` is the weight between agent i and j.
     The matrix :math:`\mathbf{K}` is chosen as :math:`0.5 (\mathbf{I} - \mathbf{W})`,
     where :math:`\mathbf{W}` is the Metropolis weight matrix.
-
-    .. [r4] J. Wang and N. Elia, "Control approach to distributed optimization," in 2010 48th Annual Allerton
-            Conference on Communication, Control, and Computing (Allerton), Monticello, IL, USA: IEEE, Sep. 2010,
-            pp. 557-561. doi: 10.1109/ALLERTON.2010.5706956.
-    .. [r5] M. Bin, I. Notarnicola, and T. Parisini, "Stability, Linear Convergence, and Robustness of the
-            Wang-Elia Algorithm for Distributed Consensus Optimization," in 2022 IEEE 61st Conference on
-            Decision and Control (CDC), Cancun, Mexico: IEEE, Dec. 2022, pp. 1610-1615.
-            doi: 10.1109/CDC51059.2022.9993284.
 
     """
 
@@ -809,12 +804,7 @@ class WangElia(P2PAlgorithm):
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            neighbors = network.neighbors(i)
-            i.initialize(
-                x=self.x0,
-                received_msgs=dict.fromkeys(neighbors, self.x0),
-                aux_vars={"z": self.x0, "x_old": self.x0},
-            )
+            i.initialize(x=self.x0, aux_vars={"z": self.x0, "x_old": self.x0})
 
         W = network.weights  # noqa: N806
         K = 0.5 * (iop.eye_like(W) - W)  # noqa: N806
@@ -827,9 +817,6 @@ class WangElia(P2PAlgorithm):
             network.broadcast(i, i.x + i.aux_vars["z"])
 
         # do consensus and local gradient step
-        for i in network.active_agents(iteration):
-            network.receive_all(i)
-
         for i in network.active_agents(iteration):
             s = iop.stack([self.K[i, j] * m_j for j, m_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
@@ -844,9 +831,6 @@ class WangElia(P2PAlgorithm):
 
         # update auxiliary variable
         for i in network.active_agents(iteration):
-            network.receive_all(i)
-
-        for i in network.active_agents(iteration):
             s = iop.stack([self.K[i, j] * m_j for j, m_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
             neighborhood_avg += self.K[i, i] * i.aux_vars["x_old"]
@@ -856,7 +840,7 @@ class WangElia(P2PAlgorithm):
 @dataclass(eq=False)
 class EXTRA(P2PAlgorithm):
     r"""
-    EXTRA [r6]_ gradient tracking algorithm characterized by the update steps below.
+    EXTRA :footcite:p:`Alg_EXTRA` gradient tracking algorithm characterized by the update steps below.
 
     .. math::
         \mathbf{x}_{i, k+1}
@@ -871,10 +855,6 @@ class EXTRA(P2PAlgorithm):
     j is a neighbor of i or i itself,
     :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j,
     and :math:`\tilde{\mathbf{W}} = (\mathbf{I} + \mathbf{W}) / 2`.
-
-    .. [r6] W. Shi, Q. Ling, G. Wu, and W. Yin, "EXTRA: An Exact First-Order Algorithm for Decentralized
-            Consensus Optimization," SIAM J. Optim., vol. 25, no. 2, pp. 944-966, Jan. 2015,
-            doi: 10.1137/14096668X.
 
     """
 
@@ -899,7 +879,6 @@ class EXTRA(P2PAlgorithm):
         for i in network.agents():
             i.initialize(
                 x=self.x0,
-                received_msgs=dict.fromkeys(network.neighbors(i), self.x0),
                 aux_vars={"x_old": self.x0, "x_old_old": self.x0, "x_cons": self.x0},
             )
 
@@ -912,9 +891,6 @@ class EXTRA(P2PAlgorithm):
                 network.broadcast(i, i.x)
 
             for i in network.active_agents(0):
-                network.receive_all(i)
-
-            for i in network.active_agents(0):
                 s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
                 neighborhood_avg = iop.sum(s, dim=0)
                 neighborhood_avg += self.W[i, i] * i.x
@@ -925,9 +901,6 @@ class EXTRA(P2PAlgorithm):
             # subsequent iterations (k >= 2)
             for i in network.active_agents(iteration):
                 network.broadcast(i, i.x)
-
-            for i in network.active_agents(iteration):
-                network.receive_all(i)
 
             for i in network.active_agents(iteration):
                 s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
@@ -949,7 +922,9 @@ class EXTRA(P2PAlgorithm):
 @dataclass(eq=False)
 class ATCTracking(P2PAlgorithm):
     r"""
-    ATC-Tracking [r7]_, [r8]_, [r9]_ gradient tracking algorithm, characterized by the updates below.
+    ATC-Tracking :footcite:p:`Alg_ATCT_1, Alg_ATCT_2, Alg_ATCT_3` gradient tracking algorithm.
+
+    The algorithm is characterized by the updates below.
 
     .. math::
         \mathbf{x}_{i, k+1} = \sum_j \mathbf{W}_{ij} (\mathbf{x}_{j, k} - \rho \mathbf{y}_{j, k})
@@ -965,17 +940,6 @@ class ATCTracking(P2PAlgorithm):
     and :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j.
 
     Aliases: :class:`SONATA`, :class:`NEXT`, :class:`ATCT`
-
-    .. [r7] P. Di Lorenzo and G. Scutari, "NEXT: In-Network Nonconvex Optimization," IEEE Transactions
-            on Signal and Information Processing over Networks, vol. 2, no. 2, pp. 120-136, Jun. 2016,
-            doi: 10.1109/TSIPN.2016.2524588.
-
-    .. [r8] G. Scutari and Y. Sun, "Distributed nonconvex constrained optimization over time-varying
-            digraphs," Math. Program., vol. 176, no. 1-2, pp. 497-544, Jul. 2019, doi: 10.1007/s10107-018-01357-w.
-
-    .. [r9] S. A. Alghunaim, E. K. Ryu, K. Yuan, and A. H. Sayed, "Decentralized Proximal Gradient Algorithms
-            With Linear Convergence Rates," IEEE Transactions on Automatic Control, vol. 66, no. 6, pp. 2787-2794,
-            Jun. 2021, doi: 10.1109/TAC.2020.3009363.
 
     """
 
@@ -999,10 +963,8 @@ class ATCTracking(P2PAlgorithm):
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
             y0 = i.cost.gradient(self.x0)
-            neighbors = network.neighbors(i)
             i.initialize(
                 x=self.x0,
-                received_msgs=dict.fromkeys(neighbors, self.x0),
                 aux_vars={"y": y0, "g": y0, "g_new": self.x0, "s": self.x0},
             )
 
@@ -1019,9 +981,6 @@ class ATCTracking(P2PAlgorithm):
 
         #     step 2: update state and compute new local gradient
         for i in network.active_agents(iteration):
-            network.receive_all(i)
-
-        for i in network.active_agents(iteration):
             s = iop.stack([self.W[i, j] * s_j for j, s_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
             neighborhood_avg += self.W[i, i] * i.aux_vars["s"]
@@ -1034,9 +993,6 @@ class ATCTracking(P2PAlgorithm):
             network.broadcast(i, i.aux_vars["y"])
 
         #     step 2: update y (global gradient estimator)
-        for i in network.active_agents(iteration):
-            network.receive_all(i)
-
         for i in network.active_agents(iteration):
             s = iop.stack([self.W[i, j] * q_j for j, q_j in i.messages.items()])
             neighborhood_avg = iop.sum(s, dim=0)
@@ -1053,7 +1009,7 @@ ATCT = ATCTracking  # alias
 @dataclass(eq=False)
 class NIDS(P2PAlgorithm):
     r"""
-    NIDS [r10]_ gradient tracking algorithm characterized by the update steps below.
+    NIDS :footcite:p:`Alg_NIDS` gradient tracking algorithm characterized by the update steps below.
 
     .. math::
         \mathbf{x}_{i, k+1}
@@ -1068,11 +1024,7 @@ class NIDS(P2PAlgorithm):
     and :math:`\tilde{\mathbf{W}} = (\mathbf{I} + \mathbf{W}) / 2`
     with :math:`\mathbf{W}` are the Metropolis weights.
 
-    This is a simplified version of the algorithm proposed in [r10]_ (see eq. (9) therein).
-
-    .. [r10] Z. Li, W. Shi, and M. Yan, "A Decentralized Proximal-Gradient Method With Network
-            Independent Step-Sizes and Separated Convergence Rates," IEEE Trans. Signal Process.,
-            vol. 67, no. 17, pp. 4494-4506, Sep. 2019, doi: 10.1109/TSP.2019.2926022.
+    This is a simplified version of the algorithm proposed in :footcite:p:`Alg_NIDS` (see eq. (9) therein).
 
     """
 
@@ -1095,11 +1047,7 @@ class NIDS(P2PAlgorithm):
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.zero_initialization(self.x0, network)
         for i in network.agents():
-            i.initialize(
-                x=self.x0,
-                received_msgs=dict.fromkeys(network.neighbors(i), self.x0),
-                aux_vars={"x_old": self.x0, "g": self.x0, "g_old": self.x0, "y": self.x0},
-            )
+            i.initialize(x=self.x0, aux_vars={"x_old": self.x0, "g": self.x0, "g_old": self.x0, "y": self.x0})
 
         W = network.weights  # noqa: N806
         W_tilde = 0.5 * (iop.eye_like(W) + W)  # noqa: N806
@@ -1124,8 +1072,6 @@ class NIDS(P2PAlgorithm):
                 )
             for i in network.active_agents(iteration):
                 network.broadcast(i, i.aux_vars["y"])
-            for i in network.active_agents(iteration):
-                network.receive_all(i)
             for i in network.active_agents(iteration):
                 s = iop.stack([self.W_tilde[i, j] * y_j for j, y_j in i.messages.items()])
                 neighborhood_avg = iop.sum(s, dim=0)
@@ -1187,12 +1133,7 @@ class ADMM(P2PAlgorithm):
         for i in all_agents:
             x1 = i.cost.proximal(x=iop.sum(self.z0, dim=0) / pN[i], rho=1 / pN[i])
             # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
-            msg0 = self.z0[i] - 2 * self.rho * x1
-            i.initialize(
-                x=x1,
-                aux_vars={"z": self.z0},
-                received_msgs=dict.fromkeys(network.neighbors(i), msg0),
-            )
+            i.initialize(x=x1, aux_vars={"z": self.z0})
 
         self.pN = pN
 
@@ -1201,21 +1142,18 @@ class ADMM(P2PAlgorithm):
             i.x = i.cost.proximal(x=iop.sum(i.aux_vars["z"], dim=0) / self.pN[i], rho=1 / self.pN[i])
 
         for i in network.active_agents(iteration):
-            for j in network.neighbors(i):
+            for j in network.active_neighbors(i, iteration):
                 network.send(i, j, i.aux_vars["z"][j] - 2 * self.rho * i.x)
 
         for i in network.active_agents(iteration):
-            network.receive_all(i)
-
-        for i in network.active_agents(iteration):
-            for j in network.neighbors(i):
+            for j in network.active_neighbors(i, iteration):
                 i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (i.messages[j])
 
 
 @dataclass(eq=False)
 class ATG(P2PAlgorithm):
     r"""
-    ADMM-Tracking Gradient (ATG) [r11]_ characterized by the update steps below.
+    ADMM-Tracking Gradient (ATG) :footcite:p:`Alg_ATG` characterized by the update steps below.
 
     .. math::
         \begin{bmatrix} \mathbf{y}_{i,k} \\ \mathbf{s}_{i,k} \end{bmatrix} = \frac{1}{1 + \rho N_i}
@@ -1244,10 +1182,6 @@ class ATG(P2PAlgorithm):
     instead of the usual average consensus.
 
     Aliases: :class:`ADMMTracking`, :class:`ADMMTrackingGradient`
-
-    .. [r11] G. Carnevale, N. Bastianello, G. Notarstefano, and R. Carli, "ADMM-Tracking Gradient for Distributed
-             Optimization Over Asynchronous and Unreliable Networks," IEEE Trans. Automat. Contr., vol. 70, no. 8,
-             pp. 5160-5175, Aug. 2025, doi: 10.1109/TAC.2025.3539454.
 
     """
 
@@ -1291,11 +1225,7 @@ class ATG(P2PAlgorithm):
                 shape=(len(all_agents), *(i.cost.shape)),
                 device=i.cost.device,
             )
-            i.initialize(
-                x=self.x0,
-                aux_vars={"y": self.x0, "s": self.x0, "z_y": z_y0, "z_s": z_s0},
-                received_msgs=dict.fromkeys(network.neighbors(i), self.x0),
-            )
+            i.initialize(x=self.x0, aux_vars={"y": self.x0, "s": self.x0, "z_y": z_y0, "z_s": z_s0})
 
         self.pN = pN
 
@@ -1310,7 +1240,7 @@ class ATG(P2PAlgorithm):
 
         # step 2: communicate and update z_{ij} variables
         for i in network.active_agents(iteration):
-            for j in network.neighbors(i):
+            for j in network.active_neighbors(i, iteration):
                 # transmit the messages as a single message, stacking along the first axis
                 s = iop.stack(
                     (
@@ -1321,9 +1251,7 @@ class ATG(P2PAlgorithm):
                 )
                 network.send(i, j, s)
         for i in network.active_agents(iteration):
-            network.receive_all(i)
-        for i in network.active_agents(iteration):
-            for j in network.neighbors(i):
+            for j in network.active_neighbors(i, iteration):
                 i.aux_vars["z_y"][j] = (1 - self.alpha) * i.aux_vars["z_y"][j] \
                                         + self.alpha * i.messages[j][0]  # fmt: skip
                 i.aux_vars["z_s"][j] = (1 - self.alpha) * i.aux_vars["z_s"][j] \
@@ -1337,7 +1265,7 @@ ADMMTrackingGradient = ATG  # alias
 @dataclass(eq=False)
 class DLM(P2PAlgorithm):
     r"""
-    Decentralized Linearized ADMM (DLM) [r12]_ characterized by the update steps below (see also [r13]_).
+    Decentralized Linearized ADMM (DLM) :footcite:p:`Alg_DLM_1, Alg_DLM_2` characterized by the update steps below.
 
     .. math::
         \mathbf{x}_{i,k+1} = \mathbf{x}_{i,k} - \mu \left( \nabla f_i(\mathbf{x}_{i,k})
@@ -1353,14 +1281,6 @@ class DLM(P2PAlgorithm):
     j is a neighbor of i. The parameters are: the penalty :math:`\rho > 0` and the step-size :math:`\mu > 0`.
 
     Alias: :class:`DecentralizedLinearizedADMM`
-
-    .. [r12] Q. Ling, W. Shi, G. Wu, and A. Ribeiro, "DLM: Decentralized Linearized Alternating Direction
-             Method of Multipliers," IEEE Transactions on Signal Processing, vol. 63, no. 15, pp. 4051-4064,
-             Aug. 2015, doi: 10.1109/TSP.2015.2436358.
-
-    .. [r13] S. A. Alghunaim, E. K. Ryu, K. Yuan, and A. H. Sayed, "Decentralized Proximal Gradient Algorithms
-            With Linear Convergence Rates," IEEE Transactions on Automatic Control, vol. 66, no. 6, pp. 2787-2794,
-            Jun. 2021, doi: 10.1109/TAC.2020.3009363.
 
     """
 
@@ -1388,16 +1308,13 @@ class DLM(P2PAlgorithm):
         for i in network.agents():
             # y must be initialized to zero
             y = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            i.initialize(x=self.x0, aux_vars={"y": y})
+            i.initialize(x=self.x0, aux_vars={"y": y, "s": y})
 
     def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         if iteration == 0:
             # step 0: first communication round
             for i in network.active_agents(0):
                 network.broadcast(i, i.x)
-
-            for i in network.active_agents(0):
-                network.receive_all(i)
 
             # compute and store \sum_j (\mathbf{x}_{i,0} - \mathbf{x}_{j,0})
             for i in network.active_agents(0):
@@ -1413,9 +1330,6 @@ class DLM(P2PAlgorithm):
             # step 2: communication round
             for i in network.active_agents(iteration):
                 network.broadcast(i, i.x)
-
-            for i in network.active_agents(iteration):
-                network.receive_all(i)
 
             # compute and store \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
             for i in network.active_agents(iteration):

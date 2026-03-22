@@ -340,6 +340,10 @@ def _benchmark(
     LOGGER.info("Starting benchmark execution ")
     LOGGER.debug(f"Nr of agents: {len(benchmark_problem.network.agents())}")
     prog_ctrl = ProgressBarController(manager, algorithms, n_trials, progress_step, show_speed, show_trial)
+
+    if runtime_metrics is not None and len(runtime_metrics) == 0:
+        runtime_metrics = None
+
     resulting_nw_states = _run_trials(
         algorithms,
         n_trials,
@@ -540,13 +544,13 @@ def _run_trial(  # noqa: PLR0917
 
     with warnings.catch_warnings(action="error"):
         try:
-            alg.run(network, start_iteration, progress_callback, skip_finalize=True)
+            alg.run(network, start_iteration, progress_callback)
             if checkpoint_manager is not None:
                 checkpoint_manager.mark_trial_complete(
                     alg_idx, trial, algorithm.iterations - 1, algorithm=alg, network=network
                 )
-            # Now that checkpoint is saved, we can finalize to clean up memory
-            alg.finalize(network)
+            # Now that checkpoint is saved, we can cleanup to clean up memory
+            alg.cleanup(network)
         except Exception as e:
             LOGGER.exception(f"An error or warning occurred when running {alg.name}: {type(e).__name__}: {e}")
 

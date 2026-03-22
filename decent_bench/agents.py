@@ -46,8 +46,9 @@ class Agent:
         self._state_snapshot_period = state_snapshot_period
         self.data = {} if data is None else data
         self._current_x: Array | None = None
+        self._resume_x: Array | None = None
         self._x_history: AgentHistory = AgentHistory()
-        self._auxiliary_variables: dict[str, Array] = {}
+        self._auxiliary_variables: dict[str, Any] = {}
         self._received_messages: dict[Agent, Array] = {}
         self._n_x_updates = 0
         self._n_sent_messages = 0
@@ -110,6 +111,10 @@ class Agent:
 
         This saves the current optimization variable x every :attr:`state_snapshot_period` iterations.
 
+        Warning:
+            This method is called automatically by algorithms during execution. It should not be called manually during
+            an algorithm run, as this may lead to unexpected behaviour of the agent's state history and metrics.
+
         Args:
             iteration: Algorithm iteration
             force: If true, skip :attr:`state_snapshot_period` and forcefully snapshot the agent state.
@@ -125,7 +130,7 @@ class Agent:
         return MappingProxyType(self._received_messages)
 
     @property
-    def aux_vars(self) -> dict[str, Array]:
+    def aux_vars(self) -> dict[str, Any]:
         """Auxiliary optimization variables used by algorithms that require more variables than x."""
         return self._auxiliary_variables
 
@@ -133,8 +138,7 @@ class Agent:
         self,
         *,
         x: Array | None = None,
-        aux_vars: dict[str, Array] | None = None,
-        received_msgs: dict[Agent, Array] | None = None,
+        aux_vars: dict[str, Any] | None = None,
     ) -> None:
         """
         Initialize local variables and messages before running an algorithm.
@@ -142,7 +146,6 @@ class Agent:
         Args:
             x: initial x
             aux_vars: initial auxiliary variables
-            received_msgs: initial messages from neighbors
 
         Raises:
             ValueError: if initialized x has incorrect shape
@@ -157,8 +160,50 @@ class Agent:
             self._n_x_updates = 0
         if aux_vars:
             self._auxiliary_variables = {k: iop.copy(v) for k, v in aux_vars.items()}
-        if received_msgs:
-            self._received_messages = {k: iop.copy(v) for k, v in received_msgs.items()}
+
+    def store_resume_state(self, x: Array) -> None:
+        """
+        Save the agent's state for resuming an algorithm run.
+
+        Warning:
+            This is used internally by algorithms to set the state which agent's will use when resuming an algorithm
+            execution from a checkpoint. It should not be called manually.
+
+        Args:
+            x: optimization variable to set as the agent's current state when resuming an algorithm run
+
+        Raises:
+            RuntimeError: if the resume state has already been set for this agent
+                (i.e. if this method has already been called once for this agent)
+
+        """
+        if self._resume_x is not None:
+            raise RuntimeError("Resume state has already been set for this agent")
+        self._resume_x = iop.copy(x)
+
+    def load_resume_state(self, iteration: int) -> None:
+        """
+        Set the agent's current state to the resume state.
+
+        Warning:
+            This is used internally by algorithms when resuming an algorithm execution from a checkpoint. It should not
+            be called manually.
+
+        Args:
+            iteration: algorithm iteration to load the resume state for.
+
+        Raises:
+            RuntimeError: if the resume state has not been configured for this agent
+                (i.e. if :meth:`store_resume_state` has not been called for this agent)
+
+        """
+        if self._resume_x is None:
+            raise RuntimeError("Resume state has not been configured for this agent")
+        self._current_x = iop.copy(self._resume_x)
+        # Override finalized state in history with resume state,
+        # so that metrics reflect the resumed state as the starting point of the algorithm execution
+        self._x_history[iteration] = iop.copy(self._resume_x)
+        self._resume_x = None
 
     def _call_counting_function(self, x: Array, *args: Any, **kwargs: Any) -> float:  # noqa: ANN401
         # Call the function first so "batch_used" is populated for EmpiricalRiskCost before counting function calls
@@ -166,7 +211,7 @@ class Agent:
         if self._no_count_depth > 0:
             return res
         if isinstance(self._cost, EmpiricalRiskCost):
-            self._n_function_calls += len(self._cost.batch_used) / self._cost.n_samples
+            self._n_function_calls += len(self._cost.batch_used)
         else:
             self._n_function_calls += 1
         return res
@@ -176,7 +221,7 @@ class Agent:
         if self._no_count_depth > 0:
             return res
         if isinstance(self._cost, EmpiricalRiskCost):
-            self._n_gradient_calls += len(self._cost.batch_used) / self._cost.n_samples
+            self._n_gradient_calls += len(self._cost.batch_used)
         else:
             self._n_gradient_calls += 1
         return res
@@ -186,7 +231,7 @@ class Agent:
         if self._no_count_depth > 0:
             return res
         if isinstance(self._cost, EmpiricalRiskCost):
-            self._n_hessian_calls += len(self._cost.batch_used) / self._cost.n_samples
+            self._n_hessian_calls += len(self._cost.batch_used)
         else:
             self._n_hessian_calls += 1
         return res
@@ -196,7 +241,7 @@ class Agent:
         if self._no_count_depth > 0:
             return res
         if isinstance(self._cost, EmpiricalRiskCost):
-            self._n_proximal_calls += len(self._cost.batch_used) / self._cost.n_samples
+            self._n_proximal_calls += len(self._cost.batch_used)
         else:
             self._n_proximal_calls += 1
         return res
@@ -204,6 +249,10 @@ class Agent:
     def __index__(self) -> int:
         """Enable using agent as index, for example ``W[a1, a2]`` instead of ``W[a1.id, a2.id]``."""
         return self._id
+
+    def __repr__(self) -> str:
+        """Human readable representation of the agent."""
+        return f"Agent(id={self._id}, instance_id={id(self)})"
 
     @staticmethod
     @contextlib.contextmanager
@@ -345,6 +394,10 @@ class AgentHistory:
     def __len__(self) -> int:
         """Return the number of snapshots recorded."""
         return len(self._x_history)
+
+    def __repr__(self) -> str:
+        """Human readable representation of the history."""
+        return self._x_history.__repr__()
 
 
 @dataclass(frozen=True, eq=False)

@@ -50,7 +50,7 @@ def display_plots(
     metrics_result: "MetricResult",
     *,
     computational_cost: ComputationalCost | None,
-    x_axis_scaling: float = 1e-4,
+    scale_x_axis: float = 1e-4,
     compare_iterations_and_computational_cost: bool = False,
     individual_plots: bool = False,
     plot_grid: bool = True,
@@ -68,7 +68,7 @@ def display_plots(
         metrics_result: result of metrics computation containing the metrics to plot and the data to plot them with.
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
             of computational cost.
-        x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
+        scale_x_axis: scaling factor for computational cost x-axis, used to convert the cost units into more
             manageable units for plotting. Only used if ``computational_cost`` is provided.
         compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
             metric vs iterations. Only used if ``computational_cost`` is provided.
@@ -109,7 +109,7 @@ def display_plots(
         use_cost,
         two_columns,
         computational_cost=computational_cost,
-        x_axis_scaling=x_axis_scaling,
+        scale_x_axis=scale_x_axis,
         plot_grid=plot_grid,
     )
 
@@ -213,7 +213,7 @@ def _create_and_plot_figures(
     two_columns: bool,
     *,
     computational_cost: ComputationalCost | None,
-    x_axis_scaling: float,
+    scale_x_axis: float,
     plot_grid: bool,
 ) -> list[tuple[Figure, list[SubPlot]]]:
     """Create figures, plot data, and return non-empty figures."""
@@ -251,7 +251,7 @@ def _create_and_plot_figures(
                 if use_cost and computational_cost is not None and resulting_agent_states is not None:
                     agent_states_for_alg = [list(trial) for trial in resulting_agent_states[alg]]
                     total_computational_cost = _calc_total_cost(agent_states_for_alg, computational_cost)
-                    x_to_plot = tuple(val * total_computational_cost * x_axis_scaling for val in x)
+                    x_to_plot = tuple(val * total_computational_cost * scale_x_axis for val in x)
 
                 # Plot iterations version if comparing
                 if two_columns:

@@ -438,14 +438,14 @@ class TestEmpiricalRiskCallCounting:
         agent = _make_empirical_agent(batch_size="all")
         agent.initialize(x=np.zeros(1))
         agent.cost.function(agent.x)
-        assert agent._n_function_calls == pytest.approx(1.0)
+        assert agent._n_function_calls == pytest.approx(agent.cost.n_samples)
 
     def test_mini_batch_counts_as_fraction(self):
         """With batch_size=2 out of 4 samples, each call should add 2/4 = 0.5."""
         agent = _make_empirical_agent(batch_size=2)
         agent.initialize(x=np.zeros(1))
         agent.cost.function(agent.x)
-        assert agent._n_function_calls == pytest.approx(0.5)
+        assert agent._n_function_calls == pytest.approx(0.5 * agent.cost.n_samples)
 
     def test_no_count_suppresses_empirical_risk_counting(self):
         agent = _make_empirical_agent(batch_size="all")

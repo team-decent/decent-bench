@@ -224,16 +224,16 @@ class RuntimeMetricPlotter:
             with contextlib.suppress(Exception):
                 self._queue.shutdown()
         if self._process is not None:
-            self._process.join(timeout=2.0)
+            self._process.join(timeout=5.0)
             if self._process.is_alive():
                 LOGGER.warning(
                     "Runtime metrics did not complete rendering, consider lowering the update interval "
-                    "for the runtime metrics used. Forcing shutdown and saving current progress."
+                    "for the runtime metrics used. Forcing shutdown."
                 )
                 with contextlib.suppress(Exception):
                     # Did not finish drawing in 2 seconds, force shutdown
                     self._queue.shutdown(immediate=True)
-            self._process.join(timeout=1.0)
+            self._process.join(timeout=5.0)
             if self._process.is_alive():
                 # Process is still alive for some reason, force terminate
                 self._process.terminate()

@@ -29,7 +29,6 @@ def test_p2p_network(n_agents: int = 10) -> None:
     for i in net.agents():
         for j in net.neighbors(i):
             net.send(i, j, x)
-            net.receive(j, i)
             tot_msg += 1
     assert tot_msg == n_agents*(n_agents-1)
 
@@ -47,7 +46,6 @@ def test_fed_network(n_agents: int = 10) -> None:
     tot_msg = 0
     for i in net.agents():
         net.send(i, msg=x)
-        net.receive(net.server)
         tot_msg += 1
     assert tot_msg == n_agents
 

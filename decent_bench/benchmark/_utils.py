@@ -15,6 +15,7 @@ ran = np.random.default_rng()  # replace with iop tool
 
 def create_classification_problem(
     cost_cls: type[LogisticRegressionCost | PyTorchCost] = LogisticRegressionCost,
+    device: SupportedDevices = SupportedDevices.CPU,
     n_agents: int = 100,
     batch_size: EmpiricalRiskBatchSize = "all",
 ) -> tuple[Sequence[Cost], Array | None, Dataset]:
@@ -23,6 +24,7 @@ def create_classification_problem(
 
     Args:
         cost_cls: type of cost function
+        device: device to create the problem on (only relevant for PyTorchCost)
         n_agents: number of agents
         batch_size: size of mini-batches for stochastic methods, or "all" for full-batch
 
@@ -42,7 +44,7 @@ def create_classification_problem(
         n_samples_per_partition=10,
         n_features=3,
         framework=SupportedFrameworks.PYTORCH if cost_cls is PyTorchCost else SupportedFrameworks.NUMPY,
-        device=SupportedDevices.CPU,
+        device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         squeeze_targets=cost_cls is PyTorchCost,  # PyTorchCost expects squeezed targets for CrossEntropyLoss
         seed=0,
@@ -53,7 +55,7 @@ def create_classification_problem(
         n_samples_per_partition=100,  # 1 partition so this is number of samples in test set
         n_features=3,
         framework=SupportedFrameworks.PYTORCH if cost_cls is PyTorchCost else SupportedFrameworks.NUMPY,
-        device=SupportedDevices.CPU,
+        device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         squeeze_targets=cost_cls is PyTorchCost,
         seed=12345,
@@ -83,6 +85,7 @@ def create_classification_problem(
                 loss_fn=torch.nn.CrossEntropyLoss(),
                 final_activation=ArgmaxActivation(),
                 batch_size=batch_size,
+                device=device,
             )
             for p in dataset.get_partitions()
         ]
@@ -99,6 +102,7 @@ def create_classification_problem(
 
 def create_regression_problem(
     cost_cls: type[LinearRegressionCost | PyTorchCost] = LinearRegressionCost,
+    device: SupportedDevices = SupportedDevices.CPU,
     n_agents: int = 100,
     batch_size: EmpiricalRiskBatchSize = "all",
 ) -> tuple[Sequence[Cost], Array | None, Dataset]:
@@ -107,6 +111,7 @@ def create_regression_problem(
 
     Args:
         cost_cls: type of cost function
+        device: device to create the problem on (only relevant for PyTorchCost)
         n_agents: number of agents
         batch_size: size of mini-batches for stochastic methods, or "all" for full-batch
 
@@ -126,7 +131,7 @@ def create_regression_problem(
         n_samples_per_partition=10,
         n_features=1,
         framework=SupportedFrameworks.PYTORCH if cost_cls is PyTorchCost else SupportedFrameworks.NUMPY,
-        device=SupportedDevices.CPU,
+        device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         target_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         seed=0,
@@ -137,7 +142,7 @@ def create_regression_problem(
         n_samples_per_partition=100,  # 1 partition so this is number of samples in test set
         n_features=1,
         framework=SupportedFrameworks.PYTORCH if cost_cls is PyTorchCost else SupportedFrameworks.NUMPY,
-        device=SupportedDevices.CPU,
+        device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         target_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         seed=12345,
@@ -159,7 +164,7 @@ def create_regression_problem(
             )
 
         costs = [
-            cost_cls(dataset=p, model=model_gen(), loss_fn=torch.nn.MSELoss(), batch_size=batch_size)  # type: ignore[call-arg]
+            cost_cls(dataset=p, model=model_gen(), loss_fn=torch.nn.MSELoss(), batch_size=batch_size, device=device)  # type: ignore[call-arg]
             for p in dataset.get_partitions()
         ]
         x_optimal = None

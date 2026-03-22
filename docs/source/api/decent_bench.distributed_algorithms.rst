@@ -26,3 +26,5 @@ decent\_bench.distributed\_algorithms
       step,
       finalize,
       run,
+
+.. footbibliography::
