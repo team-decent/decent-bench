@@ -180,9 +180,57 @@ def test_randk_compression() -> None:
 def test_k_compression(scheme: CompressionScheme) -> None:
     for k in range(1, 15+1):
         s = scheme(k=k)
-        compressed_msg = s.compress(Array(np.ones(k)))
+        compressed_msg = s.compress(Array(np.ones(k+5)))
 
         assert np.count_nonzero(compressed_msg) == k
+
+
+# test RandK and TopK with mismatched k and message size
+@pytest.mark.parametrize(
+    "scheme",
+    [
+        TopK,
+        RandK
+    ],
+)
+def test_k_compression_mismatched(scheme: CompressionScheme) -> None:
+    for k in range(5, 15+1):
+        s = scheme(k=k)
+        compressed_msg = s.compress(Array(np.ones(k-2)))
+
+        assert np.count_nonzero(compressed_msg) == k-2
+
+
+# test RandK and TopK with mismatched k and message size
+@pytest.mark.parametrize(
+    "scheme",
+    [
+        TopK,
+        RandK
+    ],
+)
+def test_k_compression_mismatched_k_msg_size(scheme: CompressionScheme) -> None:
+    for k in range(5, 15+1):
+        s = scheme(k=k)
+        compressed_msg = s.compress(Array(np.ones(k-2)))
+
+        assert np.count_nonzero(compressed_msg) == k-2
+
+
+# test RandK and TopK to check message shape is preserved
+@pytest.mark.parametrize(
+    "scheme",
+    [
+        TopK,
+        RandK
+    ],
+)
+def test_k_compression_preserved_shape(scheme: CompressionScheme) -> None:
+    message = Array(np.ones((10, 15)))
+    s = scheme(k=5)
+    compressed_msg = s.compress(message)
+
+    assert iop.to_numpy(message).shape == iop.to_numpy(compressed_msg).shape
 
 
 ## DropScheme
@@ -248,7 +296,7 @@ def test_no_noise(
         GaussianNoise(mean=0.5, std=0.5)
     ],
 )
-def test_no_noise(
+def test_noise(
     scheme: NoiseScheme,
 ) -> None:
     message = Array(np.ones(5))

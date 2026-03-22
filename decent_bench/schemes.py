@@ -71,7 +71,7 @@ class MarkovChainActivation(AgentActivationScheme):
             [1 - inactive_to_active, inactive_to_active],
             [active_to_inactive, 1 - active_to_inactive],
         ])  # transition matrix
-        self._current_state = rng.choice(self._states, p=[1 - inactive_to_active, 1 - active_to_inactive])
+        self._current_state = rng.choice(self._states, p=[0, 1])
 
     def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
         self._current_state = rng.choice(self._states, p=self._P[self._current_state])  # evolve the Markov chain
@@ -184,23 +184,42 @@ class Quantization(CompressionScheme):
 
 
 class TopK(CompressionScheme):
-    """Top-k compression which transmits only the k elements with largest magnitude."""
+    """
+    Top-k compression which transmits only the k elements with largest magnitude.
+
+    Raises:
+        ValueError: if ``k <= 0``
+
+    Note:
+        If the message has fewer than ``k`` elements, no compression is applied.
+
+    """
 
     def __init__(self, k: int):
         if k <= 0:
-            raise ValueError("`k` must be a positive integer")
+            raise ValueError(f"`k` must be a positive integer, got {k}")
         self.k = k
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
-        msg_np = iop.to_numpy(msg).ravel()
-        idx = np.argpartition(np.abs(msg_np), -self.k, axis=None)[-self.k :]
-        mask = np.isin(np.arange(msg_np.size), idx)
+        msg_np = np.copy(iop.to_numpy(msg))
+        k = min(self.k, msg_np.size)
+        idx = np.argpartition(np.abs(msg_np), -k, axis=None)[-k:]
+        mask = np.isin(np.arange(msg_np.size), idx).reshape(msg_np.shape)
         msg_np[~mask] = 0
         return iop.to_array_like(msg_np, msg)
 
 
 class RandK(CompressionScheme):
-    """Rand-k compression which transmits only k randomly selected elements."""
+    """
+    Rand-k compression which transmits only k randomly selected elements.
+
+    Raises:
+        ValueError: if ``k <= 0``
+
+    Note:
+        If the message has fewer than ``k`` elements, no compression is applied.
+
+    """
 
     def __init__(self, k: int):
         if k <= 0:
@@ -208,9 +227,10 @@ class RandK(CompressionScheme):
         self.k = k
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
-        msg_np = iop.to_numpy(msg).ravel()
-        idx = rng.choice(msg_np.size, size=self.k, replace=False)
-        mask = np.isin(np.arange(msg_np.size), idx)
+        msg_np = np.copy(iop.to_numpy(msg))
+        k = min(self.k, msg_np.size)
+        idx = rng.choice(msg_np.size, size=k, replace=False)
+        mask = np.isin(np.arange(msg_np.size), idx).reshape(msg_np.shape)
         msg_np[~mask] = 0
         return iop.to_array_like(msg_np, msg)
 

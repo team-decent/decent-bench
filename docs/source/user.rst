@@ -271,7 +271,7 @@ Create a custom benchmark problem using existing resources.
         x_optimal=x_optimal,
         agent_activations=[UniformActivationRate(0.5)] * n_agents,
         message_compression=Quantization(n_significant_digits=4),
-        message_noise=GaussianNoise(mean=0, sd=0.001),
+        message_noise=GaussianNoise(mean=0, std=0.001),
         message_drop=UniformDropRate(drop_rate=0.5),
     )
 
