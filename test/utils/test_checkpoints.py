@@ -15,7 +15,7 @@ from decent_bench.benchmark import (
     resume_benchmark,
 )
 from decent_bench.costs import LogisticRegressionCost
-from decent_bench.distributed_algorithms import ATC, DGD, Algorithm
+from decent_bench.distributed_algorithms import ADMM, ATC, DGD, Algorithm
 from decent_bench.networks import Network, P2PNetwork
 from decent_bench.utils.checkpoint_manager import CheckpointManager
 
@@ -39,6 +39,7 @@ def _build_problem_and_algorithms(
     algorithms: list[Algorithm[Any]] = [
         DGD(iterations=iterations, step_size=0.01),
         ATC(iterations=iterations, step_size=0.01),
+        ADMM(iterations=iterations),
     ]
     return problem, algorithms
 
@@ -71,14 +72,15 @@ def test_initialize_saves_structure_and_metadata(tmp_path: Path) -> None:  # noq
     assert (checkpoint_dir / "benchmark_problem.pkl").exists()
     assert (checkpoint_dir / "algorithm_0").exists()
     assert (checkpoint_dir / "algorithm_1").exists()
+    assert (checkpoint_dir / "algorithm_2").exists()
 
     metadata = manager.load_metadata()
     assert metadata["n_trials"] == 3
     assert metadata["benchmark_metadata"] == {"seed": 123}
-    assert [alg["name"] for alg in metadata["algorithms"]] == ["DGD", "ATC"]
+    assert [alg["name"] for alg in metadata["algorithms"]] == ["DGD", "ATC", "ADMM"]
 
     loaded_algs = manager.load_initial_algorithms()
-    assert [alg.name for alg in loaded_algs] == ["DGD", "ATC"]
+    assert [alg.name for alg in loaded_algs] == ["DGD", "ATC", "ADMM"]
 
     loaded_problem = manager.load_benchmark_problem()
     assert len(loaded_problem.network.agents()) == 4
