@@ -121,11 +121,15 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
 
     def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
         """
-        Generic proximal of an empirical cost plus regularizer is intentionally unsupported.
+        Raise ``NotImplementedError`` for the generic proximal of an empirical cost plus regularizer.
 
         This wrapper preserves evaluation, gradient, and Hessian structure, but does not imply a closed-form proximal.
         Use a specialized composite cost if one exists, or use
         :func:`decent_bench.centralized_algorithms.proximal_solver` when its assumptions are satisfied.
+
+        Raises:
+            NotImplementedError: Always, because no generic closed-form proximal is provided.
+
         """
         raise NotImplementedError(
             "EmpiricalRegularizedCost does not implement a generic proximal operator. Use a specialized proximal if "
@@ -133,10 +137,10 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
         )
 
     def _sample_batch_indices(self, indices: EmpiricalRiskIndices = "batch") -> list[int]:
-        return self.empirical_cost._sample_batch_indices(indices)
+        return self.empirical_cost._sample_batch_indices(indices)  # noqa: SLF001
 
     def _get_batch_data(self, indices: EmpiricalRiskIndices = "batch") -> Any:  # noqa: ANN401
-        return self.empirical_cost._get_batch_data(indices)
+        return self.empirical_cost._get_batch_data(indices)  # noqa: SLF001
 
     def __add__(self, other: Cost) -> Cost:
         if isinstance(other, BaseRegularizerCost):

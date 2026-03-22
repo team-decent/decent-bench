@@ -105,7 +105,13 @@ class EmpiricalRiskCost(Cost, ABC):
         """
 
     def __mul__(self, other: float) -> Cost:
-        """Multiply by a scalar while preserving the empirical-risk abstraction."""
+        """
+        Multiply by a scalar while preserving the empirical-risk abstraction.
+
+        Raises:
+            TypeError: If other is not a real scalar.
+
+        """
         if not self._is_valid_scalar(other):
             raise TypeError(f"Cost can only be multiplied by a real number, got {type(other)}.")
         from decent_bench.costs._empirical_risk._empirical_scaled_cost import EmpiricalScaledCost  # noqa: PLC0415
@@ -113,7 +119,14 @@ class EmpiricalRiskCost(Cost, ABC):
         return EmpiricalScaledCost(self, float(other))
 
     def __truediv__(self, other: float) -> Cost:
-        """Divide by a scalar while preserving the empirical-risk abstraction."""
+        """
+        Divide by a scalar while preserving the empirical-risk abstraction.
+
+        Raises:
+            TypeError: If other is not a real scalar.
+            ZeroDivisionError: If other is zero.
+
+        """
         if not self._is_valid_scalar(other):
             raise TypeError(f"Cost can only be divided by a real number, got {type(other)}.")
         if other == 0:
@@ -125,13 +138,21 @@ class EmpiricalRiskCost(Cost, ABC):
         return self.__mul__(-1.0)
 
     def __add__(self, other: Cost) -> Cost:
-        """Add another cost, preserving the empirical-risk abstraction for regularization."""
+        """
+        Add another cost, preserving the empirical-risk abstraction for regularization.
+
+        Raises:
+            ValueError: If the domain shapes do not match.
+
+        """
         if self.shape != other.shape:
             raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
         from decent_bench.costs._base._regularizer_costs import BaseRegularizerCost  # noqa: PLC0415
 
         if isinstance(other, BaseRegularizerCost):
-            from decent_bench.costs._empirical_risk._empirical_regularized_cost import EmpiricalRegularizedCost  # noqa: PLC0415
+            from decent_bench.costs._empirical_risk._empirical_regularized_cost import (  # noqa: PLC0415
+                EmpiricalRegularizedCost,
+            )
 
             return EmpiricalRegularizedCost(self, other)
         return SumCost([self, other])

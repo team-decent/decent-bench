@@ -35,6 +35,7 @@ from ._base import (
     L1RegularizerCost,
     L2RegularizerCost,
     QuadraticCost,
+    ScaledCost,
     SumCost,
     ZeroCost,
 )
@@ -60,6 +61,7 @@ __all__ = [
     "LogisticRegressionCost",
     "PyTorchCost",
     "QuadraticCost",
+    "ScaledCost",
     "SumCost",
     "ZeroCost",
     "base",

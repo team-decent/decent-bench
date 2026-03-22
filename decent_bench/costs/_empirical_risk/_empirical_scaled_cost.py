@@ -110,7 +110,7 @@ class EmpiricalScaledCost(EmpiricalRiskCost):
         return self.cost.proximal(x, rho * self.scalar, **kwargs)
 
     def _sample_batch_indices(self, indices: EmpiricalRiskIndices = "batch") -> list[int]:
-        return self.cost._sample_batch_indices(indices)
+        return self.cost._sample_batch_indices(indices)  # noqa: SLF001
 
     def _get_batch_data(self, indices: EmpiricalRiskIndices = "batch") -> Any:  # noqa: ANN401
-        return self.cost._get_batch_data(indices)
+        return self.cost._get_batch_data(indices)  # noqa: SLF001

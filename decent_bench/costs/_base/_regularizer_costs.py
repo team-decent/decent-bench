@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any
+from typing import Any, overload
 
 import numpy as np
 
@@ -57,6 +57,12 @@ class BaseRegularizerCost(Cost):
     def device(self) -> SupportedDevices:
         return self._device
 
+    @overload
+    def __add__(self, other: BaseRegularizerCost) -> BaseRegularizerCost: ...
+
+    @overload
+    def __add__(self, other: Cost) -> Cost: ...
+
     def __add__(self, other: Cost) -> Cost:
         """
         Add another cost, preserving the regularizer abstraction when possible.
@@ -72,13 +78,26 @@ class BaseRegularizerCost(Cost):
         return SumCost([self, other])
 
     def __mul__(self, other: float) -> Cost:
-        """Multiply by a scalar while preserving the regularizer abstraction."""
+        """
+        Multiply by a scalar while preserving the regularizer abstraction.
+
+        Raises:
+            TypeError: If other is not a real scalar.
+
+        """
         if not self._is_valid_scalar(other):
             raise TypeError(f"Cost can only be multiplied by a real number, got {type(other)}.")
         return _CompositeRegularizerCost([self], weights=[float(other)])
 
     def __truediv__(self, other: float) -> Cost:
-        """Divide by a scalar while preserving the regularizer abstraction."""
+        """
+        Divide by a scalar while preserving the regularizer abstraction.
+
+        Raises:
+            TypeError: If other is not a real scalar.
+            ZeroDivisionError: If other is zero.
+
+        """
         if not self._is_valid_scalar(other):
             raise TypeError(f"Cost can only be divided by a real number, got {type(other)}.")
         if other == 0:
@@ -90,7 +109,14 @@ class BaseRegularizerCost(Cost):
         return self.__mul__(-1.0)
 
     def __sub__(self, other: Cost) -> Cost:
-        """Subtract another cost, preserving the regularizer abstraction when possible."""
+        """
+        Subtract another cost, preserving the regularizer abstraction when possible.
+
+        Raises:
+            TypeError: If other is not a Cost.
+            ValueError: If the domain shapes do not match for regularizer subtraction.
+
+        """
         if not isinstance(other, Cost):
             raise TypeError(f"Cost can only be subtracted by another Cost, got {type(other)}.")
         if isinstance(other, BaseRegularizerCost):
@@ -134,7 +160,7 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
             if regularizer.device != self.device:
                 raise ValueError(f"Mismatching devices: {regularizer.device} vs {self.device}")
             if isinstance(regularizer, _CompositeRegularizerCost):
-                for inner_regularizer, inner_weight in regularizer._terms:
+                for inner_regularizer, inner_weight in regularizer._terms:  # noqa: SLF001
                     self._terms.append((inner_regularizer, float(weight) * inner_weight))
             else:
                 self._terms.append((regularizer, float(weight)))
@@ -176,6 +202,11 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
 
         For sums of regularizers or negative scaling, composing or summing individual proximal operators is not
         mathematically valid in general.
+
+        Raises:
+            ValueError: If rho is not positive.
+            NotImplementedError: If the composite is not a single positively scaled term.
+
         """
         if rho <= 0:
             raise ValueError("The penalty parameter rho must be positive.")
