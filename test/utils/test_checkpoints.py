@@ -4,8 +4,10 @@ from pathlib import Path
 from typing import Any
 
 import networkx as nx
+import numpy as np
 import pytest
 
+import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.benchmark import (
     BenchmarkProblem,
@@ -300,7 +302,15 @@ def test_resume_from_checkpoint(tmp_path: Path) -> None:  # noqa: D103
             strict=True,
         ):
             for iteration in range(11):
-                assert all(
-                    resumed_agent._x_history[iteration]
-                    == full_agent._x_history[iteration]
+                np.testing.assert_allclose(
+                    iop.to_numpy(resumed_agent._x_history[iteration]),
+                    iop.to_numpy(full_agent._x_history[iteration]),
                 )
+
+            with pytest.raises(AssertionError):  # noqa: PT012
+                for iteration in range(11):
+                    resumed_agent._x_history[iteration] += 1.0
+                    np.testing.assert_allclose(
+                        iop.to_numpy(resumed_agent._x_history[iteration]),
+                        iop.to_numpy(full_agent._x_history[iteration]),
+                    )
