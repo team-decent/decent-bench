@@ -71,7 +71,7 @@ class MarkovChainActivation(AgentActivationScheme):
             [1 - inactive_to_active, inactive_to_active],
             [active_to_inactive, 1 - active_to_inactive],
         ])  # transition matrix
-        self._current_state = rng.choice(self._states)  # initialize uniformly at random
+        self._current_state = rng.choice(self._states, p=[1 - inactive_to_active, 1 - active_to_inactive])
 
     def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
         self._current_state = rng.choice(self._states, p=self._P[self._current_state])  # evolve the Markov chain
@@ -187,6 +187,8 @@ class TopK(CompressionScheme):
     """Top-k compression which transmits only the k elements with largest magnitude."""
 
     def __init__(self, k: int):
+        if k <= 0:
+            raise ValueError("`k` must be a positive integer")
         self.k = k
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
@@ -201,6 +203,8 @@ class RandK(CompressionScheme):
     """Rand-k compression which transmits only k randomly selected elements."""
 
     def __init__(self, k: int):
+        if k <= 0:
+            raise ValueError("`k` must be a positive integer")
         self.k = k
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
@@ -296,11 +300,11 @@ class NoNoise(NoiseScheme):
 class GaussianNoise(NoiseScheme):
     """Scheme that applies Gaussian noise - that is, noise following a normal distribution."""
 
-    def __init__(self, mean: float, sd: float):
-        if sd < 0:
-            raise ValueError("Standard deviation (sd) must be non-negative for Gaussian noise.")
+    def __init__(self, mean: float, std: float):
+        if std < 0:
+            raise ValueError("Standard deviation (std) must be non-negative for Gaussian noise.")
         self.mean = mean
-        self.sd = sd
+        self.std = std
 
     def make_noise(self, msg: Array) -> Array:  # noqa: D102
-        return msg + iop.randn_like(msg, mean=self.mean, std=self.sd)
+        return msg + iop.randn_like(msg, mean=self.mean, std=self.std)
