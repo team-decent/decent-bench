@@ -177,25 +177,21 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
         m_cvx_vals = [weight * regularizer.m_cvx for regularizer, weight in self._terms]
         return np.nan if any(np.isnan(v) for v in m_cvx_vals) else float(sum(m_cvx_vals))
 
-    @iop.autodecorate_cost_method(Cost.function)
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ANN401
         return float(sum(weight * regularizer.function(x, **kwargs) for regularizer, weight in self._terms))
 
-    @iop.autodecorate_cost_method(Cost.gradient)
     def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ANN401
         return iop.sum(
             iop.stack([regularizer.gradient(x, **kwargs) * weight for regularizer, weight in self._terms]),
             dim=0,
         )
 
-    @iop.autodecorate_cost_method(Cost.hessian)
     def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ANN401
         return iop.sum(
             iop.stack([regularizer.hessian(x, **kwargs) * weight for regularizer, weight in self._terms]),
             dim=0,
         )
 
-    @iop.autodecorate_cost_method(Cost.proximal)
     def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
         """
         Proximal is only supported for a single positively scaled regularizer term.
@@ -236,21 +232,17 @@ class L1RegularizerCost(BaseRegularizerCost):
     def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         return 0.0
 
-    @iop.autodecorate_cost_method(Cost.function)
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ARG002, ANN401
         return float(iop.astype(iop.sum(iop.absolute(x)), float))
 
-    @iop.autodecorate_cost_method(Cost.gradient)
     def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         return iop.sign(x)
 
-    @iop.autodecorate_cost_method(Cost.hessian)
     def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if self._hessian_cache is None:
             self._hessian_cache = iop.zeros((self._dim, self._dim), framework=self.framework, device=self.device)
         return self._hessian_cache
 
-    @iop.autodecorate_cost_method(Cost.proximal)
     def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if rho <= 0:
             raise ValueError("The penalty parameter rho must be positive.")
@@ -273,21 +265,17 @@ class L2RegularizerCost(BaseRegularizerCost):
     def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         return 1.0
 
-    @iop.autodecorate_cost_method(Cost.function)
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ARG002, ANN401
         return float(iop.astype(0.5 * iop.sum(iop.mul(x, x)), float))
 
-    @iop.autodecorate_cost_method(Cost.gradient)
     def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         return x
 
-    @iop.autodecorate_cost_method(Cost.hessian)
     def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if self._hessian_cache is None:
             self._hessian_cache = iop.eye(self._dim, framework=self.framework, device=self.device)
         return self._hessian_cache
 
-    @iop.autodecorate_cost_method(Cost.proximal)
     def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if rho <= 0:
             raise ValueError("The penalty parameter rho must be positive.")
@@ -324,25 +312,21 @@ class FractionalQuadraticRegularizerCost(BaseRegularizerCost):
     def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         return np.nan
 
-    @iop.autodecorate_cost_method(Cost.function)
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ARG002, ANN401
         x2 = x * x
         return float(iop.astype(iop.sum(x2 / (1.0 + x2)), float))
 
-    @iop.autodecorate_cost_method(Cost.gradient)
     def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         x2 = x * x
         denom = (1.0 + x2) ** 2
         return 2.0 * x / denom
 
-    @iop.autodecorate_cost_method(Cost.hessian)
     def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         x2 = x * x
         denom = (1.0 + x2) ** 3
         second = 2.0 * (1.0 - 3.0 * x2) / denom
         return iop.diag(iop.reshape(second, (self._dim,)))
 
-    @iop.autodecorate_cost_method(Cost.proximal)
     def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if rho <= 0:
             raise ValueError("The penalty parameter rho must be positive.")
