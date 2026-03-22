@@ -7,7 +7,6 @@ from typing import Any
 import numpy as np
 
 from decent_bench.costs._base._cost import Cost
-from decent_bench.costs._base._sum_cost import SumCost
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import Dataset, EmpiricalRiskIndices, EmpiricalRiskReduction
 
@@ -155,7 +154,7 @@ class EmpiricalRiskCost(Cost, ABC):
             )
 
             return EmpiricalRegularizedCost(self, other)
-        return SumCost([self, other])
+        return super().__add__(other)
 
     def evaluate(self, x: Array, indices: EmpiricalRiskIndices = "batch", **kwargs: Any) -> float:  # noqa: ANN401
         """Alias for :meth:`function`."""

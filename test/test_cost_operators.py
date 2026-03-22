@@ -2,13 +2,50 @@ import numpy as np
 import pytest
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.costs import QuadraticCost, SumCost
+from decent_bench.costs import Cost, QuadraticCost, SumCost
 
 
 def _simple_quadratic(A_scale: float, b_scale: float, c: float = 0.0) -> QuadraticCost:
     A = np.eye(2) * A_scale
     b = np.ones(2) * b_scale
     return QuadraticCost(A=A, b=b, c=c)
+
+
+class _SimpleCost(Cost):
+    def __init__(self, scale: float):
+        self.scale = scale
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        return (2,)
+
+    @property
+    def framework(self) -> str:
+        return "numpy"
+
+    @property
+    def device(self) -> str | None:
+        return "cpu"
+
+    @property
+    def m_smooth(self) -> float:
+        return self.scale
+
+    @property
+    def m_cvx(self) -> float:
+        return 0.0
+
+    def function(self, x: np.ndarray) -> float:
+        return float(self.scale * np.sum(x * x))
+
+    def gradient(self, x: np.ndarray) -> np.ndarray:
+        return 2.0 * self.scale * x
+
+    def hessian(self, x: np.ndarray) -> np.ndarray:  # noqa: ARG002
+        return 2.0 * self.scale * np.eye(2)
+
+    def proximal(self, x: np.ndarray, rho: float) -> np.ndarray:
+        return x / (1.0 + 2.0 * rho * self.scale)
 
 
 def _assert_quadratic_matches(
@@ -70,6 +107,19 @@ def test_quadratic_subtraction_preserves_type_and_exact_behavior() -> None:
 
     assert isinstance(subtracted, QuadraticCost)
     _assert_quadratic_matches(subtracted, expected, x, rho)
+
+
+def test_custom_cost_inherits_generic_addition_fallback() -> None:
+    cost_a = _SimpleCost(scale=1.0)
+    cost_b = _SimpleCost(scale=2.0)
+    x = np.array([1.5, -0.5])
+
+    added = cost_a + cost_b
+
+    assert isinstance(added, SumCost)
+    assert added.function(x) == pytest.approx(cost_a.function(x) + cost_b.function(x))
+    np.testing.assert_allclose(iop.to_numpy(added.gradient(x)), cost_a.gradient(x) + cost_b.gradient(x))
+    np.testing.assert_allclose(iop.to_numpy(added.hessian(x)), cost_a.hessian(x) + cost_b.hessian(x))
 
 
 def test_cost_radd_supports_sum() -> None:

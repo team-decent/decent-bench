@@ -989,7 +989,7 @@ Custom Cost Example
     from numpy.typing import NDArray
 
     import decent_bench.utils.interoperability as iop
-    from decent_bench.costs import Cost, SumCost
+    from decent_bench.costs import Cost
     from decent_bench.utils.types import SupportedFrameworks, SupportedDevices
 
     class MyCost(Cost):
@@ -1043,9 +1043,5 @@ Custom Cost Example
             # Otherwise you can rely on `centralized_algorithms.proximal_solver`.
             return x  # identity as a placeholder
 
-        def __add__(self, other: Cost) -> Cost:
-            # Support addition of costs
-            if self.shape != other.shape:
-                raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
-
-            return SumCost([self, other])
+        # No __add__ implementation is required unless you want to preserve
+        # a more specialized structure than the generic Cost fallback.

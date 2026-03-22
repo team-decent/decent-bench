@@ -123,19 +123,26 @@ class Cost(ABC):  # noqa: PLR0904
         :meth:`~decent_bench.centralized_algorithms.proximal_solver`.
         """
 
-    @abstractmethod
     def __add__(self, other: Cost) -> Cost:
         """
         Add another cost function to create a new one.
 
-        :class:`~decent_bench.costs.SumCost` can be used as the result of :meth:`__add__` by returning
-        ``SumCost([self, other])``. However, it's often more efficient to preserve the cost function type if possible.
-        For example, the addition of two :class:`~decent_bench.costs.QuadraticCost` objects benefits
-        from returning a new :class:`~decent_bench.costs.QuadraticCost` instead of a
-        :class:`~decent_bench.costs.SumCost` as this preserves the closed
-        form proximal solution and only requires one evaluation instead of two when calling :meth:`function`,
-        :meth:`gradient`, and :meth:`hessian`.
+        The generic fallback returns ``SumCost([self, other])``. Subclasses can override this to preserve specialized
+        structure when the result remains in the same abstraction. For example, the addition of two
+        :class:`~decent_bench.costs.QuadraticCost` objects benefits from returning a new
+        :class:`~decent_bench.costs.QuadraticCost` instead of a :class:`~decent_bench.costs.SumCost` as this
+        preserves the closed form proximal solution and only requires one evaluation instead of two when calling
+        :meth:`function`, :meth:`gradient`, and :meth:`hessian`.
+
+        Raises:
+            ValueError: If the domain shapes do not match.
+
         """
+        if self.shape != other.shape:
+            raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
+        from decent_bench.costs._base._sum_cost import SumCost  # noqa: PLC0415
+
+        return SumCost([self, other])
 
     def __mul__(self, other: float) -> Cost:
         """
