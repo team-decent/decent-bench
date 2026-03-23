@@ -285,9 +285,9 @@ class AgentHistory:
     """
     Ordered history of an agent's optimization variable x, indexed by algorithm iteration.
 
-    Snapshots are stored sparsely — only iterations at which :meth:`Agent.snapshot` was called
+    Snapshots are stored sparsely — only iterations at which ``Agent._snapshot`` was called
     are recorded. Lookups for iterations between snapshots fall back to the nearest preceding
-    snapshot, matching the behaviour of :meth:`Agent.snapshot` with a ``state_snapshot_period > 1``.
+    snapshot.
 
     Internally, snapshots are kept in a dict for O(1) exact lookup and a parallel sorted list
     for O(log n) predecessor search via :mod:`bisect`.
