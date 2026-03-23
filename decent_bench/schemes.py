@@ -11,6 +11,8 @@ from decent_bench.utils.array import Array
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
 
+rng = np.random.default_rng()  # replace with iop tool?
+
 
 class AgentActivationScheme(ABC):
     """Scheme defining how agents go active/inactive over the course of the algorithm execution."""
@@ -41,6 +43,68 @@ class UniformActivationRate(AgentActivationScheme):
 
     def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
         return random.random() < self.activation_probability
+
+
+class MarkovChainActivation(AgentActivationScheme):
+    """
+    Scheme modeling activation with a 2-state Markov chain.
+
+    The scheme models activation with a 2-state (active and inactive) Markov chain. The agent transitions
+    between the two states with the given probabilities.
+
+    Args:
+        inactive_to_active: transition probability from inactive to active
+        active_to_inactive: transition probability from active to inactive
+
+    Raises:
+        ValueError: if `inactive_to_active` or `active_to_inactive` are not in :math:`[0, 1]`
+
+    """
+
+    def __init__(self, inactive_to_active: float = 0.5, active_to_inactive: float = 0.5):
+        if (inactive_to_active < 0 or inactive_to_active > 1) or (active_to_inactive < 0 or active_to_inactive > 1):
+            raise ValueError("Transition probabilities must be in [0, 1]")
+        self.inactive_to_active = inactive_to_active
+        self.active_to_inactive = active_to_inactive
+        self._states = np.array([0, 1])  # inactive = 0, active = 1
+        self._P = np.array([
+            [1 - inactive_to_active, inactive_to_active],
+            [active_to_inactive, 1 - active_to_inactive],
+        ])  # transition matrix
+        self._current_state = rng.choice(self._states, p=[0, 1])
+
+    def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
+        self._current_state = rng.choice(self._states, p=self._P[self._current_state])  # evolve the Markov chain
+
+        return bool(self._current_state)
+
+
+class PoissonActivation(AgentActivationScheme):
+    """
+    Scheme modeling activation at random intervals determined by a Poisson distribution.
+
+    The agent activates at random intervals of length sampled from a Poisson distribution of given mean.
+
+    Args:
+        mean_interval: mean interval of inactivity
+
+    Raises:
+        ValueError: if `mean_interval` is negative
+
+    """
+
+    def __init__(self, mean_interval: float = 1.0):
+        if mean_interval < 0:
+            raise ValueError("`mean_interval` must be non-negative")
+        self.mean_interval = mean_interval
+        self._countdown = int(rng.poisson(self.mean_interval))
+
+    def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
+        if self._countdown == 0:
+            self._countdown = int(rng.poisson(self.mean_interval))
+            return True
+        self._countdown -= 1
+        return False
 
 
 class ClientSelectionScheme(ABC):
@@ -119,6 +183,58 @@ class Quantization(CompressionScheme):
         return iop.to_array_like(res, msg)
 
 
+class TopK(CompressionScheme):
+    """
+    Top-k compression which transmits only the k elements with largest magnitude.
+
+    Raises:
+        ValueError: if ``k <= 0``
+
+    Note:
+        If the message has fewer than ``k`` elements, no compression is applied.
+
+    """
+
+    def __init__(self, k: int):
+        if k <= 0:
+            raise ValueError(f"`k` must be a positive integer, got {k}")
+        self.k = k
+
+    def compress(self, msg: Array) -> Array:  # noqa: D102
+        msg_np = np.copy(iop.to_numpy(msg))
+        k = min(self.k, msg_np.size)
+        idx = np.argpartition(np.abs(msg_np), -k, axis=None)[-k:]
+        mask = np.isin(np.arange(msg_np.size), idx).reshape(msg_np.shape)
+        msg_np[~mask] = 0
+        return iop.to_array_like(msg_np, msg)
+
+
+class RandK(CompressionScheme):
+    """
+    Rand-k compression which transmits only k randomly selected elements.
+
+    Raises:
+        ValueError: if ``k <= 0``
+
+    Note:
+        If the message has fewer than ``k`` elements, no compression is applied.
+
+    """
+
+    def __init__(self, k: int):
+        if k <= 0:
+            raise ValueError("`k` must be a positive integer")
+        self.k = k
+
+    def compress(self, msg: Array) -> Array:  # noqa: D102
+        msg_np = np.copy(iop.to_numpy(msg))
+        k = min(self.k, msg_np.size)
+        idx = rng.choice(msg_np.size, size=k, replace=False)
+        mask = np.isin(np.arange(msg_np.size), idx).reshape(msg_np.shape)
+        msg_np[~mask] = 0
+        return iop.to_array_like(msg_np, msg)
+
+
 class DropScheme(ABC):
     """Scheme defining how message drops occur over the network."""
 
@@ -146,6 +262,46 @@ class UniformDropRate(DropScheme):
         return random.random() < self.drop_rate
 
 
+class GilbertElliott(DropScheme):
+    """
+    Drop scheme based on the Gilbert-Elliott model [r14]_.
+
+    The Gilbert-Elliott model is characterized by a Markov chain with two states (good and bad), which
+    can stay the same or transition into each other. In the bad state message drops occur with probability
+    `drop_rate`, while in the good state no message drops occur.
+
+    Args:
+        drop_rate: message drop rate while in the bad state
+        bad_to_good: transition probability from bad to good state
+        good_to_bad: transition probability from good to bad state
+
+    Raises:
+        ValueError: if `drop_rate`, `bad_to_good` or `good_to_bad` are not in :math:`[0, 1]`
+
+    .. [r14] G. Hasslinger and O. Hohlfeld, "The Gilbert-Elliott Model for Packet Loss in Real Time Services
+            on the Internet," in 14th GI/ITG Conference - Measurement, Modelling and Evalutation of Computer
+            and Communication Systems, 2008, pp. 1-15.
+
+    """
+
+    def __init__(self, drop_rate: float, bad_to_good: float = 0.5, good_to_bad: float = 0.5):
+        if drop_rate < 0 or drop_rate > 1:
+            raise ValueError("Drop rate must be in [0, 1]")
+        if (bad_to_good < 0 or bad_to_good > 1) or (good_to_bad < 0 or good_to_bad > 1):
+            raise ValueError("Transition probabilities `bad_to_good` and `good_to_bad` must be in [0, 1]")
+        self.drop_rate = drop_rate
+        self.bad_to_good = bad_to_good
+        self.good_to_bad = good_to_bad
+        self._states = np.array([0, 1])  # good = 0, bad = 1
+        self._P = np.array([[1 - good_to_bad, good_to_bad], [bad_to_good, 1 - bad_to_good]])  # transition matrix
+        self._current_state = rng.choice(self._states)  # initialize uniformly at random
+
+    def should_drop(self) -> bool:  # noqa: D102
+        self._current_state = rng.choice(self._states, p=self._P[self._current_state])  # evolve the Markov chain
+
+        return rng.random() < self.drop_rate if self._current_state else False
+
+
 class NoiseScheme(ABC):
     """Scheme defining how noise impacts messages."""
 
@@ -164,11 +320,11 @@ class NoNoise(NoiseScheme):
 class GaussianNoise(NoiseScheme):
     """Scheme that applies Gaussian noise - that is, noise following a normal distribution."""
 
-    def __init__(self, mean: float, sd: float):
-        if sd < 0:
-            raise ValueError("Standard deviation (sd) must be non-negative for Gaussian noise.")
+    def __init__(self, mean: float, std: float):
+        if std < 0:
+            raise ValueError("Standard deviation (std) must be non-negative for Gaussian noise.")
         self.mean = mean
-        self.sd = sd
+        self.std = std
 
     def make_noise(self, msg: Array) -> Array:  # noqa: D102
-        return msg + iop.randn_like(msg, mean=self.mean, std=self.sd)
+        return msg + iop.randn_like(msg, mean=self.mean, std=self.std)

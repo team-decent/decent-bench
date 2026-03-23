@@ -8,6 +8,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
 from decent_bench.costs._empirical_risk._empirical_risk_cost import EmpiricalRiskCost
+from decent_bench.utils._tags import tags
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import (
     Dataset,
@@ -45,6 +46,7 @@ class _IndexDataset:
         return cast("tuple[torch.Tensor, torch.Tensor, int]", (*self.dataset[idx], idx))
 
 
+@tags("regression", "classification", "empirical-risk")
 class PyTorchCost(EmpiricalRiskCost):
     """
     Cost function wrapper for PyTorch neural networks that integrates with the decentralized optimization framework.
