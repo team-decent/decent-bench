@@ -67,7 +67,7 @@ def display_tables(
             LOGGER.info(
                 f"Empirical-risk cost functions are in use. Compute counters increment by the number of samples "
                 f"processed in each method call, which can lead to large raw counts. Applying scaling factor of "
-                f"1/{scale_compute} to {scale_metrics_in_use} metrics for display."
+                f"'scale_compute={scale_compute}' to {scale_metrics_in_use} metrics for display."
             )
 
     table_results = metrics_result.table_results

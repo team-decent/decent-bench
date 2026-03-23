@@ -132,14 +132,25 @@ class Agent:
             ValueError: if initialized x has incorrect shape
 
         """
+        self._resume_x = None
+        self._x_history = AgentHistory()
+        self._auxiliary_variables = {}
+        self._received_messages = {}
+        self._n_x_updates = 0
+        self._n_sent_messages = 0
+        self._n_received_messages = 0
+        self._n_sent_messages_dropped = 0
+        self._n_function_calls = 0
+        self._n_gradient_calls = 0
+        self._n_hessian_calls = 0
+        self._n_proximal_calls = 0
+
         if x is not None:
             if iop.shape(x) != self.cost.shape:
                 raise ValueError(f"Initialized x has shape {iop.shape(x)}, expected {self.cost.shape}")
-            self._x_history = AgentHistory()
             self._x_history[0] = iop.copy(x)
             self._current_x = iop.copy(x)
-            self._n_x_updates = 0
-        if aux_vars:
+        if aux_vars is not None:
             self._auxiliary_variables = {k: iop.copy(v) for k, v in aux_vars.items()}
 
     def _snapshot(self, iteration: int, force: bool = False) -> None:
@@ -194,7 +205,7 @@ class Agent:
 
         Raises:
             RuntimeError: if the resume state has not been configured for this agent
-                (i.e. if :meth:`store_resume_state` has not been called for this agent)
+                (i.e. if :meth:`_store_resume_state` has not been called for this agent)
 
         """
         if self._resume_x is None:

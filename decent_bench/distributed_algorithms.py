@@ -98,7 +98,7 @@ class Algorithm[NetworkT: Network](ABC):
         Clean up the algorithm state by clearing auxiliary variables from agents.
 
         This method is used to free up memory used by auxiliary variables that are not needed after training.
-        Can be overriden to control what gets cleaned up.
+        Can be overridden to control what gets cleaned up.
 
         Note:
             Override :meth:`~decent_bench.distributed_algorithms.Algorithm._cleanup_agents` to control which
@@ -148,7 +148,8 @@ class Algorithm[NetworkT: Network](ABC):
 
         """
         for agent in network.agents():
-            agent._load_resume_state(iteration)  # noqa: SLF001
+            if agent._resume_x is not None:  # noqa: SLF001
+                agent._load_resume_state(iteration)  # noqa: SLF001
 
     @final
     def run(
@@ -178,10 +179,9 @@ class Algorithm[NetworkT: Network](ABC):
             as needed.
 
         Note:
-            The algorithm saves the agents' states every :attr:`~decent_bench.agents.Agent.state_snapshot_period`,
-            by calling :meth:~decent_bench.agents.Agent.snapshot for each agent. Agent states are also saved at the end
-            of algorithm execution but before finalization, so that resumed benchmarks can properly resume using the
-            training states and not final states.
+            The algorithm saves the agents' states every :attr:`~decent_bench.agents.Agent.state_snapshot_period`.
+            Agent states are also saved at the end of algorithm execution but before finalization, so that resumed
+            benchmarks can properly resume using the training states and not final states.
 
         """
         if start_iteration < 0 or start_iteration > self.iterations:

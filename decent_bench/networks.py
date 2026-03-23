@@ -37,10 +37,11 @@ class Network(ABC):  # noqa: B024
     Args:
         graph: underlying NetworkX graph defining the network topology.
             Nodes must be of type :class:`~decent_bench.agents.Agent`.
-        drop_unread_messages: whether to drop messages that are not received by the next iteration (i.e. messages that
-            are "in-flight" for more than one iteration). If ``False``, messages will stay in-flight until they are
-            received or replaced by a newer message from the same sender to the same receiver. After being received or
-            replaced, the message is destroyed.
+        drop_unread_messages: whether to clear stored messages at the end of each iteration. If ``True``,
+            messages delivered to a receiver during iteration *t* are dropped when :meth:`Network.step` advances to
+            iteration *t + 1*, so agents only see messages from the most recent iteration. If ``False``, messages
+            persist on the receiver until they are overwritten by a newer message from the same sender to the same
+            receiver.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
             :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
             mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
@@ -232,8 +233,7 @@ class Network(ABC):  # noqa: B024
         elif isinstance(receiver, Agent):
             if receiver not in self.connected_agents(sender):
                 raise ValueError("Sender and receiver must be connected in the network")
-            self._send_one(sender=sender, receiver=receiver, msg=msg)
-            return
+            receiver = [receiver]
         else:
             # Its a sequence of agents, check that all are connected to sender before sending any messages
             neighbors = set(self.connected_agents(sender))
@@ -251,13 +251,13 @@ class Network(ABC):  # noqa: B024
             self._send_one(sender=sender, receiver=r, msg=msg)
 
     def step(self, iteration: int) -> None:
-        """Set the iteration counter for the network and clear all recieved messages from agents."""
+        """Set the iteration counter for the network and clear all received messages from agents."""
         self._iteration = iteration
 
         if not self._drop_unread_messages:
             return
 
-        for agent in self.agents():
+        for agent in self._agents_cache:
             agent._received_messages.clear()  # noqa: SLF001
 
 
@@ -274,10 +274,11 @@ class P2PNetwork(Network):
             :class:`~decent_bench.agents.Agent` nodes. The order of agents in the list should correspond to the order
             of nodes in `graph.nodes()`. This argument is ignored if `graph` is a graph with
             :class:`~decent_bench.agents.Agent` nodes.
-        drop_unread_messages: whether to drop messages that are not received by the next iteration (i.e. messages that
-            are "in-flight" for more than one iteration). If ``False``, messages will stay in-flight until they are
-            received or replaced by a newer message from the same sender to the same receiver. After being received
-            or replaced, the message is destroyed.
+        drop_unread_messages: whether to clear stored messages at the end of each iteration. If ``True``,
+            messages delivered to a receiver during iteration *t* are dropped when :meth:`Network.step` advances to
+            iteration *t + 1*, so agents only see messages from the most recent iteration. If ``False``, messages
+            persist on the receiver until they are overwritten by a newer message from the same sender to the same
+            receiver.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
             :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
             mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
@@ -417,10 +418,11 @@ class FedNetwork(Network):
         clients: list of client agents in the network.
         server: server agent in the network. If ``None``, a default server with zero cost and always active scheme will
             be created.
-        drop_unread_messages: whether to drop messages that are not received by the next iteration (i.e. messages that
-            are "in-flight" for more than one iteration). If ``False``, messages will stay in-flight until they are
-            received or replaced by a newer message from the same sender to the same receiver. After being received
-            or replaced, the message is destroyed.
+        drop_unread_messages: whether to clear stored messages at the end of each iteration. If ``True``,
+            messages delivered to a receiver during iteration *t* are dropped when :meth:`Network.step` advances to
+            iteration *t + 1*, so agents only see messages from the most recent iteration. If ``False``, messages
+            persist on the receiver until they are overwritten by a newer message from the same sender to the same
+            receiver.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
             :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
             mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
