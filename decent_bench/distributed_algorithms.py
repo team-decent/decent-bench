@@ -116,7 +116,7 @@ class Algorithm[NetworkT: Network](ABC):
     def _snapshot_agents(self, network: NetworkT, iteration: int) -> None:
         for i in network.agents():
             # Forcefully save a snapshot on the final iteration
-            i.snapshot(iteration=iteration, force=iteration == self.iterations)
+            i._snapshot(iteration=iteration, force=iteration == self.iterations)  # noqa: SLF001
 
     @final
     def _store_pre_finalization_states(self, network: NetworkT) -> None:
@@ -132,7 +132,7 @@ class Algorithm[NetworkT: Network](ABC):
 
         """
         for agent in network.agents():
-            agent.store_resume_state(agent.x)
+            agent._store_resume_state(agent.x)  # noqa: SLF001
 
     @final
     def _load_pre_finalization_states(self, network: NetworkT, iteration: int) -> None:
@@ -148,7 +148,7 @@ class Algorithm[NetworkT: Network](ABC):
 
         """
         for agent in network.agents():
-            agent.load_resume_state(iteration)
+            agent._load_resume_state(iteration)  # noqa: SLF001
 
     @final
     def run(
@@ -161,7 +161,7 @@ class Algorithm[NetworkT: Network](ABC):
         Run the algorithm.
 
         This method first calls :meth:`initialize`, then :meth:`step` for the specified number of iterations
-        and finally :meth:`finalize`. Optionally call :meth:`cleanup` at the end to clear auxiliary variables
+        and finally :meth:`finalize`. Optionally call :meth:`cleanup` after :meth:`run` to clear auxiliary variables
         and free up memory.
 
         Args:
@@ -249,7 +249,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         self,
         clients: Sequence["Agent"],
         iteration: int,
-        selection_scheme: (ClientSelectionScheme | object | None) = _DEFAULT_SELECTION_SCHEME,
+        selection_scheme: ClientSelectionScheme | object | None = _DEFAULT_SELECTION_SCHEME,
     ) -> list["Agent"]:
         """
         Select participating clients from an eligible pool.

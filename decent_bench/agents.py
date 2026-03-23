@@ -105,25 +105,6 @@ class Agent:
         """Number of iterations between snapshots of the agent's state."""
         return self._state_snapshot_period
 
-    def snapshot(self, iteration: int, force: bool = False) -> None:
-        """
-        Snapshot the agent's state.
-
-        This saves the current optimization variable x every :attr:`state_snapshot_period` iterations.
-
-        Warning:
-            This method is called automatically by algorithms during execution. It should not be called manually during
-            an algorithm run, as this may lead to unexpected behaviour of the agent's state history and metrics.
-
-        Args:
-            iteration: Algorithm iteration
-            force: If true, skip :attr:`state_snapshot_period` and forcefully snapshot the agent state.
-                Useful when saving the agents final state.
-
-        """
-        if (force or iteration % self.state_snapshot_period == 0) and self._current_x is not None:
-            self._x_history[iteration] = iop.copy(self._current_x)
-
     @property
     def messages(self) -> Mapping[Agent, Array]:
         """Messages received by neighbors."""
@@ -161,7 +142,26 @@ class Agent:
         if aux_vars:
             self._auxiliary_variables = {k: iop.copy(v) for k, v in aux_vars.items()}
 
-    def store_resume_state(self, x: Array) -> None:
+    def _snapshot(self, iteration: int, force: bool = False) -> None:
+        """
+        Snapshot the agent's state.
+
+        This saves the current optimization variable x every :attr:`state_snapshot_period` iterations.
+
+        Warning:
+            This method is called automatically by algorithms during execution. It should not be called manually during
+            algorithm execution, as this may lead to unexpected behaviour of the agent's state history and metrics.
+
+        Args:
+            iteration: Algorithm iteration
+            force: If true, skip :attr:`state_snapshot_period` and forcefully snapshot the agent state.
+                Useful when saving the agents final state.
+
+        """
+        if (force or iteration % self.state_snapshot_period == 0) and self._current_x is not None:
+            self._x_history[iteration] = iop.copy(self._current_x)
+
+    def _store_resume_state(self, x: Array) -> None:
         """
         Save the agent's state for resuming an algorithm run.
 
@@ -181,7 +181,7 @@ class Agent:
             raise RuntimeError("Resume state has already been set for this agent")
         self._resume_x = iop.copy(x)
 
-    def load_resume_state(self, iteration: int) -> None:
+    def _load_resume_state(self, iteration: int) -> None:
         """
         Set the agent's current state to the resume state.
 

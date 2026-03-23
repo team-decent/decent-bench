@@ -117,7 +117,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
 
     # Test += operator
     agent.x += 1.0
-    agent.snapshot(1)
+    agent._snapshot(1)
     assert_state(
         np.array([1.0, 1.0, 1.0]),
         [
@@ -128,7 +128,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
 
     # Test *= operator
     agent.x *= 2.0
-    agent.snapshot(2)
+    agent._snapshot(2)
     assert_state(
         np.array([2.0, 2.0, 2.0]),
         [
@@ -140,7 +140,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
 
     # Test **= operator
     agent.x **= 2.0
-    agent.snapshot(3)
+    agent._snapshot(3)
     assert_state(
         np.array([4.0, 4.0, 4.0]),
         [
@@ -153,7 +153,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
 
     # Test /= operator
     agent.x /= 2.0
-    agent.snapshot(4)
+    agent._snapshot(4)
     assert_state(
         np.array([2.0, 2.0, 2.0]),
         [
@@ -167,7 +167,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
 
     # Test -= operator
     agent.x -= 1.0
-    agent.snapshot(5)
+    agent._snapshot(5)
     assert_state(
         np.array([1.0, 1.0, 1.0]),
         [
@@ -263,7 +263,7 @@ def test_agent_state_snapshot_period(
     n_updates = expected_history_length * state_snapshot_period
     for k in range(n_updates):
         agent.x += 1.0
-        agent.snapshot(k + 1)
+        agent._snapshot(k + 1)
 
     assert_state(
         np.array([n_updates, n_updates, n_updates]),

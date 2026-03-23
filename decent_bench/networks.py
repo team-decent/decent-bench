@@ -58,7 +58,7 @@ class Network(ABC):  # noqa: B024
         graph: AgentGraph,
         drop_unread_messages: bool = True,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
-        message_compression: (CompressionScheme | dict[Agent, CompressionScheme] | None) = None,
+        message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
         message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
     ) -> None:
         # check that graph is connected and not a multi-graph
@@ -191,7 +191,7 @@ class Network(ABC):  # noqa: B024
         :class:`~decent_bench.schemes.NoiseScheme`,
         and :class:`~decent_bench.schemes.DropScheme`.
 
-        The message will be emmidiately available to the receiver if it is active in the current iteration.
+        The message will be immediately available to the receiver if it is active in the current iteration.
         """
         sender._n_sent_messages += 1  # noqa: SLF001
         if self._message_drop[sender].should_drop():
@@ -440,7 +440,7 @@ class FedNetwork(Network):
         drop_unread_messages: bool = True,
         *,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
-        message_compression: (CompressionScheme | dict[Agent, CompressionScheme] | None) = None,
+        message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
         message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
     ) -> None:
         if len(clients) == 0:
