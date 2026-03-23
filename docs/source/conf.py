@@ -73,7 +73,6 @@ intersphinx_mapping = {
 }
 
 
-exclude_patterns = ["api/decent_bench.utils.tags.rst"]
 
 
 # A way to link numpy.typing.ArrayLike and NDArray correctly

@@ -9,7 +9,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
-from decent_bench.utils.tags import tags
+from decent_bench.utils._tags import tags
 from decent_bench.utils.types import ClientWeights
 
 if TYPE_CHECKING:

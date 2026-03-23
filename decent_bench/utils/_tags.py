@@ -19,7 +19,7 @@ def tags(*tags: str) -> Callable[[type], type]:
     Example:
         .. code-block:: python
 
-            from decent_bench.utils.tags import tags
+            from decent_bench.utils._tags import tags
 
             @tags("gradient-based", "peer-to-peer")
             class DGD(P2PAlgorithm):
