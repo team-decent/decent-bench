@@ -37,11 +37,11 @@ class Network(ABC):  # noqa: B024
     Args:
         graph: underlying NetworkX graph defining the network topology.
             Nodes must be of type :class:`~decent_bench.agents.Agent`.
-        drop_unread_messages: whether to clear stored messages at the end of each iteration. If ``True``,
-            messages delivered to a receiver during iteration *t* are dropped when :meth:`Network.step` advances to
-            iteration *t + 1*, so agents only see messages from the most recent iteration. If ``False``, messages
+        buffer_messages: whether to keep stored messages at the end of each iteration. If ``True``, messages
             persist on the receiver until they are overwritten by a newer message from the same sender to the same
-            receiver.
+            receiver. If ``False``, messages delivered to a receiver during iteration *k* are dropped when
+            the algorithm advances to iteration *k + 1*, so agents only see messages from the most recent
+            iteration.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
             :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
             mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
@@ -57,7 +57,7 @@ class Network(ABC):  # noqa: B024
     def __init__(
         self,
         graph: AgentGraph,
-        drop_unread_messages: bool = True,
+        buffer_messages: bool = False,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
         message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
@@ -81,7 +81,7 @@ class Network(ABC):  # noqa: B024
         self._message_drop = self._initialize_message_schemes(message_drop, "drop", DropScheme, NoDrops)
         self._active_agents_cache: dict[int, list[Agent]] = {}
         self._active_connected_agents_cache: dict[tuple[Agent, int], list[Agent]] = {}
-        self._drop_unread_messages = drop_unread_messages
+        self._buffer_messages = buffer_messages
         self._iteration = 0  # Current iteration, updated by the algorithm
 
     def _initialize_message_schemes(
@@ -179,8 +179,11 @@ class Network(ABC):  # noqa: B024
         """Agents directly connected to ``agent`` and are active at the given iteration."""
         key = (agent, iteration)
         if key not in self._active_connected_agents_cache:
-            active_agents = set(self.active_agents(iteration))
-            self._active_connected_agents_cache[key] = [a for a in self.connected_agents(agent) if a in active_agents]
+            self._active_connected_agents_cache[key] = [
+                a
+                for a in self.connected_agents(agent)
+                if a._activation.is_active(iteration)  # noqa: SLF001
+            ]
         return self._active_connected_agents_cache[key]
 
     def _send_one(self, sender: Agent, receiver: Agent, msg: Array) -> None:
@@ -202,6 +205,10 @@ class Network(ABC):  # noqa: B024
         msg = self._message_noise[sender].make_noise(msg)
         receiver._n_received_messages += 1  # noqa: SLF001
         receiver._received_messages[sender] = msg  # noqa: SLF001
+
+    def _allowed_receivers(self, sender: Agent) -> set[Agent]:
+        """Get the set of agents that the sender is allowed to send messages to (i.e. connected and active)."""
+        return set(self.active_connected_agents(sender, self._iteration))
 
     def send(
         self,
@@ -234,27 +241,20 @@ class Network(ABC):  # noqa: B024
             if receiver not in self.connected_agents(sender):
                 raise ValueError("Sender and receiver must be connected in the network")
             receiver = [receiver]
-        else:
-            # Its a sequence of agents, check that all are connected to sender before sending any messages
-            neighbors = set(self.connected_agents(sender))
-            invalid_receivers = [r for r in receiver if r not in neighbors]
-            if invalid_receivers:
-                ids = [r.id for r in invalid_receivers]
-                raise ValueError(
-                    f"Sender and receiver must be connected in the network; not connected receivers: {ids}"
-                )
 
-        currently_active_agents = set(self.active_agents(self._iteration))
+        currently_active_connected_agents = self._allowed_receivers(sender)
         for r in receiver:
-            if r not in currently_active_agents:
-                raise ValueError(f"Receiver {r} is not active in iteration {self._iteration}")
+            if r not in currently_active_connected_agents:
+                raise ValueError(
+                    f"Receiver {r} is not active or not connected to {sender} in iteration {self._iteration}"
+                )
             self._send_one(sender=sender, receiver=r, msg=msg)
 
-    def step(self, iteration: int) -> None:
+    def _step(self, iteration: int) -> None:
         """Set the iteration counter for the network and clear all received messages from agents."""
         self._iteration = iteration
 
-        if not self._drop_unread_messages:
+        if self._buffer_messages:
             return
 
         for agent in self._agents_cache:
@@ -271,17 +271,22 @@ class P2PNetwork(Network):
             :class:`~decent_bench.agents.Agent` nodes, in which case the `agents` argument is optional and will be
             ignored if provided.
         agents: list of agents corresponding to the nodes in `graph` if `graph` is not a graph with
-            :class:`~decent_bench.agents.Agent` nodes. The order of agents in the list should correspond to the order
-            of nodes in `graph.nodes()`. This argument is ignored if `graph` is a graph with
-            :class:`~decent_bench.agents.Agent` nodes.
-        drop_unread_messages: whether to clear stored messages at the end of each iteration. If ``True``,
-            messages delivered to a receiver during iteration *t* are dropped when :meth:`Network.step` advances to
-            iteration *t + 1*, so agents only see messages from the most recent iteration. If ``False``, messages
+            :class:`~decent_bench.agents.Agent` nodes. The agents in the list are assigned in order to each node of the
+            graph. This argument is ignored if `graph` is a graph with :class:`~decent_bench.agents.Agent` nodes.
+        buffer_messages: whether to keep stored messages at the end of each iteration. If ``True``, messages
             persist on the receiver until they are overwritten by a newer message from the same sender to the same
-            receiver.
+            receiver. If ``False``, messages delivered to a receiver during iteration *k* are dropped when
+            the algorithm advances to iteration *k + 1*, so agents only see messages from the most recent
+            iteration.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
             :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
             mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
+        message_compression: compression scheme(s) to apply to messages sent by agents in the network. Can be a single
+            :class:`~decent_bench.schemes.CompressionScheme` instance to apply the same scheme to all agents, a
+            dictionary mapping each agent to its scheme, or ``None`` to apply no compression to any agent.
+        message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
+            :class:`~decent_bench.schemes.DropScheme` instance to apply the same scheme to all agents, a dictionary
+            mapping each agent to its scheme, or ``None`` to apply no message drop to any agent.
 
     """
 
@@ -290,7 +295,7 @@ class P2PNetwork(Network):
         graph: AnyGraph,
         agents: Sequence[Agent] | None = None,
         *,
-        drop_unread_messages: bool = True,
+        buffer_messages: bool = True,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
         message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
@@ -298,7 +303,7 @@ class P2PNetwork(Network):
         if all(isinstance(node, Agent) for node in graph.nodes()):  # pass directly to super().__init__
             super().__init__(
                 graph=graph,
-                drop_unread_messages=drop_unread_messages,
+                buffer_messages=buffer_messages,
                 message_noise=message_noise,
                 message_compression=message_compression,
                 message_drop=message_drop,
@@ -312,7 +317,7 @@ class P2PNetwork(Network):
             graph = nx.relabel_nodes(graph, agent_node_map)
             super().__init__(
                 graph=graph,
-                drop_unread_messages=drop_unread_messages,
+                buffer_messages=buffer_messages,
                 message_noise=message_noise,
                 message_compression=message_compression,
                 message_drop=message_drop,
@@ -418,11 +423,11 @@ class FedNetwork(Network):
         clients: list of client agents in the network.
         server: server agent in the network. If ``None``, a default server with zero cost and always active scheme will
             be created.
-        drop_unread_messages: whether to clear stored messages at the end of each iteration. If ``True``,
-            messages delivered to a receiver during iteration *t* are dropped when :meth:`Network.step` advances to
-            iteration *t + 1*, so agents only see messages from the most recent iteration. If ``False``, messages
+        buffer_messages: whether to keep stored messages at the end of each iteration. If ``True``, messages
             persist on the receiver until they are overwritten by a newer message from the same sender to the same
-            receiver.
+            receiver. If ``False``, messages delivered to a receiver during iteration *k* are dropped when
+            the algorithm advances to iteration *k + 1*, so agents only see messages from the most recent
+            iteration.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
             :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
             mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
@@ -439,7 +444,7 @@ class FedNetwork(Network):
         self,
         clients: Sequence[Agent],
         server: Agent | None = None,
-        drop_unread_messages: bool = True,
+        buffer_messages: bool = True,
         *,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
@@ -468,7 +473,7 @@ class FedNetwork(Network):
 
         super().__init__(
             graph=graph,
-            drop_unread_messages=drop_unread_messages,
+            buffer_messages=buffer_messages,
             message_noise=message_noise,
             message_compression=message_compression,
             message_drop=message_drop,
@@ -505,6 +510,12 @@ class FedNetwork(Network):
         """Alias for :meth:`active_agents`."""
         return self.active_agents(iteration)
 
+    def _allowed_receivers(self, sender: Agent) -> set[Agent]:
+        """Get the set of agents that the sender is allowed to send messages to (i.e. connected and active)."""
+        if sender is not self.server():
+            return {self.server()} if self.server()._activation.is_active(self._iteration) else set()  # noqa: SLF001
+        return set(self.active_connected_agents(sender, self._iteration))
+
     def send(
         self,
         sender: Agent,
@@ -531,6 +542,9 @@ class FedNetwork(Network):
             return
 
         if receiver is None:
+            if sender is not self.server():
+                super().send(sender=sender, receiver=self.server(), msg=msg)
+                return
             super().send(sender=sender, receiver=receiver, msg=msg)
             return
 

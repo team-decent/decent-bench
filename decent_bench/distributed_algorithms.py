@@ -196,7 +196,7 @@ class Algorithm[NetworkT: Network](ABC):
             self._load_pre_finalization_states(network, start_iteration)
 
         for k in range(start_iteration, self.iterations):
-            network.step(k)
+            network._step(k)  # noqa: SLF001
             self.step(network, k)
             # Already completed the iteration, so snapshot with k+1 to indicate the state after iteration k
             self._snapshot_agents(network, k + 1)
@@ -517,6 +517,8 @@ class ATC(P2PAlgorithm):
 
     Alias: :class:`AdaptThenCombine`
 
+    .. footbibliography::
+
     """
 
     iterations: int = 100
@@ -710,6 +712,8 @@ class AugDGM(P2PAlgorithm):
 
     Alias: :class:`ATCDIGing`
 
+    .. footbibliography::
+
     """
 
     iterations: int = 100
@@ -791,6 +795,8 @@ class WangElia(P2PAlgorithm):
     The matrix :math:`\mathbf{K}` is chosen as :math:`0.5 (\mathbf{I} - \mathbf{W})`,
     where :math:`\mathbf{W}` is the Metropolis weight matrix.
 
+    .. footbibliography::
+
     """
 
     iterations: int = 100
@@ -864,6 +870,8 @@ class EXTRA(P2PAlgorithm):
     j is a neighbor of i or i itself,
     :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j,
     and :math:`\tilde{\mathbf{W}} = (\mathbf{I} + \mathbf{W}) / 2`.
+
+    .. footbibliography::
 
     """
 
@@ -951,6 +959,8 @@ class ATCTracking(P2PAlgorithm):
 
     Aliases: :class:`SONATA`, :class:`NEXT`, :class:`ATCT`
 
+    .. footbibliography::
+
     """
 
     iterations: int = 100
@@ -1036,6 +1046,8 @@ class NIDS(P2PAlgorithm):
     with :math:`\mathbf{W}` are the Metropolis weights.
 
     This is a simplified version of the algorithm proposed in :footcite:p:`Alg_NIDS` (see eq. (9) therein).
+
+    .. footbibliography::
 
     """
 
@@ -1196,6 +1208,8 @@ class ATG(P2PAlgorithm):
 
     Aliases: :class:`ADMMTracking`, :class:`ADMMTrackingGradient`
 
+    .. footbibliography::
+
     """
 
     iterations: int = 100
@@ -1295,6 +1309,8 @@ class DLM(P2PAlgorithm):
     j is a neighbor of i. The parameters are: the penalty :math:`\rho > 0` and the step-size :math:`\mu > 0`.
 
     Alias: :class:`DecentralizedLinearizedADMM`
+
+    .. footbibliography::
 
     """
 
