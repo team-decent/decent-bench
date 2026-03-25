@@ -3,7 +3,7 @@
 from collections.abc import Callable
 
 
-def tags(*tags: str) -> Callable[[type], type]:
+def tags[T: type](*tags: str) -> Callable[[T], T]:
     """
     Decorate any class with tags.
 
@@ -27,7 +27,7 @@ def tags(*tags: str) -> Callable[[type], type]:
 
     """
 
-    def decorator(cls: type) -> type:
+    def decorator(cls: T) -> T:
         cls._tags = tuple(tags)  # type: ignore[attr-defined]
         return cls
 

@@ -79,8 +79,8 @@ class Network(ABC):  # noqa: B024
             message_compression, "compression", CompressionScheme, NoCompression
         )
         self._message_drop = self._initialize_message_schemes(message_drop, "drop", DropScheme, NoDrops)
-        self._active_agents_cache: dict[int, list[Agent]] = {}
-        self._active_connected_agents_cache: dict[tuple[Agent, int], list[Agent]] = {}
+        self._active_agents_cache: list[Agent] | None = None
+        self._active_connected_agents_cache: dict[Agent, list[Agent]] = {}
         self._buffer_messages = buffer_messages
         self._iteration = 0  # Current iteration, updated by the algorithm
 
@@ -139,7 +139,16 @@ class Network(ABC):  # noqa: B024
         return self.graph
 
     def agents(self) -> list[Agent]:
-        """Get all agents in the network."""
+        """
+        Get all agents in the network.
+
+        Warning:
+            This includes agents that may be inactive in the current iteration.
+            It is generally recommended to use :meth:`active_agents` instead, which returns only active agents,
+            unless you have a specific reason to access inactive agents or need to access all agents regardless
+            of activation status.
+
+        """
         return self._agents_cache
 
     @cached_property
@@ -157,34 +166,46 @@ class Network(ABC):  # noqa: B024
         """Edges of the network as (agent, agent) tuples."""
         return list(self.graph.edges())
 
-    def active_agents(self, iteration: int) -> list[Agent]:
+    def active_agents(self) -> list[Agent]:
         """
-        Get all active agents.
+        Get all *active* agents.
 
         Whether an :class:`~decent_bench.agents.Agent` is active or not at a given time is defined by its
         :class:`~decent_bench.schemes.AgentActivationScheme`.
         """
-        if iteration not in self._active_agents_cache:
+        if self._active_agents_cache is None:
             # Cache the active agents for each iterations in case the same iteration is queried multiple times
             # so that we preserve the activated agents for the iteration even if the underlying activation schemes
             # are non-deterministic.
-            self._active_agents_cache[iteration] = [a for a in self.agents() if a._activation.is_active(iteration)]  # noqa: SLF001
-        return self._active_agents_cache[iteration]
+            self._active_agents_cache = [
+                a
+                for a in self.agents()
+                if a._activation.is_active(self._iteration)  # noqa: SLF001
+            ]
+        return self._active_agents_cache
 
     def connected_agents(self, agent: Agent) -> list[Agent]:
-        """Agents directly connected to ``agent`` in the underlying graph."""
+        """
+        Agents directly connected to ``agent`` in the underlying graph.
+
+        Warning:
+            This includes agents that may be inactive in the current iteration.
+            It is generally recommended to use :meth:`active_connected_agents` instead, which returns only active
+            agents, unless you have a specific reason to access inactive agents or need to access all connected agents
+            regardless of activation status.
+
+        """
         return list(self.graph.neighbors(agent))
 
-    def active_connected_agents(self, agent: Agent, iteration: int) -> list[Agent]:
+    def active_connected_agents(self, agent: Agent) -> list[Agent]:
         """Agents directly connected to ``agent`` and are active at the given iteration."""
-        key = (agent, iteration)
-        if key not in self._active_connected_agents_cache:
-            self._active_connected_agents_cache[key] = [
+        if agent not in self._active_connected_agents_cache:
+            self._active_connected_agents_cache[agent] = [
                 a
                 for a in self.connected_agents(agent)
-                if a._activation.is_active(iteration)  # noqa: SLF001
+                if a._activation.is_active(self._iteration)  # noqa: SLF001
             ]
-        return self._active_connected_agents_cache[key]
+        return self._active_connected_agents_cache[agent]
 
     def _send_one(self, sender: Agent, receiver: Agent, msg: Array) -> None:
         """
@@ -208,7 +229,7 @@ class Network(ABC):  # noqa: B024
 
     def _allowed_receivers(self, sender: Agent) -> set[Agent]:
         """Get the set of agents that the sender is allowed to send messages to (i.e. connected and active)."""
-        return set(self.active_connected_agents(sender, self._iteration))
+        return set(self.active_connected_agents(sender))
 
     def send(
         self,
@@ -226,7 +247,7 @@ class Network(ABC):  # noqa: B024
 
         Raises:
             ValueError: if ``msg`` is not provided, if agents are not part of the network, or if sender/receiver are not
-                connected.
+                connected and active.
 
         """
         if msg is None:
@@ -236,7 +257,7 @@ class Network(ABC):  # noqa: B024
             raise ValueError("Sender must be an agent in the network")
 
         if receiver is None:
-            receiver = self.active_connected_agents(sender, self._iteration)
+            receiver = self.active_connected_agents(sender)
         elif isinstance(receiver, Agent):
             if receiver not in self.connected_agents(sender):
                 raise ValueError("Sender and receiver must be connected in the network")
@@ -254,9 +275,14 @@ class Network(ABC):  # noqa: B024
         """Set the iteration counter for the network and clear all received messages from agents."""
         self._iteration = iteration
 
+        # Clear caches
+        self._active_agents_cache = None
+        self._active_connected_agents_cache = {}
+
         if self._buffer_messages:
             return
 
+        # Use the _agents_cache to avoid overridden agents() in subclasses like FedNetwork
         for agent in self._agents_cache:
             agent._received_messages.clear()  # noqa: SLF001
 
@@ -406,9 +432,9 @@ class P2PNetwork(Network):
         """Alias for :meth:`~decent_bench.networks.Network.connected_agents`."""
         return super().connected_agents(agent)
 
-    def active_neighbors(self, agent: Agent, iteration: int) -> list[Agent]:
+    def active_neighbors(self, agent: Agent) -> list[Agent]:
         """Alias for :meth:`~decent_bench.networks.Network.active_connected_agents`."""
-        return super().active_connected_agents(agent, iteration)
+        return super().active_connected_agents(agent)
 
     def broadcast(self, sender: Agent, msg: Array) -> None:
         """Send to all neighbors (alias for :meth:`~decent_bench.networks.Network.send` with ``receiver=None``)."""
@@ -489,7 +515,16 @@ class FedNetwork(Network):
         return self.server()
 
     def agents(self) -> list[Agent]:
-        """Get all client agents (excludes the server/coordinator)."""
+        """
+        Get all client agents (excludes the server/coordinator).
+
+        Warning:
+            This includes agents that may be inactive in the current iteration.
+            It is generally recommended to use :meth:`active_agents` instead, which returns only active agents,
+            unless you have a specific reason to access inactive agents or need to access all agents regardless
+            of activation status.
+
+        """
         return self._clients_cache
 
     @cached_property
@@ -497,24 +532,29 @@ class FedNetwork(Network):
         """Cached list of clients; assumes the underlying graph is not mutated after construction."""
         return [agent for agent in self.graph if agent is not self.server()]
 
-    def active_agents(self, iteration: int) -> list[Agent]:
-        """Get all active client agents (excludes the server/coordinator)."""
+    def active_agents(self) -> list[Agent]:
+        """
+        Get all *active* client agents (excludes the server/coordinator).
+
+        Whether an :class:`~decent_bench.agents.Agent` is active or not at a given time is defined by its
+        :class:`~decent_bench.schemes.AgentActivationScheme`.
+        """
         # Delegates to Network.active_agents(), which iterates over self.agents() (clients only for FedNetwork).
-        return super().active_agents(iteration)
+        return super().active_agents()
 
     def clients(self) -> list[Agent]:
         """Alias for :meth:`agents`."""
         return self.agents()
 
-    def active_clients(self, iteration: int) -> list[Agent]:
+    def active_clients(self) -> list[Agent]:
         """Alias for :meth:`active_agents`."""
-        return self.active_agents(iteration)
+        return self.active_agents()
 
     def _allowed_receivers(self, sender: Agent) -> set[Agent]:
         """Get the set of agents that the sender is allowed to send messages to (i.e. connected and active)."""
         if sender is not self.server():
             return {self.server()} if self.server()._activation.is_active(self._iteration) else set()  # noqa: SLF001
-        return set(self.active_connected_agents(sender, self._iteration))
+        return set(self.active_connected_agents(sender))
 
     def send(
         self,

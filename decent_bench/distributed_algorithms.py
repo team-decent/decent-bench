@@ -81,19 +81,6 @@ class Algorithm[NetworkT: Network](ABC):
 
         """
 
-    def finalize(self, network: NetworkT) -> None:  # noqa: ARG002
-        """
-        Finalize the algorithm.
-
-        Override this method if needed to perform any finalization steps after the last iteration, such as syncing
-        final models to clients in federated algorithms. By default, this does nothing.
-
-        Args:
-            network: provides the agents and topology for this algorithm.
-
-        """
-        return
-
     def cleanup(self, network: NetworkT) -> None:
         """
         Clean up the algorithm state by clearing auxiliary variables from agents.
@@ -120,39 +107,6 @@ class Algorithm[NetworkT: Network](ABC):
             i._snapshot(iteration=iteration, force=iteration == self.iterations)  # noqa: SLF001
 
     @final
-    def _store_pre_finalization_states(self, network: NetworkT) -> None:
-        """
-        Store agent states before finalization.
-
-        This method is called at the end of :meth:`run`, after all iterations are completed but before finalization.
-        This method stores agent states before finalization so that resumed benchmarks can properly resume using the
-        training states and not final states.
-
-        Args:
-            network: provides the agents and topology for this algorithm.
-
-        """
-        for agent in network.agents():
-            agent._store_resume_state(agent.x)  # noqa: SLF001
-
-    @final
-    def _load_pre_finalization_states(self, network: NetworkT, iteration: int) -> None:
-        """
-        Load agent states stored by :meth:`_store_pre_finalization_states`.
-
-        This method is called at the beginning of :meth:`run` when resuming from a checkpoint with a positive
-        ``start_iteration``.
-
-        Args:
-            network: provides the agents and topology for this algorithm.
-            iteration: algorithm iteration to load the resume state for.
-
-        """
-        for agent in network.agents():
-            if agent._resume_x is not None:  # noqa: SLF001
-                agent._load_resume_state(iteration)  # noqa: SLF001
-
-    @final
     def run(
         self,
         network: NetworkT,
@@ -162,8 +116,8 @@ class Algorithm[NetworkT: Network](ABC):
         """
         Run the algorithm.
 
-        This method first calls :meth:`initialize`, then :meth:`step` for the specified number of iterations
-        and finally :meth:`finalize`. Optionally call :meth:`cleanup` after :meth:`run` to clear auxiliary variables
+        This method first calls :meth:`initialize`, then :meth:`step` for the specified number of iterations.
+        Optionally call :meth:`cleanup` after :meth:`run` to clear auxiliary variables
         and free up memory.
 
         Args:
@@ -176,13 +130,10 @@ class Algorithm[NetworkT: Network](ABC):
             ValueError: if start_iteration is not in [0, iterations]
 
         Warning:
-            Do not override this method. Instead, override :meth:`initialize`, :meth:`step` and :meth:`finalize`
-            as needed.
+            Do not override this method. Instead, override :meth:`initialize` and :meth:`step` as needed.
 
         Note:
             The algorithm saves the agents' states every :attr:`~decent_bench.agents.Agent.state_snapshot_period`.
-            Agent states are also saved at the end of algorithm execution but before finalization, so that resumed
-            benchmarks can properly resume using the training states and not final states.
 
         """
         if start_iteration < 0 or start_iteration > self.iterations:
@@ -192,8 +143,6 @@ class Algorithm[NetworkT: Network](ABC):
 
         if start_iteration == 0:
             self.initialize(network)
-        else:
-            self._load_pre_finalization_states(network, start_iteration)
 
         for k in range(start_iteration, self.iterations):
             network._step(k)  # noqa: SLF001
@@ -202,10 +151,6 @@ class Algorithm[NetworkT: Network](ABC):
             self._snapshot_agents(network, k + 1)
             if progress_callback is not None:
                 progress_callback(k)
-
-        self._store_pre_finalization_states(network)
-        self.finalize(network)
-        self._snapshot_agents(network, self.iterations)  # snapshot final state after finalize
 
 
 class P2PAlgorithm(Algorithm[P2PNetwork]):
@@ -233,18 +178,6 @@ class FedAlgorithm(Algorithm[FedNetwork]):
 
     def _cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
         return [network.server(), *network.clients()]
-
-    def finalize(self, network: FedNetwork) -> None:
-        """
-        Finalize the algorithm and sync the final server model to clients.
-
-        This performs one last server-to-client send/receive so that clients store the final model.
-        """
-        if network.clients():
-            network.broadcast(msg=network.server().x)
-            for client in network.clients():
-                if network.server() in client.messages:
-                    client.x = iop.copy(client.messages[network.server()])
 
     def select_clients(
         self,
@@ -325,7 +258,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         network.server().x = iop.sum(iop.stack(weighted_updates, dim=0), dim=0) / total_weight
 
     def _selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
-        active_clients = network.active_clients(iteration)
+        active_clients = network.active_clients()
         if not active_clients:
             return []
         return self.select_clients(active_clients, iteration)
@@ -488,14 +421,15 @@ class DGD(P2PAlgorithm):
 
         self.W = network.weights
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
-        for i in network.active_agents(iteration):
+    def step(self, network: P2PNetwork, _: int) -> None:  # noqa: D102
+        for i in network.active_agents():
             network.broadcast(i, i.x)
 
-        for i in network.active_agents(iteration):
-            s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
-            neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += self.W[i, i] * i.x
+        for i in network.active_agents():
+            neighborhood_avg = self.W[i, i] * i.x
+            if len(i.messages) > 0:
+                s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
+                neighborhood_avg += iop.sum(s, dim=0)
             i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
 
 
@@ -544,20 +478,21 @@ class ATC(P2PAlgorithm):
 
         self.W = network.weights
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
+    def step(self, network: P2PNetwork, _: int) -> None:  # noqa: D102
         # gradient step (a.k.a. adapt step)
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             i.aux_vars["y"] = i.x - self.step_size * i.cost.gradient(i.x)
 
         # transmit and receive
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             network.broadcast(i, i.aux_vars["y"])
 
         # consensus (a.k.a. combine step)
-        for i in network.active_agents(iteration):
-            s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
-            neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += self.W[i, i] * i.x
+        for i in network.active_agents():
+            neighborhood_avg = self.W[i, i] * i.x
+            if len(i.messages) > 0:
+                s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
+                neighborhood_avg += iop.sum(s, dim=0)
             i.x = neighborhood_avg
 
 
@@ -610,15 +545,18 @@ class SimpleGT(P2PAlgorithm):
 
         self.W = network.weights
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
-        for i in network.active_agents(iteration):
+    def step(self, network: P2PNetwork, _: int) -> None:  # noqa: D102
+        for i in network.active_agents():
             network.broadcast(i, i.x)
 
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
-            s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
-            neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += self.W[i, i] * i.x
+
+            neighborhood_avg = self.W[i, i] * i.x
+            if len(i.messages) > 0:
+                s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
+                neighborhood_avg += iop.sum(s, dim=0)
+
             i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
             i.aux_vars["y"] = i.aux_vars["y_new"]
 
@@ -675,13 +613,17 @@ class ED(P2PAlgorithm):
         self.W = network.weights
         self.W = 0.5 * (iop.eye_like(self.W) + self.W)
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
-        for i in network.active_agents(iteration):
+    def step(self, network: P2PNetwork, _: int) -> None:  # noqa: D102
+        for i in network.active_agents():
             network.broadcast(i, i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
 
-        for i in network.active_agents(iteration):
-            s = iop.stack([self.W[i, j] * msg for j, msg in i.messages.items()])
-            i.x = iop.sum(s, dim=0) + self.W[i, i] * (i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
+        for i in network.active_agents():
+            s = (
+                iop.sum(iop.stack([self.W[i, j] * msg for j, msg in i.messages.items()]), dim=0)
+                if len(i.messages) > 0
+                else 0
+            )
+            i.x = s + self.W[i, i] * (i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
             i.aux_vars["y"] = i.aux_vars["y_new"]
             i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
 
@@ -740,33 +682,35 @@ class AugDGM(P2PAlgorithm):
 
         self.W = network.weights
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
+    def step(self, network: P2PNetwork, _: int) -> None:  # noqa: D102
         # 1st communication round
         #     step 1: perform local gradient step and communicate
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             i.aux_vars["s"] = i.x - self.step_size * i.aux_vars["y"]
 
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             network.broadcast(i, i.aux_vars["s"])
 
         #     step 2: update state and compute new local gradient
-        for i in network.active_agents(iteration):
-            s = iop.stack([self.W[i, j] * s_j for j, s_j in i.messages.items()])
-            neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += self.W[i, i] * i.aux_vars["s"]
+        for i in network.active_agents():
+            neighborhood_avg = self.W[i, i] * i.aux_vars["s"]
+            if len(i.messages) > 0:
+                s = iop.stack([self.W[i, j] * s_j for j, s_j in i.messages.items()])
+                neighborhood_avg += iop.sum(s, dim=0)
             i.x = neighborhood_avg
             i.aux_vars["g_new"] = i.cost.gradient(i.x)
 
         # 2nd communication round
         #     step 1: transmit local gradient tracker
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             network.broadcast(i, i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
 
         #     step 2: update y (global gradient estimator)
-        for i in network.active_agents(iteration):
-            s = iop.stack([self.W[i, j] * q_j for j, q_j in i.messages.items()])
-            neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += self.W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
+        for i in network.active_agents():
+            neighborhood_avg = self.W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
+            if len(i.messages) > 0:
+                s = iop.stack([self.W[i, j] * q_j for j, q_j in i.messages.items()])
+                neighborhood_avg += iop.sum(s, dim=0)
             i.aux_vars["y"] = neighborhood_avg
             i.aux_vars["g"] = i.aux_vars["g_new"]
 
@@ -825,29 +769,31 @@ class WangElia(P2PAlgorithm):
 
         self.K = K
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
+    def step(self, network: P2PNetwork, _: int) -> None:  # noqa: D102
         # 1st communication round
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             network.broadcast(i, i.x + i.aux_vars["z"])
 
         # do consensus and local gradient step
-        for i in network.active_agents(iteration):
-            s = iop.stack([self.K[i, j] * m_j for j, m_j in i.messages.items()])
-            neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += self.K[i, i] * (i.x + i.aux_vars["z"])
+        for i in network.active_agents():
+            neighborhood_avg = self.K[i, i] * (i.x + i.aux_vars["z"])
+            if len(i.messages) > 0:
+                s = iop.stack([self.K[i, j] * m_j for j, m_j in i.messages.items()])
+                neighborhood_avg += iop.sum(s, dim=0)
 
             i.aux_vars["x_old"] = i.x
             i.x = i.x - neighborhood_avg - self.step_size * i.cost.gradient(i.x)
 
         # 2nd communication round
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             network.broadcast(i, i.aux_vars["x_old"])
 
         # update auxiliary variable
-        for i in network.active_agents(iteration):
-            s = iop.stack([self.K[i, j] * m_j for j, m_j in i.messages.items()])
-            neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += self.K[i, i] * i.aux_vars["x_old"]
+        for i in network.active_agents():
+            neighborhood_avg = self.K[i, i] * i.aux_vars["x_old"]
+            if len(i.messages) > 0:
+                s = iop.stack([self.K[i, j] * m_j for j, m_j in i.messages.items()])
+                neighborhood_avg += iop.sum(s, dim=0)
             i.aux_vars["z"] += neighborhood_avg
 
 
@@ -904,25 +850,27 @@ class EXTRA(P2PAlgorithm):
     def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         if iteration == 0:
             # first iteration (iteration k=1)
-            for i in network.active_agents(0):
+            for i in network.active_agents():
                 network.broadcast(i, i.x)
 
-            for i in network.active_agents(0):
-                s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
-                neighborhood_avg = iop.sum(s, dim=0)
-                neighborhood_avg += self.W[i, i] * i.x
+            for i in network.active_agents():
+                neighborhood_avg = self.W[i, i] * i.x
+                if len(i.messages) > 0:
+                    s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
+                    neighborhood_avg += iop.sum(s, dim=0)
                 i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
                 i.aux_vars["x_old"] = i.x  # store x_0
                 i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
         else:
             # subsequent iterations (k >= 2)
-            for i in network.active_agents(iteration):
+            for i in network.active_agents():
                 network.broadcast(i, i.x)
 
-            for i in network.active_agents(iteration):
-                s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
-                neighborhood_avg = iop.sum(s, dim=0)
-                neighborhood_avg += self.W[i, i] * i.x
+            for i in network.active_agents():
+                neighborhood_avg = self.W[i, i] * i.x
+                if len(i.messages) > 0:
+                    s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
+                    neighborhood_avg += iop.sum(s, dim=0)
                 i.aux_vars["x_old_old"] = i.aux_vars["x_old"]  # store x_{k-1}
                 i.aux_vars["x_old"] = i.x  # store x_k
                 # update x_{k+1}
@@ -990,33 +938,35 @@ class ATCTracking(P2PAlgorithm):
 
         self.W = network.weights
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
+    def step(self, network: P2PNetwork, _: int) -> None:  # noqa: D102
         # 1st communication round
         #     step 1: perform local gradient step and communicate
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             i.aux_vars["s"] = i.x - self.step_size * i.aux_vars["y"]
 
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             network.broadcast(i, i.aux_vars["s"])
 
         #     step 2: update state and compute new local gradient
-        for i in network.active_agents(iteration):
-            s = iop.stack([self.W[i, j] * s_j for j, s_j in i.messages.items()])
-            neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += self.W[i, i] * i.aux_vars["s"]
+        for i in network.active_agents():
+            neighborhood_avg = self.W[i, i] * i.aux_vars["s"]
+            if len(i.messages) > 0:
+                s = iop.stack([self.W[i, j] * s_j for j, s_j in i.messages.items()])
+                neighborhood_avg += iop.sum(s, dim=0)
             i.x = neighborhood_avg
             i.aux_vars["g_new"] = i.cost.gradient(i.x)
 
         # 2nd communication round
         #     step 1: transmit local gradient tracker
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             network.broadcast(i, i.aux_vars["y"])
 
         #     step 2: update y (global gradient estimator)
-        for i in network.active_agents(iteration):
-            s = iop.stack([self.W[i, j] * q_j for j, q_j in i.messages.items()])
-            neighborhood_avg = iop.sum(s, dim=0)
-            neighborhood_avg += self.W[i, i] * i.aux_vars["y"]
+        for i in network.active_agents():
+            neighborhood_avg = self.W[i, i] * i.aux_vars["y"]
+            if len(i.messages) > 0:
+                s = iop.stack([self.W[i, j] * q_j for j, q_j in i.messages.items()])
+                neighborhood_avg += iop.sum(s, dim=0)
             i.aux_vars["y"] = neighborhood_avg + i.aux_vars["g_new"] - i.aux_vars["g"]
             i.aux_vars["g"] = i.aux_vars["g_new"]
 
@@ -1079,12 +1029,12 @@ class NIDS(P2PAlgorithm):
     def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         if iteration == 0:
             # first iteration (iteration k=1)
-            for i in network.active_agents(0):
+            for i in network.active_agents():
                 i.aux_vars["g"] = i.cost.gradient(i.x)  # store grad f_i(x_0)
                 i.x = i.aux_vars["x_old"] - self.step_size * i.aux_vars["g"]
         else:
             # subsequent iterations (k >= 2)
-            for i in network.active_agents(iteration):
+            for i in network.active_agents():
                 i.aux_vars["g_old"] = i.aux_vars["g"]  # store grad f_i(x_{k-1})
                 i.aux_vars["g"] = i.cost.gradient(i.x)  # store grad f_i(x_k)
                 i.aux_vars["y"] = (
@@ -1093,12 +1043,13 @@ class NIDS(P2PAlgorithm):
                     - self.step_size * i.aux_vars["g"]
                     + self.step_size * i.aux_vars["g_old"]
                 )
-            for i in network.active_agents(iteration):
+            for i in network.active_agents():
                 network.broadcast(i, i.aux_vars["y"])
-            for i in network.active_agents(iteration):
-                s = iop.stack([self.W_tilde[i, j] * y_j for j, y_j in i.messages.items()])
-                neighborhood_avg = iop.sum(s, dim=0)
-                neighborhood_avg += self.W_tilde[i, i] * i.aux_vars["y"]
+            for i in network.active_agents():
+                neighborhood_avg = self.W_tilde[i, i] * i.aux_vars["y"]
+                if len(i.messages) > 0:
+                    s = iop.stack([self.W_tilde[i, j] * y_j for j, y_j in i.messages.items()])
+                    neighborhood_avg += iop.sum(s, dim=0)
                 i.aux_vars["x_old"] = i.x  # store x_k
                 i.x = neighborhood_avg  # update x_{k+1}
 
@@ -1161,17 +1112,17 @@ class ADMM(P2PAlgorithm):
 
         self.pN = pN
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
-        for i in network.active_agents(iteration):
+    def step(self, network: P2PNetwork, _: int) -> None:  # noqa: D102
+        for i in network.active_agents():
             i.x = i.cost.proximal(x=iop.sum(i.aux_vars["z"], dim=0) / self.pN[i], rho=1 / self.pN[i])
 
-        for i in network.active_agents(iteration):
-            for j in network.active_neighbors(i, iteration):
+        for i in network.active_agents():
+            for j in network.active_neighbors(i):
                 network.send(i, j, i.aux_vars["z"][j] - 2 * self.rho * i.x)
 
-        for i in network.active_agents(iteration):
-            for j in network.active_neighbors(i, iteration):
-                i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (i.messages[j])
+        for i in network.active_agents():
+            for j, msg in i.messages.items():
+                i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (msg)
 
 
 @tags("peer-to-peer", "gradient tracking", "ADMM")
@@ -1256,9 +1207,9 @@ class ATG(P2PAlgorithm):
 
         self.pN = pN
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
+    def step(self, network: P2PNetwork, _: int) -> None:  # noqa: D102
         # step 1: update consensus-ADMM variables
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             # update auxiliary variables
             i.aux_vars["y"] = (i.x + iop.sum(i.aux_vars["z_y"], dim=0)) / (1 + self.pN[i])
             i.aux_vars["s"] = (i.cost.gradient(i.x) + iop.sum(i.aux_vars["z_s"], dim=0)) / (1 + self.pN[i])
@@ -1266,8 +1217,8 @@ class ATG(P2PAlgorithm):
             i.x = (1 - self.gamma) * i.x + self.gamma * (i.aux_vars["y"] - self.delta * i.aux_vars["s"])
 
         # step 2: communicate and update z_{ij} variables
-        for i in network.active_agents(iteration):
-            for j in network.active_neighbors(i, iteration):
+        for i in network.active_agents():
+            for j in network.active_neighbors(i):
                 # transmit the messages as a single message, stacking along the first axis
                 s = iop.stack(
                     (
@@ -1277,12 +1228,12 @@ class ATG(P2PAlgorithm):
                     dim=0,
                 )
                 network.send(i, j, s)
-        for i in network.active_agents(iteration):
-            for j in network.active_neighbors(i, iteration):
+        for i in network.active_agents():
+            for j, msg in i.messages.items():
                 i.aux_vars["z_y"][j] = (1 - self.alpha) * i.aux_vars["z_y"][j] \
-                                        + self.alpha * i.messages[j][0]  # fmt: skip
+                                        + self.alpha * msg[0]  # fmt: skip
                 i.aux_vars["z_s"][j] = (1 - self.alpha) * i.aux_vars["z_s"][j] \
-                                        + self.alpha * i.messages[j][1]  # fmt: skip
+                                        + self.alpha * msg[1]  # fmt: skip
 
 
 ADMMTracking = ATG  # alias
@@ -1343,31 +1294,33 @@ class DLM(P2PAlgorithm):
     def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         if iteration == 0:
             # step 0: first communication round
-            for i in network.active_agents(0):
+            for i in network.active_agents():
                 network.broadcast(i, i.x)
 
             # compute and store \sum_j (\mathbf{x}_{i,0} - \mathbf{x}_{j,0})
-            for i in network.active_agents(0):
-                s = iop.stack([i.x - x_j for x_j in i.messages.values()])
-                i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
+            for i in network.active_agents():
+                if len(i.messages) > 0:
+                    s = iop.stack([i.x - x_j for x_j in i.messages.values()])
+                    i.aux_vars["s"] = iop.sum(s, dim=0)
         else:
             # step 1: update primal variable
-            for i in network.active_agents(iteration):
+            for i in network.active_agents():
                 i.x = i.x - self.step_size * (  # noqa: PLR6104
                     i.cost.gradient(i.x) + self.penalty * i.aux_vars["s"] + i.aux_vars["y"]
                 )
 
             # step 2: communication round
-            for i in network.active_agents(iteration):
+            for i in network.active_agents():
                 network.broadcast(i, i.x)
 
             # compute and store \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
-            for i in network.active_agents(iteration):
-                s = iop.stack([i.x - x_j for x_j in i.messages.values()])
-                i.aux_vars["s"] = iop.sum(s, dim=0)  # pyright: ignore[reportArgumentType]
+            for i in network.active_agents():
+                if len(i.messages) > 0:
+                    s = iop.stack([i.x - x_j for x_j in i.messages.values()])
+                    i.aux_vars["s"] = iop.sum(s, dim=0)
 
             # step 3: update dual variable
-            for i in network.active_agents(iteration):
+            for i in network.active_agents():
                 i.aux_vars["y"] += self.penalty * i.aux_vars["s"]
 
 

@@ -1,5 +1,6 @@
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,15 @@ from decent_bench.utils.checkpoint_manager import CheckpointManager
 logging.getLogger("jax").setLevel(logging.WARNING)
 
 
+@dataclass(eq=False)
+class DummyAlg(DGD):
+    def finalize(self, network: P2PNetwork) -> None:
+        for agent in network.agents():
+            if agent.id == 0:
+                print(f"Agent {agent.id} finalizing with x: {agent.x}")  # noqa: T201
+            agent.x = agent.x + 100
+
+
 def _build_problem_and_algorithms(
     iterations: int = 5,
 ) -> tuple[BenchmarkProblem, list[Algorithm[Any]]]:
@@ -35,26 +45,21 @@ def _build_problem_and_algorithms(
     )
     agents = [Agent(i, cost) for i, cost in enumerate(costs)]
     network = P2PNetwork(graph=nx.complete_graph(len(agents)), agents=agents)
-    problem = BenchmarkProblem(
-        network=network, x_optimal=x_optimal, test_data=test_data
-    )
+    problem = BenchmarkProblem(network=network, x_optimal=x_optimal, test_data=test_data)
     algorithms: list[Algorithm[Any]] = [
         DGD(iterations=iterations, step_size=0.01),
         ATC(iterations=iterations, step_size=0.01),
+        DummyAlg(iterations=iterations, step_size=0.01, name="DummyAlg"),
         ADMM(iterations=iterations),
     ]
     return problem, algorithms
 
 
 def test_init_validates_arguments(tmp_path: Path) -> None:  # noqa: D103
-    with pytest.raises(
-        ValueError, match="checkpoint_step must be a positive integer or None"
-    ):
+    with pytest.raises(ValueError, match="checkpoint_step must be a positive integer or None"):
         CheckpointManager(tmp_path / "ckpt", checkpoint_step=0)
 
-    with pytest.raises(
-        ValueError, match="keep_n_checkpoints must be a positive integer"
-    ):
+    with pytest.raises(ValueError, match="keep_n_checkpoints must be a positive integer"):
         CheckpointManager(tmp_path / "ckpt", keep_n_checkpoints=0)
 
 
@@ -79,10 +84,10 @@ def test_initialize_saves_structure_and_metadata(tmp_path: Path) -> None:  # noq
     metadata = manager.load_metadata()
     assert metadata["n_trials"] == 3
     assert metadata["benchmark_metadata"] == {"seed": 123}
-    assert [alg["name"] for alg in metadata["algorithms"]] == ["DGD", "ATC", "ADMM"]
+    assert [alg["name"] for alg in metadata["algorithms"]] == ["DGD", "ATC", "DummyAlg", "ADMM"]
 
     loaded_algs = manager.load_initial_algorithms()
-    assert [alg.name for alg in loaded_algs] == ["DGD", "ATC", "ADMM"]
+    assert [alg.name for alg in loaded_algs] == ["DGD", "ATC", "DummyAlg", "ADMM"]
 
     loaded_problem = manager.load_benchmark_problem()
     assert len(loaded_problem.network.agents()) == 4
@@ -265,6 +270,123 @@ def test_resume_from_checkpoint(tmp_path: Path) -> None:  # noqa: D103
         checkpoint_manager=manager,
         increase_iterations=5,
         increase_trials=1,
+    )
+    assert resumed_bench is not None
+
+    # Check that the resumed benchmark has the expected number of iterations and trials.
+    for alg in resumed_bench.states:
+        assert alg.iterations == 10
+        assert len(resumed_bench.states[alg]) == 2
+
+    # Check that the resumed benchmark's problem matches the original.
+    assert len(resumed_bench.problem.network.agents()) == 4
+
+    # Check that the agent states and history is correct
+    resumed_results: dict[tuple[str, int], Network] = {}
+    for alg in resumed_bench.states:
+        for i, trial_result in enumerate(resumed_bench.states[alg]):
+            assert len(trial_result.agents()) == 4
+            for agent in trial_result.agents():
+                assert len(agent._x_history) == 11  # 10 iterations + initial state
+            resumed_results[(alg.name, i)] = trial_result
+
+    full_results: dict[tuple[str, int], Network] = {}
+    for alg in bench_10.states:
+        for i, trial_result in enumerate(bench_10.states[alg]):
+            assert len(trial_result.agents()) == 4
+            for agent in trial_result.agents():
+                assert len(agent._x_history) == 11  # 10 iterations + initial state
+            full_results[(alg.name, i)] = trial_result
+
+    for key in resumed_results:
+        resumed_trial = resumed_results[key]
+        full_trial = full_results[key]
+        for resumed_agent, full_agent in zip(
+            resumed_trial.agents(),
+            full_trial.agents(),
+            strict=True,
+        ):
+            for iteration in range(11):
+                np.testing.assert_allclose(
+                    iop.to_numpy(resumed_agent._x_history[iteration]),
+                    iop.to_numpy(full_agent._x_history[iteration]),
+                )
+
+            with pytest.raises(AssertionError):  # noqa: PT012
+                for iteration in range(11):
+                    resumed_agent._x_history[iteration] += 1.0
+                    np.testing.assert_allclose(
+                        iop.to_numpy(resumed_agent._x_history[iteration]),
+                        iop.to_numpy(full_agent._x_history[iteration]),
+                    )
+
+
+@pytest.mark.filterwarnings(
+    "ignore:os.fork\\(\\) was called.*:RuntimeWarning"
+)  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
+def test_resume_from_non_completed_checkpoint(tmp_path: Path) -> None:  # noqa: D103
+    problem_5, algorithms_5 = _build_problem_and_algorithms(5)
+    problem_10, algorithms_10 = _build_problem_and_algorithms(10)
+    manager = CheckpointManager(tmp_path / "ckpt", checkpoint_step=2)
+
+    bench_5 = benchmark(
+        algorithms=algorithms_5,
+        benchmark_problem=problem_5,
+        n_trials=2,
+        checkpoint_manager=manager,
+    )
+    bench_10 = benchmark(
+        algorithms=algorithms_10,
+        benchmark_problem=problem_10,
+        n_trials=2,
+    )
+    assert bench_5 is not None
+    assert bench_10 is not None
+
+    # print files in checkpoint directory for debugging
+    print("Before")
+    for path in (tmp_path / "ckpt").rglob("*"):
+        if path.is_file():
+            print(path.relative_to(tmp_path / "ckpt"))
+        if path.name == "progress.json":
+            with path.open(encoding="utf-8") as f:
+                progress = json.load(f)
+            print(f"Progress for algorithm_0 trial_0: {progress}")
+
+    # Modify the checkpoint to simulate an interrupted run that did not mark the trial as complete
+    for alg in range(len(algorithms_5)):
+        for trial in range(2):
+            progress_path = tmp_path / "ckpt" / f"algorithm_{alg}" / f"trial_{trial}" / "progress.json"
+            with progress_path.open(encoding="utf-8") as f:
+                progress = json.load(f)
+            progress["last_completed_iteration"] = 1  # Set to 2 less than total iterations
+            with progress_path.open("w", encoding="utf-8") as f:
+                json.dump(progress, f)
+            complete_marker = tmp_path / "ckpt" / f"algorithm_{alg}" / f"trial_{trial}" / "complete.json"
+            if complete_marker.exists():
+                complete_marker.unlink()
+            else:
+                raise FileNotFoundError(f"Expected complete marker not found at {complete_marker}")
+            for i in [3, 4]:  # Remove checkpoints for iterations 3 and 4
+                checkpoint_path = tmp_path / "ckpt" / f"algorithm_{alg}" / f"trial_{trial}" / f"checkpoint_{i:07d}.pkl"
+                if checkpoint_path.exists():
+                    checkpoint_path.unlink()
+                else:
+                    raise FileNotFoundError(f"Expected checkpoint not found at {checkpoint_path}")
+
+    print("After")
+    # print files in checkpoint directory for debugging
+    for path in (tmp_path / "ckpt").rglob("*"):
+        if path.is_file():
+            print(path.relative_to(tmp_path / "ckpt"))
+        if path.name == "progress.json":
+            with path.open(encoding="utf-8") as f:
+                progress = json.load(f)
+            print(f"Progress for algorithm_0 trial_0: {progress}")
+
+    resumed_bench = resume_benchmark(
+        checkpoint_manager=manager,
+        increase_iterations=5,
     )
     assert resumed_bench is not None
 

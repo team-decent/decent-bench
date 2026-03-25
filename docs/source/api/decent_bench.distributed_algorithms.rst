@@ -24,5 +24,4 @@ decent\_bench.distributed\_algorithms
       P2PAlgorithm,
       initialize,
       step,
-      finalize,
       run,
