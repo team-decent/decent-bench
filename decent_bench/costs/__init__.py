@@ -9,9 +9,9 @@ Developer note:
     scaling through a private empirical scaling wrapper, and under ``empirical + regularizer`` through
     :class:`EmpiricalRegularizedCost`. Unsupported mixed compositions still fall back to the generic wrappers.
 
-    :class:`EmpiricalRegularizedCost.gradient` uses broadcast semantics when ``reduction=None``: it returns one
-    composite gradient per sample by adding the regularizer gradient to each per-sample empirical gradient. Averaging
-    over the leading sample dimension recovers the composite mean gradient.
+    :class:`EmpiricalRegularizedCost.gradient` uses broadcast semantics when ``reduction=None``: it returns
+    one composite gradient per sample by adding the regularizer gradient to each per-sample empirical
+    gradient. Averaging over the leading sample dimension recovers the composite mean gradient.
 
     Composition wrappers keep references to their underlying cost objects; they do not make implicit shallow or deep
     copies at construction time. Mutating a wrapped cost after composition therefore affects the composite view as
