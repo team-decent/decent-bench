@@ -335,7 +335,7 @@ def test_empirical_regularized_gradient_mean_matches_manual_expression() -> None
     )
 
 
-def test_empirical_regularized_gradient_none_broadcasts_scaled_regularizer_and_recovers_full_gradient() -> None:
+def test_empirical_regularized_gradient_none_broadcasts_regularizer_and_recovers_mean() -> None:
     risk = _simple_linear_regression_cost()
     _, reg_l2 = _simple_regularizers()
     x = np.array([0.25, -0.75])
@@ -345,10 +345,10 @@ def test_empirical_regularized_gradient_none_broadcasts_scaled_regularizer_and_r
     actual = iop.to_numpy(objective.gradient(x, indices="all", reduction=None))
     empirical_per_sample = iop.to_numpy(risk.gradient(x, indices="all", reduction=None))
     regularizer_gradient = iop.to_numpy(reg_l2.gradient(x))
-    expected = empirical_per_sample + np.stack([regularizer_gradient / risk.n_samples] * risk.n_samples)
+    expected = empirical_per_sample + np.stack([regularizer_gradient] * risk.n_samples)
 
     np.testing.assert_allclose(actual, expected)
-    np.testing.assert_allclose(actual.sum(axis=0), empirical_per_sample.sum(axis=0) + regularizer_gradient)
+    np.testing.assert_allclose(actual.mean(axis=0), iop.to_numpy(objective.gradient(x, indices="all", reduction="mean")))
 
 
 def test_empirical_risk_minus_regularizer_matches_manual_expression() -> None:
@@ -392,14 +392,10 @@ def test_empirical_risk_plus_scaled_regularizer_matches_lambda_expression() -> N
 
     actual_per_sample = iop.to_numpy(objective.gradient(x, indices="all", reduction=None))
     expected_per_sample = iop.to_numpy(risk.gradient(x, indices="all", reduction=None)) + np.stack(
-        [(lambda_ * iop.to_numpy(reg_l2.gradient(x))) / risk.n_samples] * risk.n_samples
+        [lambda_ * iop.to_numpy(reg_l2.gradient(x))] * risk.n_samples
     )
     np.testing.assert_allclose(actual_per_sample, expected_per_sample)
-    np.testing.assert_allclose(
-        actual_per_sample.sum(axis=0),
-        iop.to_numpy(risk.gradient(x, indices="all", reduction=None)).sum(axis=0)
-        + lambda_ * iop.to_numpy(reg_l2.gradient(x)),
-    )
+    np.testing.assert_allclose(actual_per_sample.mean(axis=0), iop.to_numpy(objective.gradient(x, indices="all")))
 
 
 def test_same_type_empirical_addition_preserves_concrete_type_and_metadata() -> None:

@@ -946,9 +946,8 @@ Important Semantics
 Reduction Semantics
 ^^^^^^^^^^^^^^^^^^^
 :class:`~decent_bench.costs.EmpiricalRegularizedCost.gradient` uses broadcast semantics when ``reduction=None``: the
-empirical term returns one gradient per selected sample, and ``regularizer.gradient(x) / m`` is added to each row,
-where ``m`` is the number of selected samples. Summing over the sample dimension recovers the full composite
-gradient.
+empirical term returns one gradient per selected sample, and the regularizer gradient is added to each row. Averaging
+over the sample dimension recovers the same composite gradient returned by ``reduction="mean"``.
 
 Proximal Semantics
 ^^^^^^^^^^^^^^^^^^
