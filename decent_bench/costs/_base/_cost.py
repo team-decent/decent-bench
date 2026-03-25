@@ -11,6 +11,30 @@ from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 class Cost(ABC):  # noqa: PLR0904
     """Used by agents to evaluate the cost and its derivatives at a certain x."""
 
+    def _validate_cost_operation(
+        self,
+        other: object,
+        *,
+        check_framework: bool = False,
+        check_device: bool = False,
+    ) -> None:
+        """
+        Validate that another object can participate in a binary cost operation.
+
+        Raises:
+            TypeError: If other is not a Cost.
+            ValueError: If shapes, frameworks, or devices are mismatched.
+
+        """
+        if not isinstance(other, Cost):
+            raise TypeError(f"Cost can only be combined with another Cost, got {type(other)}.")
+        if self.shape != other.shape:
+            raise ValueError(f"Mismatched domain shapes: {self.shape} vs {other.shape}")
+        if check_framework and self.framework != other.framework:
+            raise ValueError(f"Mismatching frameworks: {self.framework} vs {other.framework}")
+        if check_device and self.device != other.device:
+            raise ValueError(f"Mismatching devices: {self.device} vs {other.device}")
+
     @property
     @abstractmethod
     def shape(self) -> tuple[int, ...]:
@@ -133,13 +157,8 @@ class Cost(ABC):  # noqa: PLR0904
         :class:`~decent_bench.costs.QuadraticCost` instead of a :class:`~decent_bench.costs.SumCost` as this
         preserves the closed form proximal solution and only requires one evaluation instead of two when calling
         :meth:`function`, :meth:`gradient`, and :meth:`hessian`.
-
-        Raises:
-            ValueError: If the domain shapes do not match.
-
         """
-        if self.shape != other.shape:
-            raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
+        self._validate_cost_operation(other)
         from decent_bench.costs._base._sum_cost import SumCost  # noqa: PLC0415
 
         return SumCost([self, other])
@@ -192,15 +211,8 @@ class Cost(ABC):  # noqa: PLR0904
         return self.__mul__(-1.0)
 
     def __sub__(self, other: Cost) -> Cost:
-        """
-        Subtract another cost function as sum with its negation.
-
-        Raises:
-            TypeError: If other is not a Cost.
-
-        """
-        if not isinstance(other, Cost):
-            raise TypeError(f"Cost can only be subtracted by another Cost, got {type(other)}.")
+        """Subtract another cost function as sum with its negation."""
+        self._validate_cost_operation(other)
         return self + (-other)
 
     def __radd__(self, other: object) -> Cost:

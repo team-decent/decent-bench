@@ -339,15 +339,8 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         return A, b
 
     def __add__(self, other: Cost) -> Cost:
-        """
-        Add another cost function.
-
-        Raises:
-            ValueError: if the domain shapes don't match
-
-        """
-        if self.shape != other.shape:
-            raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
+        """Add another cost function."""
+        self._validate_cost_operation(other)
         if isinstance(other, LogisticRegressionCost):
             if self.batch_size == self.n_samples and other.batch_size == other.n_samples:
                 combined_batch_size = self.n_samples + other.n_samples

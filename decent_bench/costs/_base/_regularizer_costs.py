@@ -22,9 +22,10 @@ class BaseRegularizerCost(Cost):
     """
     Base class for regularizers with regularizer-preserving arithmetic.
 
-    Adding, subtracting, negating, scaling, or dividing regularizers returns a regularizer-aware composite instead of
-    generic :class:`~decent_bench.costs.SumCost` or :class:`~decent_bench.costs.ScaledCost`. Mixing a regularizer
-    with an arbitrary non-regularizer still falls back to generic cost composition.
+    Adding, subtracting, negating, scaling, or dividing regularizers returns another regularizer subclass instead of
+    falling back immediately to generic :class:`~decent_bench.costs.SumCost` or
+    :class:`~decent_bench.costs.ScaledCost`. This preserves regularizer-specific structure and can improve
+    performance. Mixing a regularizer with an arbitrary non-regularizer still falls back to generic cost composition.
     """
 
     def __init__(
@@ -63,15 +64,8 @@ class BaseRegularizerCost(Cost):
     def __add__(self, other: Cost) -> Cost: ...
 
     def __add__(self, other: Cost) -> Cost:
-        """
-        Add another cost, preserving the regularizer abstraction when possible.
-
-        Raises:
-            ValueError: if the domain shapes don't match.
-
-        """
-        if self.shape != other.shape:
-            raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
+        """Add another cost, preserving the regularizer abstraction when possible."""
+        self._validate_cost_operation(other)
         if isinstance(other, BaseRegularizerCost):
             return _CompositeRegularizerCost([self, other])
         return super().__add__(other)
@@ -108,19 +102,9 @@ class BaseRegularizerCost(Cost):
         return self.__mul__(-1.0)
 
     def __sub__(self, other: Cost) -> Cost:
-        """
-        Subtract another cost, preserving the regularizer abstraction when possible.
-
-        Raises:
-            TypeError: If other is not a Cost.
-            ValueError: If the domain shapes do not match for regularizer subtraction.
-
-        """
-        if not isinstance(other, Cost):
-            raise TypeError(f"Cost can only be subtracted by another Cost, got {type(other)}.")
+        """Subtract another cost, preserving the regularizer abstraction when possible."""
+        self._validate_cost_operation(other)
         if isinstance(other, BaseRegularizerCost):
-            if self.shape != other.shape:
-                raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
             return _CompositeRegularizerCost([self, other], weights=[1.0, -1.0])
         return super().__sub__(other)
 
@@ -152,12 +136,7 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
         for regularizer, weight in zip(regularizers, weights, strict=True):
             if not isinstance(regularizer, BaseRegularizerCost):
                 raise TypeError(f"Composite regularizer can only contain regularizers, got {type(regularizer)}.")
-            if regularizer.shape != self.shape:
-                raise ValueError(f"Mismatching domain shapes: {regularizer.shape} vs {self.shape}")
-            if regularizer.framework != self.framework:
-                raise ValueError(f"Mismatching frameworks: {regularizer.framework} vs {self.framework}")
-            if regularizer.device != self.device:
-                raise ValueError(f"Mismatching devices: {regularizer.device} vs {self.device}")
+            self._validate_cost_operation(regularizer, check_framework=True, check_device=True)
             if isinstance(regularizer, _CompositeRegularizerCost):
                 for inner_regularizer, inner_weight in regularizer._terms:  # noqa: SLF001
                     self._terms.append((inner_regularizer, float(weight) * inner_weight))

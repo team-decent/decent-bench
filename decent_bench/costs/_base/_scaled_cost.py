@@ -78,6 +78,5 @@ class ScaledCost(Cost):
         return self.cost.proximal(x, rho * self.scalar, *args, **kwargs)
 
     def __add__(self, other: Cost) -> Cost:
-        if self.shape != other.shape:
-            raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
+        self._validate_cost_operation(other)
         return SumCost([self, other])

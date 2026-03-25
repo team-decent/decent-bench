@@ -870,8 +870,7 @@ interface.
 
 - ``regularizer_a + regularizer_b``, ``regularizer_a - regularizer_b``, ``scalar * regularizer``,
   ``regularizer / scalar``, and ``-regularizer`` preserve a regularizer-aware cost.
-- ``scalar * empirical_cost`` preserves the empirical-risk interface through
-  :class:`~decent_bench.costs.EmpiricalScaledCost`.
+- ``scalar * empirical_cost`` preserves the empirical-risk interface through an internal empirical scaling wrapper.
 - ``empirical_cost + regularizer`` and ``empirical_cost - regularizer`` preserve the empirical-risk interface through
   :class:`~decent_bench.costs.EmpiricalRegularizedCost`.
 - Unsupported combinations still fall back to the generic wrappers
@@ -947,8 +946,9 @@ Important Semantics
 Reduction Semantics
 ^^^^^^^^^^^^^^^^^^^
 :class:`~decent_bench.costs.EmpiricalRegularizedCost.gradient` uses broadcast semantics when ``reduction=None``: the
-empirical term returns one gradient per selected sample, and the regularizer gradient is added to each row. Averaging
-over the sample dimension recovers the same composite gradient returned by ``reduction="mean"``.
+empirical term returns one gradient per selected sample, and ``regularizer.gradient(x) / m`` is added to each row,
+where ``m`` is the number of selected samples. Summing over the sample dimension recovers the full composite
+gradient.
 
 Proximal Semantics
 ^^^^^^^^^^^^^^^^^^
@@ -962,8 +962,10 @@ Proximal Semantics
 
 .. warning::
 
-    :class:`~decent_bench.costs.SumCost.proximal` currently returns the sum of the proximal results of its terms for
-    compatibility. This should not be interpreted as the exact proximal of an arbitrary sum of functions in general.
+    :class:`~decent_bench.costs.SumCost.proximal` computes the proximal of the full summed objective through
+    :func:`decent_bench.centralized_algorithms.proximal_solver`, which uses accelerated gradient descent. This
+    requires the summed objective to satisfy that backend's assumptions, in particular differentiability, global
+    smoothness, and convexity.
 
 Copy Semantics
 ^^^^^^^^^^^^^^

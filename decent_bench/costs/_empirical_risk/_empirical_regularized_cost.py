@@ -27,7 +27,8 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
     This wrapper preserves empirical-risk-specific behavior from the empirical term, including :meth:`predict`,
     dataset access, and batch metadata, while combining function, gradient, and Hessian values with the regularizer.
     When :meth:`gradient` is called with ``reduction=None``, the regularizer gradient is broadcast across the leading
-    sample dimension so that averaging over samples recovers the composite mean gradient. A generic proximal is
+    sample dimension with a ``1 / m`` factor, where ``m`` is the number of selected samples, so that summing over
+    samples recovers the full composite gradient. A generic proximal is
     intentionally not implemented.
 
     Instances keep references to the wrapped cost objects. No implicit copying is performed; use
@@ -35,12 +36,7 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
     """
 
     def __init__(self, empirical_cost: EmpiricalRiskCost, regularizer: BaseRegularizerCost):
-        if empirical_cost.shape != regularizer.shape:
-            raise ValueError(f"Mismatching domain shapes: {empirical_cost.shape} vs {regularizer.shape}")
-        if empirical_cost.framework != regularizer.framework:
-            raise ValueError(f"Mismatching frameworks: {empirical_cost.framework} vs {regularizer.framework}")
-        if empirical_cost.device != regularizer.device:
-            raise ValueError(f"Mismatching devices: {empirical_cost.device} vs {regularizer.device}")
+        empirical_cost._validate_cost_operation(regularizer, check_framework=True, check_device=True)  # noqa: SLF001
 
         self.empirical_cost = empirical_cost
         self.regularizer = regularizer
@@ -103,15 +99,16 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
         When ``reduction="mean"``, this returns the mean empirical gradient over the selected samples plus the
         regularizer gradient.
 
-        When ``reduction=None``, this returns one gradient per selected sample with the regularizer gradient broadcast
-        along the leading sample dimension. Averaging the result over that leading dimension recovers the composite
-        gradient returned by ``reduction="mean"``.
+        When ``reduction=None``, this returns one gradient per selected sample with ``regularizer.gradient(x) / m``
+        added to each row, where ``m`` is the number of selected samples. Summing over the leading sample dimension
+        recovers the full composite gradient.
         """
         empirical_gradient = self.empirical_cost.gradient(x, indices=indices, reduction=reduction, **kwargs)
         regularizer_gradient = self.regularizer.gradient(x)
 
         if reduction is None:
-            regularizer_gradients = [regularizer_gradient for _ in self.empirical_cost.batch_used]
+            batch_count = iop.shape(empirical_gradient)[0]
+            regularizer_gradients = [regularizer_gradient / batch_count for _ in range(batch_count)]
             return empirical_gradient + iop.stack(regularizer_gradients)
 
         return empirical_gradient + regularizer_gradient

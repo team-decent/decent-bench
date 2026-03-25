@@ -17,11 +17,11 @@ from decent_bench.utils.types import (
 from ._empirical_risk_cost import EmpiricalRiskCost
 
 
-class EmpiricalScaledCost(EmpiricalRiskCost):
+class _EmpiricalScaledCost(EmpiricalRiskCost):
     """
-    Scalar wrapper around an empirical-risk cost.
+    Private scalar wrapper around an empirical-risk cost.
 
-    ``EmpiricalScaledCost`` preserves empirical-risk-specific behavior such as :meth:`predict`, dataset access, and
+    ``_EmpiricalScaledCost`` preserves empirical-risk-specific behavior such as :meth:`predict`, dataset access, and
     batch handling under scalar scaling. Scaling changes the objective value, gradient, Hessian, and proximal
     parameterization, but does not change the prediction map of the underlying model at a fixed parameter vector.
 
@@ -32,7 +32,7 @@ class EmpiricalScaledCost(EmpiricalRiskCost):
     def __init__(self, cost: EmpiricalRiskCost, scalar: float):
         self.cost: EmpiricalRiskCost
         self.scalar: float
-        if isinstance(cost, EmpiricalScaledCost):
+        if isinstance(cost, _EmpiricalScaledCost):
             self.cost = cost.cost
             self.scalar = scalar * cost.scalar
         else:

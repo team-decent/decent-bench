@@ -8,7 +8,6 @@ from decent_bench.costs import (
     BaseRegularizerCost,
     EmpiricalRegularizedCost,
     EmpiricalRiskCost,
-    EmpiricalScaledCost,
     L1RegularizerCost,
     L2RegularizerCost,
     LinearRegressionCost,
@@ -336,7 +335,7 @@ def test_empirical_regularized_gradient_mean_matches_manual_expression() -> None
     )
 
 
-def test_empirical_regularized_gradient_none_broadcasts_regularizer_and_recovers_mean() -> None:
+def test_empirical_regularized_gradient_none_broadcasts_scaled_regularizer_and_recovers_full_gradient() -> None:
     risk = _simple_linear_regression_cost()
     _, reg_l2 = _simple_regularizers()
     x = np.array([0.25, -0.75])
@@ -346,10 +345,10 @@ def test_empirical_regularized_gradient_none_broadcasts_regularizer_and_recovers
     actual = iop.to_numpy(objective.gradient(x, indices="all", reduction=None))
     empirical_per_sample = iop.to_numpy(risk.gradient(x, indices="all", reduction=None))
     regularizer_gradient = iop.to_numpy(reg_l2.gradient(x))
-    expected = empirical_per_sample + np.stack([regularizer_gradient] * risk.n_samples)
+    expected = empirical_per_sample + np.stack([regularizer_gradient / risk.n_samples] * risk.n_samples)
 
     np.testing.assert_allclose(actual, expected)
-    np.testing.assert_allclose(actual.mean(axis=0), iop.to_numpy(objective.gradient(x, indices="all", reduction="mean")))
+    np.testing.assert_allclose(actual.sum(axis=0), empirical_per_sample.sum(axis=0) + regularizer_gradient)
 
 
 def test_empirical_risk_minus_regularizer_matches_manual_expression() -> None:
@@ -393,10 +392,14 @@ def test_empirical_risk_plus_scaled_regularizer_matches_lambda_expression() -> N
 
     actual_per_sample = iop.to_numpy(objective.gradient(x, indices="all", reduction=None))
     expected_per_sample = iop.to_numpy(risk.gradient(x, indices="all", reduction=None)) + np.stack(
-        [lambda_ * iop.to_numpy(reg_l2.gradient(x))] * risk.n_samples
+        [(lambda_ * iop.to_numpy(reg_l2.gradient(x))) / risk.n_samples] * risk.n_samples
     )
     np.testing.assert_allclose(actual_per_sample, expected_per_sample)
-    np.testing.assert_allclose(actual_per_sample.mean(axis=0), iop.to_numpy(objective.gradient(x, indices="all")))
+    np.testing.assert_allclose(
+        actual_per_sample.sum(axis=0),
+        iop.to_numpy(risk.gradient(x, indices="all", reduction=None)).sum(axis=0)
+        + lambda_ * iop.to_numpy(reg_l2.gradient(x)),
+    )
 
 
 def test_same_type_empirical_addition_preserves_concrete_type_and_metadata() -> None:
@@ -636,9 +639,12 @@ def test_scaling_regularized_empirical_returns_empirical_scaled_cost() -> None:
     divided = objective / 2.0
     negated = -objective
 
-    assert isinstance(scaled, EmpiricalScaledCost)
-    assert isinstance(divided, EmpiricalScaledCost)
-    assert isinstance(negated, EmpiricalScaledCost)
+    assert isinstance(scaled, EmpiricalRiskCost)
+    assert isinstance(divided, EmpiricalRiskCost)
+    assert isinstance(negated, EmpiricalRiskCost)
+    assert not isinstance(scaled, SumCost)
+    assert not isinstance(divided, SumCost)
+    assert not isinstance(negated, SumCost)
     assert scaled.dataset is risk.dataset
     assert scaled.batch_size == risk.batch_size
     np.testing.assert_allclose(iop.to_numpy(scaled.predict(x, prediction_data)), iop.to_numpy(risk.predict(x, prediction_data)))

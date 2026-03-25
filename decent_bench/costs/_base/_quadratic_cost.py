@@ -142,15 +142,8 @@ class QuadraticCost(Cost):
         return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
 
     def __add__(self, other: Cost) -> Cost:
-        """
-        Add another cost function.
-
-        Raises:
-            ValueError: if the domain shapes don't match
-
-        """
-        if self.shape != other.shape:
-            raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
+        """Add another cost function."""
+        self._validate_cost_operation(other)
         if isinstance(other, QuadraticCost):
             return QuadraticCost(
                 A=iop.to_array(self.A + other.A, self.framework, self.device),
@@ -165,13 +158,8 @@ class QuadraticCost(Cost):
         Subtract another cost function.
 
         Preserves :class:`QuadraticCost` when subtracting another quadratic cost.
-
-        Raises:
-            TypeError: If other is not a Cost.
-
         """
-        if not isinstance(other, Cost):
-            raise TypeError(f"Cost can only be subtracted by another Cost, got {type(other)}.")
+        self._validate_cost_operation(other)
         if isinstance(other, QuadraticCost):
             return self.__add__(
                 QuadraticCost(

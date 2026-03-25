@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
+from decent_bench import centralized_algorithms as ca
 from decent_bench.costs._base._cost import Cost
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
@@ -93,13 +94,24 @@ class SumCost(Cost):
 
     def proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         """
-        Return the sum of the component proximal results.
+        Approximate the proximal of the full summed objective.
 
-        This is the current compatibility behavior of ``SumCost``. In general, summing the proximal results of the
-        terms is not the exact proximal operator of a sum, so this method should not be interpreted as a generic
-        closed-form identity for arbitrary ``f + g`` compositions.
+        ``SumCost`` computes its proximal through
+        :func:`decent_bench.centralized_algorithms.proximal_solver`, which solves the proximal subproblem for the full
+        summed objective using accelerated gradient descent. Extra ``args`` and ``kwargs`` are ignored.
+
+        Raises:
+            NotImplementedError: If the accelerated-gradient backend assumptions are not satisfied.
+
         """
-        return iop.sum(iop.stack([cf.proximal(x, rho, *args, **kwargs) for cf in self.costs]), dim=0)
+        del args, kwargs
+        try:
+            return ca.proximal_solver(self, x, rho)
+        except NotImplementedError as exc:
+            raise NotImplementedError(
+                "SumCost.proximal uses centralized_algorithms.proximal_solver and requires the summed objective to be "
+                "differentiable, globally L-smooth, and convex under the accelerated-gradient backend."
+            ) from exc
 
     def __add__(self, other: Cost) -> SumCost:
         """Add another cost function."""
