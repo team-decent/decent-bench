@@ -72,10 +72,7 @@ class ZeroCost(Cost):
         return x
 
     def __add__(self, other: Cost) -> Cost:
-        if not isinstance(other, Cost):
-            raise TypeError(f"Cost can only be added to another Cost, got {type(other)}.")
-        if self.shape != other.shape:
-            raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
+        self._validate_cost_operation(other)
 
         if isinstance(other, ZeroCost):
             return self

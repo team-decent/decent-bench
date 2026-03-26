@@ -8,7 +8,6 @@ from numpy.typing import NDArray
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
-from decent_bench.costs._base._sum_cost import SumCost
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
@@ -143,15 +142,8 @@ class QuadraticCost(Cost):
         return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
 
     def __add__(self, other: Cost) -> Cost:
-        """
-        Add another cost function.
-
-        Raises:
-            ValueError: if the domain shapes don't match
-
-        """
-        if self.shape != other.shape:
-            raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
+        """Add another cost function."""
+        self._validate_cost_operation(other)
         if isinstance(other, QuadraticCost):
             return QuadraticCost(
                 A=iop.to_array(self.A + other.A, self.framework, self.device),
@@ -159,4 +151,21 @@ class QuadraticCost(Cost):
                 c=self.c + other.c,
             )
 
-        return SumCost([self, other])
+        return super().__add__(other)
+
+    def __sub__(self, other: Cost) -> Cost:
+        """
+        Subtract another cost function.
+
+        Preserves :class:`QuadraticCost` when subtracting another quadratic cost.
+        """
+        self._validate_cost_operation(other)
+        if isinstance(other, QuadraticCost):
+            return self.__add__(
+                QuadraticCost(
+                    A=iop.to_array(-other.A, self.framework, self.device),
+                    b=iop.to_array(-other.b, self.framework, self.device),
+                    c=-other.c,
+                )
+            )
+        return super().__sub__(other)

@@ -1,9 +1,11 @@
+import copy
+
 import numpy as np
 import pytest
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent, AgentHistory
-from decent_bench.costs import LinearRegressionCost, QuadraticCost
+from decent_bench.costs import L2RegularizerCost, LinearRegressionCost, QuadraticCost
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 try:
@@ -341,6 +343,73 @@ class TestCallCounting:
         assert agent._n_gradient_calls == 2
         assert agent._n_hessian_calls == 0
         assert agent._n_proximal_calls == 0
+
+    @pytest.mark.parametrize(
+        "make_wrapper",
+        [
+            lambda cost: 2.0 * cost,
+            lambda cost: cost + L2RegularizerCost(shape=cost.shape),
+        ],
+    )
+    def test_shared_wrapper_calls_increment_original_agent_counter(self, make_wrapper):
+        """
+        Shared-reference wrappers reuse the patched base cost object.
+
+        Calling the wrapper therefore increments the same agent counter as calling the original cost directly.
+        """
+        base_cost = QuadraticCost(np.eye(2) * 2.0, np.zeros(2), 0.0)
+        wrapper = make_wrapper(base_cost)
+        agent = Agent(0, base_cost, None, state_snapshot_period=1)
+        agent.initialize(x=np.zeros(2))
+
+        agent.cost.function(agent.x)
+        wrapper.function(agent.x)
+
+        assert agent._n_function_calls == 2
+
+    @pytest.mark.parametrize(
+        "make_wrapper",
+        [
+            lambda cost: 2.0 * cost,
+            lambda cost: cost + L2RegularizerCost(shape=cost.shape),
+        ],
+    )
+    def test_deepcopied_wrapper_avoids_shared_counter_effects(self, make_wrapper):
+        """Deep-copying a wrapper breaks the shared reference to the patched base cost."""
+        base_cost = QuadraticCost(np.eye(2) * 2.0, np.zeros(2), 0.0)
+        wrapper = copy.deepcopy(make_wrapper(base_cost))
+        agent = Agent(0, base_cost, None, state_snapshot_period=1)
+        agent.initialize(x=np.zeros(2))
+
+        wrapper.function(agent.x)
+
+        assert agent._n_function_calls == 0
+
+    @pytest.mark.parametrize(
+        "make_wrapper",
+        [
+            lambda cost: 2.0 * cost,
+            lambda cost: cost + L2RegularizerCost(shape=cost.shape),
+        ],
+    )
+    def test_agents_sharing_wrapped_cost_object_share_counter_side_effects(self, make_wrapper):
+        """
+        Reusing the same underlying cost across agents propagates counting side effects.
+
+        This is current shared-reference behavior: calling the wrapped agent also increments the counter on the agent
+        that owns the reused base cost object.
+        """
+        base_cost = QuadraticCost(np.eye(2) * 2.0, np.zeros(2), 0.0)
+        wrapped_cost = make_wrapper(base_cost)
+        base_agent = Agent(0, base_cost, None, state_snapshot_period=1)
+        wrapped_agent = Agent(1, wrapped_cost, None, state_snapshot_period=1)
+        base_agent.initialize(x=np.zeros(2))
+        wrapped_agent.initialize(x=np.zeros(2))
+
+        wrapped_agent.cost.function(wrapped_agent.x)
+
+        assert wrapped_agent._n_function_calls == 1
+        assert base_agent._n_function_calls == 1
 
 
 # ---------------------------------------------------------------------------

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import Any
+from typing import Any, overload
 
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
-from decent_bench.costs._base._sum_cost import SumCost
 from decent_bench.utils._tags import tags
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
@@ -21,7 +20,14 @@ __all__ = [
 
 
 class BaseRegularizerCost(Cost):
-    """Base class for element-wise regularizers defined over a vector x."""
+    """
+    Base class for regularizers with regularizer-preserving arithmetic.
+
+    Adding, subtracting, negating, scaling, or dividing regularizers returns another regularizer subclass instead of
+    falling back immediately to generic :class:`~decent_bench.costs.SumCost` or
+    :class:`~decent_bench.costs.ScaledCost`. This preserves regularizer-specific structure and can improve
+    performance. Mixing a regularizer with an arbitrary non-regularizer still falls back to generic cost composition.
+    """
 
     def __init__(
         self,
@@ -52,17 +58,142 @@ class BaseRegularizerCost(Cost):
     def device(self) -> SupportedDevices:
         return self._device
 
+    @overload
+    def __add__(self, other: BaseRegularizerCost) -> BaseRegularizerCost: ...
+
+    @overload
+    def __add__(self, other: Cost) -> Cost: ...
+
     def __add__(self, other: Cost) -> Cost:
+        """Add another cost, preserving the regularizer abstraction when possible."""
+        self._validate_cost_operation(other)
+        if isinstance(other, BaseRegularizerCost):
+            return _CompositeRegularizerCost([self, other])
+        return super().__add__(other)
+
+    def __mul__(self, other: float) -> Cost:
         """
-        Add another cost function, returning a sum cost.
+        Multiply by a scalar while preserving the regularizer abstraction.
 
         Raises:
-            ValueError: if the domain shapes don't match.
+            TypeError: If other is not a real scalar.
 
         """
-        if self.shape != other.shape:
-            raise ValueError(f"Mismatching domain shapes: {self.shape} vs {other.shape}")
-        return SumCost([self, other])
+        if not self._is_valid_scalar(other):
+            raise TypeError(f"Cost can only be multiplied by a real number, got {type(other)}.")
+        return _CompositeRegularizerCost([self], weights=[float(other)])
+
+    def __truediv__(self, other: float) -> Cost:
+        """
+        Divide by a scalar while preserving the regularizer abstraction.
+
+        Raises:
+            TypeError: If other is not a real scalar.
+            ZeroDivisionError: If other is zero.
+
+        """
+        if not self._is_valid_scalar(other):
+            raise TypeError(f"Cost can only be divided by a real number, got {type(other)}.")
+        if other == 0:
+            raise ZeroDivisionError("Division by zero is not allowed for Cost objects.")
+        return self.__mul__(1.0 / float(other))
+
+    def __neg__(self) -> Cost:
+        """Negate this regularizer while preserving the regularizer abstraction."""
+        return self.__mul__(-1.0)
+
+    def __sub__(self, other: Cost) -> Cost:
+        """Subtract another cost, preserving the regularizer abstraction when possible."""
+        self._validate_cost_operation(other)
+        if isinstance(other, BaseRegularizerCost):
+            return _CompositeRegularizerCost([self, other], weights=[1.0, -1.0])
+        return super().__sub__(other)
+
+
+class _CompositeRegularizerCost(BaseRegularizerCost):
+    """
+    Weighted combination of regularizers that preserves the regularizer abstraction.
+
+    This wrapper represents sums and scalar rescalings of regularizers while keeping the
+    :class:`BaseRegularizerCost` interface. It combines function, gradient, and Hessian termwise. A generic proximal
+    is intentionally not implemented except for the single positively scaled regularizer case.
+
+    Instances keep references to the wrapped cost objects. No implicit copying is performed; use
+    :func:`copy.deepcopy` explicitly if independent objects are required.
+    """
+
+    def __init__(self, regularizers: list[BaseRegularizerCost], weights: list[float] | None = None):
+        if len(regularizers) == 0:
+            raise ValueError("Composite regularizer must contain at least one regularizer.")
+        first = regularizers[0]
+        super().__init__(first.shape, framework=first.framework, device=first.device)
+
+        if weights is None:
+            weights = [1.0] * len(regularizers)
+        if len(regularizers) != len(weights):
+            raise ValueError("Composite regularizer weights must match the number of regularizers.")
+
+        self._terms: list[tuple[BaseRegularizerCost, float]] = []
+        for regularizer, weight in zip(regularizers, weights, strict=True):
+            if not isinstance(regularizer, BaseRegularizerCost):
+                raise TypeError(f"Composite regularizer can only contain regularizers, got {type(regularizer)}.")
+            self._validate_cost_operation(regularizer, check_framework=True, check_device=True)
+            if isinstance(regularizer, _CompositeRegularizerCost):
+                for inner_regularizer, inner_weight in regularizer._terms:  # noqa: SLF001
+                    self._terms.append((inner_regularizer, float(weight) * inner_weight))
+            else:
+                self._terms.append((regularizer, float(weight)))
+
+    @cached_property
+    def m_smooth(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
+        m_smooth_vals = [abs(weight) * regularizer.m_smooth for regularizer, weight in self._terms]
+        return np.nan if any(np.isnan(v) for v in m_smooth_vals) else float(sum(m_smooth_vals))
+
+    @cached_property
+    def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if any(weight < 0 for _, weight in self._terms):
+            return np.nan
+        m_cvx_vals = [weight * regularizer.m_cvx for regularizer, weight in self._terms]
+        return np.nan if any(np.isnan(v) for v in m_cvx_vals) else float(sum(m_cvx_vals))
+
+    def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ANN401
+        return float(sum(weight * regularizer.function(x, **kwargs) for regularizer, weight in self._terms))
+
+    def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ANN401
+        return iop.sum(
+            iop.stack([regularizer.gradient(x, **kwargs) * weight for regularizer, weight in self._terms]),
+            dim=0,
+        )
+
+    def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ANN401
+        return iop.sum(
+            iop.stack([regularizer.hessian(x, **kwargs) * weight for regularizer, weight in self._terms]),
+            dim=0,
+        )
+
+    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
+        """
+        Proximal is only supported for a single positively scaled regularizer term.
+
+        For sums of regularizers or negative scaling, composing or summing individual proximal operators is not
+        mathematically valid in general.
+
+        Raises:
+            ValueError: If rho is not positive.
+            NotImplementedError: If the composite is not a single positively scaled term.
+
+        """
+        if rho <= 0:
+            raise ValueError("The penalty parameter rho must be positive.")
+        if len(self._terms) == 1:
+            regularizer, weight = self._terms[0]
+            if weight > 0:
+                return regularizer.proximal(x, rho * weight, **kwargs)
+        raise NotImplementedError(
+            "Composite regularizers do not implement a generic proximal operator because sums of regularizers and "
+            "negative scaling do not admit a proximal from simple composition in general. Use a specialized proximal "
+            "if available."
+        )
 
 
 @tags("regularizer")
@@ -81,21 +212,17 @@ class L1RegularizerCost(BaseRegularizerCost):
     def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         return 0.0
 
-    @iop.autodecorate_cost_method(Cost.function)
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ARG002, ANN401
         return float(iop.astype(iop.sum(iop.absolute(x)), float))
 
-    @iop.autodecorate_cost_method(Cost.gradient)
     def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         return iop.sign(x)
 
-    @iop.autodecorate_cost_method(Cost.hessian)
     def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if self._hessian_cache is None:
             self._hessian_cache = iop.zeros((self._dim, self._dim), framework=self.framework, device=self.device)
         return self._hessian_cache
 
-    @iop.autodecorate_cost_method(Cost.proximal)
     def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if rho <= 0:
             raise ValueError("The penalty parameter rho must be positive.")
@@ -119,21 +246,17 @@ class L2RegularizerCost(BaseRegularizerCost):
     def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         return 1.0
 
-    @iop.autodecorate_cost_method(Cost.function)
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ARG002, ANN401
         return float(iop.astype(0.5 * iop.sum(iop.mul(x, x)), float))
 
-    @iop.autodecorate_cost_method(Cost.gradient)
     def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         return x
 
-    @iop.autodecorate_cost_method(Cost.hessian)
     def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if self._hessian_cache is None:
             self._hessian_cache = iop.eye(self._dim, framework=self.framework, device=self.device)
         return self._hessian_cache
 
-    @iop.autodecorate_cost_method(Cost.proximal)
     def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if rho <= 0:
             raise ValueError("The penalty parameter rho must be positive.")
@@ -171,25 +294,21 @@ class FractionalQuadraticRegularizerCost(BaseRegularizerCost):
     def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         return np.nan
 
-    @iop.autodecorate_cost_method(Cost.function)
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ARG002, ANN401
         x2 = x * x
         return float(iop.astype(iop.sum(x2 / (1.0 + x2)), float))
 
-    @iop.autodecorate_cost_method(Cost.gradient)
     def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         x2 = x * x
         denom = (1.0 + x2) ** 2
         return 2.0 * x / denom
 
-    @iop.autodecorate_cost_method(Cost.hessian)
     def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         x2 = x * x
         denom = (1.0 + x2) ** 3
         second = 2.0 * (1.0 - 3.0 * x2) / denom
         return iop.diag(iop.reshape(second, (self._dim,)))
 
-    @iop.autodecorate_cost_method(Cost.proximal)
     def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if rho <= 0:
             raise ValueError("The penalty parameter rho must be positive.")

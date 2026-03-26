@@ -103,6 +103,52 @@ class EmpiricalRiskCost(Cost, ABC):
 
         """
 
+    def __mul__(self, other: float) -> Cost:
+        """
+        Multiply by a scalar while preserving the empirical-risk abstraction.
+
+        Raises:
+            TypeError: If other is not a real scalar.
+
+        """
+        if not self._is_valid_scalar(other):
+            raise TypeError(f"Cost can only be multiplied by a real number, got {type(other)}.")
+        from decent_bench.costs._empirical_risk._empirical_scaled_cost import _EmpiricalScaledCost  # noqa: PLC0415
+
+        return _EmpiricalScaledCost(self, float(other))
+
+    def __truediv__(self, other: float) -> Cost:
+        """
+        Divide by a scalar while preserving the empirical-risk abstraction.
+
+        Raises:
+            TypeError: If other is not a real scalar.
+            ZeroDivisionError: If other is zero.
+
+        """
+        if not self._is_valid_scalar(other):
+            raise TypeError(f"Cost can only be divided by a real number, got {type(other)}.")
+        if other == 0:
+            raise ZeroDivisionError("Division by zero is not allowed for Cost objects.")
+        return self.__mul__(1.0 / float(other))
+
+    def __neg__(self) -> Cost:
+        """Negate this empirical risk while preserving the empirical-risk abstraction."""
+        return self.__mul__(-1.0)
+
+    def __add__(self, other: Cost) -> Cost:
+        """Add another cost, preserving the empirical-risk abstraction for regularization."""
+        self._validate_cost_operation(other)
+        from decent_bench.costs._base._regularizer_costs import BaseRegularizerCost  # noqa: PLC0415
+
+        if isinstance(other, BaseRegularizerCost):
+            from decent_bench.costs._empirical_risk._empirical_regularized_cost import (  # noqa: PLC0415
+                EmpiricalRegularizedCost,
+            )
+
+            return EmpiricalRegularizedCost(self, other)
+        return super().__add__(other)
+
     def evaluate(self, x: Array, indices: EmpiricalRiskIndices = "batch", **kwargs: Any) -> float:  # noqa: ANN401
         """Alias for :meth:`function`."""
         return self.function(x, indices=indices, **kwargs)

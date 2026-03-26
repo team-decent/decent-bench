@@ -6,13 +6,23 @@ from typing import Any
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
+from decent_bench import centralized_algorithms as ca
 from decent_bench.costs._base._cost import Cost
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
 class SumCost(Cost):
-    """The sum of multiple cost functions."""
+    """
+    Generic additive fallback for cost composition.
+
+    ``SumCost`` is returned when two costs can be added but no more specialized composite is available. It preserves
+    the core :class:`~decent_bench.costs.Cost` interface, but does not preserve regularizer-specific or
+    empirical-risk-specific behavior.
+
+    Instances keep references to the wrapped cost objects. No implicit copying is performed; use
+    :func:`copy.deepcopy` explicitly if independent objects are required.
+    """
 
     def __init__(self, costs: list[Cost]):
         if not all(costs[0].shape == cf.shape for cf in costs):
@@ -83,8 +93,25 @@ class SumCost(Cost):
         return iop.sum(iop.stack([cf.hessian(x, *args, **kwargs) for cf in self.costs]), dim=0)
 
     def proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        """Sum the :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>` of each cost function."""
-        return iop.sum(iop.stack([cf.proximal(x, rho, *args, **kwargs) for cf in self.costs]), dim=0)
+        """
+        Approximate the proximal of the full summed objective.
+
+        ``SumCost`` computes its proximal through
+        :func:`decent_bench.centralized_algorithms.proximal_solver`, which solves the proximal subproblem for the full
+        summed objective using accelerated gradient descent. Extra ``args`` and ``kwargs`` are ignored.
+
+        Raises:
+            NotImplementedError: If the accelerated-gradient backend assumptions are not satisfied.
+
+        """
+        del args, kwargs
+        try:
+            return ca.proximal_solver(self, x, rho)
+        except NotImplementedError as exc:
+            raise NotImplementedError(
+                "SumCost.proximal uses centralized_algorithms.proximal_solver and requires the summed objective to be "
+                "differentiable, globally L-smooth, and convex under the accelerated-gradient backend."
+            ) from exc
 
     def __add__(self, other: Cost) -> SumCost:
         """Add another cost function."""

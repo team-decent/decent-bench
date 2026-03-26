@@ -6,6 +6,7 @@ from ._regularizer_costs import (
     L1RegularizerCost,
     L2RegularizerCost,
 )
+from ._scaled_cost import ScaledCost
 from ._sum_cost import SumCost
 from ._zero_cost import ZeroCost
 
@@ -16,6 +17,7 @@ __all__ = [
     "L1RegularizerCost",
     "L2RegularizerCost",
     "QuadraticCost",
+    "ScaledCost",
     "SumCost",
     "ZeroCost",
 ]
