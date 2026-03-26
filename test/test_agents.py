@@ -119,7 +119,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
 
     # Test += operator
     agent.x += 1.0
-    agent.snapshot(1)
+    agent._snapshot(1)
     assert_state(
         np.array([1.0, 1.0, 1.0]),
         [
@@ -130,7 +130,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
 
     # Test *= operator
     agent.x *= 2.0
-    agent.snapshot(2)
+    agent._snapshot(2)
     assert_state(
         np.array([2.0, 2.0, 2.0]),
         [
@@ -142,7 +142,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
 
     # Test **= operator
     agent.x **= 2.0
-    agent.snapshot(3)
+    agent._snapshot(3)
     assert_state(
         np.array([4.0, 4.0, 4.0]),
         [
@@ -155,7 +155,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
 
     # Test /= operator
     agent.x /= 2.0
-    agent.snapshot(4)
+    agent._snapshot(4)
     assert_state(
         np.array([2.0, 2.0, 2.0]),
         [
@@ -169,7 +169,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
 
     # Test -= operator
     agent.x -= 1.0
-    agent.snapshot(5)
+    agent._snapshot(5)
     assert_state(
         np.array([1.0, 1.0, 1.0]),
         [
@@ -265,7 +265,7 @@ def test_agent_state_snapshot_period(
     n_updates = expected_history_length * state_snapshot_period
     for k in range(n_updates):
         agent.x += 1.0
-        agent.snapshot(k + 1)
+        agent._snapshot(k + 1)
 
     assert_state(
         np.array([n_updates, n_updates, n_updates]),
@@ -507,14 +507,14 @@ class TestEmpiricalRiskCallCounting:
         agent = _make_empirical_agent(batch_size="all")
         agent.initialize(x=np.zeros(1))
         agent.cost.function(agent.x)
-        assert agent._n_function_calls == pytest.approx(1.0)
+        assert agent._n_function_calls == pytest.approx(agent.cost.n_samples)
 
     def test_mini_batch_counts_as_fraction(self):
         """With batch_size=2 out of 4 samples, each call should add 2/4 = 0.5."""
         agent = _make_empirical_agent(batch_size=2)
         agent.initialize(x=np.zeros(1))
         agent.cost.function(agent.x)
-        assert agent._n_function_calls == pytest.approx(0.5)
+        assert agent._n_function_calls == pytest.approx(0.5 * agent.cost.n_samples)
 
     def test_no_count_suppresses_empirical_risk_counting(self):
         agent = _make_empirical_agent(batch_size="all")

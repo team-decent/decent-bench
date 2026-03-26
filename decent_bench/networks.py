@@ -31,11 +31,33 @@ else:
 
 
 class Network(ABC):  # noqa: B024
-    """Base network object defining communication logic shared by all network types."""
+    """
+    Base network object defining communication logic shared by all network types.
+
+    Args:
+        graph: underlying NetworkX graph defining the network topology.
+            Nodes must be of type :class:`~decent_bench.agents.Agent`.
+        buffer_messages: whether to keep stored messages at the end of each iteration. If ``True``, messages
+            persist on the receiver until they are overwritten by a newer message from the same sender to the same
+            receiver. If ``False``, messages delivered to a receiver during iteration *k* are dropped when
+            the algorithm advances to iteration *k + 1*, so agents only see messages from the most recent
+            iteration.
+        message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
+            :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
+            mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
+        message_compression: compression scheme(s) to apply to messages sent by agents in the network. Can be a single
+            :class:`~decent_bench.schemes.CompressionScheme` instance to apply the same scheme to all agents, a
+            dictionary mapping each agent to its scheme, or ``None`` to apply no compression to any agent.
+        message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
+            :class:`~decent_bench.schemes.DropScheme` instance to apply the same scheme to all agents, a dictionary
+            mapping each agent to its scheme, or ``None`` to apply no message drop to any agent.
+
+    """
 
     def __init__(
         self,
         graph: AgentGraph,
+        buffer_messages: bool = False,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
         message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
@@ -47,6 +69,9 @@ class Network(ABC):  # noqa: B024
             raise ValueError("Directed graphs are not supported; please provide an undirected graph")
         if not nx.is_connected(graph):
             raise ValueError("The graph needs to be connected")
+        agent_ids = [agent.id for agent in graph.nodes()]
+        if len(agent_ids) != len(set(agent_ids)):
+            raise ValueError("Agent IDs must be unique")
 
         self._graph = graph
         self._message_noise = self._initialize_message_schemes(message_noise, "noise", NoiseScheme, NoNoise)
@@ -54,10 +79,17 @@ class Network(ABC):  # noqa: B024
             message_compression, "compression", CompressionScheme, NoCompression
         )
         self._message_drop = self._initialize_message_schemes(message_drop, "drop", DropScheme, NoDrops)
-        self._active_agents_cache: dict[int, list[Agent]] = {}
+        self._active_agents_cache: list[Agent] | None = None
+        self._active_connected_agents_cache: dict[Agent, list[Agent]] = {}
+        self._buffer_messages = buffer_messages
+        self._iteration = 0  # Current iteration, updated by the algorithm
 
     def _initialize_message_schemes(
-        self, scheme: object, scheme_name: str, scheme_class: type, default_factory: Callable[[], Any] | None = None
+        self,
+        scheme: object,
+        scheme_name: str,
+        scheme_class: type,
+        default_factory: Callable[[], Any] | None = None,
     ) -> dict[Agent, Any]:
         """
         Create dictionary of message schemes.
@@ -107,7 +139,16 @@ class Network(ABC):  # noqa: B024
         return self.graph
 
     def agents(self) -> list[Agent]:
-        """Get all agents in the network."""
+        """
+        Get all agents in the network.
+
+        Warning:
+            This includes agents that may be inactive in the current iteration.
+            It is generally recommended to use :meth:`active_agents` instead, which returns only active agents,
+            unless you have a specific reason to access inactive agents or need to access all agents regardless
+            of activation status.
+
+        """
         return self._agents_cache
 
     @cached_property
@@ -125,23 +166,43 @@ class Network(ABC):  # noqa: B024
         """Edges of the network as (agent, agent) tuples."""
         return list(self.graph.edges())
 
-    def active_agents(self, iteration: int) -> list[Agent]:
+    def active_agents(self) -> list[Agent]:
         """
-        Get all active agents.
+        Get all *active* agents.
 
         Whether an :class:`~decent_bench.agents.Agent` is active or not at a given time is defined by its
         :class:`~decent_bench.schemes.AgentActivationScheme`.
         """
-        if iteration not in self._active_agents_cache:
+        if self._active_agents_cache is None:
             # Cache the active agents for each iterations in case the same iteration is queried multiple times
             # so that we preserve the activated agents for the iteration even if the underlying activation schemes
             # are non-deterministic.
-            self._active_agents_cache[iteration] = [a for a in self.agents() if a._activation.is_active(iteration)]  # noqa: SLF001
-        return self._active_agents_cache[iteration]
+            self._active_agents_cache = [
+                a
+                for a in self.agents()
+                if a._activation.is_active(self._iteration)  # noqa: SLF001
+            ]
+        return self._active_agents_cache
 
     def connected_agents(self, agent: Agent) -> list[Agent]:
-        """Agents directly connected to ``agent`` in the underlying graph."""
+        """
+        Agents directly connected to ``agent`` in the underlying graph.
+
+        Warning:
+            This includes agents that may be inactive in the current iteration.
+            It is generally recommended to use :meth:`active_connected_agents` instead, which returns only active
+            agents, unless you have a specific reason to access inactive agents or need to access all connected agents
+            regardless of activation status.
+
+        """
         return list(self.graph.neighbors(agent))
+
+    def active_connected_agents(self, agent: Agent) -> list[Agent]:
+        """Agents directly connected to ``agent`` and are active at the given iteration."""
+        if agent not in self._active_connected_agents_cache:
+            active_agents = set(self.active_agents())
+            self._active_connected_agents_cache[agent] = [a for a in self.connected_agents(agent) if a in active_agents]
+        return self._active_connected_agents_cache[agent]
 
     def _send_one(self, sender: Agent, receiver: Agent, msg: Array) -> None:
         """
@@ -152,8 +213,7 @@ class Network(ABC):  # noqa: B024
         :class:`~decent_bench.schemes.NoiseScheme`,
         and :class:`~decent_bench.schemes.DropScheme`.
 
-        The message will stay in-flight until it is received or replaced by a newer message from the same sender to the
-        same receiver. After being received or replaced, the message is destroyed.
+        The message will be immediately available to the receiver if it is active in the current iteration.
         """
         sender._n_sent_messages += 1  # noqa: SLF001
         if self._message_drop[sender].should_drop():
@@ -161,7 +221,12 @@ class Network(ABC):  # noqa: B024
             return
         msg = self._message_compression[sender].compress(msg)
         msg = self._message_noise[sender].make_noise(msg)
-        self.graph.edges[sender, receiver][str(receiver.id)] = msg
+        receiver._n_received_messages += 1  # noqa: SLF001
+        receiver._received_messages[sender] = msg  # noqa: SLF001
+
+    def _allowed_receivers(self, sender: Agent) -> set[Agent]:
+        """Get the set of agents that the sender is allowed to send messages to (i.e. connected and active)."""
+        return set(self.active_connected_agents(sender))
 
     def send(
         self,
@@ -179,7 +244,7 @@ class Network(ABC):  # noqa: B024
 
         Raises:
             ValueError: if ``msg`` is not provided, if agents are not part of the network, or if sender/receiver are not
-                connected.
+                connected and active.
 
         """
         if msg is None:
@@ -189,73 +254,71 @@ class Network(ABC):  # noqa: B024
             raise ValueError("Sender must be an agent in the network")
 
         if receiver is None:
-            receiver = self.connected_agents(sender)
+            receiver = self.active_connected_agents(sender)
         elif isinstance(receiver, Agent):
             if receiver not in self.connected_agents(sender):
                 raise ValueError("Sender and receiver must be connected in the network")
-            self._send_one(sender=sender, receiver=receiver, msg=msg)
-            return
-        neighbors = set(self.connected_agents(sender))
-        invalid_receivers = [r for r in receiver if r not in neighbors]
-        if invalid_receivers:
-            ids = [r.id for r in invalid_receivers]
-            raise ValueError(f"Sender and receiver must be connected in the network; not connected receivers: {ids}")
+            receiver = [receiver]
 
+        currently_active_connected_agents = self._allowed_receivers(sender)
         for r in receiver:
+            if r not in currently_active_connected_agents:
+                raise ValueError(
+                    f"Receiver {r} is not active or not connected to {sender} in iteration {self._iteration}"
+                )
             self._send_one(sender=sender, receiver=r, msg=msg)
 
-    def _receive_one(self, receiver: Agent, sender: Agent) -> None:
-        """
-        Receive message from an agent.
+    def _step(self, iteration: int) -> None:
+        """Set the iteration counter for the network and clear all received messages from agents."""
+        self._iteration = iteration
 
-        Received messages are stored in
-        :attr:`Agent.messages <decent_bench.agents.Agent.messages>`.
-        """
-        msg = self.graph.edges[sender, receiver].get(str(receiver.id))
-        if msg is not None:
-            receiver._n_received_messages += 1  # noqa: SLF001
-            receiver._received_messages[sender] = msg  # noqa: SLF001
-            self.graph.edges[sender, receiver][str(receiver.id)] = None
+        # Clear caches
+        self._active_agents_cache = None
+        self._active_connected_agents_cache = {}
 
-    def receive(self, receiver: Agent, sender: Agent | Sequence[Agent] | None = None) -> None:
-        """
-        Receive message(s) at an agent.
-
-        Args:
-            receiver: receiver agent
-            sender: sender agent, sequence of sender agents, or ``None`` to receive from all connected agents.
-
-        Raises:
-            ValueError: if sender/receiver are not part of the network or not connected.
-
-        """
-        if receiver not in self.graph:
-            raise ValueError("Receiver must be an agent in the network")
-
-        if sender is None:
-            sender = self.connected_agents(receiver)
-        elif isinstance(sender, Agent):
-            if sender not in self.connected_agents(receiver):
-                raise ValueError("Sender and receiver must be connected in the network")
-            self._receive_one(receiver=receiver, sender=sender)
+        if self._buffer_messages:
             return
-        neighbors = set(self.connected_agents(receiver))
-        invalid_senders = [s for s in sender if s not in neighbors]
-        if invalid_senders:
-            ids = [s.id for s in invalid_senders]
-            raise ValueError(f"Sender and receiver must be connected in the network; not connected senders: {ids}")
 
-        for s in sender:
-            self._receive_one(receiver=receiver, sender=s)
+        # Use the _agents_cache to avoid overridden agents() in subclasses like FedNetwork
+        for agent in self._agents_cache:
+            agent._received_messages.clear()  # noqa: SLF001
 
 
 class P2PNetwork(Network):
-    """Peer-to-peer network architecture where agents communicate directly with each other."""
+    """
+    Peer-to-peer network architecture where agents communicate directly with each other.
+
+    Args:
+        graph: NetworkX graph defining the network topology. Can be a graph with arbitrary node types as long as a list
+            of agents is provided via the `agents` argument; or it can be a graph with
+            :class:`~decent_bench.agents.Agent` nodes, in which case the `agents` argument is optional and will be
+            ignored if provided.
+        agents: list of agents corresponding to the nodes in `graph` if `graph` is not a graph with
+            :class:`~decent_bench.agents.Agent` nodes. The agents in the list are assigned in order to each node of the
+            graph. This argument is ignored if `graph` is a graph with :class:`~decent_bench.agents.Agent` nodes.
+        buffer_messages: whether to keep stored messages at the end of each iteration. If ``True``, messages
+            persist on the receiver until they are overwritten by a newer message from the same sender to the same
+            receiver. If ``False``, messages delivered to a receiver during iteration *k* are dropped when
+            the algorithm advances to iteration *k + 1*, so agents only see messages from the most recent
+            iteration.
+        message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
+            :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
+            mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
+        message_compression: compression scheme(s) to apply to messages sent by agents in the network. Can be a single
+            :class:`~decent_bench.schemes.CompressionScheme` instance to apply the same scheme to all agents, a
+            dictionary mapping each agent to its scheme, or ``None`` to apply no compression to any agent.
+        message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
+            :class:`~decent_bench.schemes.DropScheme` instance to apply the same scheme to all agents, a dictionary
+            mapping each agent to its scheme, or ``None`` to apply no message drop to any agent.
+
+    """
 
     def __init__(
         self,
         graph: AnyGraph,
         agents: Sequence[Agent] | None = None,
+        *,
+        buffer_messages: bool = False,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
         message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
@@ -263,6 +326,7 @@ class P2PNetwork(Network):
         if all(isinstance(node, Agent) for node in graph.nodes()):  # pass directly to super().__init__
             super().__init__(
                 graph=graph,
+                buffer_messages=buffer_messages,
                 message_noise=message_noise,
                 message_compression=message_compression,
                 message_drop=message_drop,
@@ -276,6 +340,7 @@ class P2PNetwork(Network):
             graph = nx.relabel_nodes(graph, agent_node_map)
             super().__init__(
                 graph=graph,
+                buffer_messages=buffer_messages,
                 message_noise=message_noise,
                 message_compression=message_compression,
                 message_drop=message_drop,
@@ -364,22 +429,46 @@ class P2PNetwork(Network):
         """Alias for :meth:`~decent_bench.networks.Network.connected_agents`."""
         return super().connected_agents(agent)
 
+    def active_neighbors(self, agent: Agent) -> list[Agent]:
+        """Alias for :meth:`~decent_bench.networks.Network.active_connected_agents`."""
+        return super().active_connected_agents(agent)
+
     def broadcast(self, sender: Agent, msg: Array) -> None:
         """Send to all neighbors (alias for :meth:`~decent_bench.networks.Network.send` with ``receiver=None``)."""
         self.send(sender=sender, receiver=None, msg=msg)
 
-    def receive_all(self, receiver: Agent) -> None:
-        """Receive from all neighbors (alias for Network.receive with sender=None)."""
-        self.receive(receiver=receiver, sender=None)
-
 
 class FedNetwork(Network):
-    """Federated learning network with one server node connected to all client nodes (star topology)."""
+    """
+    Federated learning network with one server node connected to all client nodes (star topology).
+
+    Args:
+        clients: list of client agents in the network.
+        server: server agent in the network. If ``None``, a default server with zero cost and always active scheme will
+            be created.
+        buffer_messages: whether to keep stored messages at the end of each iteration. If ``True``, messages
+            persist on the receiver until they are overwritten by a newer message from the same sender to the same
+            receiver. If ``False``, messages delivered to a receiver during iteration *k* are dropped when
+            the algorithm advances to iteration *k + 1*, so agents only see messages from the most recent
+            iteration.
+        message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
+            :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
+            mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
+        message_compression: compression scheme(s) to apply to messages sent by agents in the network. Can be a single
+            :class:`~decent_bench.schemes.CompressionScheme` instance to apply the same scheme to all agents,
+            a dictionary mapping each agent to its scheme, or ``None`` to apply no compression to any agent.
+        message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
+            :class:`~decent_bench.schemes.DropScheme` instance to apply the same scheme to all agents, a dictionary
+            mapping each agent to its scheme, or ``None`` to apply no message drop to any agent.
+
+    """
 
     def __init__(
         self,
         clients: Sequence[Agent],
         server: Agent | None = None,
+        buffer_messages: bool = False,
+        *,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
         message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
@@ -407,44 +496,62 @@ class FedNetwork(Network):
 
         super().__init__(
             graph=graph,
+            buffer_messages=buffer_messages,
             message_noise=message_noise,
             message_compression=message_compression,
             message_drop=message_drop,
         )
         self._server = server
 
-    @property
     def server(self) -> Agent:
         """Agent acting as the central server."""
         return self._server
 
-    @property
     def coordinator(self) -> Agent:
         """Alias for :attr:`server`."""
-        return self.server
+        return self.server()
 
     def agents(self) -> list[Agent]:
-        """Get all client agents (excludes the server/coordinator)."""
+        """
+        Get all client agents (excludes the server/coordinator).
+
+        Warning:
+            This includes agents that may be inactive in the current iteration.
+            It is generally recommended to use :meth:`active_agents` instead, which returns only active agents,
+            unless you have a specific reason to access inactive agents or need to access all agents regardless
+            of activation status.
+
+        """
         return self._clients_cache
 
     @cached_property
     def _clients_cache(self) -> list[Agent]:
         """Cached list of clients; assumes the underlying graph is not mutated after construction."""
-        return [agent for agent in self.graph if agent is not self.server]
+        return [agent for agent in self.graph if agent is not self.server()]
 
-    def active_agents(self, iteration: int) -> list[Agent]:
-        """Get all active client agents (excludes the server/coordinator)."""
+    def active_agents(self) -> list[Agent]:
+        """
+        Get all *active* client agents (excludes the server/coordinator).
+
+        Whether an :class:`~decent_bench.agents.Agent` is active or not at a given time is defined by its
+        :class:`~decent_bench.schemes.AgentActivationScheme`.
+        """
         # Delegates to Network.active_agents(), which iterates over self.agents() (clients only for FedNetwork).
-        return super().active_agents(iteration)
+        return super().active_agents()
 
-    @property
     def clients(self) -> list[Agent]:
         """Alias for :meth:`agents`."""
         return self.agents()
 
-    def active_clients(self, iteration: int) -> list[Agent]:
+    def active_clients(self) -> list[Agent]:
         """Alias for :meth:`active_agents`."""
-        return self.active_agents(iteration)
+        return self.active_agents()
+
+    def _allowed_receivers(self, sender: Agent) -> set[Agent]:
+        """Get the set of agents that the sender is allowed to send messages to (i.e. connected and active)."""
+        if sender is not self.server():
+            return {self.server()} if self.server()._activation.is_active(self._iteration) else set()  # noqa: SLF001
+        return set(self.active_connected_agents(sender))
 
     def send(
         self,
@@ -464,56 +571,26 @@ class FedNetwork(Network):
 
         """
         if isinstance(receiver, Agent):
-            if sender is self.server and receiver is self.server:
+            if sender is self.server() and receiver is self.server():
                 raise ValueError("Server-to-server communication is not supported")
-            if sender is not self.server and receiver is not self.server:
+            if sender is not self.server() and receiver is not self.server():
                 raise ValueError("Client-to-client communication is not supported")
             super().send(sender=sender, receiver=receiver, msg=msg)
             return
 
         if receiver is None:
+            if sender is not self.server():
+                super().send(sender=sender, receiver=self.server(), msg=msg)
+                return
             super().send(sender=sender, receiver=receiver, msg=msg)
             return
 
-        if sender is not self.server:
+        if sender is not self.server():
             raise ValueError("Only the server can send to multiple receivers")
-        if any(r is self.server for r in receiver):
+        if any(r is self.server() for r in receiver):
             raise ValueError("All receivers must be clients")
         super().send(sender=sender, receiver=receiver, msg=msg)
 
-    def receive(self, receiver: Agent, sender: Agent | Sequence[Agent] | None = None) -> None:
-        """
-        Receive message(s) in a federated learning network.
-
-        Only server <-> client communication is allowed. Client-to-client and server-to-server communication will
-        raise an error.
-
-        Raises:
-            ValueError: if sender/receiver roles are invalid. Also see :meth:`Network.receive` for generic validation.
-
-        """
-        if isinstance(sender, Agent):
-            if receiver is self.server and sender is self.server:
-                raise ValueError("Server-to-server communication is not supported")
-            if receiver is not self.server and sender is not self.server:
-                raise ValueError("Client-to-client communication is not supported")
-            super().receive(receiver=receiver, sender=sender)
-            return
-
-        if sender is None:
-            super().receive(receiver=receiver, sender=sender)
-            return
-
-        if receiver is not self.server:
-            raise ValueError("Only the server can receive from multiple senders")
-        if any(s is self.server for s in sender):
-            raise ValueError("All senders must be clients")
-        super().receive(receiver=receiver, sender=sender)
-
     def broadcast(self, msg: Array) -> None:
         """Send the same message from the server to every client (synchronous FL push)."""
-        self.send(sender=self.server, receiver=None, msg=msg)
-
-    def receive_all(self) -> None:
-        """Receive messages at the server from every client (synchronous FL pull)."""
-        self.receive(receiver=self.server, sender=None)
+        self.send(sender=self.server(), receiver=None, msg=msg)

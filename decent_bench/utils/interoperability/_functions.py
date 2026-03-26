@@ -496,8 +496,12 @@ def stack(arrays: Sequence[Array], dim: int = 0) -> Array:
 
     Raises:
         TypeError: if the framework type of the input arrays is unsupported.
+        ValueError: if the input sequence is empty.
 
     """
+    if len(arrays) == 0:
+        raise ValueError("Input sequence is empty.")
+
     arrs = [arr.value for arr in arrays] if isinstance(arrays[0], Array) else arrays
 
     if isinstance(arrs[0], np.ndarray | np.generic):

@@ -9,20 +9,30 @@ from scipy import stats
 
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
+from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics._metric import Metric
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 
+from .metric_library import (
+    FunctionCalls,
+    GradientCalls,
+    HessianCalls,
+    ProximalCalls,
+)
+
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem, MetricResult
 
 STATISTICS_ABBR = {"average": "avg", "median": "mdn"}
+SCALE_METRICS = (FunctionCalls, GradientCalls, HessianCalls, ProximalCalls)
 
 
 def display_tables(
     metrics_result: "MetricResult",
     table_fmt: Literal["grid", "latex"] = "grid",
+    scale_compute: float = 1.0,
     table_path: Path | None = None,
 ) -> None:
     """
@@ -31,6 +41,12 @@ def display_tables(
     Args:
         metrics_result: result of metrics computation containing the metrics to display.
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document.
+        scale_compute: scaling factor for the compute related metrics (i.e.
+            :class:`~decent_bench.metrics.metric_library.FunctionCalls`,
+            :class:`~decent_bench.metrics.metric_library.GradientCalls`,
+            :class:`~decent_bench.metrics.metric_library.HessianCalls` and
+            :class:`~decent_bench.metrics.metric_library.ProximalCalls`) shown in the table, used to convert the
+            raw count into more manageable units for display.
         table_path: optional directory path to save the tables in. Tables will be saved as "table.txt" and "table.tex".
             If not provided, the tables will only be displayed.
 
@@ -38,6 +54,21 @@ def display_tables(
     if not metrics_result.table_results or not metrics_result.table_metrics:
         LOGGER.warning("No table metrics to display.")
         return
+
+    if (
+        any(isinstance(metric, SCALE_METRICS) for metric in metrics_result.table_metrics)
+        and metrics_result.agent_metrics
+    ):
+        metric_views = next(iter(metrics_result.agent_metrics.values()))[0]
+        scale_metrics_in_use = [
+            metric.table_description for metric in metrics_result.table_metrics if isinstance(metric, SCALE_METRICS)
+        ]
+        if any(isinstance(a.cost, EmpiricalRiskCost) for a in metric_views):
+            LOGGER.info(
+                f"Empirical-risk cost functions are in use. Compute counters increment by the number of samples "
+                f"processed in each method call, which can lead to large raw counts. Applying scaling factor of "
+                f"'scale_compute={scale_compute}' to {scale_metrics_in_use} metrics for display."
+            )
 
     table_results = metrics_result.table_results
     algs = list(table_results.keys())
@@ -49,6 +80,10 @@ def display_tables(
             row = [f"{metric.table_description} ({statistic_name})"]
             for alg in algs:
                 mean, margin_of_error = table_results[alg][metric][statistic_name]
+
+                if isinstance(metric, SCALE_METRICS):
+                    mean, margin_of_error = mean * scale_compute, margin_of_error * scale_compute
+
                 formatted_confidence_interval = _format_confidence_interval(
                     mean,
                     margin_of_error,

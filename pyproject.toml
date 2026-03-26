@@ -33,7 +33,6 @@ dev = [
   "pytest",
   "ruff",
   "scipy-stubs",
-  "sphinx",
   "types-networkx",
   "types-tabulate",
   "torch",
@@ -51,6 +50,11 @@ dev-gpu = [
   "tensorflow[and-cuda]",
   "jax[cuda12]",
 ]
+sphinx-tools = [
+  "sphinx",
+  "pydata-sphinx-theme",
+  "sphinxcontrib-bibtex",
+]
 
 
 [build-system]
@@ -65,8 +69,8 @@ description = "Generate dev venv with all dependencies, active with `source .tox
 deps = [
   ".[dev]",
   ".[dev-cpu]",
-  "git+https://github.com/microsoft/python-type-stubs.git@main",
-  "pydata-sphinx-theme"
+  ".[sphinx-tools]",
+  "git+https://github.com/microsoft/python-type-stubs.git@main"
 ]
 
 [tool.tox.env.dev-gpu]
@@ -74,13 +78,13 @@ description = "Generate dev venv with all dependencies including GPU support, ac
 deps = [
   ".[dev]",
   ".[dev-gpu]",
-  "git+https://github.com/microsoft/python-type-stubs.git@main",
-  "pydata-sphinx-theme"
+  ".[sphinx-tools]",
+  "git+https://github.com/microsoft/python-type-stubs.git@main"
 ]
 
 [tool.tox.env.sphinx]
 description = "Generate rst and html files using sphinx"
-deps = ["sphinx", "pydata-sphinx-theme"]
+deps = [".[sphinx-tools]"]
 commands = [
   ["sphinx-apidoc", "-o", "docs/source/api", "decent_bench", "--separate", "--no-toc", "--templatedir=docs/source/_templates"],
   ["sphinx-build", "-W", "-E", "-b", "html", "docs/source", "docs/build/html"]

@@ -26,6 +26,7 @@ extensions = [
     "sphinx.ext.intersphinx",  # Link to types from external packages
     "sphinx.ext.napoleon",  # Parse Google style docstrings
     "sphinx.ext.viewcode",  # View source code
+    "sphinxcontrib.bibtex",  # For bibliography in API docs
     "class_tagger",  # Tag-based class list directives
 ]
 
@@ -34,6 +35,7 @@ tagged_list_modules = [
     "decent_bench.costs",
 ]
 
+bibtex_bibfiles = ["references.bib"]
 autodoc_default_options = {}
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True

@@ -27,7 +27,8 @@ def display_metrics(
     plot_grid: bool = True,
     individual_plots: bool = False,
     computational_cost: ComputationalCost | None = None,
-    x_axis_scaling: float = 1e-4,
+    scale_x_axis: float = 1e-4,
+    scale_compute: float = 1.0,
     compare_iterations_and_computational_cost: bool = False,
     save_path: str | Path | None = None,
     plot_format: Literal["png", "pdf", "svg"] = "png",
@@ -49,8 +50,14 @@ def display_metrics(
         individual_plots: whether to plot each metric in a separate figure
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
             of computational cost
-        x_axis_scaling: scaling factor for computational cost x-axis, used to convert the cost units into more
+        scale_x_axis: scaling factor for computational cost x-axis, used to convert the cost units into more
             manageable units for plotting. Only used if ``computational_cost`` is provided.
+        scale_compute: scaling factor for the compute related metrics (i.e.
+            :class:`~decent_bench.metrics.metric_library.FunctionCalls`,
+            :class:`~decent_bench.metrics.metric_library.GradientCalls`,
+            :class:`~decent_bench.metrics.metric_library.HessianCalls` and
+            :class:`~decent_bench.metrics.metric_library.ProximalCalls`) shown in the table, used to convert the
+            raw count into more manageable units for display.
         compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
             metric vs iterations. Only used if ``computational_cost`` is provided.
         save_path: optional directory path to save the tables and plots to. Tables will be saved as ``table.txt`` and
@@ -115,11 +122,11 @@ def display_metrics(
     elif save_path is None and checkpoint_manager is not None:
         save_path = checkpoint_manager.get_results_path()
 
-    display_tables(new_metrics_result, table_fmt=table_fmt, table_path=save_path)
+    display_tables(new_metrics_result, table_fmt=table_fmt, scale_compute=scale_compute, table_path=save_path)
     display_plots(
         new_metrics_result,
         computational_cost=computational_cost,
-        x_axis_scaling=x_axis_scaling,
+        scale_x_axis=scale_x_axis,
         compare_iterations_and_computational_cost=compare_iterations_and_computational_cost,
         individual_plots=individual_plots,
         plot_grid=plot_grid,
