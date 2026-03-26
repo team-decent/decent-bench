@@ -201,11 +201,7 @@ class Network(ABC):  # noqa: B024
         """Agents directly connected to ``agent`` and are active at the given iteration."""
         if agent not in self._active_connected_agents_cache:
             active_agents = set(self.active_agents())
-            self._active_connected_agents_cache[agent] = [
-                a
-                for a in self.connected_agents(agent)
-                if a in active_agents
-            ]
+            self._active_connected_agents_cache[agent] = [a for a in self.connected_agents(agent) if a in active_agents]
         return self._active_connected_agents_cache[agent]
 
     def _send_one(self, sender: Agent, receiver: Agent, msg: Array) -> None:
