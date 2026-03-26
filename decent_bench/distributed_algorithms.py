@@ -345,7 +345,7 @@ class FedAvg(FedAlgorithm):
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
     def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
-        local_x = iop.copy(client.messages[server])
+        local_x = iop.copy(client.messages[server]) if server in client.messages else iop.copy(client.x)
         if isinstance(client.cost, EmpiricalRiskCost):
             cost = client.cost
             n_samples = cost.n_samples
