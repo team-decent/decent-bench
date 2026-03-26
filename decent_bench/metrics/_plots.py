@@ -244,21 +244,25 @@ def _create_and_plot_figures(
                 x, y_mean, y_min, y_max = plot_results[alg][metric]
 
                 if metric.x_log and any(val <= 0 for val in x):
-                    x = [val if val > 0 else 1e-8 for val in x]  # avoid log(0) issues
+                    non_positive_replacement = min(*(val for val in x if val > 0), 1e-8)
+                    x = [val if val > 0 else non_positive_replacement for val in x]  # avoid log(0) issues
                     LOGGER.warning(
                         f"Metric '{metric.plot_description}' has x_log=True but contains non-positive x values. "
-                        f"These values have been replaced with 1e-8 for plotting purposes."
+                        f"These values have been replaced with {non_positive_replacement} for plotting purposes."
                     )
                 if metric.y_log and any(val <= 0 for val in y_mean):
-                    y_mean = [val if val > 0 else 1e-8 for val in y_mean]
+                    non_positive_replacement = min(*(val for val in y_mean if val > 0), 1e-8)
+                    y_mean = [val if val > 0 else non_positive_replacement for val in y_mean]
                     LOGGER.warning(
                         f"Metric '{metric.plot_description}' has y_log=True but contains non-positive y values. "
-                        f"These values have been replaced with 1e-8 for plotting purposes."
+                        f"These values have been replaced with {non_positive_replacement} for plotting purposes."
                     )
                 if metric.y_log and any(val <= 0 for val in y_min):
-                    y_min = [val if val > 0 else 1e-8 for val in y_min]
+                    non_positive_replacement = min(*(val for val in y_min if val > 0), 1e-8)
+                    y_min = [val if val > 0 else non_positive_replacement for val in y_min]
                 if metric.y_log and any(val <= 0 for val in y_max):
-                    y_max = [val if val > 0 else 1e-8 for val in y_max]
+                    non_positive_replacement = min(*(val for val in y_max if val > 0), 1e-8)
+                    y_max = [val if val > 0 else non_positive_replacement for val in y_max]
 
                 # Determine subplot index
                 subplot_idx = metric_index_in_group * (2 if two_columns else 1)
