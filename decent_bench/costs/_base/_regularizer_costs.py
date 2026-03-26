@@ -7,6 +7,8 @@ import numpy as np
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
+from decent_bench.costs._base._sum_cost import SumCost
+from decent_bench.utils._tags import tags
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
@@ -195,6 +197,7 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
         )
 
 
+@tags("regularizer")
 class L1RegularizerCost(BaseRegularizerCost):
     r"""
     L1 regularizer cost.
@@ -228,6 +231,7 @@ class L1RegularizerCost(BaseRegularizerCost):
         return iop.sign(x) * shrink
 
 
+@tags("regularizer")
 class L2RegularizerCost(BaseRegularizerCost):
     r"""
     L2 regularizer cost.
@@ -260,6 +264,7 @@ class L2RegularizerCost(BaseRegularizerCost):
         return x / (1.0 + rho)
 
 
+@tags("regularizer")
 class FractionalQuadraticRegularizerCost(BaseRegularizerCost):
     r"""
     Nonconvex fractional quadratic regularizer.
