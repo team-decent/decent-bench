@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from decent_bench.agents import Agent
 
 
-def zero_initialization(x0: Array | None, network: Network, stacked_copies: int | None = None) -> Array:
+def zero_initialization(network: Network, stacked_copies: int | None = None) -> Array:
     """
     Initialize the variable to zero if x0 is None.
 

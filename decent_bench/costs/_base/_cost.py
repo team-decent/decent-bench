@@ -6,6 +6,7 @@ from typing import Any
 
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
+import decent_bench.utils.interoperability as iop
 
 
 class Cost(ABC):  # noqa: PLR0904
@@ -109,6 +110,17 @@ class Cost(ABC):  # noqa: PLR0904
             - ``np.nan`` if function is not guaranteed to be convex
 
         """
+
+    @property
+    def _custom_x(self) -> Array:
+        """
+        Create a custom Array to be used in :meth:`~decent_bench.distributed_algorithms.Algorithm.initial_states`.
+        
+        Override this property to define a custom value, which is used by 
+        :meth:`~decent_bench.distributed_algorithms.Algorithm.initial_states` to set the inital state of
+        agents when not otherwise specified.
+        """
+        return iop.zeros(self.shape, self.framework, self.device)
 
     @abstractmethod
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ANN401

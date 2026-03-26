@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
     from decent_bench.networks import Network
     from decent_bench.utils.array import Array
+    from decent_bench.agents import Agent
 
 ArrayLike: TypeAlias = Union["numpy.ndarray", "torch.Tensor", "tf.Tensor", "jax.Array"]  # noqa: UP040
 """
@@ -33,6 +34,11 @@ else:
     NetworkT = TypeVar("NetworkT")
 """
 Type variable for algorithms operating on a :class:`~decent_bench.networks.Network`.
+"""
+
+InitialStates: TypeAlias = Union[None, "Array", "dict[Agent, Array]"]
+"""
+Type alias for what can be passed to :meth:`~decent_bench.distributed_algorithms.Algorithm.initial_states`.
 """
 
 ArrayKey: TypeAlias = SupportsIndex | slice | tuple[SupportsIndex | slice, ...]  # noqa: UP040

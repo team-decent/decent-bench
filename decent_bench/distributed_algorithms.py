@@ -10,7 +10,7 @@ from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
-from decent_bench.utils.types import ClientWeights
+from decent_bench.utils.types import ClientWeights, InitialStates
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -49,6 +49,23 @@ class Algorithm[NetworkT: Network](ABC):
     @abstractmethod
     def name(self) -> str:
         """Name of the algorithm."""
+
+    def initial_states(self, x0: InitialStates, network: NetworkT, stacked_copies: int | None = None) -> "dict[Agent, Array]":
+        if x0 is None:
+            x0s = {agent: agent.cost._custom_x for agent in network.graph.nodes()}
+        elif isinstance(x0, Array):
+            x0s = {agent: x0 for agent in network.graph.nodes()}
+        elif isinstance(x0, dict):
+            for agent in network.graph:
+                if agent not in x0:
+                    raise ValueError(f"x0 not provided for agent {agent}")
+            x0s = {agent: x0[agent] for agent in self.graph}
+        else:
+            raise ValueError(f"Invalid x0: expected None, an Array instance, or a dict, got {type(x0)}")
+
+        if stacked_copies is not None:
+            x0s = {agent: iop.stack([x] * stacked_copies) for agent, x in x0s.items()}
+        return x0s
 
     @abstractmethod
     def initialize(self, network: NetworkT) -> None:
@@ -400,7 +417,7 @@ class DGD(P2PAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    x0: "Array | None" = None
+    x0: InitialStates = None
     name: str = "DGD"
 
     def __post_init__(self) -> None:
@@ -415,9 +432,9 @@ class DGD(P2PAlgorithm):
             raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        self.x0 = self.initial_states(self.x0, network)
         for i in network.agents():
-            i.initialize(x=self.x0)
+            i.initialize(x=self.x0[i])
 
         self.W = network.weights
 
@@ -1104,11 +1121,12 @@ class ADMM(P2PAlgorithm):
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
         all_agents = network.agents()
-        self.z0 = alg_helpers.zero_initialization(self.z0, network, stacked_copies=len(all_agents))
+        self.z0 = self.initial_states(self.z0, network, stacked_copies=len(all_agents))
+        # self.z0 = alg_helpers.zero_initialization(self.z0, network, stacked_copies=len(all_agents))
         for i in all_agents:
-            x1 = i.cost.proximal(x=iop.sum(self.z0, dim=0) / pN[i], rho=1 / pN[i])
+            x1 = i.cost.proximal(x=iop.sum(self.z0[i], dim=0) / pN[i], rho=1 / pN[i])
             # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
-            i.initialize(x=x1, aux_vars={"z": self.z0})
+            i.initialize(x=x1, aux_vars={"z": self.z0[i]})
 
         self.pN = pN
 
