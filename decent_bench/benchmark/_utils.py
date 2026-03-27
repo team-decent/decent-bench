@@ -46,7 +46,6 @@ def create_classification_problem(
         device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         squeeze_targets=cost_cls is PyTorchCost,  # PyTorchCost expects squeezed targets for CrossEntropyLoss
-        seed=0,
     )
     test_data = SyntheticClassificationDatasetHandler(
         n_targets=2,
@@ -57,7 +56,6 @@ def create_classification_problem(
         device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         squeeze_targets=cost_cls is PyTorchCost,
-        seed=12345,
     )
 
     if cost_cls is PyTorchCost:
@@ -133,7 +131,6 @@ def create_regression_problem(
         device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         target_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
-        seed=0,
     )
     test_data = SyntheticRegressionDatasetHandler(
         n_targets=1,
@@ -144,7 +141,6 @@ def create_regression_problem(
         device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         target_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
-        seed=12345,
     )
     if cost_cls is PyTorchCost:
         try:

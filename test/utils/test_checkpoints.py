@@ -1,6 +1,7 @@
 import json
 import logging
 import random
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -18,10 +19,20 @@ from decent_bench.benchmark import (
     create_classification_problem,
     resume_benchmark,
 )
-from decent_bench.costs import LogisticRegressionCost
+from decent_bench.costs import LogisticRegressionCost, PyTorchCost
 from decent_bench.distributed_algorithms import ADMM, ATC, DGD, Algorithm
 from decent_bench.networks import Network, P2PNetwork
+from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
 from decent_bench.utils.checkpoint_manager import CheckpointManager
+
+try:
+    import torch
+
+    TORCH_AVAILABLE = True
+    TORCH_CUDA_AVAILABLE = torch.cuda.is_available()
+except ModuleNotFoundError:
+    TORCH_AVAILABLE = False
+    TORCH_CUDA_AVAILABLE = False
 
 # Suppress JAX debug logs that cause issues during cleanup
 logging.getLogger("jax").setLevel(logging.WARNING)
@@ -37,22 +48,31 @@ class DummyAlg(DGD):
 
 
 def _build_problem_and_algorithms(
-    iterations: int = 5,
+    iterations: int,
+    cost_cls: type[LogisticRegressionCost | PyTorchCost],
 ) -> tuple[BenchmarkProblem, list[Algorithm[Any]]]:
     # Keep n_agents low to avoid expensive optimization in tests.
     costs, x_optimal, test_data = create_classification_problem(
-        cost_cls=LogisticRegressionCost,
+        cost_cls=cost_cls,
         n_agents=4,
     )
-    agents = [Agent(i, cost) for i, cost in enumerate(costs)]
-    network = P2PNetwork(graph=nx.complete_graph(len(agents)), agents=agents)
+    agents = [Agent(i, cost, activation=UniformActivationRate(0.8)) for i, cost in enumerate(costs)]
+    network = P2PNetwork(
+        graph=nx.complete_graph(len(agents)),
+        agents=agents,
+        message_compression=Quantization(8),
+        message_noise=GaussianNoise(0.0, 0.01),
+        message_drop=UniformDropRate(0.1),
+    )
     problem = BenchmarkProblem(network=network, x_optimal=x_optimal, test_data=test_data)
     algorithms: list[Algorithm[Any]] = [
         DGD(iterations=iterations, step_size=0.01),
         ATC(iterations=iterations, step_size=0.01),
         DummyAlg(iterations=iterations, step_size=0.01, name="DummyAlg"),
-        ADMM(iterations=iterations),
-    ]
+    ] + (
+        # ADMM does not work with PyTorchCost due to no Proximal
+        [ADMM(iterations=iterations),] if cost_cls is LogisticRegressionCost else []
+    )
     return problem, algorithms
 
 
@@ -66,7 +86,7 @@ def test_init_validates_arguments(tmp_path: Path) -> None:  # noqa: D103
 
 def test_initialize_saves_structure_and_metadata(tmp_path: Path) -> None:  # noqa: D103
     checkpoint_dir = tmp_path / "ckpt"
-    problem, algorithms = _build_problem_and_algorithms()
+    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(
         checkpoint_dir,
         checkpoint_step=2,
@@ -95,7 +115,7 @@ def test_initialize_saves_structure_and_metadata(tmp_path: Path) -> None:  # noq
 
 
 def test_append_metadata_merges_entries(tmp_path: Path) -> None:  # noqa: D103
-    problem, algorithms = _build_problem_and_algorithms()
+    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(tmp_path / "ckpt", benchmark_metadata={"seed": 7})
     manager.initialize(algorithms=algorithms, problem=problem, n_trials=1)
 
@@ -120,7 +140,7 @@ def test_should_checkpoint_logic(tmp_path: Path) -> None:  # noqa: D103
 
 
 def test_save_and_load_checkpoint_roundtrip(tmp_path: Path) -> None:  # noqa: D103
-    problem, algorithms = _build_problem_and_algorithms()
+    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(tmp_path / "ckpt", keep_n_checkpoints=5)
     manager.initialize(algorithms=algorithms, problem=problem, n_trials=1)
 
@@ -153,7 +173,7 @@ def test_save_and_load_checkpoint_roundtrip(tmp_path: Path) -> None:  # noqa: D1
 
 
 def test_mark_unmark_and_load_trial_result(tmp_path: Path) -> None:  # noqa: D103
-    problem, algorithms = _build_problem_and_algorithms()
+    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(tmp_path / "ckpt")
     manager.initialize(algorithms=algorithms, problem=problem, n_trials=1)
 
@@ -177,7 +197,7 @@ def test_mark_unmark_and_load_trial_result(tmp_path: Path) -> None:  # noqa: D10
 
 
 def test_cleanup_old_checkpoints_keeps_latest_n(tmp_path: Path) -> None:  # noqa: D103
-    problem, algorithms = _build_problem_and_algorithms()
+    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(tmp_path / "ckpt", keep_n_checkpoints=2)
     manager.initialize(algorithms=algorithms, problem=problem, n_trials=1)
 
@@ -204,7 +224,7 @@ def test_cleanup_old_checkpoints_keeps_latest_n(tmp_path: Path) -> None:  # noqa
 def test_load_benchmark_result_skips_incomplete_algorithms(  # noqa: D103
     tmp_path: Path,
 ) -> None:
-    problem, algorithms = _build_problem_and_algorithms()
+    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(tmp_path / "ckpt")
     manager.initialize(algorithms=algorithms, problem=problem, n_trials=2)
 
@@ -260,7 +280,7 @@ def test_save_and_load_metrics_result(tmp_path: Path) -> None:  # noqa: D103
 
 
 def test_create_backup_and_clear(tmp_path: Path) -> None:  # noqa: D103
-    problem, algorithms = _build_problem_and_algorithms()
+    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(tmp_path / "ckpt")
     manager.initialize(algorithms=algorithms, problem=problem, n_trials=1)
 
@@ -272,18 +292,34 @@ def test_create_backup_and_clear(tmp_path: Path) -> None:  # noqa: D103
     assert not (tmp_path / "ckpt").exists()
 
 
-@pytest.mark.parametrize("seed", [None, 42])
+@pytest.mark.parametrize("seed", [1, 42])
+@pytest.mark.parametrize(
+    "cost_cls",
+    [
+        LogisticRegressionCost,
+        pytest.param(
+            PyTorchCost,
+            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+        ),
+    ],
+)
 @pytest.mark.filterwarnings(
     "ignore:os.fork\\(\\) was called.*:RuntimeWarning"
 )  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
-def test_resume_from_checkpoint(tmp_path: Path, seed: int | None) -> None:  # noqa: D103
+def test_resume_from_checkpoint(
+    tmp_path: Path,
+    cost_cls: type[LogisticRegressionCost | PyTorchCost],
+    seed: int | None,
+) -> None:
     if seed is not None:
         iop.set_seed(seed)
 
-    problem_5, algorithms_5 = _build_problem_and_algorithms(5)
-    problem_10, algorithms_10 = _build_problem_and_algorithms(10)
-    manager = CheckpointManager(tmp_path / "ckpt", checkpoint_step=2)
+    problem_5, algorithms_5 = _build_problem_and_algorithms(5, cost_cls=cost_cls)
+    problem_10, algorithms_10 = deepcopy(problem_5), deepcopy(algorithms_5)
+    for alg in algorithms_10:
+        alg.iterations = 10
 
+    manager = CheckpointManager(tmp_path / "ckpt", checkpoint_step=2)
     bench_5 = benchmark(
         algorithms=algorithms_5,
         benchmark_problem=problem_5,
@@ -357,24 +393,41 @@ def test_resume_from_checkpoint(tmp_path: Path, seed: int | None) -> None:  # no
                     )
 
 
-@pytest.mark.parametrize("seed", [None, 42])
+@pytest.mark.parametrize("seed", [1, 42])
+@pytest.mark.parametrize(
+    "cost_cls",
+    [
+        LogisticRegressionCost,
+        pytest.param(
+            PyTorchCost,
+            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+        ),
+    ],
+)
 @pytest.mark.filterwarnings(
     "ignore:os.fork\\(\\) was called.*:RuntimeWarning"
 )  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
-def test_resume_from_non_completed_checkpoint(tmp_path: Path, seed: int | None) -> None:  # noqa: D103
+def test_resume_from_non_completed_checkpoint(
+    tmp_path: Path,
+    cost_cls: type[LogisticRegressionCost | PyTorchCost],
+    seed: int | None,
+) -> None:
     if seed is not None:
         iop.set_seed(seed)
 
-    problem_5, algorithms_5 = _build_problem_and_algorithms(5)
-    problem_10, algorithms_10 = _build_problem_and_algorithms(10)
-    manager = CheckpointManager(tmp_path / "ckpt", checkpoint_step=2)
+    problem_5, algorithms_5 = _build_problem_and_algorithms(5, cost_cls=cost_cls)
+    problem_10, algorithms_10 = deepcopy(problem_5), deepcopy(algorithms_5)
+    for alg in algorithms_10:
+        alg.iterations = 10
 
+    manager = CheckpointManager(tmp_path / "ckpt", checkpoint_step=2)
     bench_5 = benchmark(
         algorithms=algorithms_5,
         benchmark_problem=problem_5,
         n_trials=2,
         checkpoint_manager=manager,
     )
+
     bench_10 = benchmark(
         algorithms=algorithms_10,
         benchmark_problem=problem_10,
@@ -394,7 +447,7 @@ def test_resume_from_non_completed_checkpoint(tmp_path: Path, seed: int | None) 
             print(f"Progress for algorithm_0 trial_0: {progress}")
 
     # Modify the checkpoint to simulate an interrupted run that did not mark the trial as complete
-    for alg in range(len(algorithms_5)):
+    for alg in range(len(algorithms_5) - 1):
         for trial in range(2):
             progress_path = tmp_path / "ckpt" / f"algorithm_{alg}" / f"trial_{trial}" / "progress.json"
             with progress_path.open(encoding="utf-8") as f:
@@ -422,7 +475,7 @@ def test_resume_from_non_completed_checkpoint(tmp_path: Path, seed: int | None) 
         if path.name == "progress.json":
             with path.open(encoding="utf-8") as f:
                 progress = json.load(f)
-            print(f"Progress for algorithm_0 trial_0: {progress}")
+            print(f"Progress for {path.parent.name}: {progress}")
 
     resumed_bench = resume_benchmark(
         checkpoint_manager=manager,

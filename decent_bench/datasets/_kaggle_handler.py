@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from collections.abc import Sequence
 
 import numpy as np
@@ -32,7 +33,6 @@ class KaggleDatasetHandler(DatasetHandler):
         device: SupportedDevices = SupportedDevices.CPU,
         dtype: DTypeLike = np.float64,
         samples_per_partition: int | None = None,
-        seed: int | None = None,
     ) -> None:
         """
         Dataset wrapper for Kaggle datasets.
@@ -47,7 +47,6 @@ class KaggleDatasetHandler(DatasetHandler):
             device: Device to use for data representation
             dtype: Data type of the returned arrays
             samples_per_partition: Number of samples per partition
-            seed: Random seed for shuffling the dataset
 
         Raises:
             ImportError: If kagglehub or pandas is not installed
@@ -73,7 +72,6 @@ class KaggleDatasetHandler(DatasetHandler):
         self.framework = framework
         self.device = device
         self.dtype = dtype
-        self.seed = seed
         self._partitions: Sequence[Dataset] | None = None
 
         self._df: pd.DataFrame = kagglehub.dataset_load(  # pyright: ignore[reportPossiblyUnboundVariable]
@@ -134,7 +132,7 @@ class KaggleDatasetHandler(DatasetHandler):
 
     def _random_split(self, df: pd.DataFrame) -> Sequence[Dataset]:
         # Shuffle the dataframe
-        df = df.sample(frac=1, random_state=self.seed, replace=False).reset_index(drop=True)
+        df = df.sample(frac=1, random_state=random.randint(0, 2**32 - 1), replace=False).reset_index(drop=True)
 
         partitions: list[Dataset] = []
         for i in range(self.n_partitions):

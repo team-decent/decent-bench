@@ -144,6 +144,7 @@ class PyTorchCost(EmpiricalRiskCost):
 
         self._dataloader: torch.utils.data.DataLoader[Any] | None = None
         self._last_batch_used = []  # Pre-allocate list for last used batch for efficiency in _get_batch_data
+        self._remaining_batch_indices: list[int] = []  # Used for tracking remaining indices when not using dataloader
 
         # Store parameter shapes for flattening/unflattening
         self._params_list = list(self.model.parameters())  # Cache for faster access
@@ -183,11 +184,6 @@ class PyTorchCost(EmpiricalRiskCost):
     @property
     def m_cvx(self) -> float:
         return float("nan")
-
-    @cached_property
-    @override
-    def _rand(self) -> torch.Generator:  # type: ignore[override]
-        return iop.get_torch_generator(SupportedDevices.CPU)  # DataLoader shuffling must be done on CPU
 
     def _clean(self) -> None:
         """Clean up cache."""
@@ -356,7 +352,7 @@ class PyTorchCost(EmpiricalRiskCost):
         dataloader = torch.utils.data.DataLoader(
             cast("torch.utils.data.Dataset[Any]", self._dataset),
             batch_size=self.batch_size,
-            generator=self._rand,
+            generator=iop.get_torch_generator(SupportedDevices.CPU),  # DataLoader shuffling must be done on CPU
             collate_fn=_collate_xy_idx,
             **self._dataloader_kwargs,
         )
@@ -386,7 +382,11 @@ class PyTorchCost(EmpiricalRiskCost):
                     if self._use_dataloader:
                         batch_x, batch_y, batch_idx = self._handle_dataloader()
                     else:
-                        indices = torch.randperm(self.n_samples, generator=self._rand)[: self.batch_size].tolist()
+                        if len(self._remaining_batch_indices) < self.batch_size:
+                            # Refill remaining indices if not enough left for a full batch
+                            self._remaining_batch_indices = torch.randperm(self.n_samples).tolist()
+                        indices = self._remaining_batch_indices[: self.batch_size]
+                        self._remaining_batch_indices = self._remaining_batch_indices[self.batch_size :]
                 else:
                     # Use full dataset
                     indices = list(range(self.n_samples))

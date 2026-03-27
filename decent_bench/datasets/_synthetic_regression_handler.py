@@ -1,3 +1,5 @@
+import random
+
 import numpy as np
 from numpy.typing import DTypeLike
 from sklearn import datasets as sk_datasets
@@ -21,7 +23,6 @@ class SyntheticRegressionDatasetHandler(DatasetHandler):
         feature_dtype: DTypeLike = np.float64,
         target_dtype: DTypeLike = np.float64,
         squeeze_targets: bool = False,
-        seed: int | None = None,
     ):
         """
         Dataset with synthetic regression data.
@@ -37,7 +38,6 @@ class SyntheticRegressionDatasetHandler(DatasetHandler):
             feature_dtype: Data type of the features in the returned arrays
             target_dtype: Data type of the targets in the returned arrays
             squeeze_targets: If true, empty dimensions are removed from the targets, e.g. shape (1,) becomes ()
-            seed: Seed used for random generation, set to a specific value for reproducible results
 
         """
         self._n_partitions = n_partitions
@@ -49,7 +49,6 @@ class SyntheticRegressionDatasetHandler(DatasetHandler):
         self.feature_dtype = feature_dtype
         self.target_dtype = target_dtype
         self.squeeze_targets = squeeze_targets
-        self.seed = seed
         self._partitions: list[Dataset] | None = None
 
     @property
@@ -74,8 +73,8 @@ class SyntheticRegressionDatasetHandler(DatasetHandler):
     def get_partitions(self) -> list[Dataset]:
         if self._partitions is None:
             res: list[Dataset] = []
-            for i in range(self.n_partitions):
-                seed = self.seed + i if self.seed is not None else None
+            for _ in range(self.n_partitions):
+                seed = random.randint(0, 2**32 - 1)
                 partition = sk_datasets.make_regression(
                     n_samples=self._n_samples_per_partition,
                     n_features=self.n_features,

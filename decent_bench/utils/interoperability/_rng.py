@@ -57,7 +57,7 @@ class _RngState:
 _STATE = _RngState(
     numpy_rng=np.random.default_rng(),
     jax_key=(jax.random.key(random.randint(0, 2**32 - 1)) if jax else None),
-    tf_generator=(tf.random.get_global_generator() if tf else None),
+    tf_generator=(tf.random.Generator.from_non_deterministic_state() if tf else None),
     torch_generators={},
 )
 
@@ -68,13 +68,36 @@ def _selected_frameworks(frameworks: Iterable[SupportedFrameworks] | None) -> se
     return set(frameworks)
 
 
-def set_seed(seed: int, frameworks: Iterable[SupportedFrameworks] | None = None) -> None:
+def set_seed(
+    seed: int,
+    frameworks: Iterable[SupportedFrameworks] | None = None,
+) -> None:
     """
     Set random seeds across supported frameworks.
 
     Args:
         seed: Base seed to use.
         frameworks: Optional subset of frameworks to seed. If ``None``, all are seeded.
+
+    """
+    _set_seed(seed=seed, frameworks=frameworks, set_global_seed=True)
+
+
+def _set_seed(
+    seed: int,
+    frameworks: Iterable[SupportedFrameworks] | None = None,
+    *,
+    set_global_seed: bool = True,
+) -> None:
+    """
+    Set random seeds across supported frameworks.
+
+    Args:
+        seed: Base seed to use.
+        frameworks: Optional subset of frameworks to seed. If ``None``, all are seeded.
+        set_global_seed: Whether to update the globally tracked seed returned by
+            :func:`get_seed`. Set this to ``False`` for trial-local reseeding where
+            preserving the external base seed is required.
 
     """
     selected = _selected_frameworks(frameworks)
@@ -91,13 +114,14 @@ def set_seed(seed: int, frameworks: Iterable[SupportedFrameworks] | None = None)
         _STATE.torch_generators.clear()
 
     if tf and SupportedFrameworks.TENSORFLOW in selected:
-        tf.random.set_global_generator(tf.random.Generator.from_seed(seed, alg="philox"))
+        tf.random.set_seed(seed)
         _STATE.tf_generator = tf.random.Generator.from_seed(seed, alg="philox")
 
     if jax and SupportedFrameworks.JAX in selected:
         _STATE.jax_key = jax.random.key(seed)
 
-    _STATE.global_seed = seed
+    if set_global_seed:
+        _STATE.global_seed = seed
 
 
 def get_seed() -> int | None:
@@ -165,13 +189,20 @@ def get_tensorflow_generator() -> TfGenerator:
 
 
 def get_rng_state(frameworks: Iterable[SupportedFrameworks] | None = None) -> dict[str, Any]:
-    """Return a picklable snapshot of all managed RNG states."""
+    """
+    Return a picklable snapshot of all managed RNG states.
+
+    Args:
+        frameworks: Optional subset of frameworks to seed. If ``None``, all are seeded.
+
+    """
     selected = _selected_frameworks(frameworks)
 
     state: dict[str, Any] = {
         "seed": _STATE.global_seed,
         "python_random_state": random.getstate(),
         "numpy_bit_generator_state": deepcopy(_STATE.numpy_rng.bit_generator.state),
+        "numpy_rng_state": np.random.get_state(),  # noqa: NPY002 # Include legacy state for users who use legacy np.random functions
     }
 
     if torch and SupportedFrameworks.PYTORCH in selected:
@@ -181,8 +212,7 @@ def get_rng_state(frameworks: Iterable[SupportedFrameworks] | None = None) -> di
         state["torch_generators"] = {device: gen.get_state() for device, gen in _STATE.torch_generators.items()}
 
     if tf and _STATE.tf_generator is not None and SupportedFrameworks.TENSORFLOW in selected:
-        state["tf_rng_state"] = np.array(tf.random.get_global_generator().state.numpy())
-        state["tf_generator_state"] = np.array(_STATE.tf_generator.state.numpy())
+        state["tf_generator_state"] = _STATE.tf_generator.state.numpy()
 
     if jax and _STATE.jax_key is not None and SupportedFrameworks.JAX in selected:
         state["jax_key"] = jax.random.key_data(_STATE.jax_key)
@@ -194,6 +224,7 @@ def set_rng_state(state: dict[str, Any]) -> None:
     """Restore a RNG snapshot created by ``get_rng_state``."""
     if "seed" in state:
         _STATE.global_seed = state["seed"]
+        print("Set seed in set rng state to: ", state["seed"])
 
     if "python_random_state" in state:
         random.setstate(state["python_random_state"])
@@ -201,6 +232,9 @@ def set_rng_state(state: dict[str, Any]) -> None:
     if "numpy_bit_generator_state" in state:
         _STATE.numpy_rng = np.random.default_rng()
         _STATE.numpy_rng.bit_generator.state = state["numpy_bit_generator_state"]
+
+    if "numpy_rng_state" in state:
+        np.random.set_state(state["numpy_rng_state"])  # noqa: NPY002
 
     if torch and "torch_rng_state" in state:
         torch.random.set_rng_state(state["torch_rng_state"])
@@ -216,8 +250,7 @@ def set_rng_state(state: dict[str, Any]) -> None:
             generator.set_state(generator_state)
             _STATE.torch_generators[device] = generator
 
-    if tf and "tf_rng_state" in state:
-        tf.random.set_global_generator(tf.random.get_global_generator().from_state(state["tf_rng_state"], alg="philox"))
+    if tf and "tf_generator_state" in state:
         _STATE.tf_generator = tf.random.Generator.from_state(state["tf_generator_state"], alg="philox")
 
     if jax and "jax_key" in state:
@@ -259,7 +292,7 @@ def randn(
         return _return_array(torch.normal(mean=mean, std=std, size=shape, device=framework_device))
     if tf and framework == SupportedFrameworks.TENSORFLOW:
         with tf.device(framework_device):
-            return _return_array(tf.random.normal(shape=shape, mean=mean, stddev=std))
+            return _return_array(get_tensorflow_generator().normal(shape=shape, mean=mean, stddev=std))
     if jax and framework == SupportedFrameworks.JAX:
         sub_key = get_next_jax_key()
         return _return_array(mean + std * jax.random.normal(sub_key, shape=shape).to_device(framework_device))
@@ -302,7 +335,7 @@ def rand(
         return _return_array((high - low) * torch.rand(size=shape, device=framework_device) + low)
     if tf and framework == SupportedFrameworks.TENSORFLOW:
         with tf.device(framework_device):
-            return _return_array(tf.random.uniform(shape=shape, minval=low, maxval=high))
+            return _return_array(get_tensorflow_generator().uniform(shape=shape, minval=low, maxval=high))
     if jax and framework == SupportedFrameworks.JAX:
         sub_key = get_next_jax_key()
         return _return_array(
@@ -338,7 +371,7 @@ def rand_like(array: Array, low: float = 0.0, high: float = 1.0) -> Array:
     if torch and isinstance(value, torch.Tensor):
         return _return_array((high - low) * torch.rand_like(value) + low)
     if tf and isinstance(value, tf.Tensor):
-        return _return_array(tf.random.uniform(tf.shape(value), dtype=value.dtype, minval=low, maxval=high))
+        return _return_array(get_tensorflow_generator().uniform(shape=tf.shape(value), minval=low, maxval=high))
     if jnp and jax and isinstance(value, jnp.ndarray | jnp.generic):
         sub_key = get_next_jax_key()
         return _return_array(jax.random.uniform(sub_key, shape=value.shape, dtype=value.dtype, minval=low, maxval=high))
@@ -373,7 +406,7 @@ def randn_like(array: Array, mean: float = 0.0, std: float = 1.0) -> Array:
         return _return_array(torch.normal(mean=mean, std=std, size=value.shape, dtype=value.dtype, device=value.device))
     if tf and isinstance(value, tf.Tensor):
         shape = tf.shape(value)
-        return _return_array(tf.random.normal(shape=shape, mean=mean, stddev=std, dtype=value.dtype))
+        return _return_array(get_tensorflow_generator().normal(shape=shape, mean=mean, stddev=std, dtype=value.dtype))
     if jnp and jax and isinstance(value, jnp.ndarray | jnp.generic):
         sub_key = get_next_jax_key()
         return _return_array(mean + std * jax.random.normal(sub_key, shape=value.shape, dtype=value.dtype))

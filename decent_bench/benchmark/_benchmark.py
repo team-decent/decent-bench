@@ -19,6 +19,7 @@ from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics import RuntimeMetricPlotter
 from decent_bench.networks import Network
 from decent_bench.utils import logger
+from decent_bench.utils.interoperability._rng import _set_seed
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.progress_bar import ProgressBarController
 from decent_bench.utils.types import SupportedFrameworks
@@ -501,7 +502,7 @@ def _run_trial(  # noqa: PLR0917
 ) -> Network:
     # Set seed for used frameworks
     used_frameworks = {agent.cost.framework for agent in problem.network.agents()}
-    iop.set_seed(trial_seed, used_frameworks)
+    _set_seed(trial_seed, used_frameworks, set_global_seed=False)
 
     rng_state: dict[str, Any] | None = None
     if checkpoint_manager is not None:

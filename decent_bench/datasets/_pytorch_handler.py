@@ -4,8 +4,9 @@ import random
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, cast
 
+import decent_bench.utils.interoperability as iop
 from decent_bench.utils.logger import LOGGER
-from decent_bench.utils.types import Dataset
+from decent_bench.utils.types import Dataset, SupportedDevices
 
 from ._dataset_handler import DatasetHandler
 
@@ -13,7 +14,6 @@ if TYPE_CHECKING:
     import torch
 
 try:
-    from torch import Generator
     from torch.utils.data import Subset as TorchSubset
     from torch.utils.data import random_split as torch_random_split
 
@@ -33,7 +33,6 @@ class PyTorchDatasetHandler(DatasetHandler):
         samples_per_partition: int | None = None,
         heterogeneity: bool = False,
         targets_per_partition: int = 1,
-        seed: int | None = None,
     ) -> None:
         """
         Dataset wrapper for PyTorch datasets which represents datapoints as tuples (features, targets).
@@ -52,7 +51,6 @@ class PyTorchDatasetHandler(DatasetHandler):
             samples_per_partition: Number of samples per partition, if None, will split evenly
             heterogeneity: Whether to create heterogeneous partitions with unique classes
             targets_per_partition: Number of unique classes per partition (only if heterogeneity is True)
-            seed: Random seed for shuffling the dataset
 
         Raises:
             ImportError: If PyTorch is not installed
@@ -78,7 +76,6 @@ class PyTorchDatasetHandler(DatasetHandler):
         self.samples_per_partition = samples_per_partition
         self.heterogeneity = heterogeneity
         self.targets_per_partition = targets_per_partition
-        self.seed = seed
         self._partitions: list[Dataset] | None = None
 
         if self.heterogeneity:
@@ -149,13 +146,9 @@ class PyTorchDatasetHandler(DatasetHandler):
                 f"must be <= n_datapoints ({self.n_samples})"
             )
 
-        generator = None
-        if self.seed is not None:
-            generator = Generator().manual_seed(self.seed)  # pyright: ignore[reportPossiblyUnboundVariable]
-
         partitions = cast(
             "list[Dataset]",
-            torch_random_split(self.torch_dataset, parts, generator=generator),  # pyright: ignore[reportPossiblyUnboundVariable]
+            torch_random_split(self.torch_dataset, parts, generator=iop.get_torch_generator(SupportedDevices.CPU)),
         )
 
         return partitions[: self.n_partitions]
@@ -171,10 +164,6 @@ class PyTorchDatasetHandler(DatasetHandler):
         for idx, (_, label) in enumerate(self.torch_dataset):  # type: ignore[misc, arg-type]
             if label in class_to_indices or len(class_to_indices) < (self.n_partitions * self.targets_per_partition):  # type: ignore[has-type]
                 class_to_indices[label].append(idx)  # type: ignore[has-type]
-
-        # Set random seed if specified for reproducibility
-        if self.seed is not None:
-            random.seed(self.seed)
 
         # Create partitions from class-grouped indices
         idx_partitions = []
