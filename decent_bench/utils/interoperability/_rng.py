@@ -411,3 +411,43 @@ def randn_like(array: Array, mean: float = 0.0, std: float = 1.0) -> Array:
         return _return_array(mean + std * jax.random.normal(sub_key, shape=value.shape, dtype=value.dtype))
 
     raise TypeError(f"Unsupported framework type: {type(value)}")
+
+
+def choice(array: Array, size: int, replace: bool = True) -> Array:
+    """
+    Randomly sample elements from an array.
+
+    Args:
+        array (Array): Input array to sample from.
+        size (int): Number of samples to draw.
+        replace (bool): Whether to sample with replacement.
+
+    Returns:
+        Array: Sampled values in the same framework type as the input.
+
+    Raises:
+        TypeError: if the framework type of `array` is unsupported.
+
+    """
+    value = array.value if isinstance(array, Array) else array
+
+    if isinstance(value, np.ndarray | np.generic):
+        random_array = get_numpy_generator().choice(value, size=size, replace=replace)
+        return _return_array(random_array)
+    if torch and isinstance(value, torch.Tensor):
+        unif = torch.ones(value.shape[0], device=value.device)
+        indices = unif.multinomial(num_samples=size, replacement=replace)
+        return _return_array(value[indices])
+    if tf and isinstance(value, tf.Tensor):
+        if replace:
+            indices = get_tensorflow_generator().uniform(shape=(size,), minval=0, maxval=value.shape[0], dtype=tf.int32)
+        else:
+            scores = get_tensorflow_generator().uniform(shape=(value.shape[0],), dtype=tf.float32)
+            indices = tf.math.top_k(scores, k=size).indices
+        return _return_array(tf.gather(value, indices))
+    if jnp and jax and isinstance(value, jnp.ndarray | jnp.generic):
+        sub_key = get_next_jax_key()
+        indices = jax.random.choice(sub_key, a=value.shape[0], shape=(size,), replace=replace)
+        return _return_array(value[indices])
+
+    raise TypeError(f"Unsupported framework type: {type(value)}")

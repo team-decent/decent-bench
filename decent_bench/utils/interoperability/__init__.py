@@ -54,6 +54,7 @@ from ._operators import (
     sub,
 )
 from ._rng import (
+    choice,
     get_next_jax_key,
     get_numpy_generator,
     get_rng_state,
@@ -119,6 +120,7 @@ __all__ = [  # noqa: RUF022
     # Extensions
     "ext",
     # RNG manager
+    "choice",
     "get_numpy_generator",
     "get_rng_state",
     "get_seed",

@@ -457,7 +457,6 @@ def test_set_rng_state_with_different_seeds(framework: str, device: str) -> None
     rand_first = iop.rand(framework=framework_enum, shape=shape, device=device_enum)
     randn_first = iop.randn(framework=framework_enum, shape=shape, device=device_enum)
 
-
     iop.set_seed(seed=seed2, frameworks=[framework_enum])
     assert iop.get_seed() == seed2
     _ = iop.rand(framework=framework_enum, shape=shape, device=device_enum)  # Advance the RNG state with the new seed
@@ -490,3 +489,163 @@ def test_set_rng_state_with_different_seeds_python() -> None:
     first_after_restore_again = random.random()
 
     _assert_same_random_values(first_after_restore, first_after_restore_again)
+
+
+@pytest.mark.parametrize(
+    ("framework", "device"),
+    [
+        ("numpy", "cpu"),
+        pytest.param(
+            "pytorch",
+            "cpu",
+            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+        ),
+        pytest.param(
+            "pytorch",
+            "gpu",
+            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "cpu",
+            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "gpu",
+            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+        ),
+        pytest.param(
+            "jax",
+            "cpu",
+            marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
+        ),
+        pytest.param(
+            "jax",
+            "gpu",
+            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+        ),
+    ],
+)
+@pytest.mark.parametrize(("size", "replace"), [(4, True), (3, False)])
+def test_choice_frameworks(framework: str, device: str, size: int, replace: bool) -> None:
+    """choice should return same-framework values with expected shape and replacement semantics."""
+    data = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
+    arr = create_array(data, framework, device)
+
+    sampled = iop.choice(arr, size=size, replace=replace)
+
+    assert_same_type(sampled, framework)
+    sampled_np = iop.to_numpy(sampled)
+    assert sampled_np.shape == (size,)
+    assert set(sampled_np.tolist()).issubset(set(data))
+    if not replace:
+        assert np.unique(sampled_np).shape[0] == size
+
+
+@pytest.mark.parametrize(
+    ("framework", "device"),
+    [
+        ("numpy", "cpu"),
+        pytest.param(
+            "pytorch",
+            "cpu",
+            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+        ),
+        pytest.param(
+            "pytorch",
+            "gpu",
+            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "cpu",
+            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "gpu",
+            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+        ),
+        pytest.param(
+            "jax",
+            "cpu",
+            marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
+        ),
+        pytest.param(
+            "jax",
+            "gpu",
+            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+        ),
+    ],
+)
+def test_set_seed_makes_choice_reproducible(framework: str, device: str) -> None:
+    """Setting the same seed twice should reproduce identical choice samples."""
+    framework_enum = SupportedFrameworks(framework)
+    seed = 2031
+    data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    arr = create_array(data, framework, device)
+
+    iop.set_seed(seed=seed, frameworks=[framework_enum])
+    first = iop.choice(arr, size=4, replace=True)
+
+    iop.set_seed(seed=seed, frameworks=[framework_enum])
+    second = iop.choice(arr, size=4, replace=True)
+
+    _assert_same_random_values(first, second)
+
+
+@pytest.mark.parametrize(
+    ("framework", "device"),
+    [
+        ("numpy", "cpu"),
+        pytest.param(
+            "pytorch",
+            "cpu",
+            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
+        ),
+        pytest.param(
+            "pytorch",
+            "gpu",
+            marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "cpu",
+            marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
+        ),
+        pytest.param(
+            "tensorflow",
+            "gpu",
+            marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
+        ),
+        pytest.param(
+            "jax",
+            "cpu",
+            marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
+        ),
+        pytest.param(
+            "jax",
+            "gpu",
+            marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
+        ),
+    ],
+)
+@pytest.mark.parametrize("set_seed", [True, False])
+def test_set_rng_state_restores_choice_sequence(framework: str, device: str, set_seed: bool) -> None:
+    """Restoring RNG state should continue the same choice sequence."""
+    framework_enum = SupportedFrameworks(framework)
+    data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    arr = create_array(data, framework, device)
+
+    if set_seed:
+        iop.set_seed(seed=2032, frameworks=[framework_enum])
+
+    _ = iop.choice(arr, size=3, replace=True)
+    state_after_first_draw = iop.get_rng_state(frameworks=[framework_enum])
+
+    second_draw = iop.choice(arr, size=3, replace=True)
+    iop.set_rng_state(state_after_first_draw)
+    second_draw_after_restore = iop.choice(arr, size=3, replace=True)
+
+    _assert_same_random_values(second_draw, second_draw_after_restore)
