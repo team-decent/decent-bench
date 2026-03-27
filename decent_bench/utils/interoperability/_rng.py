@@ -165,7 +165,7 @@ def get_torch_generator(device: SupportedDevices = SupportedDevices.CPU) -> Torc
     framework_device = device_to_framework_device(device, SupportedFrameworks.PYTORCH)
     generator: TorchGenerator = torch.Generator(device=framework_device)
     if _STATE.global_seed is not None:
-        generator.manual_seed(_STATE.global_seed)
+        generator.manual_seed(torch.initial_seed())
     _STATE.torch_generators[device] = generator
     return generator
 

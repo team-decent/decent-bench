@@ -114,7 +114,7 @@ def to_torch(array: Array | SupportedArrayTypes, device: SupportedDevices, dtype
     framework_device = device_to_framework_device(device, SupportedFrameworks.PYTORCH)
 
     if isinstance(value, torch.Tensor):
-        return cast("TorchTensor", value)
+        return cast("TorchTensor", value.to(device=framework_device, dtype=dtype))
     if isinstance(value, np.ndarray | np.generic):
         return cast("TorchTensor", torch.tensor(value, dtype=dtype, device=framework_device))
     if tf and isinstance(value, tf.Tensor):

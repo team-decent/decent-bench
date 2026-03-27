@@ -619,7 +619,7 @@ def _should_use_spawn_context(benchmark_problem: BenchmarkProblem) -> bool:
     )
     if uses_unsafe_framework:
         LOGGER.warning(
-            "It is not recommended to use use multiprocessing with PyTorch/TensorFlow/JAX, "
+            "It is not recommended to use multiprocessing with PyTorch/TensorFlow/JAX, "
             "may cause unexpected behavior. Consider setting max_processes=1 to disable multiprocessing.\n"
             "Execution will continue in 5 seconds, Ctrl+C to abort..."
         )
