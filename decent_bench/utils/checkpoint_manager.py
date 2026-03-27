@@ -27,7 +27,6 @@ class CheckpointManager:  # noqa: PLR0904
             ├── metadata.json                   # Run configuration and algorithm metadata
             ├── benchmark_problem.pkl           # Initial benchmark problem state (before any trials)
             ├── initial_algorithms.pkl          # Initial algorithm states (before any trials)
-            ├── initial_rng_state.pkl           # Initial RNG state (for deterministic resume)
             ├── metric_computation.pkl          # Computed metrics results (after all trials complete)
             ├── algorithm_0/                    # Directory for first algorithm
             │   ├── trial_0/                    # Directory for trial 0
@@ -52,7 +51,6 @@ class CheckpointManager:  # noqa: PLR0904
           :func:`~decent_bench.utils.checkpoint_manager.CheckpointManager.append_metadata`.
         - **benchmark_problem.pkl**: Initial benchmark problem state before any trials run.
         - **initial_algorithms.pkl**: Initial algorithm states before any trials run.
-        - **initial_rng_state.pkl**: Initial RNG state for deterministic resume.
         - **metric_computation.pkl**: Computed metrics results after :func:`~decent_bench.benchmark.compute_metrics`
           completes.
         - **checkpoint_NNNNNNN.pkl**: Combined checkpoint containing both algorithm and network state.
@@ -231,19 +229,6 @@ class CheckpointManager:  # noqa: PLR0904
         with initial_path.open("rb") as f:
             ret: list[Algorithm[Network]] = pickle.load(f)  # noqa: S301
         return ret
-
-    def load_initial_rng_state(self) -> dict[str, Any]:
-        """
-        Load initial RNG state from checkpoint.
-
-        Returns:
-            Dictionary representing the initial RNG state.
-
-        """
-        rng_path = self.checkpoint_dir / "initial_rng_state.pkl"
-        with rng_path.open("rb") as f:
-            rng_state: dict[str, Any] = pickle.load(f)  # noqa: S301
-        return rng_state
 
     def load_benchmark_problem(self) -> BenchmarkProblem:
         """
@@ -623,13 +608,6 @@ class CheckpointManager:  # noqa: PLR0904
         with initial_path.open("wb") as f:
             pickle.dump(algorithms, f)
         LOGGER.debug(f"Saved initial algorithms to {initial_path}")
-
-    def _save_initial_rng_state(self, rng_state: dict[str, Any]) -> None:
-        """Save initial RNG state for deterministic resume."""
-        rng_path = self.checkpoint_dir / "initial_rng_state.pkl"
-        with rng_path.open("wb") as f:
-            pickle.dump(rng_state, f)
-        LOGGER.debug(f"Saved initial RNG state to {rng_path}")
 
     def _save_benchmark_problem(self, problem: BenchmarkProblem) -> None:
         """Save benchmark problem configuration."""
