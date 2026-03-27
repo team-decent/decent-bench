@@ -52,9 +52,6 @@ nitpick_ignore = [
     ("py:class", "numpy._typing._array_like._SupportsArray"),
     ("py:class", "numpy._typing._nested_sequence._NestedSequence"),
     ("py:class", "T"),
-    ("py:class", "TorchTensor"),
-    ("py:class", "TensorFlowTensor"),
-    ("py:class", "JaxArray"),
 ]
 
 suppress_warnings = ["toc.duplicate"]
@@ -73,8 +70,6 @@ intersphinx_mapping = {
     "rich": ("https://rich.readthedocs.io/en/latest/", None),
     "sklearn": ("https://scikit-learn.org/stable/", None),
 }
-
-
 
 
 # A way to link numpy.typing.ArrayLike and NDArray correctly
@@ -108,6 +103,36 @@ def _fix_missing_ref(app, env, node, contnode):
                 "",
                 "SpawnContext",
                 refuri="https://docs.python.org/3/library/multiprocessing.html#multiprocessing.get_context",
+            )
+        if target in {"TensorflowGenerator"}:
+            return nodes.reference(
+                "",
+                "TensorflowGenerator",
+                refuri="https://www.tensorflow.org/api_docs/python/tf/random/Generator",
+            )
+        if target in {"TorchGenerator"}:
+            return nodes.reference(
+                "",
+                "TorchGenerator",
+                refuri="https://pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator",
+            )
+        if target in {"JaxArray"}:
+            return nodes.reference(
+                "",
+                "JaxArray",
+                refuri="https://docs.jax.dev/en/latest/_autosummary/jax.Array.html#jax.Array",
+            )
+        if target in {"TorchTensor"}:
+            return nodes.reference(
+                "",
+                "TorchTensor",
+                refuri="https://docs.pytorch.org/docs/stable/tensors.html#torch-tensor",
+            )
+        if target in {"TensorflowTensor"}:
+            return nodes.reference(
+                "",
+                "TensorflowTensor",
+                refuri="https://www.tensorflow.org/api_docs/python/tf/Tensor",
             )
     return None
 

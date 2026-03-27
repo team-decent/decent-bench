@@ -176,7 +176,8 @@ def test_numpy_to_frameworks_like(framework, device: str):
     like = create_array([1, 2], framework, device)
 
     data = [1, 2, 3]
-    np_arr = np.array(data, dtype=np.float32)
+    np_arr = np.array(data, dtype=np.int16)
     out = iop.to_array_like(np_arr, like)
 
     assert isinstance(out, type(like.value)), f"Expected type {type(like.value)}, got {type(out)}"
+    assert out.dtype == like.value.dtype, f"Expected dtype {like.value.dtype}, got {out.dtype}"

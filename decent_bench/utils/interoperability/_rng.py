@@ -41,7 +41,7 @@ with contextlib.suppress(ImportError, ModuleNotFoundError):
 
 if TYPE_CHECKING:
     from jax import Array as JaxArray
-    from tensorflow.random import Generator as TfGenerator
+    from tensorflow.random import Generator as TensorflowGenerator
     from torch import Generator as TorchGenerator
 
 
@@ -50,7 +50,7 @@ class _RngState:
     global_seed: int | None = None
     numpy_rng: np.random.Generator = field(default_factory=np.random.default_rng)
     jax_key: JaxArray | None = None
-    tf_generator: TfGenerator | None = None
+    tf_generator: TensorflowGenerator | None = None
     torch_generators: dict[SupportedDevices, TorchGenerator] = field(default_factory=dict)
 
 
@@ -170,7 +170,7 @@ def get_torch_generator(device: SupportedDevices = SupportedDevices.CPU) -> Torc
     return generator
 
 
-def get_tensorflow_generator() -> TfGenerator:
+def get_tensorflow_generator() -> TensorflowGenerator:
     """
     Return a TensorFlow random generator.
 
@@ -224,7 +224,6 @@ def set_rng_state(state: dict[str, Any]) -> None:
     """Restore a RNG snapshot created by ``get_rng_state``."""
     if "seed" in state:
         _STATE.global_seed = state["seed"]
-        print("Set seed in set rng state to: ", state["seed"])
 
     if "python_random_state" in state:
         random.setstate(state["python_random_state"])

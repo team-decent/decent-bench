@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from functools import cached_property
 from typing import TYPE_CHECKING, Any, cast, override
 
 import decent_bench.utils.interoperability as iop
@@ -373,6 +372,21 @@ class PyTorchCost(EmpiricalRiskCost):
         return batch_x, batch_y, batch_idx
 
     def _get_batch_data(self, indices: EmpiricalRiskIndices = "batch") -> tuple[torch.Tensor, torch.Tensor]:
+        batch_x, batch_y, batch_idx = self._handle_indices(indices)
+
+        if batch_x is None or batch_y is None or batch_idx is None:
+            raise RuntimeError("Batch data could not be retrieved. Please report this error.")
+
+        self._last_batch_used = list(batch_idx)
+        self._last_batch_x = batch_x.to(self._pytorch_device, non_blocking=True)
+        self._last_batch_y = batch_y.to(self._pytorch_device, non_blocking=True)
+
+        return self._last_batch_x, self._last_batch_y
+
+    def _handle_indices(
+        self,
+        indices: EmpiricalRiskIndices,
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None, list[int] | None]:
         batch_x: torch.Tensor | None = None
         batch_y: torch.Tensor | None = None
         batch_idx: list[int] | None = None
@@ -394,14 +408,13 @@ class PyTorchCost(EmpiricalRiskCost):
                 indices = list(range(self.n_samples))
             else:
                 raise ValueError(f"Invalid indices string: {indices}. Only 'all' and 'batch' are supported.")
-
-        if isinstance(indices, int):
+        elif isinstance(indices, int):
             indices = [indices]
 
         if isinstance(indices, list):
             if len(indices) == len(self.batch_used) and indices == self.batch_used:
                 # Use cached batch so we don't have to re-stack
-                return self._last_batch_x, self._last_batch_y
+                return self._last_batch_x, self._last_batch_y, self._last_batch_used
 
             batch = (
                 self._dataset
@@ -412,14 +425,7 @@ class PyTorchCost(EmpiricalRiskCost):
             batch_x = torch.stack(list_batch_x)
             batch_y = torch.stack(list_batch_y)
 
-        if batch_x is None or batch_y is None or batch_idx is None:
-            raise RuntimeError("Batch data could not be retrieved. Please report this error.")
-
-        self._last_batch_used = list(batch_idx)
-        self._last_batch_x = batch_x.to(self._pytorch_device, non_blocking=True)
-        self._last_batch_y = batch_y.to(self._pytorch_device, non_blocking=True)
-
-        return self._last_batch_x, self._last_batch_y
+        return batch_x, batch_y, batch_idx
 
     def _init_per_sample_grad(self) -> None:
         """Initialize per-sample gradient function using functorch."""

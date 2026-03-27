@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from functools import cached_property
 from typing import Any
-
-import numpy as np
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
@@ -229,10 +226,10 @@ class EmpiricalRiskCost(Cost, ABC):
             - "batch": draw a batch with :attr:`batch_size` samples.
 
         This method uses :attr:`batch_size` to determine the size of the batch. For ``indices="batch"`` with
-        :attr:`batch_size < n_samples <decent_bench.costs.EmpiricalRiskCost.n_samples>`, batches are sampled
-        without replacement across successive calls until the full dataset is covered (epoch-style sampling).
-        When there are fewer unseen indices left than :attr:`batch_size`, the remaining unseen indices are used first,
-        and the rest of the batch is drawn from a newly shuffled epoch.
+        :attr:`batch_size` < :attr:`n_samples`, batches are sampled without replacement across successive calls until
+        the full dataset is covered (epoch-style sampling). When there are fewer unseen indices left than
+        :attr:`batch_size`, the remaining unseen indices are used first, and the rest of the batch is drawn from a
+        newly shuffled epoch.
 
         Once a batch is sampled, it is also stored in :attr:`batch_used` for later reference.
 
@@ -243,14 +240,10 @@ class EmpiricalRiskCost(Cost, ABC):
             List of sampled indices.
 
         Raises:
-            ValueError: If an integer index is out of bounds.
             ValueError: If an invalid string is provided for indices.
 
         """
         if isinstance(indices, int):
-            if indices < 0 or indices >= self.n_samples:
-                raise ValueError(f"Index {indices} is out of bounds for dataset with {self.n_samples} samples.")
-
             self._last_batch_used = [indices]
             return self._last_batch_used
 

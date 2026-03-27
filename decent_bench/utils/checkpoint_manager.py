@@ -285,6 +285,7 @@ class CheckpointManager:  # noqa: PLR0904
 
     def save_checkpoint(
         self,
+        *,
         alg_idx: int,
         trial: int,
         iteration: int,
@@ -372,6 +373,7 @@ class CheckpointManager:  # noqa: PLR0904
 
     def mark_trial_complete(
         self,
+        *,
         alg_idx: int,
         trial: int,
         iteration: int,

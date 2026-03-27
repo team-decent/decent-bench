@@ -54,12 +54,12 @@ from ._operators import (
     sub,
 )
 from ._rng import (
+    get_next_jax_key,
     get_numpy_generator,
     get_rng_state,
     get_seed,
     get_tensorflow_generator,
     get_torch_generator,
-    get_next_jax_key,
     rand,
     rand_like,
     randn,

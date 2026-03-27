@@ -1,4 +1,5 @@
 import logging
+import operator
 import random
 import warnings
 from collections import defaultdict
@@ -472,7 +473,8 @@ def _run_trials(  # noqa: PLR0917
 
     progress_bar_ctrl.stop()
     for alg in partial_result:
-        results[alg].extend(partial_result[alg])
+        sorted_trials = sorted(partial_result[alg], key=operator.itemgetter(0))  # sort by trial number
+        results[alg].extend([trial_result[1] for trial_result in sorted_trials])
 
     # Clean up runtime plotter process
     if runtime_plotter is not None:
@@ -499,7 +501,7 @@ def _run_trial(  # noqa: PLR0917
     checkpoint_manager: "CheckpointManager | None" = None,
     runtime_metrics: "list[RuntimeMetric] | None" = None,
     runtime_plotter_queue: "queue.Queue[Any] | None" = None,
-) -> Network:
+) -> tuple[int, Network]:
     # Set seed for used frameworks
     used_frameworks = {agent.cost.framework for agent in problem.network.agents()}
     _set_seed(trial_seed, used_frameworks, set_global_seed=False)
@@ -571,7 +573,7 @@ def _run_trial(  # noqa: PLR0917
         except Exception as e:
             LOGGER.exception(f"An error or warning occurred when running {alg.name}: {type(e).__name__}: {e}")
 
-    return network
+    return trial, network
 
 
 def _get_runtime_metrics(

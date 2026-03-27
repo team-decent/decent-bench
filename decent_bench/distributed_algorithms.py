@@ -356,11 +356,7 @@ class FedAvg(FedAlgorithm):
     ) -> "Array":
         for _ in range(self.num_local_epochs):
             indices = list(range(n_samples))
-            print("Before")
-            print(indices)
             random.shuffle(indices)
-            print("After")
-            print(indices, "\n")
             for start in range(0, n_samples, per_client_batch):
                 batch_indices = indices[start : start + per_client_batch]
                 grad = cost.gradient(local_x, indices=batch_indices)

@@ -58,12 +58,12 @@ def _return_array(array: SupportedArrayTypes) -> Array:
     return Array(array)
 
 
-def framework_device_of_array(array: Array) -> tuple[SupportedFrameworks, SupportedDevices]:
+def framework_device_of_array(array: Array | SupportedArrayTypes) -> tuple[SupportedFrameworks, SupportedDevices]:
     """
     Determine the framework and device of the given Array.
 
     Args:
-        array (Array): Input array.
+        array (Array | SupportedArrayTypes): Input array.
 
     Returns:
         tuple[SupportedFrameworks, SupportedDevices]: Framework and device of the array.

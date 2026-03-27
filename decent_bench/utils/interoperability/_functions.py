@@ -46,17 +46,23 @@ with contextlib.suppress(ImportError, ModuleNotFoundError):
 
 if TYPE_CHECKING:
     from jax import Array as JaxArray
-    from tensorflow import Tensor as TensorFlowTensor
+    from tensorflow import Tensor as TensorflowTensor
     from torch import Tensor as TorchTensor
 
 
-def to_numpy(array: Array | SupportedArrayTypes, device: SupportedDevices = SupportedDevices.CPU) -> NDArray[Any]:  # noqa: ARG001
+def to_numpy(
+    array: Array | SupportedArrayTypes,
+    device: SupportedDevices = SupportedDevices.CPU,  # noqa: ARG001
+    dtype: Any | None = None,  # noqa: ANN401
+) -> NDArray[Any]:
     """
     Convert input array to a NumPy array.
 
     Args:
         array (Array | SupportedArrayTypes): Input Array
         device (SupportedDevices): Device of the input array.
+        dtype (Any | None): Optional data type for the converted array. If None,
+            the data type of the input array is preserved.
 
     Returns:
         NDArray: Converted NumPy array.
@@ -70,21 +76,29 @@ def to_numpy(array: Array | SupportedArrayTypes, device: SupportedDevices = Supp
     if isinstance(value, np.ndarray | np.generic):
         return value
     if torch and isinstance(value, torch.Tensor):
-        return cast("np.ndarray", value.cpu().numpy())  # pyright: ignore[reportAttributeAccessIssue]
+        res: np.ndarray[Any] = value.cpu().numpy()
+        if dtype:
+            res = res.astype(dtype)
+        return res
     if tf and isinstance(value, tf.Tensor):
-        return cast("np.ndarray", value.numpy())  # pyright: ignore[reportAttributeAccessIssue]
+        res = value.numpy()
+        if dtype:
+            res = res.astype(dtype)
+        return res
     if jnp and isinstance(value, jnp.ndarray | jnp.generic):
-        return np.array(value)
-    return np.array(value)
+        return np.array(value, dtype=dtype)
+    return np.array(value, dtype=dtype)
 
 
-def to_torch(array: Array | SupportedArrayTypes, device: SupportedDevices) -> TorchTensor:
+def to_torch(array: Array | SupportedArrayTypes, device: SupportedDevices, dtype: Any | None = None) -> TorchTensor:  # noqa: ANN401
     """
     Convert input array to a PyTorch tensor.
 
     Args:
         array (Array | SupportedArrayTypes): Input Array
         device (SupportedDevices): Device of the input array.
+        dtype (Any | None): Optional data type for the converted array. If None,
+            the data type of the input array is preserved.
 
     Returns:
         torch.Tensor: Converted PyTorch tensor.
@@ -102,21 +116,27 @@ def to_torch(array: Array | SupportedArrayTypes, device: SupportedDevices) -> To
     if isinstance(value, torch.Tensor):
         return cast("TorchTensor", value)
     if isinstance(value, np.ndarray | np.generic):
-        return cast("TorchTensor", torch.tensor(value).to(framework_device))
+        return cast("TorchTensor", torch.tensor(value, dtype=dtype, device=framework_device))
     if tf and isinstance(value, tf.Tensor):
-        return cast("TorchTensor", torch.tensor(value.cpu(), device=framework_device))
+        return cast("TorchTensor", torch.tensor(value.cpu(), dtype=dtype, device=framework_device))
     if jnp and isinstance(value, jnp.ndarray | jnp.generic):
-        return cast("TorchTensor", torch.tensor(np.array(value)).to(framework_device))
-    return cast("TorchTensor", torch.tensor(value, device=framework_device))
+        return cast("TorchTensor", torch.tensor(np.array(value), dtype=dtype, device=framework_device))
+    return cast("TorchTensor", torch.tensor(value, dtype=dtype, device=framework_device))
 
 
-def to_tensorflow(array: Array | SupportedArrayTypes, device: SupportedDevices) -> TensorFlowTensor:
+def to_tensorflow(
+    array: Array | SupportedArrayTypes,
+    device: SupportedDevices,
+    dtype: Any | None = None,  # noqa: ANN401
+) -> TensorflowTensor:
     """
     Convert input array to a TensorFlow tensor.
 
     Args:
         array (Array | SupportedArrayTypes): Input Array
         device (SupportedDevices): Device of the input array.
+        dtype (Any | None): Optional data type for the converted array. If None,
+            the data type of the input array is preserved.
 
     Returns:
         tf.Tensor: Converted TensorFlow tensor.
@@ -133,27 +153,29 @@ def to_tensorflow(array: Array | SupportedArrayTypes, device: SupportedDevices) 
 
     if isinstance(value, tf.Tensor):
         with tf.device(framework_device):
-            return cast("TensorFlowTensor", value)
+            return cast("TensorflowTensor", value)
     if isinstance(value, np.ndarray | np.generic):
         with tf.device(framework_device):
-            return cast("TensorFlowTensor", tf.convert_to_tensor(value))
+            return cast("TensorflowTensor", tf.convert_to_tensor(value, dtype=dtype))
     if torch and isinstance(value, torch.Tensor):
         with tf.device(framework_device):
-            return cast("TensorFlowTensor", tf.convert_to_tensor(value.cpu()))  # pyright: ignore[reportArgumentType]
+            return cast("TensorflowTensor", tf.convert_to_tensor(value.cpu(), dtype=dtype))
     if jnp and isinstance(value, jnp.ndarray | jnp.generic):
         with tf.device(framework_device):
-            return cast("TensorFlowTensor", tf.convert_to_tensor(value))  # pyright: ignore[reportArgumentType]
+            return cast("TensorflowTensor", tf.convert_to_tensor(value, dtype=dtype))
     with tf.device(framework_device):
-        return cast("TensorFlowTensor", tf.convert_to_tensor(value))  # pyright: ignore[reportArgumentType]
+        return cast("TensorflowTensor", tf.convert_to_tensor(value, dtype=dtype))
 
 
-def to_jax(array: Array | SupportedArrayTypes, device: SupportedDevices) -> JaxArray:
+def to_jax(array: Array | SupportedArrayTypes, device: SupportedDevices, dtype: Any | None = None) -> JaxArray:  # noqa: ANN401
     """
     Convert input array to a JAX array.
 
     Args:
         array (Array | SupportedArrayTypes): Input Array
         device (SupportedDevices): Device of the input array.
+        dtype (Any | None): Optional data type for the converted array. If None,
+            the data type of the input array is preserved.
 
     Returns:
         jax.Array: Converted JAX array.
@@ -171,18 +193,19 @@ def to_jax(array: Array | SupportedArrayTypes, device: SupportedDevices) -> JaxA
     if isinstance(value, jnp.ndarray | jnp.generic):
         return cast("JaxArray", value.to_device(framework_device))
     if isinstance(value, np.ndarray | np.generic):
-        return cast("JaxArray", jnp.array(value, device=framework_device))
+        return cast("JaxArray", jnp.array(value, dtype=dtype, device=framework_device))
     if torch and isinstance(value, torch.Tensor):
-        return cast("JaxArray", jnp.array(value, device=framework_device))
+        return cast("JaxArray", jnp.array(value, dtype=dtype, device=framework_device))
     if tf and isinstance(value, tf.Tensor):
-        return cast("JaxArray", jnp.array(value, device=framework_device))
-    return cast("JaxArray", jnp.array(value, device=framework_device))
+        return cast("JaxArray", jnp.array(value, dtype=dtype, device=framework_device))
+    return cast("JaxArray", jnp.array(value, dtype=dtype, device=framework_device))
 
 
 def to_array(
     array: Array | SupportedArrayTypes,
     framework: SupportedFrameworks,
     device: SupportedDevices,
+    dtype: Any | None = None,  # noqa: ANN401
 ) -> Array:
     """
     Convert an array to the specified framework type.
@@ -194,6 +217,8 @@ def to_array(
         array (Array | SupportedArrayTypes): Input array.
         framework (SupportedFrameworks): Target framework type (e.g., "torch", "tf").
         device (SupportedDevices): Target device ("cpu" or "gpu").
+        dtype (Any | None): Optional data type for the converted array. If None,
+            the data type of the input array is preserved.
 
     Returns:
         Array: Converted array in the specified framework type.
@@ -203,13 +228,13 @@ def to_array(
 
     """
     if framework == SupportedFrameworks.NUMPY:
-        return _return_array(to_numpy(array, device))
+        return _return_array(to_numpy(array, device, dtype))
     if torch and framework == SupportedFrameworks.PYTORCH:
-        return _return_array(to_torch(array, device))
+        return _return_array(to_torch(array, device, dtype))
     if tf and framework == SupportedFrameworks.TENSORFLOW:
-        return _return_array(to_tensorflow(array, device))
+        return _return_array(to_tensorflow(array, device, dtype))
     if jnp and framework == SupportedFrameworks.JAX:
-        return _return_array(to_jax(array, device))
+        return _return_array(to_jax(array, device, dtype))
 
     raise TypeError(f"Unsupported framework type: {framework}")
 
@@ -226,9 +251,13 @@ def to_array_like(array: Array | SupportedArrayTypes, like: Array) -> Array:
         Array: Converted array in the specified framework type.
 
     """
-    framework, device = framework_device_of_array(like)
+    value = like.value if isinstance(like, Array) else like
+    framework, device = framework_device_of_array(value)
+    dtype = None
+    if hasattr(value, "dtype"):
+        dtype = value.dtype
 
-    return to_array(array, framework, device)
+    return to_array(array, framework, device, dtype)
 
 
 def sum(  # noqa: A001
@@ -472,7 +501,7 @@ def copy(array: Array) -> Array:
     if isinstance(value, np.ndarray | np.generic):
         return _return_array(np.copy(value))
     if torch and isinstance(value, torch.Tensor):
-        return _return_array(torch.clone(value))
+        return _return_array(torch.clone(value.detach()))
     if tf and isinstance(value, tf.Tensor):
         return _return_array(tf.identity(value))
     if jnp and isinstance(value, jnp.ndarray | jnp.generic):
