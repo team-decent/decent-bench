@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import random
 from copy import deepcopy
 from dataclasses import dataclass
@@ -314,6 +315,9 @@ def test_resume_from_checkpoint_with_additional_trials(
     max_processes: int,
     seed: int | None,
 ) -> None:
+    if os.cpu_count() is not None and max_processes > os.cpu_count():
+        pytest.skip(f"max_processes={max_processes} exceeds available CPU cores")
+
     if seed is not None:
         iop.set_seed(seed)
 
@@ -418,6 +422,9 @@ def test_resume_from_checkpoint_with_additional_iterations(
     max_processes: int,
     seed: int | None,
 ) -> None:
+    if os.cpu_count() is not None and max_processes > os.cpu_count():
+        pytest.skip(f"max_processes={max_processes} exceeds available CPU cores")
+
     if seed is not None:
         iop.set_seed(seed)
 
@@ -524,6 +531,9 @@ def test_resume_from_checkpoint_with_additional_iterations_and_trials(
     max_processes: int,
     seed: int | None,
 ) -> None:
+    if os.cpu_count() is not None and max_processes > os.cpu_count():
+        pytest.skip(f"max_processes={max_processes} exceeds available CPU cores")
+
     if seed is not None:
         iop.set_seed(seed)
 
@@ -631,6 +641,9 @@ def test_resume_from_non_completed_checkpoint(
     max_processes: int,
     seed: int | None,
 ) -> None:
+    if os.cpu_count() is not None and max_processes > os.cpu_count():
+        pytest.skip(f"max_processes={max_processes} exceeds available CPU cores")
+
     if seed is not None:
         iop.set_seed(seed)
 
@@ -776,6 +789,9 @@ def test_back_to_back_benchmarks(
     cost_cls: type[LogisticRegressionCost | PyTorchCost],
     max_processes: int,
 ) -> None:
+    if os.cpu_count() is not None and max_processes > os.cpu_count():
+        pytest.skip(f"max_processes={max_processes} exceeds available CPU cores")
+
     iop.set_seed(123)
     problem_5, algorithms_5 = _build_problem_and_algorithms(5, cost_cls=cost_cls)
 
