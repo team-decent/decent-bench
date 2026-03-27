@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import random
-from functools import cache
 from types import ModuleType
 
 import numpy as np
@@ -48,11 +46,3 @@ if jax and jnp:
 else:
     _jnp_array_types = ()
 _jnp_types = (*_jnp_array_types, float, int) if jnp else (float,)
-
-_jax_key = jax.random.key(random.randint(0, 2**32 - 1)) if jax else None
-
-
-@cache
-def _numpy_generator() -> np.random.Generator:
-    """Get a NumPy random number generator instance."""
-    return np.random.default_rng()

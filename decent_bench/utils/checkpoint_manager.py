@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import decent_bench.utils.interoperability as iop
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, MetricResult
 from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.networks import Network
@@ -149,7 +150,7 @@ class CheckpointManager:  # noqa: PLR0904
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         # Save metadata
-        metadata = {
+        metadata: dict[str, Any] = {
             "n_trials": n_trials,
             "algorithms": [
                 {
@@ -162,6 +163,8 @@ class CheckpointManager:  # noqa: PLR0904
         }
         if self._metadata is not None:
             metadata["benchmark_metadata"] = self._metadata
+        if iop.get_seed() is not None:
+            metadata["rng_seed"] = iop.get_seed()
 
         # Save initial state and metadata for resuming later if needed
         self._save_metadata(metadata)
@@ -272,6 +275,7 @@ class CheckpointManager:  # noqa: PLR0904
         iteration: int,
         algorithm: Algorithm[Network],
         network: Network,
+        rng_state: dict[str, Any],
     ) -> Path:
         """
         Save checkpoint for a specific algorithm trial at a given iteration.
@@ -282,6 +286,7 @@ class CheckpointManager:  # noqa: PLR0904
             iteration: Current iteration number.
             algorithm: Algorithm object with current internal state.
             network: Network object with current agent states and metrics.
+            rng_state: RNG snapshot for deterministic resume.
 
         Returns:
             Path to the saved checkpoint file.
@@ -296,6 +301,7 @@ class CheckpointManager:  # noqa: PLR0904
             "algorithm": algorithm,
             "network": network,
             "iteration": iteration,
+            "rng_state": rng_state,
         }
         with checkpoint_path.open("wb") as f:
             pickle.dump(checkpoint_data, f)
@@ -311,7 +317,9 @@ class CheckpointManager:  # noqa: PLR0904
         self._cleanup_old_checkpoints(alg_idx, trial)
         return checkpoint_path
 
-    def load_checkpoint(self, alg_idx: int, trial: int) -> tuple[Algorithm[Network], Network, int] | None:
+    def load_checkpoint(
+        self, alg_idx: int, trial: int
+    ) -> tuple[Algorithm[Network], Network, int, dict[str, Any]] | None:
         """
         Load the latest checkpoint for a specific algorithm trial.
 
@@ -320,7 +328,7 @@ class CheckpointManager:  # noqa: PLR0904
             trial: Trial number (0-based).
 
         Returns:
-            Tuple of (algorithm, network, last_iteration) or None if no checkpoint exists.
+            Tuple of (algorithm, network, last_iteration, rng_state) or None if no checkpoint exists.
             Execution should resume from iteration (last_iteration + 1).
 
         """
@@ -342,9 +350,10 @@ class CheckpointManager:  # noqa: PLR0904
 
         algorithm: Algorithm[Network] = checkpoint_data["algorithm"]
         network: Network = checkpoint_data["network"]
+        rng_state = checkpoint_data["rng_state"]
 
         LOGGER.debug(f"Loaded checkpoint: alg={alg_idx}, trial={trial}, iter={last_iteration}")
-        return algorithm, network, last_iteration
+        return algorithm, network, last_iteration, rng_state
 
     def mark_trial_complete(
         self,
@@ -353,6 +362,7 @@ class CheckpointManager:  # noqa: PLR0904
         iteration: int,
         algorithm: Algorithm[Network],
         network: Network,
+        rng_state: dict[str, Any],
     ) -> Path:
         """
         Mark a trial as complete and save final result.
@@ -363,12 +373,20 @@ class CheckpointManager:  # noqa: PLR0904
             iteration: The final iteration number.
             algorithm: Final Algorithm state after all iterations complete.
             network: Final Network state after all iterations complete.
+            rng_state: RNG snapshot for deterministic resume.
 
         Returns:
             Path to the saved final checkpoint file.
 
         """
-        checkpoint_path = self.save_checkpoint(alg_idx, trial, iteration, algorithm, network)
+        checkpoint_path = self.save_checkpoint(
+            alg_idx=alg_idx,
+            trial=trial,
+            iteration=iteration,
+            algorithm=algorithm,
+            network=network,
+            rng_state=rng_state,
+        )
 
         # Mark as complete
         trial_dir = self._get_trial_dir(alg_idx, trial)

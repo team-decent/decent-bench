@@ -13,10 +13,8 @@ from decent_bench.utils.types import ArrayKey, SupportedArrayTypes, SupportedDev
 
 from ._helpers import _return_array, device_to_framework_device, framework_device_of_array
 from ._imports_types import (
-    _jax_key,
     _jnp_types,
     _np_types,
-    _numpy_generator,
     _tf_types,
     _torch_types,
 )
@@ -602,77 +600,6 @@ def ones_like(array: Array) -> Array:
     raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def rand_like(array: Array, low: float = 0.0, high: float = 1.0) -> Array:
-    """
-    Create an array of random values with the same shape and type as the input.
-
-    Values are drawn uniformly from [low, high).
-
-    Args:
-        array (Array): Input array.
-        low (float): Lower bound of the uniform distribution.
-        high (float): Upper bound of the uniform distribution.
-
-    Returns:
-        Array: Array of random values in the same framework type as the input.
-
-    Raises:
-        TypeError: if the framework type of `array` is unsupported.
-
-    """
-    value = array.value if isinstance(array, Array) else array
-
-    if isinstance(value, np.ndarray | np.generic):
-        random_array = _numpy_generator().uniform(low=low, high=high, size=value.shape)
-        return _return_array(random_array)
-    if torch and isinstance(value, torch.Tensor):
-        return _return_array((high - low) * torch.rand_like(value) + low)
-    if tf and isinstance(value, tf.Tensor):
-        return _return_array(tf.random.uniform(tf.shape(value), dtype=value.dtype, minval=low, maxval=high))
-    if jnp and jax and isinstance(value, jnp.ndarray | jnp.generic):
-        global _jax_key
-        _jax_key, sub_key = jax.random.split(_jax_key)  # pyright: ignore[reportArgumentType]
-        return _return_array(jax.random.uniform(sub_key, shape=value.shape, dtype=value.dtype, minval=low, maxval=high))
-
-    raise TypeError(f"Unsupported framework type: {type(value)}")
-
-
-def randn_like(array: Array, mean: float = 0.0, std: float = 1.0) -> Array:
-    """
-    Create an array of random values with the same shape and type as the input.
-
-    Values are drawn from a normal distribution with mean `mean` and standard deviation `std`.
-
-    Args:
-        array (Array): Input array.
-        mean (float): Mean of the normal distribution.
-        std (float): Standard deviation of the normal distribution.
-
-    Returns:
-        Array: Array of random values in the same framework type as the input.
-
-    Raises:
-        TypeError: if the framework type of `array` is unsupported.
-
-    """
-    value = array.value if isinstance(array, Array) else array
-
-    if isinstance(value, np.ndarray | np.generic):
-        random_array = _numpy_generator().normal(loc=mean, scale=std, size=value.shape)
-        return _return_array(random_array)
-    if torch and isinstance(value, torch.Tensor):
-        return _return_array(torch.normal(mean=mean, std=std, size=value.shape, dtype=value.dtype, device=value.device))
-    if tf and isinstance(value, tf.Tensor):
-        shape = tf.shape(value)
-        return _return_array(tf.random.normal(shape=shape, mean=mean, stddev=std, dtype=value.dtype))
-    if jnp and jax and isinstance(value, jnp.ndarray | jnp.generic):
-        global _jax_key
-        _jax_key, sub_key = jax.random.split(_jax_key)  # pyright: ignore[reportArgumentType]
-        return _return_array(mean + std * jax.random.normal(sub_key, shape=value.shape, dtype=value.dtype))
-
-    raise TypeError(f"Unsupported framework type: {type(value)}")
-
-
 def eye_like(array: Array) -> Array:
     """
     Create an identity matrix with the same shape as the input.
@@ -824,50 +751,6 @@ def zeros(shape: tuple[int, ...], framework: SupportedFrameworks, device: Suppor
             return _return_array(tf.zeros(shape))
     if jnp and framework == SupportedFrameworks.JAX:
         return _return_array(jnp.zeros(shape, device=framework_device))
-
-    raise TypeError(f"Unsupported framework type: {framework}")
-
-
-def randn(
-    shape: tuple[int, ...],
-    framework: SupportedFrameworks,
-    device: SupportedDevices,
-    mean: float = 0.0,
-    std: float = 1.0,
-) -> Array:
-    """
-    Create an array of random values with the specified shape and framework.
-
-    Values are drawn from a normal distribution with mean `mean` and standard deviation `std`.
-
-    Args:
-        shape (tuple[int, ...]): Shape of the output array.
-        framework (SupportedFrameworks): Target framework type.
-        device (SupportedDevices): Target device.
-        mean (float): Mean of the normal distribution.
-        std (float): Standard deviation of the normal distribution.
-
-    Returns:
-        Array: Array of random values in the same framework type as the input.
-
-    Raises:
-        TypeError: if the framework type of `array` is unsupported.
-
-    """
-    framework_device = device_to_framework_device(device, framework)
-
-    if framework == SupportedFrameworks.NUMPY:
-        random_array = _numpy_generator().normal(loc=mean, scale=std, size=shape)
-        return _return_array(random_array)
-    if torch and framework == SupportedFrameworks.PYTORCH:
-        return _return_array(torch.normal(mean=mean, std=std, size=shape, device=framework_device))
-    if tf and framework == SupportedFrameworks.TENSORFLOW:
-        with tf.device(framework_device):
-            return _return_array(tf.random.normal(shape=shape, mean=mean, stddev=std))
-    if jax and framework == SupportedFrameworks.JAX:
-        global _jax_key
-        _jax_key, sub_key = jax.random.split(_jax_key)  # pyright: ignore[reportArgumentType]
-        return _return_array(mean + std * jax.random.normal(sub_key, shape=shape).to_device(framework_device))
 
     raise TypeError(f"Unsupported framework type: {framework}")
 

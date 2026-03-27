@@ -187,7 +187,7 @@ class PyTorchCost(EmpiricalRiskCost):
     @cached_property
     @override
     def _rand(self) -> torch.Generator:  # type: ignore[override]
-        return torch.Generator(device="cpu").manual_seed(0)  # Later replace with global rng
+        return iop.get_torch_generator(SupportedDevices.CPU)  # DataLoader shuffling must be done on CPU
 
     def _clean(self) -> None:
         """Clean up cache."""

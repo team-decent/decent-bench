@@ -22,9 +22,6 @@ from ._functions import (
     min,  # noqa: A004
     norm,
     ones_like,
-    rand_like,
-    randn,
-    randn_like,
     reshape,
     set_item,
     shape,
@@ -56,6 +53,20 @@ from ._operators import (
     sqrt,
     sub,
 )
+from ._rng import (
+    get_numpy_generator,
+    get_rng_state,
+    get_seed,
+    get_tensorflow_generator,
+    get_torch_generator,
+    get_next_jax_key,
+    rand,
+    rand_like,
+    randn,
+    randn_like,
+    set_rng_state,
+    set_seed,
+)
 
 __all__ = [  # noqa: RUF022
     # From _functions
@@ -72,9 +83,6 @@ __all__ = [  # noqa: RUF022
     "min",
     "norm",
     "ones_like",
-    "rand_like",
-    "randn",
-    "randn_like",
     "reshape",
     "set_item",
     "shape",
@@ -110,4 +118,17 @@ __all__ = [  # noqa: RUF022
     "autodecorate_cost_method",
     # Extensions
     "ext",
+    # RNG manager
+    "get_numpy_generator",
+    "get_rng_state",
+    "get_seed",
+    "get_tensorflow_generator",
+    "get_torch_generator",
+    "set_rng_state",
+    "set_seed",
+    "rand_like",
+    "rand",
+    "randn",
+    "randn_like",
+    "get_next_jax_key",
 ]

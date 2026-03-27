@@ -11,8 +11,6 @@ from decent_bench.utils.array import Array
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
 
-rng = np.random.default_rng()  # replace with iop tool?
-
 
 class AgentActivationScheme(ABC):
     """Scheme defining how agents go active/inactive over the course of the algorithm execution."""
@@ -71,10 +69,13 @@ class MarkovChainActivation(AgentActivationScheme):
             [1 - inactive_to_active, inactive_to_active],
             [active_to_inactive, 1 - active_to_inactive],
         ])  # transition matrix
-        self._current_state = rng.choice(self._states, p=[0, 1])
+        self._current_state = iop.get_numpy_generator().choice(self._states, p=[0, 1])
 
     def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
-        self._current_state = rng.choice(self._states, p=self._P[self._current_state])  # evolve the Markov chain
+        self._current_state = iop.get_numpy_generator().choice(
+            self._states,
+            p=self._P[self._current_state],
+        )  # evolve the Markov chain
 
         return bool(self._current_state)
 
@@ -97,11 +98,11 @@ class PoissonActivation(AgentActivationScheme):
         if mean_interval < 0:
             raise ValueError("`mean_interval` must be non-negative")
         self.mean_interval = mean_interval
-        self._countdown = int(rng.poisson(self.mean_interval))
+        self._countdown = int(iop.get_numpy_generator().poisson(self.mean_interval))
 
     def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
         if self._countdown == 0:
-            self._countdown = int(rng.poisson(self.mean_interval))
+            self._countdown = int(iop.get_numpy_generator().poisson(self.mean_interval))
             return True
         self._countdown -= 1
         return False
@@ -130,7 +131,6 @@ class UniformClientSelection(ClientSelectionScheme):
         *,
         clients_per_round: int | None = None,
         client_fraction: float | None = None,
-        seed: int | None = None,
     ) -> None:
         if clients_per_round is None and client_fraction is None:
             raise ValueError("Provide clients_per_round or client_fraction")
@@ -142,7 +142,6 @@ class UniformClientSelection(ClientSelectionScheme):
             raise ValueError("client_fraction must be in (0, 1]")
         self.clients_per_round = clients_per_round
         self.client_fraction = client_fraction
-        self._rng = random.Random(seed)
 
     def select(self, clients: Sequence["Agent"], iteration: int) -> list["Agent"]:  # noqa: D102, ARG002
         if not clients:
@@ -154,7 +153,7 @@ class UniformClientSelection(ClientSelectionScheme):
             k = min(k, len(clients))
         if k >= len(clients):
             return list(clients)
-        return self._rng.sample(list(clients), k)
+        return random.sample(list(clients), k)
 
 
 class CompressionScheme(ABC):
@@ -229,7 +228,7 @@ class RandK(CompressionScheme):
     def compress(self, msg: Array) -> Array:  # noqa: D102
         msg_np = np.copy(iop.to_numpy(msg))
         k = min(self.k, msg_np.size)
-        idx = rng.choice(msg_np.size, size=k, replace=False)
+        idx = iop.get_numpy_generator().choice(msg_np.size, size=k, replace=False)
         mask = np.isin(np.arange(msg_np.size), idx).reshape(msg_np.shape)
         msg_np[~mask] = 0
         return iop.to_array_like(msg_np, msg)
@@ -264,7 +263,7 @@ class UniformDropRate(DropScheme):
 
 class GilbertElliott(DropScheme):
     """
-    Drop scheme based on the Gilbert-Elliott model [r14]_.
+    Drop scheme based on the Gilbert-Elliott model :footcite:p:`Scheme_GilbertElliott`.
 
     The Gilbert-Elliott model is characterized by a Markov chain with two states (good and bad), which
     can stay the same or transition into each other. In the bad state message drops occur with probability
@@ -278,9 +277,7 @@ class GilbertElliott(DropScheme):
     Raises:
         ValueError: if `drop_rate`, `bad_to_good` or `good_to_bad` are not in :math:`[0, 1]`
 
-    .. [r14] G. Hasslinger and O. Hohlfeld, "The Gilbert-Elliott Model for Packet Loss in Real Time Services
-            on the Internet," in 14th GI/ITG Conference - Measurement, Modelling and Evalutation of Computer
-            and Communication Systems, 2008, pp. 1-15.
+    .. footbibliography::
 
     """
 
@@ -294,12 +291,14 @@ class GilbertElliott(DropScheme):
         self.good_to_bad = good_to_bad
         self._states = np.array([0, 1])  # good = 0, bad = 1
         self._P = np.array([[1 - good_to_bad, good_to_bad], [bad_to_good, 1 - bad_to_good]])  # transition matrix
-        self._current_state = rng.choice(self._states)  # initialize uniformly at random
+        self._current_state = iop.get_numpy_generator().choice(self._states)  # initialize uniformly at random
 
     def should_drop(self) -> bool:  # noqa: D102
-        self._current_state = rng.choice(self._states, p=self._P[self._current_state])  # evolve the Markov chain
+        self._current_state = iop.get_numpy_generator().choice(
+            self._states, p=self._P[self._current_state]
+        )  # evolve the Markov chain
 
-        return rng.random() < self.drop_rate if self._current_state else False
+        return iop.get_numpy_generator().random() < self.drop_rate if self._current_state else False
 
 
 class NoiseScheme(ABC):

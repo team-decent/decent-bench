@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 
+import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import Dataset, EmpiricalRiskIndices, EmpiricalRiskReduction
@@ -75,8 +76,7 @@ class EmpiricalRiskCost(Cost, ABC):
 
     @cached_property
     def _rand(self) -> np.random.Generator:
-        # Later replace with global rng and return Generic generator to support other frameworks
-        return np.random.default_rng(seed=0)
+        return iop.get_numpy_generator()
 
     @abstractmethod
     def predict(self, x: Array, data: list[Array]) -> Array:

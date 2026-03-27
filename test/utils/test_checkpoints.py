@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -125,12 +126,15 @@ def test_save_and_load_checkpoint_roundtrip(tmp_path: Path) -> None:  # noqa: D1
 
     assert manager.load_checkpoint(alg_idx=0, trial=0) is None
 
+    rng_state = {"seed": 123, "python_random_state": random.getstate()}
+
     checkpoint_path = manager.save_checkpoint(
         alg_idx=0,
         trial=0,
         iteration=4,
         algorithm=algorithms[0],
         network=problem.network,
+        rng_state=rng_state,
     )
 
     assert checkpoint_path.exists()
@@ -141,10 +145,11 @@ def test_save_and_load_checkpoint_roundtrip(tmp_path: Path) -> None:  # noqa: D1
 
     loaded = manager.load_checkpoint(alg_idx=0, trial=0)
     assert loaded is not None
-    loaded_alg, loaded_net, last_iteration = loaded
+    loaded_alg, loaded_net, last_iteration, rng_state = loaded
     assert loaded_alg.name == "DGD"
     assert len(loaded_net.agents()) == 4
     assert last_iteration == 4
+    assert rng_state == {"seed": 123, "python_random_state": random.getstate()}
 
 
 def test_mark_unmark_and_load_trial_result(tmp_path: Path) -> None:  # noqa: D103
@@ -158,6 +163,7 @@ def test_mark_unmark_and_load_trial_result(tmp_path: Path) -> None:  # noqa: D10
         iteration=5,
         algorithm=algorithms[0],
         network=problem.network,
+        rng_state={"seed": 123, "python_random_state": random.getstate()},
     )
     assert final_checkpoint.exists()
     assert manager.is_trial_complete(alg_idx=0, trial=0) is True
@@ -182,6 +188,7 @@ def test_cleanup_old_checkpoints_keeps_latest_n(tmp_path: Path) -> None:  # noqa
             iteration=iteration,
             algorithm=algorithms[0],
             network=problem.network,
+            rng_state={"seed": iteration},
         )
 
     trial_dir = tmp_path / "ckpt" / "algorithm_0" / "trial_0"
@@ -190,7 +197,7 @@ def test_cleanup_old_checkpoints_keeps_latest_n(tmp_path: Path) -> None:  # noqa
 
     loaded = manager.load_checkpoint(alg_idx=0, trial=0)
     assert loaded is not None
-    _, _, iteration = loaded
+    _, _, iteration, _ = loaded
     assert iteration == 3
 
 
@@ -201,9 +208,30 @@ def test_load_benchmark_result_skips_incomplete_algorithms(  # noqa: D103
     manager = CheckpointManager(tmp_path / "ckpt")
     manager.initialize(algorithms=algorithms, problem=problem, n_trials=2)
 
-    manager.mark_trial_complete(0, 0, 5, algorithms[0], problem.network)
-    manager.mark_trial_complete(0, 1, 5, algorithms[0], problem.network)
-    manager.mark_trial_complete(1, 0, 4, algorithms[1], problem.network)
+    manager.mark_trial_complete(
+        0,
+        0,
+        5,
+        algorithms[0],
+        problem.network,
+        rng_state={"seed": 123, "python_random_state": random.getstate()},
+    )
+    manager.mark_trial_complete(
+        0,
+        1,
+        5,
+        algorithms[0],
+        problem.network,
+        rng_state={"seed": 123, "python_random_state": random.getstate()},
+    )
+    manager.mark_trial_complete(
+        1,
+        0,
+        4,
+        algorithms[1],
+        problem.network,
+        rng_state={"seed": 123, "python_random_state": random.getstate()},
+    )
 
     result = manager.load_benchmark_result()
 
@@ -244,10 +272,14 @@ def test_create_backup_and_clear(tmp_path: Path) -> None:  # noqa: D103
     assert not (tmp_path / "ckpt").exists()
 
 
+@pytest.mark.parametrize("seed", [None, 42])
 @pytest.mark.filterwarnings(
     "ignore:os.fork\\(\\) was called.*:RuntimeWarning"
 )  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
-def test_resume_from_checkpoint(tmp_path: Path) -> None:  # noqa: D103
+def test_resume_from_checkpoint(tmp_path: Path, seed: int | None) -> None:  # noqa: D103
+    if seed is not None:
+        iop.set_seed(seed)
+
     problem_5, algorithms_5 = _build_problem_and_algorithms(5)
     problem_10, algorithms_10 = _build_problem_and_algorithms(10)
     manager = CheckpointManager(tmp_path / "ckpt", checkpoint_step=2)
@@ -287,7 +319,9 @@ def test_resume_from_checkpoint(tmp_path: Path) -> None:  # noqa: D103
         for i, trial_result in enumerate(resumed_bench.states[alg]):
             assert len(trial_result.agents()) == 4
             for agent in trial_result.agents():
-                assert len(agent._x_history) == 11  # 10 iterations + initial state
+                assert len(agent._x_history) == 11, (
+                    f"Expected 11 iterations for agent {agent.id}, got {len(agent._x_history)}"
+                )  # 10 iterations + initial state
             resumed_results[(alg.name, i)] = trial_result
 
     full_results: dict[tuple[str, int], Network] = {}
@@ -295,7 +329,9 @@ def test_resume_from_checkpoint(tmp_path: Path) -> None:  # noqa: D103
         for i, trial_result in enumerate(bench_10.states[alg]):
             assert len(trial_result.agents()) == 4
             for agent in trial_result.agents():
-                assert len(agent._x_history) == 11  # 10 iterations + initial state
+                assert len(agent._x_history) == 11, (
+                    f"Expected 11 iterations for agent {agent.id}, got {len(agent._x_history)}"
+                )  # 10 iterations + initial state
             full_results[(alg.name, i)] = trial_result
 
     for key in resumed_results:
@@ -321,10 +357,14 @@ def test_resume_from_checkpoint(tmp_path: Path) -> None:  # noqa: D103
                     )
 
 
+@pytest.mark.parametrize("seed", [None, 42])
 @pytest.mark.filterwarnings(
     "ignore:os.fork\\(\\) was called.*:RuntimeWarning"
 )  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
-def test_resume_from_non_completed_checkpoint(tmp_path: Path) -> None:  # noqa: D103
+def test_resume_from_non_completed_checkpoint(tmp_path: Path, seed: int | None) -> None:  # noqa: D103
+    if seed is not None:
+        iop.set_seed(seed)
+
     problem_5, algorithms_5 = _build_problem_and_algorithms(5)
     problem_10, algorithms_10 = _build_problem_and_algorithms(10)
     manager = CheckpointManager(tmp_path / "ckpt", checkpoint_step=2)
@@ -340,8 +380,8 @@ def test_resume_from_non_completed_checkpoint(tmp_path: Path) -> None:  # noqa: 
         benchmark_problem=problem_10,
         n_trials=2,
     )
-    assert bench_5 is not None
-    assert bench_10 is not None
+    assert bench_5 is not None, "Expected bench_5 to be created successfully"
+    assert bench_10 is not None, "Expected bench_10 to be created successfully"
 
     # print files in checkpoint directory for debugging
     print("Before")
@@ -404,7 +444,9 @@ def test_resume_from_non_completed_checkpoint(tmp_path: Path) -> None:  # noqa: 
         for i, trial_result in enumerate(resumed_bench.states[alg]):
             assert len(trial_result.agents()) == 4
             for agent in trial_result.agents():
-                assert len(agent._x_history) == 11  # 10 iterations + initial state
+                assert len(agent._x_history) == 11, (
+                    f"Expected 11 iterations for agent {agent.id}, got {len(agent._x_history)}"
+                )  # 10 iterations + initial state
             resumed_results[(alg.name, i)] = trial_result
 
     full_results: dict[tuple[str, int], Network] = {}
@@ -412,7 +454,9 @@ def test_resume_from_non_completed_checkpoint(tmp_path: Path) -> None:  # noqa: 
         for i, trial_result in enumerate(bench_10.states[alg]):
             assert len(trial_result.agents()) == 4
             for agent in trial_result.agents():
-                assert len(agent._x_history) == 11  # 10 iterations + initial state
+                assert len(agent._x_history) == 11, (
+                    f"Expected 11 iterations for agent {agent.id}, got {len(agent._x_history)}"
+                )  # 10 iterations + initial state
             full_results[(alg.name, i)] = trial_result
 
     for key in resumed_results:
