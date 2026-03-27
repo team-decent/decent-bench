@@ -178,7 +178,7 @@ class Quantization(CompressionScheme):
         self.n_significant_digits = n_significant_digits
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
-        res = np.vectorize(lambda x: float(f"%.{self.n_significant_digits - 1}e" % x))(iop.to_numpy(msg))
+        res = np.vectorize(lambda x: float(f"%.{self.n_significant_digits - 1}e" % x))(iop.to_numpy(msg))  # noqa: RUF073
         return iop.to_array_like(res, msg)
 
 
