@@ -169,6 +169,12 @@ def resume_benchmark(  # noqa: PLR0912
             f"total increase is {total_increase_iterations}"
         )
 
+    if "rng_seed" in metadata:
+        base_seed = metadata["rng_seed"]
+        LOGGER.info(f"Setting base RNG seed to {base_seed} from checkpoint metadata")
+        used_frameworks = {agent.cost.framework for agent in problem.network.agents()}
+        iop.set_seed(base_seed, used_frameworks)
+
     results = _benchmark(
         algorithms=algorithms,
         benchmark_problem=problem,
