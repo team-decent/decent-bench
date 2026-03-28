@@ -4,13 +4,12 @@ from operator import add
 
 import numpy as np
 
+import decent_bench.utils.interoperability as iop
 from decent_bench import centralized_algorithms as ca
 from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCost, PyTorchCost, QuadraticCost
 from decent_bench.datasets import SyntheticClassificationDatasetHandler, SyntheticRegressionDatasetHandler
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import Dataset, EmpiricalRiskBatchSize, SupportedDevices, SupportedFrameworks
-
-ran = np.random.default_rng()  # replace with iop tool
 
 
 def create_classification_problem(
@@ -47,7 +46,6 @@ def create_classification_problem(
         device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         squeeze_targets=cost_cls is PyTorchCost,  # PyTorchCost expects squeezed targets for CrossEntropyLoss
-        seed=0,
     )
     test_data = SyntheticClassificationDatasetHandler(
         n_targets=2,
@@ -58,7 +56,6 @@ def create_classification_problem(
         device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         squeeze_targets=cost_cls is PyTorchCost,
-        seed=12345,
     )
 
     if cost_cls is PyTorchCost:
@@ -134,7 +131,6 @@ def create_regression_problem(
         device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         target_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
-        seed=0,
     )
     test_data = SyntheticRegressionDatasetHandler(
         n_targets=1,
@@ -145,7 +141,6 @@ def create_regression_problem(
         device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         target_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
-        seed=12345,
     )
     if cost_cls is PyTorchCost:
         try:
@@ -192,11 +187,11 @@ def create_quadratic_problem(
     """
     A, b = [], []  # noqa: N806
     for _ in range(n_agents):
-        A_i = ran.random((size, size))  # noqa: N806
-        A.append((A_i + A_i.T) / 2 + size * np.eye(size))
-        b.append(ran.normal(scale=10, size=(size,)))
+        A_i = iop.uniform((size, size), framework=SupportedFrameworks.NUMPY, device=SupportedDevices.CPU)  # noqa: N806
+        A.append((A_i + iop.transpose(A_i)) / 2 + size * iop.eye_like(A_i))
+        b.append(iop.normal((size,), std=10, framework=SupportedFrameworks.NUMPY, device=SupportedDevices.CPU))
 
-    costs = [QuadraticCost(Array(A[i]), Array(b[i])) for i in range(n_agents)]
+    costs = [QuadraticCost(A[i], b[i]) for i in range(n_agents)]
     sum_cost = reduce(add, costs)
     x_optimal = Array(np.linalg.solve(sum_cost.A, -sum_cost.b))
 

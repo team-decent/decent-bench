@@ -67,7 +67,7 @@ def randn_initialization(
     """
     i = network.agents()[0]
     if x0 is None:
-        x0 = iop.randn(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device, mean=mean, std=std)
+        x0 = iop.normal(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device, mean=mean, std=std)
 
     if iop.shape(x0) != i.cost.shape:
         raise ValueError(f"Initial variable has shape {iop.shape(x0)}, expected {i.cost.shape}.")

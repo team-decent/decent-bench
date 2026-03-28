@@ -621,7 +621,7 @@ algorithms framework-agnostic, always use the interoperability layer :class:`~de
 `iop`, and the :class:`~decent_bench.utils.array.Array` wrapper when creating, manipulating, and exchanging values:
 
 - Use :class:`decent_bench.utils.interoperability.zeros` instead of framework-specific constructors (e.g., `np.zeros`, `torch.zeros`). 
-    Other examples are :meth:`~decent_bench.utils.interoperability.ones_like`, :meth:`~decent_bench.utils.interoperability.rand_like`, :meth:`~decent_bench.utils.interoperability.randn_like`, etc.
+    Other examples are :meth:`~decent_bench.utils.interoperability.ones_like`, :meth:`~decent_bench.utils.interoperability.uniform_like`, :meth:`~decent_bench.utils.interoperability.normal_like`, etc.
     See :mod:`~decent_bench.utils.interoperability` for a full list of available methods and :mod:`~decent_bench.distributed_algorithms` for examples of usage.
 - Avoid calling any framework-specific functions directly within your algorithm. 
     Let the :class:`~decent_bench.costs.Cost` implementations handle framework-specific details for 
