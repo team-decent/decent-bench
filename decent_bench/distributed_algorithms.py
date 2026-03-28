@@ -1081,7 +1081,7 @@ class ADMM(P2PAlgorithm):
 
     Note:
         ``x0`` and ``z0`` follow the :obj:`~decent_bench.utils.types.InitialStates` convention and are resolved
-        per agent during :meth:`initialize` via
+        per agent during ``initialize`` via
         :func:`~decent_bench.utils.algorithm_helpers.initial_states`.
         If ``x0`` is ``None`` and ``z0`` is provided, each agent initializes ``x0`` from ``z0`` with one proximal
         update:
@@ -1115,14 +1115,14 @@ class ADMM(P2PAlgorithm):
             raise ValueError("`alpha` must be in (0, 1)")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.rho_i = {i: 1 / (self.rho * len(network.neighbors(i))) for i in network.agents()}  # noqa: N806
+        self.rho_i = {i: 1 / (self.rho * len(network.neighbors(i))) for i in network.agents()}
         x_from_z = self.x0 is None and self.z0 is not None  # if x0 needs to be created from z0
         self.x0 = alg_helpers.initial_states(self.x0, network)
         self.z0 = alg_helpers.initial_states(self.z0, network)
         for i in network.agents():
             if x_from_z:
                 self.x0[i] = i.cost.proximal(x=self.z0[i] / self.rho, rho=self.rho_i[i])
-            z0 = {j: self.z0[i] for j in network.neighbors(i)}
+            z0 = dict.fromkeys(network.neighbors(i), self.z0[i])
             i.initialize(x=self.x0[i], aux_vars={"z": z0})
 
     def step(self, network: P2PNetwork, _: int) -> None:  # noqa: D102
@@ -1203,12 +1203,12 @@ class ATG(P2PAlgorithm):
             raise ValueError("`delta` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
+        self.pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}
         self.x0 = alg_helpers.initial_states(self.x0, network)
         self.z0 = alg_helpers.initial_states(self.z0, network)
         for i in network.agents():
-            z_y0 = {j: self.z0[i] for j in network.neighbors(i)}
-            z_s0 = {j: self.z0[i] for j in network.neighbors(i)}
+            z_y0 = dict.fromkeys(network.neighbors(i), self.z0[i])
+            z_s0 = dict.fromkeys(network.neighbors(i), self.z0[i])
             q = iop.zeros_like(self.x0[i])
             i.initialize(x=self.x0[i], aux_vars={"y": q, "s": q, "z_y": z_y0, "z_s": z_s0})
 

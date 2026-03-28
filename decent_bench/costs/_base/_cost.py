@@ -6,7 +6,6 @@ from typing import Any
 
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
-import decent_bench.utils.interoperability as iop
 
 
 class Cost(ABC):  # noqa: PLR0904

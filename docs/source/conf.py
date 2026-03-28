@@ -40,7 +40,10 @@ autodoc_default_options = {}
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True
 autodoc_type_aliases = {
+    "Agent": "decent_bench.agents.Agent",
+    "Array": "decent_bench.utils.array.Array",
     "ClientWeights": "decent_bench.utils.types.ClientWeights",
+    "InitialStates": "decent_bench.utils.types.InitialStates",
     "Network": "decent_bench.networks.Network",
     "NetworkT": "decent_bench.utils.types.NetworkT",
 }
@@ -55,6 +58,12 @@ nitpick_ignore = [
     ("py:class", "TorchTensor"),
     ("py:class", "TensorFlowTensor"),
     ("py:class", "JaxArray"),
+]
+
+nitpick_ignore_regex = [
+    (r"py:class", r"TypeAliasForwardRef.*"),
+    (r"py:class", r"Array"),
+    (r"py:class", r"dict\[Agent, Array\]"),
 ]
 
 suppress_warnings = ["toc.duplicate"]

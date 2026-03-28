@@ -2,7 +2,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.networks import Network, FedNetwork
+from decent_bench.networks import FedNetwork, Network
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import InitialStates
 
@@ -35,11 +35,10 @@ def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
         Keys in ``x0`` not referring to agents in the network are silently ignored.
 
     """
-
     if x0 is None:
         x0s = {a: iop.zeros(a.cost.shape, a.cost.framework, a.cost.device) for a in network.graph}
     elif isinstance(x0, Array):
-        x0s = {a: x0 for a in network.graph}
+        x0s = dict.fromkeys(network.graph, x0)
     elif isinstance(x0, dict):
         # match by agent.id to handle deep-copied dicts whose keys are different instances
         x0_by_id = {a.id: v for a, v in x0.items()}
@@ -65,6 +64,7 @@ def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
     # ignore keys that are not network agents and normalize to the target framework/device
     return {a: iop.to_array(x0s[a], framework=a.cost.framework, device=a.cost.device) for a in network.graph}
 
+
 def normal_initialization(
     network: Network,
     mean: float = 0.0,
@@ -85,11 +85,10 @@ def normal_initialization(
         The states are created using each agent's own ``cost.shape``, ``cost.framework``, and ``cost.device``.
 
     """
-    return {a: iop.randn(shape=a.cost.shape,
-                         framework=a.cost.framework,
-                         device=a.cost.device,
-                         mean=mean,
-                         std=std) for a in network.graph}
+    return {
+        a: iop.randn(shape=a.cost.shape, framework=a.cost.framework, device=a.cost.device, mean=mean, std=std)
+        for a in network.graph
+    }
 
 
 def uniform_initialization(
@@ -119,10 +118,9 @@ def uniform_initialization(
         raise ValueError(f"Expected high > low, got low={low} and high={high}.")
 
     return {
-        a: iop.rand_like(iop.zeros(shape=a.cost.shape,
-                                   framework=a.cost.framework,
-                                   device=a.cost.device),
-                                   low=low, high=high)
+        a: iop.rand_like(
+            iop.zeros(shape=a.cost.shape, framework=a.cost.framework, device=a.cost.device), low=low, high=high
+        )
         for a in network.graph
     }
 
@@ -135,7 +133,7 @@ def pytorch_initialization(
     Build per-agent initial states by applying a PyTorch initialization routine to each agent's model.
 
     Calls ``init_fn`` on every parameter tensor of each agent's
-    :attr:`~decent_bench.costs.PyTorchCost.model` (via :meth:`torch.nn.Module.parameters`),
+    ``PyTorchCost.model`` (via :meth:`torch.nn.Module.parameters`),
     then extracts the resulting flattened parameter vector as the agent's initial state.
     The returned dict is compatible with :func:`initial_states` and can be passed
     directly as ``x0`` to any algorithm.
@@ -147,7 +145,7 @@ def pytorch_initialization(
             to each parameter tensor. Any :mod:`torch.nn.init` routine can be passed directly,
             e.g. ``nn.init.xavier_uniform_``, ``nn.init.kaiming_normal_``, or a custom
             ``lambda x: nn.init.normal_(x, mean=0, std=0.01)``.
-            If ``init_fn`` raises a ``ValueError`` because it can only be applied to 
+            If ``init_fn`` raises a ``ValueError`` because it can only be applied to
             tensors with < 2 dimensions (e.g. fan-in/fan-out routines on 1-D bias vectors),
             that parameter is silently skipped and retains its current value.
 
@@ -167,15 +165,13 @@ def pytorch_initialization(
         # or with a lambda for init functions that require extra arguments:
         x0 = pytorch_initialization(network, lambda x: nn.init.normal_(x, mean=0, std=0.01))
 
-    """
-    from decent_bench.costs import PyTorchCost
+    """  # noqa: DOC501
+    from decent_bench.costs import PyTorchCost  # noqa: PLC0415
 
     x0s = {}
     for a in network.graph:
         if not isinstance(a.cost, PyTorchCost):
-            raise TypeError(
-                f"Agent {a} has cost of type {type(a.cost).__name__!r}, expected PyTorchCost."
-            )
+            raise TypeError(f"Agent {a} has cost of type {type(a.cost).__name__!r}, expected PyTorchCost.")
         with __import__("torch").no_grad():
             for param in a.cost.model.parameters():
                 try:
@@ -184,7 +180,7 @@ def pytorch_initialization(
                     if "fewer than 2 dimensions" not in str(e):
                         raise
         x0s[a] = iop.to_array(
-            a.cost._get_model_parameters(),
+            a.cost._get_model_parameters(),  # noqa: SLF001
             framework=a.cost.framework,
             device=a.cost.device,
         )
