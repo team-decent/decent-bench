@@ -111,17 +111,6 @@ class Cost(ABC):  # noqa: PLR0904
 
         """
 
-    @property
-    def _custom_x(self) -> Array:
-        """
-        Create a custom Array to be used in :meth:`~decent_bench.distributed_algorithms.Algorithm.initial_states`.
-        
-        Override this property to define a custom value, which is used by 
-        :meth:`~decent_bench.distributed_algorithms.Algorithm.initial_states` to set the inital state of
-        agents when not otherwise specified.
-        """
-        return iop.zeros(self.shape, self.framework, self.device)
-
     @abstractmethod
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ANN401
         """Evaluate function at x."""

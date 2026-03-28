@@ -50,23 +50,6 @@ class Algorithm[NetworkT: Network](ABC):
     def name(self) -> str:
         """Name of the algorithm."""
 
-    def initial_states(self, x0: InitialStates, network: NetworkT, stacked_copies: int | None = None) -> "dict[Agent, Array]":
-        if x0 is None:
-            x0s = {agent: agent.cost._custom_x for agent in network.graph.nodes()}
-        elif isinstance(x0, Array):
-            x0s = {agent: x0 for agent in network.graph.nodes()}
-        elif isinstance(x0, dict):
-            for agent in network.graph:
-                if agent not in x0:
-                    raise ValueError(f"x0 not provided for agent {agent}")
-            x0s = {agent: x0[agent] for agent in self.graph}
-        else:
-            raise ValueError(f"Invalid x0: expected None, an Array instance, or a dict, got {type(x0)}")
-
-        if stacked_copies is not None:
-            x0s = {agent: iop.stack([x] * stacked_copies) for agent, x in x0s.items()}
-        return x0s
-
     @abstractmethod
     def initialize(self, network: NetworkT) -> None:
         """
@@ -314,7 +297,7 @@ class FedAvg(FedAlgorithm):
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
-    x0: "Array | None" = None
+    x0: InitialStates = None
     _sgd_rngs: dict[int, random.Random] | None = field(init=False, repr=False, default=None)
     name: str = "FedAvg"
 
@@ -332,11 +315,11 @@ class FedAvg(FedAlgorithm):
             raise ValueError("`num_local_epochs` must be positive")
 
     def initialize(self, network: FedNetwork) -> None:  # noqa: D102
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        self.x0 = alg_helpers.initial_states(self.x0, network)
         self._setup_rngs(network.clients())
-        network.server().initialize(x=self.x0)
+        network.server().initialize(x=self.x0[network.server()])
         for client in network.clients():
-            client.initialize(x=self.x0)
+            client.initialize(x=self.x0[client])
 
     def _setup_rngs(self, clients: Sequence["Agent"]) -> None:
         if self.sgd_seed is not None:
@@ -432,7 +415,7 @@ class DGD(P2PAlgorithm):
             raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = self.initial_states(self.x0, network)
+        self.x0 = alg_helpers.initial_states(self.x0, network)
         for i in network.agents():
             i.initialize(x=self.x0[i])
 
@@ -474,7 +457,7 @@ class ATC(P2PAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    x0: "Array | None" = None
+    x0: InitialStates = None
     name: str = "ATC"
 
     def __post_init__(self) -> None:
@@ -489,9 +472,9 @@ class ATC(P2PAlgorithm):
             raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        self.x0 = alg_helpers.initial_states(self.x0, network)
         for i in network.agents():
-            i.initialize(x=self.x0, aux_vars={"y": self.x0})
+            i.initialize(x=self.x0[i], aux_vars={"y": self.x0[i]})
 
         self.W = network.weights
 
@@ -540,7 +523,7 @@ class SimpleGT(P2PAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    x0: "Array | None" = None
+    x0: InitialStates = None
     name: str = "SimpleGT"
 
     def __post_init__(self) -> None:
@@ -555,10 +538,9 @@ class SimpleGT(P2PAlgorithm):
             raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        self.x0 = alg_helpers.initial_states(self.x0, network)
         for i in network.agents():
-            y0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            i.initialize(x=self.x0, aux_vars={"y": y0})
+            i.initialize(x=self.x0[i], aux_vars={"y": self.x0[i]})
 
         self.W = network.weights
 
@@ -606,7 +588,7 @@ class ED(P2PAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    x0: "Array | None" = None
+    x0: InitialStates = None
     name: str = "ED"
 
     def __post_init__(self) -> None:
@@ -621,11 +603,11 @@ class ED(P2PAlgorithm):
             raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        self.x0 = alg_helpers.initial_states(self.x0, network)
         for i in network.agents():
-            y0 = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            y1 = self.x0 - self.step_size * i.cost.gradient(self.x0)
-            i.initialize(x=self.x0, aux_vars={"y": y0, "y_new": y1})
+            y0 = self.x0[i]
+            y1 = self.x0[i] - self.step_size * i.cost.gradient(self.x0[i])
+            i.initialize(x=self.x0[i], aux_vars={"y": y0, "y_new": y1})
 
         self.W = network.weights
         self.W = 0.5 * (iop.eye_like(self.W) + self.W)
@@ -677,7 +659,7 @@ class AugDGM(P2PAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    x0: "Array | None" = None
+    x0: InitialStates = None
     name: str = "Aug-DGM"
 
     def __post_init__(self) -> None:
@@ -692,10 +674,11 @@ class AugDGM(P2PAlgorithm):
             raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        self.x0 = alg_helpers.initial_states(self.x0, network)
         for i in network.agents():
-            y0 = i.cost.gradient(self.x0)
-            i.initialize(x=self.x0, aux_vars={"y": y0, "g": y0, "g_new": self.x0, "s": self.x0})
+            y0 = i.cost.gradient(self.x0[i])
+            z = iop.zeros_like(self.x0[i])
+            i.initialize(x=self.x0[i], aux_vars={"y": y0, "g": y0, "g_new": z, "s": z})
 
         self.W = network.weights
 
@@ -762,7 +745,7 @@ class WangElia(P2PAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    x0: "Array | None" = None
+    x0: InitialStates = None
     name: str = "Wang-Elia"
 
     def __post_init__(self) -> None:
@@ -777,9 +760,9 @@ class WangElia(P2PAlgorithm):
             raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        self.x0 = alg_helpers.initial_states(self.x0, network)
         for i in network.agents():
-            i.initialize(x=self.x0, aux_vars={"z": self.x0, "x_old": self.x0})
+            i.initialize(x=self.x0[i], aux_vars={"z": iop.zeros_like(self.x0[i]), "x_old": self.x0[i]})
 
         W = network.weights  # noqa: N806
         K = 0.5 * (iop.eye_like(W) - W)  # noqa: N806
@@ -840,7 +823,7 @@ class EXTRA(P2PAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    x0: "Array | None" = None
+    x0: InitialStates = None
     name: str = "EXTRA"
 
     def __post_init__(self) -> None:
@@ -855,11 +838,12 @@ class EXTRA(P2PAlgorithm):
             raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        self.x0 = alg_helpers.initial_states(self.x0, network)
         for i in network.agents():
+            z = iop.zeros_like(self.x0[i])
             i.initialize(
-                x=self.x0,
-                aux_vars={"x_old": self.x0, "x_old_old": self.x0, "x_cons": self.x0},
+                x=self.x0[i],
+                aux_vars={"x_old": self.x0[i], "x_old_old": z, "x_cons": z},
             )
 
         self.W = network.weights
@@ -930,7 +914,7 @@ class ATCTracking(P2PAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    x0: "Array | None" = None
+    x0: InitialStates = None
     name: str = "ATC-Tracking"
 
     def __post_init__(self) -> None:
@@ -945,12 +929,13 @@ class ATCTracking(P2PAlgorithm):
             raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        self.x0 = alg_helpers.initial_states(self.x0, network)
         for i in network.agents():
-            y0 = i.cost.gradient(self.x0)
+            y0 = i.cost.gradient(self.x0[i])
+            z = iop.zeros_like(self.x0[i])
             i.initialize(
-                x=self.x0,
-                aux_vars={"y": y0, "g": y0, "g_new": self.x0, "s": self.x0},
+                x=self.x0[i],
+                aux_vars={"y": y0, "g": y0, "g_new": z, "s": z},
             )
 
         self.W = network.weights
@@ -1020,7 +1005,7 @@ class NIDS(P2PAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    x0: "Array | None" = None
+    x0: InitialStates = None
     name: str = "NIDS"
 
     def __post_init__(self) -> None:
@@ -1035,9 +1020,10 @@ class NIDS(P2PAlgorithm):
             raise ValueError("`step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        self.x0 = alg_helpers.initial_states(self.x0, network)
         for i in network.agents():
-            i.initialize(x=self.x0, aux_vars={"x_old": self.x0, "g": self.x0, "g_old": self.x0, "y": self.x0})
+            z = iop.zeros_like(self.x0[i])
+            i.initialize(x=self.x0[i], aux_vars={"x_old": self.x0[i], "g": z, "g_old": z, "y": z})
 
         W = network.weights  # noqa: N806
         W_tilde = 0.5 * (iop.eye_like(W) + W)  # noqa: N806
@@ -1079,9 +1065,9 @@ class ADMM(P2PAlgorithm):
 
     .. math::
         \mathbf{x}_{i, k+1} = \operatorname{prox}_{\frac{1}{\rho N_i} f_i}
-        \left(\sum_j \mathbf{Z}_{ij, k} \frac{1}{\rho N_i} \right)
+        \left(\sum_j \mathbf{z}_{ij, k} \frac{1}{\rho N_i} \right)
     .. math::
-        \mathbf{Z}_{ij, k+1} = (1-\alpha) \mathbf{Z}_{ij, k} - \alpha (\mathbf{Z}_{ji, k} - 2 \rho \mathbf{x}_{j, k+1})
+        \mathbf{z}_{ij, k+1} = (1-\alpha) \mathbf{z}_{ij, k} - \alpha (\mathbf{z}_{ji, k} - 2 \rho \mathbf{x}_{j, k+1})
 
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
@@ -1094,15 +1080,25 @@ class ADMM(P2PAlgorithm):
     and :math:`\alpha \in (0, 1)` is the relaxation parameter.
 
     Note:
-        ``z0`` is of shape :attr:`agent.cost.shape <decent_bench.costs.Cost.shape>` which is then stacked for all
-        agents to form ``z`` of shape ``(num_agents, *agent.cost.shape)``.
+        ``x0`` and ``z0`` follow the :obj:`~decent_bench.utils.types.InitialStates` convention and are resolved
+        per agent during :meth:`initialize` via
+        :func:`~decent_bench.utils.algorithm_helpers.initial_states`.
+        If ``x0`` is ``None`` and ``z0`` is provided, each agent initializes ``x0`` from ``z0`` with one proximal
+        update:
+
+        .. math::
+            x_{i,0} = \operatorname{prox}_{\frac{1}{\rho N_i} f_i}\left(\frac{z_{i,0}}{\rho}\right)
+
+        The :math:`\mathbf{z}_{ij}` variables of an agent are all initialized to
+        the same value specified in ``z0`` (if any).
 
     """
 
     iterations: int = 100
     rho: float = 1
     alpha: float = 0.5
-    z0: "Array | None" = None
+    x0: InitialStates = None
+    z0: InitialStates = None
     name: str = "ADMM"
 
     def __post_init__(self) -> None:
@@ -1119,20 +1115,19 @@ class ADMM(P2PAlgorithm):
             raise ValueError("`alpha` must be in (0, 1)")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
-        all_agents = network.agents()
-        self.z0 = self.initial_states(self.z0, network, stacked_copies=len(all_agents))
-        # self.z0 = alg_helpers.zero_initialization(self.z0, network, stacked_copies=len(all_agents))
-        for i in all_agents:
-            x1 = i.cost.proximal(x=iop.sum(self.z0[i], dim=0) / pN[i], rho=1 / pN[i])
-            # note: msg0's x1 is an approximation of the neighbors' x1 (z0 is exact: all agents start with same)
-            i.initialize(x=x1, aux_vars={"z": self.z0[i]})
-
-        self.pN = pN
+        self.rho_i = {i: 1 / (self.rho * len(network.neighbors(i))) for i in network.agents()}  # noqa: N806
+        x_from_z = self.x0 is None and self.z0 is not None  # if x0 needs to be created from z0
+        self.x0 = alg_helpers.initial_states(self.x0, network)
+        self.z0 = alg_helpers.initial_states(self.z0, network)
+        for i in network.agents():
+            if x_from_z:
+                self.x0[i] = i.cost.proximal(x=self.z0[i] / self.rho, rho=self.rho_i[i])
+            z0 = {j: self.z0[i] for j in network.neighbors(i)}
+            i.initialize(x=self.x0[i], aux_vars={"z": z0})
 
     def step(self, network: P2PNetwork, _: int) -> None:  # noqa: D102
         for i in network.active_agents():
-            i.x = i.cost.proximal(x=iop.sum(i.aux_vars["z"], dim=0) / self.pN[i], rho=1 / self.pN[i])
+            i.x = i.cost.proximal(x=sum(i.aux_vars["z"].values()) * self.rho_i[i], rho=self.rho_i[i])
 
         for i in network.active_agents():
             for j in network.active_neighbors(i):
@@ -1186,7 +1181,8 @@ class ATG(P2PAlgorithm):
     alpha: float = 0.5
     gamma: float = 0.1
     delta: float = 0.001
-    x0: "Array | None" = None
+    x0: InitialStates = None
+    z0: InitialStates = None
     name: str = "ATG"
 
     def __post_init__(self) -> None:
@@ -1207,30 +1203,21 @@ class ATG(P2PAlgorithm):
             raise ValueError("`delta` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
-        all_agents = network.agents()
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
-        for i in all_agents:
-            z_y0 = iop.zeros(
-                framework=i.cost.framework,
-                shape=(len(all_agents), *(i.cost.shape)),
-                device=i.cost.device,
-            )
-            z_s0 = iop.zeros(
-                framework=i.cost.framework,
-                shape=(len(all_agents), *(i.cost.shape)),
-                device=i.cost.device,
-            )
-            i.initialize(x=self.x0, aux_vars={"y": self.x0, "s": self.x0, "z_y": z_y0, "z_s": z_s0})
-
-        self.pN = pN
+        self.pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}  # noqa: N806
+        self.x0 = alg_helpers.initial_states(self.x0, network)
+        self.z0 = alg_helpers.initial_states(self.z0, network)
+        for i in network.agents():
+            z_y0 = {j: self.z0[i] for j in network.neighbors(i)}
+            z_s0 = {j: self.z0[i] for j in network.neighbors(i)}
+            q = iop.zeros_like(self.x0[i])
+            i.initialize(x=self.x0[i], aux_vars={"y": q, "s": q, "z_y": z_y0, "z_s": z_s0})
 
     def step(self, network: P2PNetwork, _: int) -> None:  # noqa: D102
         # step 1: update consensus-ADMM variables
         for i in network.active_agents():
             # update auxiliary variables
-            i.aux_vars["y"] = (i.x + iop.sum(i.aux_vars["z_y"], dim=0)) / (1 + self.pN[i])
-            i.aux_vars["s"] = (i.cost.gradient(i.x) + iop.sum(i.aux_vars["z_s"], dim=0)) / (1 + self.pN[i])
+            i.aux_vars["y"] = (i.x + sum(i.aux_vars["z_y"].values())) / (1 + self.pN[i])
+            i.aux_vars["s"] = (i.cost.gradient(i.x) + sum(i.aux_vars["z_s"].values())) / (1 + self.pN[i])
             # update local state
             i.x = (1 - self.gamma) * i.x + self.gamma * (i.aux_vars["y"] - self.delta * i.aux_vars["s"])
 
@@ -1286,7 +1273,7 @@ class DLM(P2PAlgorithm):
     iterations: int = 100
     step_size: float = 0.001
     penalty: float = 1
-    x0: "Array | None" = None
+    x0: InitialStates = None
     name: str = "DLM"
 
     def __post_init__(self) -> None:
@@ -1303,11 +1290,10 @@ class DLM(P2PAlgorithm):
             raise ValueError("`penalty` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
+        self.x0 = alg_helpers.initial_states(self.x0, network)
         for i in network.agents():
-            # y must be initialized to zero
-            y = iop.zeros(framework=i.cost.framework, shape=i.cost.shape, device=i.cost.device)
-            i.initialize(x=self.x0, aux_vars={"y": y, "s": y})
+            y = iop.zeros_like(self.x0[i])  # y must be initialized to zero
+            i.initialize(x=self.x0[i], aux_vars={"y": y, "s": y})
 
     def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         if iteration == 0:

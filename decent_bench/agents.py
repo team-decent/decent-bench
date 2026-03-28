@@ -151,7 +151,10 @@ class Agent:
             self._x_history[0] = iop.copy(x)
             self._current_x = iop.copy(x)
         if aux_vars is not None:
-            self._auxiliary_variables = {k: iop.copy(v) for k, v in aux_vars.items()}
+            self._auxiliary_variables = {
+                k: {dk: iop.copy(dv) for dk, dv in v.items()} if isinstance(v, dict) else iop.copy(v)
+                for k, v in aux_vars.items()
+            }
 
     def _snapshot(self, iteration: int, force: bool = False) -> None:
         """
