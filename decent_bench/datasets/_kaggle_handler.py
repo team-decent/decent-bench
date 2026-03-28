@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import random
 from collections.abc import Sequence
 
 import numpy as np
@@ -132,7 +131,7 @@ class KaggleDatasetHandler(DatasetHandler):
 
     def _random_split(self, df: pd.DataFrame) -> Sequence[Dataset]:
         # Shuffle the dataframe
-        df = df.sample(frac=1, random_state=random.randint(0, 2**32 - 1), replace=False).reset_index(drop=True)
+        df = df.sample(frac=1, random_state=iop.rng_numpy(), replace=False).reset_index(drop=True)
 
         partitions: list[Dataset] = []
         for i in range(self.n_partitions):

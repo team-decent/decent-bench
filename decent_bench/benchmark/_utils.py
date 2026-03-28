@@ -187,9 +187,9 @@ def create_quadratic_problem(
     """
     A, b = [], []  # noqa: N806
     for _ in range(n_agents):
-        A_i = iop.rand((size, size), framework=SupportedFrameworks.NUMPY, device=SupportedDevices.CPU)  # noqa: N806
+        A_i = iop.uniform((size, size), framework=SupportedFrameworks.NUMPY, device=SupportedDevices.CPU)  # noqa: N806
         A.append((A_i + iop.transpose(A_i)) / 2 + size * iop.eye_like(A_i))
-        b.append(iop.randn((size,), std=10, framework=SupportedFrameworks.NUMPY, device=SupportedDevices.CPU))
+        b.append(iop.normal((size,), std=10, framework=SupportedFrameworks.NUMPY, device=SupportedDevices.CPU))
 
     costs = [QuadraticCost(A[i], b[i]) for i in range(n_agents)]
     sum_cost = reduce(add, costs)

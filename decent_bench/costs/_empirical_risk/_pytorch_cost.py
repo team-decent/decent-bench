@@ -351,7 +351,7 @@ class PyTorchCost(EmpiricalRiskCost):
         dataloader = torch.utils.data.DataLoader(
             cast("torch.utils.data.Dataset[Any]", self._dataset),
             batch_size=self.batch_size,
-            generator=iop.get_torch_generator(SupportedDevices.CPU),  # DataLoader shuffling must be done on CPU
+            generator=iop.rng_torch(SupportedDevices.CPU),  # DataLoader shuffling must be done on CPU
             collate_fn=_collate_xy_idx,
             **self._dataloader_kwargs,
         )

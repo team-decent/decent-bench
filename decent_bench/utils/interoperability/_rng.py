@@ -129,12 +129,12 @@ def get_seed() -> int | None:
     return _STATE.global_seed
 
 
-def get_numpy_generator() -> np.random.Generator:
+def rng_numpy() -> np.random.Generator:
     """Return the shared NumPy generator used by interoperability random functions."""
     return _STATE.numpy_rng
 
 
-def get_next_jax_key() -> JaxArray:
+def rng_jax() -> JaxArray:
     """
     Split and return the next JAX sub-key while advancing global JAX RNG state.
 
@@ -148,7 +148,7 @@ def get_next_jax_key() -> JaxArray:
     return cast("JaxArray", sub_key)
 
 
-def get_torch_generator(device: SupportedDevices = SupportedDevices.CPU) -> TorchGenerator:
+def rng_torch(device: SupportedDevices = SupportedDevices.CPU) -> TorchGenerator:
     """
     Return a torch.Generator for a given device.
 
@@ -170,7 +170,7 @@ def get_torch_generator(device: SupportedDevices = SupportedDevices.CPU) -> Torc
     return generator
 
 
-def get_tensorflow_generator() -> TensorflowGenerator:
+def rng_tensorflow() -> TensorflowGenerator:
     """
     Return a TensorFlow random generator.
 
@@ -256,7 +256,7 @@ def set_rng_state(state: dict[str, Any]) -> None:
         _STATE.jax_key = jax.random.wrap_key_data(state["jax_key"])
 
 
-def randn(
+def normal(
     shape: tuple[int, ...],
     framework: SupportedFrameworks,
     device: SupportedDevices,
@@ -285,21 +285,21 @@ def randn(
     framework_device = device_to_framework_device(device, framework)
 
     if framework == SupportedFrameworks.NUMPY:
-        random_array = get_numpy_generator().normal(loc=mean, scale=std, size=shape)
+        random_array = rng_numpy().normal(loc=mean, scale=std, size=shape)
         return _return_array(random_array)
     if torch and framework == SupportedFrameworks.PYTORCH:
         return _return_array(torch.normal(mean=mean, std=std, size=shape, device=framework_device))
     if tf and framework == SupportedFrameworks.TENSORFLOW:
         with tf.device(framework_device):
-            return _return_array(get_tensorflow_generator().normal(shape=shape, mean=mean, stddev=std))
+            return _return_array(rng_tensorflow().normal(shape=shape, mean=mean, stddev=std))
     if jax and framework == SupportedFrameworks.JAX:
-        sub_key = get_next_jax_key()
+        sub_key = rng_jax()
         return _return_array(mean + std * jax.random.normal(sub_key, shape=shape).to_device(framework_device))
 
     raise TypeError(f"Unsupported framework type: {framework}")
 
 
-def rand(
+def uniform(
     shape: tuple[int, ...],
     framework: SupportedFrameworks,
     device: SupportedDevices,
@@ -328,15 +328,15 @@ def rand(
     framework_device = device_to_framework_device(device, framework)
 
     if framework == SupportedFrameworks.NUMPY:
-        random_array = get_numpy_generator().uniform(low=low, high=high, size=shape)
+        random_array = rng_numpy().uniform(low=low, high=high, size=shape)
         return _return_array(random_array)
     if torch and framework == SupportedFrameworks.PYTORCH:
         return _return_array((high - low) * torch.rand(size=shape, device=framework_device) + low)
     if tf and framework == SupportedFrameworks.TENSORFLOW:
         with tf.device(framework_device):
-            return _return_array(get_tensorflow_generator().uniform(shape=shape, minval=low, maxval=high))
+            return _return_array(rng_tensorflow().uniform(shape=shape, minval=low, maxval=high))
     if jax and framework == SupportedFrameworks.JAX:
-        sub_key = get_next_jax_key()
+        sub_key = rng_jax()
         return _return_array(
             jax.random.uniform(sub_key, shape=shape, minval=low, maxval=high).to_device(framework_device)
         )
@@ -344,7 +344,7 @@ def rand(
     raise TypeError(f"Unsupported framework type: {framework}")
 
 
-def rand_like(array: Array, low: float = 0.0, high: float = 1.0) -> Array:
+def uniform_like(array: Array, low: float = 0.0, high: float = 1.0) -> Array:
     """
     Create an array of random values with the same shape and type as the input.
 
@@ -365,20 +365,20 @@ def rand_like(array: Array, low: float = 0.0, high: float = 1.0) -> Array:
     value = array.value if isinstance(array, Array) else array
 
     if isinstance(value, np.ndarray | np.generic):
-        random_array = get_numpy_generator().uniform(low=low, high=high, size=value.shape)
+        random_array = rng_numpy().uniform(low=low, high=high, size=value.shape)
         return _return_array(random_array)
     if torch and isinstance(value, torch.Tensor):
         return _return_array((high - low) * torch.rand_like(value) + low)
     if tf and isinstance(value, tf.Tensor):
-        return _return_array(get_tensorflow_generator().uniform(shape=tf.shape(value), minval=low, maxval=high))
+        return _return_array(rng_tensorflow().uniform(shape=tf.shape(value), minval=low, maxval=high))
     if jnp and jax and isinstance(value, jnp.ndarray | jnp.generic):
-        sub_key = get_next_jax_key()
+        sub_key = rng_jax()
         return _return_array(jax.random.uniform(sub_key, shape=value.shape, dtype=value.dtype, minval=low, maxval=high))
 
     raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def randn_like(array: Array, mean: float = 0.0, std: float = 1.0) -> Array:
+def normal_like(array: Array, mean: float = 0.0, std: float = 1.0) -> Array:
     """
     Create an array of random values with the same shape and type as the input.
 
@@ -399,15 +399,15 @@ def randn_like(array: Array, mean: float = 0.0, std: float = 1.0) -> Array:
     value = array.value if isinstance(array, Array) else array
 
     if isinstance(value, np.ndarray | np.generic):
-        random_array = get_numpy_generator().normal(loc=mean, scale=std, size=value.shape)
+        random_array = rng_numpy().normal(loc=mean, scale=std, size=value.shape)
         return _return_array(random_array)
     if torch and isinstance(value, torch.Tensor):
         return _return_array(torch.normal(mean=mean, std=std, size=value.shape, dtype=value.dtype, device=value.device))
     if tf and isinstance(value, tf.Tensor):
         shape = tf.shape(value)
-        return _return_array(get_tensorflow_generator().normal(shape=shape, mean=mean, stddev=std, dtype=value.dtype))
+        return _return_array(rng_tensorflow().normal(shape=shape, mean=mean, stddev=std, dtype=value.dtype))
     if jnp and jax and isinstance(value, jnp.ndarray | jnp.generic):
-        sub_key = get_next_jax_key()
+        sub_key = rng_jax()
         return _return_array(mean + std * jax.random.normal(sub_key, shape=value.shape, dtype=value.dtype))
 
     raise TypeError(f"Unsupported framework type: {type(value)}")
@@ -432,7 +432,7 @@ def choice(array: Array, size: int, replace: bool = True) -> Array:
     value = array.value if isinstance(array, Array) else array
 
     if isinstance(value, np.ndarray | np.generic):
-        random_array = get_numpy_generator().choice(value, size=size, replace=replace)
+        random_array = rng_numpy().choice(value, size=size, replace=replace)
         return _return_array(random_array)
     if torch and isinstance(value, torch.Tensor):
         unif = torch.ones(value.shape[0], device=value.device)
@@ -440,13 +440,13 @@ def choice(array: Array, size: int, replace: bool = True) -> Array:
         return _return_array(value[indices])
     if tf and isinstance(value, tf.Tensor):
         if replace:
-            indices = get_tensorflow_generator().uniform(shape=(size,), minval=0, maxval=value.shape[0], dtype=tf.int32)
+            indices = rng_tensorflow().uniform(shape=(size,), minval=0, maxval=value.shape[0], dtype=tf.int32)
         else:
-            scores = get_tensorflow_generator().uniform(shape=(value.shape[0],), dtype=tf.float32)
+            scores = rng_tensorflow().uniform(shape=(value.shape[0],), dtype=tf.float32)
             indices = tf.math.top_k(scores, k=size).indices
         return _return_array(tf.gather(value, indices))
     if jnp and jax and isinstance(value, jnp.ndarray | jnp.generic):
-        sub_key = get_next_jax_key()
+        sub_key = rng_jax()
         indices = jax.random.choice(sub_key, a=value.shape[0], shape=(size,), replace=replace)
         return _return_array(value[indices])
 

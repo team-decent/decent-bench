@@ -259,7 +259,7 @@ class EmpiricalRiskCost(Cost, ABC):
             if self.batch_size < self.n_samples:
                 remaining: list[int] = getattr(self, "_remaining_batch_indices", [])
                 if len(remaining) == 0:
-                    remaining = iop.get_numpy_generator().permutation(self.n_samples).tolist()
+                    remaining = iop.rng_numpy().permutation(self.n_samples).tolist()
 
                 if len(remaining) >= self.batch_size:
                     sample = remaining[: self.batch_size]
@@ -270,11 +270,9 @@ class EmpiricalRiskCost(Cost, ABC):
 
                     if len(sample) > 0:
                         used_now = set(sample)
-                        next_epoch = (
-                            iop.get_numpy_generator().permutation(list(set(range(self.n_samples)) - used_now)).tolist()
-                        )
+                        next_epoch = iop.rng_numpy().permutation(list(set(range(self.n_samples)) - used_now)).tolist()
                     else:
-                        next_epoch = iop.get_numpy_generator().permutation(self.n_samples).tolist()
+                        next_epoch = iop.rng_numpy().permutation(self.n_samples).tolist()
 
                     sample.extend(next_epoch[:needed])
                     self._remaining_batch_indices = next_epoch[needed:]

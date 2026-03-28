@@ -69,10 +69,10 @@ class MarkovChainActivation(AgentActivationScheme):
             [1 - inactive_to_active, inactive_to_active],
             [active_to_inactive, 1 - active_to_inactive],
         ])  # transition matrix
-        self._current_state = iop.get_numpy_generator().choice(self._states, p=[0, 1])
+        self._current_state = iop.rng_numpy().choice(self._states, p=[0, 1])
 
     def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
-        self._current_state = iop.get_numpy_generator().choice(
+        self._current_state = iop.rng_numpy().choice(
             self._states,
             p=self._P[self._current_state],
         )  # evolve the Markov chain
@@ -98,11 +98,11 @@ class PoissonActivation(AgentActivationScheme):
         if mean_interval < 0:
             raise ValueError("`mean_interval` must be non-negative")
         self.mean_interval = mean_interval
-        self._countdown = int(iop.get_numpy_generator().poisson(self.mean_interval))
+        self._countdown = int(iop.rng_numpy().poisson(self.mean_interval))
 
     def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
         if self._countdown == 0:
-            self._countdown = int(iop.get_numpy_generator().poisson(self.mean_interval))
+            self._countdown = int(iop.rng_numpy().poisson(self.mean_interval))
             return True
         self._countdown -= 1
         return False
@@ -228,7 +228,7 @@ class RandK(CompressionScheme):
     def compress(self, msg: Array) -> Array:  # noqa: D102
         msg_np = np.copy(iop.to_numpy(msg))
         k = min(self.k, msg_np.size)
-        idx = iop.get_numpy_generator().choice(msg_np.size, size=k, replace=False)
+        idx = iop.rng_numpy().choice(msg_np.size, size=k, replace=False)
         mask = np.isin(np.arange(msg_np.size), idx).reshape(msg_np.shape)
         msg_np[~mask] = 0
         return iop.to_array_like(msg_np, msg)
@@ -291,14 +291,14 @@ class GilbertElliott(DropScheme):
         self.good_to_bad = good_to_bad
         self._states = np.array([0, 1])  # good = 0, bad = 1
         self._P = np.array([[1 - good_to_bad, good_to_bad], [bad_to_good, 1 - bad_to_good]])  # transition matrix
-        self._current_state = iop.get_numpy_generator().choice(self._states)  # initialize uniformly at random
+        self._current_state = iop.rng_numpy().choice(self._states)  # initialize uniformly at random
 
     def should_drop(self) -> bool:  # noqa: D102
-        self._current_state = iop.get_numpy_generator().choice(
+        self._current_state = iop.rng_numpy().choice(
             self._states, p=self._P[self._current_state]
         )  # evolve the Markov chain
 
-        return iop.get_numpy_generator().random() < self.drop_rate if self._current_state else False
+        return iop.rng_numpy().random() < self.drop_rate if self._current_state else False
 
 
 class NoiseScheme(ABC):
@@ -326,4 +326,4 @@ class GaussianNoise(NoiseScheme):
         self.std = std
 
     def make_noise(self, msg: Array) -> Array:  # noqa: D102
-        return msg + iop.randn_like(msg, mean=self.mean, std=self.std)
+        return msg + iop.normal_like(msg, mean=self.mean, std=self.std)

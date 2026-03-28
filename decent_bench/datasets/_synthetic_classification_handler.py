@@ -1,5 +1,3 @@
-import random
-
 import numpy as np
 from numpy.typing import DTypeLike
 from sklearn import datasets as sk_datasets
@@ -73,8 +71,10 @@ class SyntheticClassificationDatasetHandler(DatasetHandler):
     def get_partitions(self) -> list[Dataset]:
         if self._partitions is None:
             res: list[Dataset] = []
-            for _ in range(self.n_partitions):
-                seed = random.randint(0, 2**32 - 1)
+            for i in range(self.n_partitions):
+                seed = iop.get_seed()
+                if seed is not None:
+                    seed += i
                 partition = sk_datasets.make_classification(
                     n_samples=self._n_samples_per_partition,
                     n_features=self.n_features,

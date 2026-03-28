@@ -97,7 +97,7 @@ def test_rand_like_frameworks(framework: str, device: str, shape: tuple[int, ...
     data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
     arr = create_array(data, framework, device)
     arr = iop.reshape(arr, shape)
-    rand_arr = iop.rand_like(arr)
+    rand_arr = iop.uniform_like(arr)
 
     # Compute expected shape using numpy
     np_arr = create_array(data, "numpy")
@@ -152,7 +152,7 @@ def test_randn_like_frameworks(framework: str, device: str, shape: tuple[int, ..
     data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
     arr = create_array(data, framework, device)
     arr = iop.reshape(arr, shape)
-    rand_arr = iop.randn_like(arr)
+    rand_arr = iop.normal_like(arr)
 
     # Compute expected shape using numpy
     np_arr = create_array(data, "numpy")
@@ -204,7 +204,7 @@ def test_randn_like_frameworks(framework: str, device: str, shape: tuple[int, ..
 )
 def test_randn_frameworks(framework: str, device: str, shape: tuple[int, ...]) -> None:
     """Test randn function for all frameworks and devices."""
-    randn_arr = iop.randn(framework=SupportedFrameworks(framework), shape=shape, device=SupportedDevices(device))
+    randn_arr = iop.normal(framework=SupportedFrameworks(framework), shape=shape, device=SupportedDevices(device))
     expected = np.random.default_rng().normal(size=shape)
 
     assert_shapes_equal(randn_arr, expected, framework)
@@ -253,7 +253,7 @@ def test_randn_frameworks(framework: str, device: str, shape: tuple[int, ...]) -
 )
 def test_rand_frameworks(framework: str, device: str, shape: tuple[int, ...]) -> None:
     """Test rand function for all frameworks and devices."""
-    rand_arr = iop.rand(framework=SupportedFrameworks(framework), shape=shape, device=SupportedDevices(device))
+    rand_arr = iop.uniform(framework=SupportedFrameworks(framework), shape=shape, device=SupportedDevices(device))
     expected = np.random.default_rng().random(size=shape)
 
     assert_shapes_equal(rand_arr, expected, framework)
@@ -305,13 +305,13 @@ def test_set_seed_makes_rand_and_randn_reproducible(framework: str, device: str)
 
     iop.set_seed(seed=seed, frameworks=[framework_enum])
     assert iop.get_seed() == seed
-    rand_first = iop.rand(framework=framework_enum, shape=shape, device=device_enum)
-    randn_first = iop.randn(framework=framework_enum, shape=shape, device=device_enum)
+    rand_first = iop.uniform(framework=framework_enum, shape=shape, device=device_enum)
+    randn_first = iop.normal(framework=framework_enum, shape=shape, device=device_enum)
 
     iop.set_seed(seed=seed, frameworks=[framework_enum])
     assert iop.get_seed() == seed
-    rand_second = iop.rand(framework=framework_enum, shape=shape, device=device_enum)
-    randn_second = iop.randn(framework=framework_enum, shape=shape, device=device_enum)
+    rand_second = iop.uniform(framework=framework_enum, shape=shape, device=device_enum)
+    randn_second = iop.normal(framework=framework_enum, shape=shape, device=device_enum)
 
     _assert_same_random_values(rand_first, rand_second)
     _assert_same_random_values(randn_first, randn_second)
@@ -362,12 +362,12 @@ def test_set_rng_state_restores_sequence(framework: str, device: str, set_seed: 
 
     if set_seed:
         iop.set_seed(seed=2026, frameworks=[framework_enum])
-    _ = iop.rand(framework=framework_enum, shape=shape, device=device_enum)
+    _ = iop.uniform(framework=framework_enum, shape=shape, device=device_enum)
     state_after_first_draw = iop.get_rng_state(frameworks=[framework_enum])
 
-    second_draw = iop.rand(framework=framework_enum, shape=shape, device=device_enum)
+    second_draw = iop.uniform(framework=framework_enum, shape=shape, device=device_enum)
     iop.set_rng_state(state_after_first_draw)
-    second_draw_after_restore = iop.rand(framework=framework_enum, shape=shape, device=device_enum)
+    second_draw_after_restore = iop.uniform(framework=framework_enum, shape=shape, device=device_enum)
 
     _assert_same_random_values(second_draw, second_draw_after_restore)
 
@@ -450,21 +450,23 @@ def test_set_rng_state_with_different_seeds(framework: str, device: str) -> None
 
     iop.set_seed(seed=seed1, frameworks=[framework_enum])
     assert iop.get_seed() == seed1
-    _ = iop.rand(framework=framework_enum, shape=shape, device=device_enum)
-    _ = iop.randn(framework=framework_enum, shape=shape, device=device_enum)
+    _ = iop.uniform(framework=framework_enum, shape=shape, device=device_enum)
+    _ = iop.normal(framework=framework_enum, shape=shape, device=device_enum)
 
     state = iop.get_rng_state(frameworks=[framework_enum])
-    rand_first = iop.rand(framework=framework_enum, shape=shape, device=device_enum)
-    randn_first = iop.randn(framework=framework_enum, shape=shape, device=device_enum)
+    rand_first = iop.uniform(framework=framework_enum, shape=shape, device=device_enum)
+    randn_first = iop.normal(framework=framework_enum, shape=shape, device=device_enum)
 
     iop.set_seed(seed=seed2, frameworks=[framework_enum])
     assert iop.get_seed() == seed2
-    _ = iop.rand(framework=framework_enum, shape=shape, device=device_enum)  # Advance the RNG state with the new seed
-    _ = iop.randn(framework=framework_enum, shape=shape, device=device_enum)  # Advance the RNG state with the new seed
+    _ = iop.uniform(
+        framework=framework_enum, shape=shape, device=device_enum
+    )  # Advance the RNG state with the new seed
+    _ = iop.normal(framework=framework_enum, shape=shape, device=device_enum)  # Advance the RNG state with the new seed
 
     iop.set_rng_state(state)
-    rand_second = iop.rand(framework=framework_enum, shape=shape, device=device_enum)
-    randn_second = iop.randn(framework=framework_enum, shape=shape, device=device_enum)
+    rand_second = iop.uniform(framework=framework_enum, shape=shape, device=device_enum)
+    randn_second = iop.normal(framework=framework_enum, shape=shape, device=device_enum)
 
     _assert_same_random_values(rand_first, rand_second)
     _assert_same_random_values(randn_first, randn_second)
