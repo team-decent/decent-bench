@@ -59,11 +59,11 @@ class ZeroCost(Cost):
 
     def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         self._check_shape(x)
-        return iop.zeros(self.shape, self.framework, self.device)
+        return iop.zeros(shape=self.shape, framework=self.framework, device=self.device)
 
     def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         self._check_shape(x)
-        return iop.zeros(self.shape + self.shape, self.framework, self.device)
+        return iop.zeros(shape=self.shape + self.shape, framework=self.framework, device=self.device)
 
     def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if rho <= 0:

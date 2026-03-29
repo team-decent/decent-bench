@@ -257,11 +257,11 @@ def set_rng_state(state: dict[str, Any]) -> None:
 
 
 def normal(
-    shape: tuple[int, ...],
     framework: SupportedFrameworks,
     device: SupportedDevices,
     mean: float = 0.0,
     std: float = 1.0,
+    shape: tuple[int, ...] = (),
 ) -> Array:
     """
     Create an array of random values with the specified shape and framework.
@@ -269,11 +269,11 @@ def normal(
     Values are drawn from a normal distribution with mean `mean` and standard deviation `std`.
 
     Args:
-        shape (tuple[int, ...]): Shape of the output array.
         framework (SupportedFrameworks): Target framework type.
         device (SupportedDevices): Target device.
         mean (float): Mean of the normal distribution.
         std (float): Standard deviation of the normal distribution.
+        shape (tuple[int, ...]): Shape of the output array.
 
     Returns:
         Array: Array of random values in the same framework type as the input.
@@ -300,11 +300,11 @@ def normal(
 
 
 def uniform(
-    shape: tuple[int, ...],
     framework: SupportedFrameworks,
     device: SupportedDevices,
     low: float = 0.0,
     high: float = 1.0,
+    shape: tuple[int, ...] = (),
 ) -> Array:
     """
     Create an array of random values with the specified shape and framework.
@@ -312,11 +312,11 @@ def uniform(
     Values are drawn uniformly from [low, high).
 
     Args:
-        shape (tuple[int, ...]): Shape of the output array.
         framework (SupportedFrameworks): Target framework type.
         device (SupportedDevices): Target device.
         low (float): Lower bound of the uniform distribution.
         high (float): Upper bound of the uniform distribution.
+        shape (tuple[int, ...]): Shape of the output array.
 
     Returns:
         Array: Array of random values in the same framework type as the input.

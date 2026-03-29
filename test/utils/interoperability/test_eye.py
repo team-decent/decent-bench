@@ -80,7 +80,7 @@ except RuntimeError:
 )
 def test_eye_frameworks(framework: str, device: str, n: int) -> None:
     """Test eye function for all frameworks and devices."""
-    eye_arr = iop.eye(n, SupportedFrameworks(framework), SupportedDevices(device))
+    eye_arr = iop.eye(SupportedFrameworks(framework), SupportedDevices(device), n)
 
     # Compute expected result using numpy
     expected = np.eye(n, dtype=np.float64)

@@ -24,7 +24,11 @@ def test_p2p_network(n_agents: int = 10) -> None:
 
     assert len(net.active_agents()) == n_agents
 
-    x = iop.zeros(net.agents()[0].cost.shape, net.agents()[0].cost.framework, net.agents()[0].cost.device)
+    x = iop.zeros(
+        shape=net.agents()[0].cost.shape,
+        framework=net.agents()[0].cost.framework,
+        device=net.agents()[0].cost.device,
+    )
     tot_msg = 0
     for i in net.agents():
         for j in net.neighbors(i):
@@ -42,7 +46,11 @@ def test_fed_network(n_agents: int = 10) -> None:
 
     assert len(net.active_agents()) == n_agents
 
-    x = iop.zeros(net.agents()[0].cost.shape, net.agents()[0].cost.framework, net.agents()[0].cost.device)
+    x = iop.zeros(
+        shape=net.agents()[0].cost.shape,
+        framework=net.agents()[0].cost.framework,
+        device=net.agents()[0].cost.device,
+    )
     tot_msg = 0
     for i in net.agents():
         net.send(i, msg=x)
@@ -116,7 +124,7 @@ def test_initialize_message_schemes_dict_used_in_send() -> None:
     net._message_drop = {agent: NoDrops() for agent in agents}
     net._message_noise = {agent: NoNoise() for agent in agents}
 
-    msg = iop.zeros(agents[0].cost.shape, agents[0].cost.framework, agents[0].cost.device)
+    msg = iop.zeros(shape=agents[0].cost.shape, framework=agents[0].cost.framework, device=agents[0].cost.device)
     net._send_one(agents[0], agents[1], msg)
 
     # verify agent 0's compression scheme was called

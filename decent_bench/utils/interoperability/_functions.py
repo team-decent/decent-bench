@@ -658,14 +658,14 @@ def eye_like(array: Array) -> Array:
     raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def eye(n: int, framework: SupportedFrameworks, device: SupportedDevices) -> Array:
+def eye(framework: SupportedFrameworks, device: SupportedDevices, n: int) -> Array:
     """
     Create an identity matrix of size n x n in the specified framework.
 
     Args:
-        n (int): Size of the identity matrix.
         framework (SupportedFrameworks): Target framework type (e.g., "torch", "tf").
         device (SupportedDevices): Target device ("cpu" or "gpu").
+        n (int): Size of the identity matrix.
 
     Returns:
         Array: Identity matrix in the specified framework type.
@@ -753,14 +753,14 @@ def shape(array: Array) -> tuple[int, ...]:
     raise TypeError(f"Unsupported framework type: {type(value)}")
 
 
-def zeros(shape: tuple[int, ...], framework: SupportedFrameworks, device: SupportedDevices) -> Array:
+def zeros(framework: SupportedFrameworks, device: SupportedDevices, shape: tuple[int, ...]) -> Array:
     """
     Create a Array of zeros.
 
     Args:
-        shape (tuple[int, ...]): Shape of the output array.
         framework (SupportedFrameworks): The framework to use.
         device (SupportedDevices): The device to place the tensor on.
+        shape (tuple[int, ...]): Shape of the output array.
 
     Returns:
         Array: Array of zeros.
