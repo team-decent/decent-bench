@@ -75,6 +75,7 @@ deps = [
 
 [tool.tox.env.dev-gpu]
 description = "Generate dev venv with all dependencies including GPU support, active with `source .tox/dev-gpu/bin/activate`"
+set_env = { PIP_EXTRA_INDEX_URL = "https://download.pytorch.org/whl/cu128" } # torch 2.11 uses CUDA 13.0 which seems to have broken linalg.norm, use cuda 12.8 for now
 deps = [
   ".[dev]",
   ".[dev-gpu]",

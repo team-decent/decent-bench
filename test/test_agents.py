@@ -87,7 +87,7 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
         state_snapshot_period=1,
     )
 
-    initial = iop.zeros((3,), framework=framework, device=device)
+    initial = iop.zeros(framework=framework, device=device, shape=(3,))
     agent.initialize(x=initial)
 
     def assert_state(expected_x, expected_history):
@@ -234,7 +234,7 @@ def test_agent_state_snapshot_period(
         state_snapshot_period=state_snapshot_period,
     )
 
-    initial = iop.zeros((3,), framework=framework, device=device)
+    initial = iop.zeros(shape=(3,), framework=framework, device=device)
     agent.initialize(x=initial)
 
     def assert_state(expected_x, expected_history):

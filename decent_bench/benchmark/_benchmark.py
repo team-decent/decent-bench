@@ -1,4 +1,6 @@
 import logging
+import operator
+import random
 import warnings
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -11,14 +13,17 @@ from typing import TYPE_CHECKING, Any
 
 from rich.status import Status
 
+import decent_bench.utils.interoperability as iop
 from decent_bench.benchmark._benchmark_problem import BenchmarkProblem
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
 from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics import RuntimeMetricPlotter
 from decent_bench.networks import Network
 from decent_bench.utils import logger
+from decent_bench.utils.interoperability._rng import _set_seed
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.progress_bar import ProgressBarController
+from decent_bench.utils.types import SupportedFrameworks
 
 if TYPE_CHECKING:
     import queue
@@ -163,6 +168,12 @@ def resume_benchmark(  # noqa: PLR0912
             f"Increased iterations for all algorithms by {increase_iterations}, "
             f"total increase is {total_increase_iterations}"
         )
+
+    if "rng_seed" in metadata:
+        base_seed = metadata["rng_seed"]
+        LOGGER.info(f"Setting base RNG seed to {base_seed} from checkpoint metadata")
+        used_frameworks = {agent.cost.framework for agent in problem.network.agents()}
+        iop.set_seed(base_seed, used_frameworks)
 
     results = _benchmark(
         algorithms=algorithms,
@@ -436,23 +447,25 @@ def _run_trials(  # noqa: PLR0917
         progress_bar_ctrl.stop()
         return results
 
+    trial_args = {
+        alg: [
+            (
+                alg,
+                problem,
+                progress_bar_handle,
+                trial,
+                alg_idx,
+                _derive_trial_seed(iop.get_seed(), alg_idx, trial),
+                checkpoint_manager,
+                runtime_metrics,
+                runtime_plotter_queue,
+            )
+            for trial in to_run[alg]
+        ]
+        for alg_idx, alg in enumerate(algorithms)
+    }
     if max_processes == 1:
-        partial_result = {
-            alg: [
-                _run_trial(
-                    alg,
-                    problem,
-                    progress_bar_handle,
-                    trial,
-                    alg_idx,
-                    checkpoint_manager,
-                    runtime_metrics,
-                    runtime_plotter_queue,
-                )
-                for trial in to_run[alg]
-            ]
-            for alg_idx, alg in enumerate(algorithms)
-        }
+        partial_result = {alg: [_run_trial(*args) for args in trial_args[alg]] for alg in trial_args}
     else:
         with ProcessPoolExecutor(
             initializer=logger.start_queue_logger,
@@ -461,28 +474,13 @@ def _run_trials(  # noqa: PLR0917
             mp_context=mp_context,
         ) as executor:
             LOGGER.debug(f"Concurrent processes: {executor._max_workers}")  # type: ignore[attr-defined] # noqa: SLF001
-            all_futures = {
-                alg: [
-                    executor.submit(
-                        _run_trial,
-                        alg,
-                        problem,
-                        progress_bar_handle,
-                        trial,
-                        alg_idx,
-                        checkpoint_manager,
-                        runtime_metrics,
-                        runtime_plotter_queue,
-                    )
-                    for trial in to_run[alg]
-                ]
-                for alg_idx, alg in enumerate(algorithms)
-            }
+            all_futures = {alg: [executor.submit(_run_trial, *args) for args in trial_args[alg]] for alg in trial_args}
             partial_result = {alg: [f.result() for f in as_completed(futures)] for alg, futures in all_futures.items()}
 
     progress_bar_ctrl.stop()
     for alg in partial_result:
-        results[alg].extend(partial_result[alg])
+        sorted_trials = sorted(partial_result[alg], key=operator.itemgetter(0))  # sort by trial number
+        results[alg].extend([trial_result[1] for trial_result in sorted_trials])
 
     # Clean up runtime plotter process
     if runtime_plotter is not None:
@@ -491,20 +489,34 @@ def _run_trials(  # noqa: PLR0917
     return results
 
 
+def _derive_trial_seed(base_seed: int | None, algorithm_index: int, trial: int) -> int:
+    """Derive a deterministic per-trial seed from a base seed."""
+    if base_seed is None:
+        base_seed = random.randint(0, 2**32 - 1)
+
+    return int((base_seed + 0x9E3779B9 * (algorithm_index + 1) + 0x85EBCA6B * (trial + 1)) % (2**32))
+
+
 def _run_trial(  # noqa: PLR0917
     algorithm: Algorithm[Network],
     problem: BenchmarkProblem,
     progress_bar_handle: "ProgressBarHandle",
     trial: int,
     alg_idx: int,
+    trial_seed: int,
     checkpoint_manager: "CheckpointManager | None" = None,
     runtime_metrics: "list[RuntimeMetric] | None" = None,
     runtime_plotter_queue: "queue.Queue[Any] | None" = None,
-) -> Network:
+) -> tuple[int, Network]:
+    # Set seed for used frameworks
+    used_frameworks = {agent.cost.framework for agent in problem.network.agents()}
+    _set_seed(trial_seed, used_frameworks, set_global_seed=False)
+
+    rng_state: dict[str, Any] | None = None
     if checkpoint_manager is not None:
         checkpoint = checkpoint_manager.load_checkpoint(alg_idx, trial)
         if checkpoint is not None:
-            alg, network, last_completed_iteration = checkpoint
+            alg, network, last_completed_iteration, rng_state = checkpoint
             # Set iterations in case it is updated
             alg.iterations = algorithm.iterations
             # Resume from the next iteration after the last completed one
@@ -515,6 +527,7 @@ def _run_trial(  # noqa: PLR0917
                 f"Resuming {algorithm.name} trial {trial} from iteration {start_iteration}/{algorithm.iterations} "
                 f"(loaded checkpoint from iteration {last_completed_iteration})"
             )
+            iop.set_rng_state(rng_state)
         else:
             start_iteration = 0
             network = deepcopy(problem.network)
@@ -531,7 +544,14 @@ def _run_trial(  # noqa: PLR0917
     def progress_callback(iteration: int) -> None:
         progress_bar_handle.advance_progress_bar(algorithm, iteration)
         if checkpoint_manager is not None and checkpoint_manager.should_checkpoint(iteration):
-            checkpoint_manager.save_checkpoint(alg_idx, trial, iteration, alg, network)
+            checkpoint_manager.save_checkpoint(
+                alg_idx=alg_idx,
+                trial=trial,
+                iteration=iteration,
+                algorithm=alg,
+                network=network,
+                rng_state=iop.get_rng_state(used_frameworks),
+            )
 
         for metric in trial_runtime_metrics:
             if metric.should_update(iteration) or iteration + 1 == alg.iterations:
@@ -547,14 +567,19 @@ def _run_trial(  # noqa: PLR0917
             alg.run(network, start_iteration, progress_callback)
             if checkpoint_manager is not None:
                 checkpoint_manager.mark_trial_complete(
-                    alg_idx, trial, algorithm.iterations - 1, algorithm=alg, network=network
+                    alg_idx=alg_idx,
+                    trial=trial,
+                    iteration=algorithm.iterations - 1,
+                    algorithm=alg,
+                    network=network,
+                    rng_state=iop.get_rng_state(used_frameworks),
                 )
             # Now that checkpoint is saved, we can cleanup to clean up memory
             alg.cleanup(network)
         except Exception as e:
             LOGGER.exception(f"An error or warning occurred when running {alg.name}: {type(e).__name__}: {e}")
 
-    return network
+    return trial, network
 
 
 def _get_runtime_metrics(
@@ -583,19 +608,22 @@ def _get_runtime_metrics(
 
 
 def _should_use_spawn_context(benchmark_problem: BenchmarkProblem) -> bool:
-    """Check if any cost function is a PyTorchCost, which requires spawn context."""
-    try:
-        from decent_bench.costs import PyTorchCost  # noqa: PLC0415
+    """Check if any cost function uses a framework that should run with spawn context."""
+    unsafe_frameworks = {
+        SupportedFrameworks.PYTORCH,
+        SupportedFrameworks.TENSORFLOW,
+        SupportedFrameworks.JAX,
+    }
+    uses_unsafe_framework = any(
+        agent.cost.framework in unsafe_frameworks for agent in benchmark_problem.network.agents()
+    )
+    if uses_unsafe_framework:
+        LOGGER.warning(
+            "It is not recommended to use multiprocessing with PyTorch/TensorFlow/JAX, "
+            "may cause unexpected behavior. Consider setting max_processes=1 to disable multiprocessing.\n"
+            "Execution will continue in 5 seconds, Ctrl+C to abort..."
+        )
+        sleep(5)  # Sleep to give the user a chance to read the warning
+        return True
 
-        if any(isinstance(agent.cost, PyTorchCost) for agent in benchmark_problem.network.agents()):
-            LOGGER.warning(
-                "It is not recommended to use use multiprocessing with PyTorchCost, "
-                "may cause unexpected behavior. Consider setting max_processes=1 to disable multiprocessing.\n"
-                "Execution will continue in 5 seconds, Ctrl+C to abort..."
-            )
-            sleep(5)  # Sleep to give the user a chance to read the warning
-
-            return True
-    except ImportError:
-        return False
     return False
