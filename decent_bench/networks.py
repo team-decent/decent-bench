@@ -445,7 +445,7 @@ class FedNetwork(Network):
     Args:
         clients: list of client agents in the network.
         server: server agent in the network. If ``None``, a default server with zero cost and always active scheme will
-            be created.
+            be created. Custom servers must use :class:`~decent_bench.schemes.AlwaysActive`.
         buffer_messages: whether to keep stored messages at the end of each iteration. If ``True``, messages
             persist on the receiver until they are overwritten by a newer message from the same sender to the same
             receiver. If ``False``, messages delivered to a receiver during iteration *k* are dropped when
@@ -460,6 +460,10 @@ class FedNetwork(Network):
         message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
             :class:`~decent_bench.schemes.DropScheme` instance to apply the same scheme to all agents, a dictionary
             mapping each agent to its scheme, or ``None`` to apply no message drop to any agent.
+
+    Raises:
+        ValueError: if ``clients`` is empty or if a custom ``server`` does not use
+            :class:`~decent_bench.schemes.AlwaysActive`.
 
     """
 
@@ -484,6 +488,8 @@ class FedNetwork(Network):
                 AlwaysActive(),
                 min(c.state_snapshot_period for c in clients),
             )
+        elif not isinstance(server._activation, AlwaysActive):  # noqa: SLF001
+            raise ValueError("FedNetwork server must use AlwaysActive activation")
         graph = nx.star_graph([server, *list(clients)])  # create AgentGraph
 
         # specify the server's message schemes if not provided
