@@ -1,18 +1,11 @@
-from collections.abc import Callable
-from typing import TYPE_CHECKING
-
 import decent_bench.utils.interoperability as iop
+from decent_bench.agents import Agent
 from decent_bench.networks import FedNetwork, Network
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import InitialStates
 
-if TYPE_CHECKING:
-    import torch
 
-    from decent_bench.agents import Agent
-
-
-def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
+def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":  # noqa: PLR0912
     """
     Build per-agent initial states, for use in :meth:`~decent_bench.distributed_algorithms.Algorithm.initialize`.
 
@@ -27,7 +20,8 @@ def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
         dict[Agent, Array]: mapping from each network agent to its initial state.
 
     Raises:
-        ValueError: if ``x0`` has an invalid type or is missing required agent entries.
+        ValueError: if ``x0`` is missing required agent entries.
+        TypeError: if ``x0`` has an invalid type.
 
     Notes:
         For :class:`~decent_bench.networks.FedNetwork`, explicit ``x0`` dictionaries must provide client entries.
@@ -41,7 +35,11 @@ def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
         x0s = dict.fromkeys(network.graph, x0)
     elif isinstance(x0, dict):
         # match by agent.id to handle deep-copied dicts whose keys are different instances
-        x0_by_id = {a.id: v for a, v in x0.items()}
+        x0_by_id = {}
+        for a, v in x0.items():
+            if not isinstance(a, Agent):
+                raise TypeError(f"``x0`` must have keys of type Agent, got {type(a)}")
+            x0_by_id[a.id] = v
         x0s = {}
         if isinstance(network, FedNetwork):
             for a in network.clients():
@@ -127,27 +125,18 @@ def uniform_initialization(
 
 def pytorch_initialization(
     network: Network,
-    init_fn: "Callable[[torch.Tensor], None]",
 ) -> "dict[Agent, Array]":
     """
-    Build per-agent initial states by applying a PyTorch initialization routine to each agent's model.
+    Build per-agent initial states using ``PyTorchCost.model`` initialization routine.
 
-    Calls ``init_fn`` on every parameter tensor of each agent's
-    ``PyTorchCost.model`` (via :meth:`torch.nn.Module.parameters`),
-    then extracts the resulting flattened parameter vector as the agent's initial state.
+    Gets the initialized parameter tensor for every agent from
+    ``PyTorchCost.model`` (via :meth:`torch.nn.Module.parameters`), and flattens it.
     The returned dict is compatible with :func:`initial_states` and can be passed
     directly as ``x0`` to any algorithm.
 
     Args:
         network (Network): network instance containing the target agents.
             All agents must have a :class:`~decent_bench.costs.PyTorchCost`.
-        init_fn (Callable[[torch.Tensor], None]): in-place initialization function applied
-            to each parameter tensor. Any :mod:`torch.nn.init` routine can be passed directly,
-            e.g. ``nn.init.xavier_uniform_``, ``nn.init.kaiming_normal_``, or a custom
-            ``lambda x: nn.init.normal_(x, mean=0, std=0.01)``.
-            If ``init_fn`` raises a ``ValueError`` because it can only be applied to
-            tensors with < 2 dimensions (e.g. fan-in/fan-out routines on 1-D bias vectors),
-            that parameter is silently skipped and retains its current value.
 
     Returns:
         dict[Agent, Array]: mapping from each network agent to its initial state,
@@ -156,29 +145,13 @@ def pytorch_initialization(
     Raises:
         TypeError: if any agent's cost is not a :class:`~decent_bench.costs.PyTorchCost`.
 
-    Example::
-
-        import torch.nn as nn
-
-        x0 = pytorch_initialization(network, nn.init.xavier_uniform_)
-
-        # or with a lambda for init functions that require extra arguments:
-        x0 = pytorch_initialization(network, lambda x: nn.init.normal_(x, mean=0, std=0.01))
-
-    """  # noqa: DOC501
+    """
     from decent_bench.costs import PyTorchCost  # noqa: PLC0415
 
     x0s = {}
     for a in network.graph:
         if not isinstance(a.cost, PyTorchCost):
             raise TypeError(f"Agent {a} has cost of type {type(a.cost).__name__!r}, expected PyTorchCost.")
-        with __import__("torch").no_grad():
-            for param in a.cost.model.parameters():
-                try:
-                    init_fn(param)
-                except ValueError as e:
-                    if "fewer than 2 dimensions" not in str(e):
-                        raise
         x0s[a] = iop.to_array(
             a.cost._get_model_parameters(),  # noqa: SLF001
             framework=a.cost.framework,

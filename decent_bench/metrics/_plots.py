@@ -247,7 +247,7 @@ def _create_and_plot_figures(
                     x = [val + 1 for val in x]  # avoid log(0) issues
                     LOGGER.warning(
                         f"Metric '{metric.plot_description}' has x_log=True but contains non-positive x values. "
-                        f"These values have been replaced with 1 for plotting purposes."
+                        f"Added 1 to all x values for plotting purposes."
                     )
                 if metric.y_log and any(val <= 0 for val in y_mean):
                     non_positive_replacement = min(*(val for val in y_mean if val > 0), 1e-8)

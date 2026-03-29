@@ -651,9 +651,11 @@ When implementing a custom algorithm by subclassing :class:`~decent_bench.distri
 
 - **initialize(network)**: Called once before the algorithm starts. Use this to set up initial values for agents' primal variables (:attr:`Agent.x <decent_bench.agents.Agent.x>`), auxiliary variables (:attr:`Agent.aux_vars <decent_bench.agents.Agent.aux_vars>`), and received messages (:attr:`Agent.messages <decent_bench.agents.Agent.messages>`). **Implementation required.**
     If you want the agents' primal variable to be a customizable parameter to the algorithm, consider using a field like ``x0: Array | None = None`` in your algorithm class.
-    Use a helper function like :func:`~decent_bench.utils.algorithm_helpers.zero_initialization` to initialize it properly if the input argument is ``None``. 
-    :func:`~decent_bench.utils.algorithm_helpers.zero_initialization` initializes x0 to zero if x0 is None, otherwise uses provided x0. 
-    :func:`~decent_bench.utils.algorithm_helpers.randn_initialization` can also be used to create normally distributed random initializations.
+    Use a helper function like :func:`~decent_bench.utils.algorithm_helpers.initial_states` to initialize it properly if the input argument is ``None``. 
+    :func:`~decent_bench.utils.algorithm_helpers.initial_states` initializes x0 to zero if x0 is None, otherwise uses provided x0. 
+    :func:`~decent_bench.utils.algorithm_helpers.normal_initialization` can also be used to create normally distributed random initializations,
+    and :func:`~decent_bench.utils.algorithm_helpers.uniform_initialization` for uniformly distributed;
+    :func:`~decent_bench.utils.algorithm_helpers.pytorch_initialization` can be used with PyTorchCosts.
 
 - **step(network, iteration)**: Called at each iteration of the algorithm. This is where the main algorithm logic goes - updating agent states, computing gradients, exchanging messages, etc. **Implementation required.**
 

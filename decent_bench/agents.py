@@ -5,7 +5,7 @@ import contextlib
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs import Cost, EmpiricalRiskCost
@@ -151,10 +151,12 @@ class Agent:
             self._x_history[0] = iop.copy(x)
             self._current_x = iop.copy(x)
         if aux_vars is not None:
-            self._auxiliary_variables = {
-                k: {dk: iop.copy(dv) for dk, dv in v.items()} if isinstance(v, dict) else iop.copy(v)
-                for k, v in aux_vars.items()
-            }
+            self._auxiliary_variables = {k: self._copy_aux_var(v) for k, v in aux_vars.items()}
+
+    def _copy_aux_var(self, value: object) -> object:
+        if isinstance(value, Mapping):
+            return {k: self._copy_aux_var(v) for k, v in value.items()}
+        return iop.copy(cast("Array", value))
 
     def _snapshot(self, iteration: int, force: bool = False) -> None:
         """

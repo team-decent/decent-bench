@@ -40,10 +40,7 @@ autodoc_default_options = {}
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True
 autodoc_type_aliases = {
-    "Agent": "decent_bench.agents.Agent",
-    "Array": "decent_bench.utils.array.Array",
     "ClientWeights": "decent_bench.utils.types.ClientWeights",
-    "InitialStates": "decent_bench.utils.types.InitialStates",
     "Network": "decent_bench.networks.Network",
     "NetworkT": "decent_bench.utils.types.NetworkT",
 }

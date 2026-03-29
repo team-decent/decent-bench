@@ -36,7 +36,7 @@ else:
 Type variable for algorithms operating on a :class:`~decent_bench.networks.Network`.
 """
 
-InitialStates: TypeAlias = Union["Array", "dict[Agent, Array]", None]  # noqa: UP040
+type InitialStates = Union["Array", "dict[Agent, Array]", None]  # noqa: TC008, UP007
 """
 Type alias for what can be passed to
 :func:`~decent_bench.utils.algorithm_helpers.initial_states`.
