@@ -46,7 +46,6 @@ class Agent:
         self._state_snapshot_period = state_snapshot_period
         self.data = {} if data is None else data
         self._current_x: Array | None = None
-        self._resume_x: Array | None = None
         self._x_history: AgentHistory = AgentHistory()
         self._auxiliary_variables: dict[str, Any] = {}
         self._received_messages: dict[Agent, Array] = {}
@@ -132,7 +131,6 @@ class Agent:
             ValueError: if initialized x has incorrect shape
 
         """
-        self._resume_x = None
         self._x_history = AgentHistory()
         self._auxiliary_variables = {}
         self._received_messages = {}
@@ -171,50 +169,6 @@ class Agent:
         """
         if (force or iteration % self.state_snapshot_period == 0) and self._current_x is not None:
             self._x_history[iteration] = iop.copy(self._current_x)
-
-    def _store_resume_state(self, x: Array) -> None:
-        """
-        Save the agent's state for resuming an algorithm run.
-
-        Warning:
-            This is used internally by algorithms to set the state which agent's will use when resuming an algorithm
-            execution from a checkpoint. It should not be called manually.
-
-        Args:
-            x: optimization variable to set as the agent's current state when resuming an algorithm run
-
-        Raises:
-            RuntimeError: if the resume state has already been set for this agent
-                (i.e. if this method has already been called once for this agent)
-
-        """
-        if self._resume_x is not None:
-            raise RuntimeError("Resume state has already been set for this agent")
-        self._resume_x = iop.copy(x)
-
-    def _load_resume_state(self, iteration: int) -> None:
-        """
-        Set the agent's current state to the resume state.
-
-        Warning:
-            This is used internally by algorithms when resuming an algorithm execution from a checkpoint. It should not
-            be called manually.
-
-        Args:
-            iteration: algorithm iteration to load the resume state for.
-
-        Raises:
-            RuntimeError: if the resume state has not been configured for this agent
-                (i.e. if :meth:`_store_resume_state` has not been called for this agent)
-
-        """
-        if self._resume_x is None:
-            raise RuntimeError("Resume state has not been configured for this agent")
-        self._current_x = iop.copy(self._resume_x)
-        # Override finalized state in history with resume state,
-        # so that metrics reflect the resumed state as the starting point of the algorithm execution
-        self._x_history[iteration] = iop.copy(self._resume_x)
-        self._resume_x = None
 
     def _call_counting_function(self, x: Array, *args: Any, **kwargs: Any) -> float:  # noqa: ANN401
         # Call the function first so "batch_used" is populated for EmpiricalRiskCost before counting function calls
