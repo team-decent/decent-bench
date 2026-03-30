@@ -135,8 +135,7 @@ def resume_benchmark(  # noqa: PLR0912
             raise ValueError(f"Invalid checkpoint directory: metadata is not valid JSON - {e}") from e
 
     if create_backup:
-        backup_path = checkpoint_manager.create_backup()
-        LOGGER.info(f"Created backup of checkpoint directory at '{backup_path}'")
+        checkpoint_manager.create_backup()
 
     LOGGER.info(
         f"Resuming benchmark from checkpoint '{checkpoint_manager.checkpoint_dir}' with {metadata['n_trials']} trials "
@@ -189,7 +188,8 @@ def resume_benchmark(  # noqa: PLR0912
         checkpoint_manager=checkpoint_manager,
         runtime_metrics=runtime_metrics,
     )
-    log_listener.stop()
+    if log_listener is not None:
+        log_listener.stop()
     return results
 
 
@@ -268,6 +268,9 @@ def benchmark(
             "Progress cannot be resumed if interrupted."
         )
 
+    if runtime_metrics is not None and len(runtime_metrics) == 0:
+        runtime_metrics = None
+
     results = _benchmark(
         algorithms=algorithms,
         benchmark_problem=benchmark_problem,
@@ -282,15 +285,16 @@ def benchmark(
         checkpoint_manager=checkpoint_manager,
         runtime_metrics=runtime_metrics,
     )
-    log_listener.stop()
+    if log_listener is not None:
+        log_listener.stop()
     return results
 
 
 def _benchmark(
     algorithms: list[Algorithm[Network]],
     benchmark_problem: BenchmarkProblem,
-    log_listener: QueueListener,
-    manager: "SyncManager",
+    log_listener: QueueListener | None,
+    manager: "SyncManager | None",
     *,
     mp_context: "SpawnContext | None" = None,
     n_trials: int = 30,
@@ -374,15 +378,14 @@ def _init_logging_and_multiprocessing(
     log_level: int,
     max_processes: int | None,
     benchmark_problem: BenchmarkProblem,
-) -> tuple[QueueListener, "SyncManager", "SpawnContext | None"]:
+) -> tuple[QueueListener | None, "SyncManager | None", "SpawnContext | None"]:
     # Detect if PyTorch costs are being used to determine multiprocessing context
-    if max_processes != 1:
-        use_spawn = _should_use_spawn_context(benchmark_problem)
-        mp_context = get_context("spawn") if use_spawn else None
-    else:
-        use_spawn = False
-        mp_context = None
+    if max_processes == 1:
+        logger.start_logger(log_level)
+        return None, None, None
 
+    use_spawn = _should_use_spawn_context(benchmark_problem)
+    mp_context = get_context("spawn") if use_spawn else None
     manager = Manager() if not use_spawn else get_context("spawn").Manager()
     log_listener = logger.start_log_listener(manager, log_level)
 
@@ -397,7 +400,7 @@ def _run_trials(  # noqa: PLR0917
     n_trials: int,
     problem: BenchmarkProblem,
     progress_bar_ctrl: ProgressBarController,
-    log_listener: QueueListener,
+    log_listener: QueueListener | None,
     max_processes: int | None,
     mp_context: "SpawnContext | None" = None,
     checkpoint_manager: "CheckpointManager | None" = None,
@@ -467,6 +470,10 @@ def _run_trials(  # noqa: PLR0917
     if max_processes == 1:
         partial_result = {alg: [_run_trial(*args) for args in trial_args[alg]] for alg in trial_args}
     else:
+        if log_listener is None:
+            # This shouldnt happen
+            raise ValueError("Log listener must be initialized for multiprocessing to handle logs from worker processes")
+
         with ProcessPoolExecutor(
             initializer=logger.start_queue_logger,
             initargs=(log_listener.queue,),
