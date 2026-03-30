@@ -397,7 +397,7 @@ def _init_logging_and_multiprocessing(
                 "    ... call decent_bench.benchmark(...)\n\n"
                 "This prevents child processes from re-running top-level script code during import."
             ) from e
-        raise e
+        raise
     log_listener = logger.start_log_listener(manager, log_level)
 
     if use_spawn:
@@ -489,7 +489,9 @@ def _run_trials(  # noqa: PLR0917
     else:
         if log_listener is None:
             # This shouldnt happen
-            raise ValueError("Log listener must be initialized for multiprocessing to handle logs from worker processes")
+            raise ValueError(
+                "Log listener must be initialized for multiprocessing to handle logs from worker processes"
+            )
 
         with ProcessPoolExecutor(
             initializer=logger.start_queue_logger,
