@@ -87,7 +87,7 @@ Then when you write:
     from decent_bench.utils.types import SupportedFrameworks, SupportedDevices
     
     # Users create arrays using interoperability functions
-    x = iop.randn((3,), SupportedFrameworks.NUMPY, SupportedDevices.CPU)
+    x = iop.normal((3,), SupportedFrameworks.NUMPY, SupportedDevices.CPU)
     y = iop.zeros((3,), SupportedFrameworks.NUMPY, SupportedDevices.CPU)
     
     # Stack them together
@@ -118,7 +118,7 @@ Design Goals and Implementation
 
 Users should work with :class:`~decent_bench.utils.array.Array` objects and rely on:
 
-- **Array creation**: Use :func:`iop.randn() <decent_bench.utils.interoperability.randn>`, :func:`iop.zeros() <decent_bench.utils.interoperability.zeros>`, etc. to create arrays
+- **Array creation**: Use :func:`iop.normal() <decent_bench.utils.interoperability.normal>`, :func:`iop.zeros() <decent_bench.utils.interoperability.zeros>`, etc. to create arrays
 - **Operator overloading**: Use ``+``, ``-``, ``*``, ``/``, ``@``, etc. on :class:`~decent_bench.utils.array.Array` objects
 - **Interoperability functions**: Use :func:`iop.sum() <decent_bench.utils.interoperability.sum>`, :func:`iop.mean() <decent_bench.utils.interoperability.mean>`, :func:`iop.transpose() <decent_bench.utils.interoperability.transpose>`, etc.
 - **Framework conversion**: Use :func:`iop.to_torch() <decent_bench.utils.interoperability.to_torch>`, :func:`iop.to_numpy() <decent_bench.utils.interoperability.to_numpy>`, etc. when needed
@@ -150,9 +150,9 @@ package work in tandem to provide seamless cross-framework operations:
     
     # Create Array objects using interoperability functions
     # This ensures frameworks and devices are correctly handled
-    x = iop.randn((10, 5), SupportedFrameworks.NUMPY, SupportedDevices.CPU)
+    x = iop.normal((10, 5), SupportedFrameworks.NUMPY, SupportedDevices.CPU)
     y = iop.ones_like(x) # Create an array of ones with same shape/framework/device as x
-    weight = iop.randn((5, 3), SupportedFrameworks.NUMPY, SupportedDevices.CPU)
+    weight = iop.normal((5, 3), SupportedFrameworks.NUMPY, SupportedDevices.CPU)
     
     # Option 1: Use operators (calls iop functions internally)
     z = x + y           # Calls iop.add(x, y) internally
@@ -568,7 +568,7 @@ Example for a function in ``_functions.py``:
         raise TypeError(f"Unsupported framework type: {type(value)}")
 
 You'll need to update every operation: ``add``, ``sub``, ``mul``, ``div``, ``matmul``, ``power``, 
-``sqrt``, ``mean``, ``max``, ``min``, ``transpose``, ``reshape``, ``zeros``, ``ones``, ``randn``, etc.
+``sqrt``, ``mean``, ``max``, ``min``, ``transpose``, ``reshape``, ``zeros``, ``ones``, ``normal``, etc.
 
 Step 6: Update Decorators
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -668,7 +668,7 @@ Use this checklist when adding a new framework:
     ☐ Update all operators: add, sub, mul, div, matmul, power, etc.
     ☐ Update all in-place operators: iadd, isub, imul, idiv, ipow
     ☐ Update all functions: sum, mean, min, max, argmax, argmin, etc.
-    ☐ Update creation functions: zeros, eye, randn, etc.
+    ☐ Update creation functions: zeros, eye, normal, etc.
     ☐ Update utility functions: shape, reshape, transpose, stack, etc.
     ☐ Update _get_converter in _decorators.py
     ☐ Export to_myframework in __init__.py
@@ -803,7 +803,7 @@ Performance Considerations
     from decent_bench.utils.types import SupportedFrameworks, SupportedDevices
     
     # Good: Create arrays with iop and use operators
-    x = iop.randn((100,), SupportedFrameworks.TORCH, SupportedDevices.GPU)
+    x = iop.normal((100,), SupportedFrameworks.TORCH, SupportedDevices.GPU)
     weight = iop.ones_like(x)
     matrix = iop.eye(100, SupportedFrameworks.TORCH, SupportedDevices.GPU)
     
@@ -830,8 +830,8 @@ Working with Array Objects
     from decent_bench.utils.types import SupportedFrameworks, SupportedDevices
     
     # Create Array objects using interoperability functions
-    x = iop.randn((100, 50), SupportedFrameworks.NUMPY, SupportedDevices.CPU)
-    weight = iop.randn((50, 10), SupportedFrameworks.NUMPY, SupportedDevices.CPU)
+    x = iop.normal((100, 50), SupportedFrameworks.NUMPY, SupportedDevices.CPU)
+    weight = iop.normal((50, 10), SupportedFrameworks.NUMPY, SupportedDevices.CPU)
     bias = iop.zeros((10,), SupportedFrameworks.NUMPY, SupportedDevices.CPU)
 
     # or use ones_like, zeros_like etc
@@ -899,7 +899,7 @@ Common Pitfalls
 
 **For Users:**
 
-1. **Don't create Array objects directly**: Use :meth:`iop.randn() <decent_bench.utils.interoperability.randn>`, :meth:`iop.zeros() <decent_bench.utils.interoperability.zeros>`, etc., not ``Array(...)``
+1. **Don't create Array objects directly**: Use :meth:`iop.normal() <decent_bench.utils.interoperability.normal>`, :meth:`iop.zeros() <decent_bench.utils.interoperability.zeros>`, etc., not ``Array(...)``
 2. **Don't access .value directly**: Use the :class:`~decent_bench.utils.array.Array` interface and operators instead
 3. **Don't bypass interoperability**: Use ``x + y`` or :meth:`iop.add() <decent_bench.utils.interoperability.add>`, not ``np.add()``
 4. **Trust the abstraction**: Runtime unwrapping is automatic; you don't need to manage it

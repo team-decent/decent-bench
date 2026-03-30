@@ -95,9 +95,9 @@ def make_clients(n_clients: int) -> list[Agent]:
 @pytest.mark.parametrize(
     ("scheme", "n_clients", "expected_selected"),
     [
-        (UniformClientSelection(clients_per_round=3, seed=0), 5, 3),
-        (UniformClientSelection(client_fraction=0.4, seed=0), 5, 2),
-        (UniformClientSelection(clients_per_round=5, seed=0), 5, 5),
+        (UniformClientSelection(clients_per_round=3), 5, 3),
+        (UniformClientSelection(client_fraction=0.4), 5, 2),
+        (UniformClientSelection(clients_per_round=5), 5, 5),
     ],
 )
 def test_client_selection(

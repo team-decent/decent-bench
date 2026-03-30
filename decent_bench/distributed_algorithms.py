@@ -292,13 +292,11 @@ class FedAvg(FedAlgorithm):
     iterations: int = 100
     step_size: float = 0.001
     num_local_epochs: int = 1
-    sgd_seed: int | None = None
     client_weights: ClientWeights | None = None
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
     x0: InitialStates = None
-    _sgd_rngs: dict[int, random.Random] | None = field(init=False, repr=False, default=None)
     name: str = "FedAvg"
 
     def __post_init__(self) -> None:
@@ -316,16 +314,9 @@ class FedAvg(FedAlgorithm):
 
     def initialize(self, network: FedNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.initial_states(self.x0, network)
-        self._setup_rngs(network.clients())
         network.server().initialize(x=self.x0[network.server()])
         for client in network.clients():
-            client.initialize(x=self.x0[client])
-
-    def _setup_rngs(self, clients: Sequence["Agent"]) -> None:
-        if self.sgd_seed is not None:
-            self._sgd_rngs = {client.id: random.Random(self.sgd_seed + client.id) for client in clients}
-        else:
-            self._sgd_rngs = None
+            client.initialize(x=self.x0)
 
     def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
         selected_clients = self._selected_clients_for_round(network, iteration)
@@ -349,18 +340,12 @@ class FedAvg(FedAlgorithm):
         if isinstance(client.cost, EmpiricalRiskCost):
             cost = client.cost
             n_samples = cost.n_samples
-            rng = self._client_rng(client)
-            return self._epoch_minibatch_update(cost, local_x, cost.batch_size, n_samples, rng)
+            return self._epoch_minibatch_update(cost, local_x, cost.batch_size, n_samples)
 
         for _ in range(self.num_local_epochs):
             grad = client.cost.gradient(local_x)
             local_x -= self.step_size * grad
         return local_x
-
-    def _client_rng(self, client: "Agent") -> random.Random:
-        if self._sgd_rngs is None:
-            return random.Random()
-        return self._sgd_rngs[client.id]
 
     def _epoch_minibatch_update(
         self,
@@ -368,11 +353,10 @@ class FedAvg(FedAlgorithm):
         local_x: "Array",
         per_client_batch: int,
         n_samples: int,
-        rng: random.Random,
     ) -> "Array":
         for _ in range(self.num_local_epochs):
             indices = list(range(n_samples))
-            rng.shuffle(indices)
+            random.shuffle(indices)
             for start in range(0, n_samples, per_client_batch):
                 batch_indices = indices[start : start + per_client_batch]
                 grad = cost.gradient(local_x, indices=batch_indices)

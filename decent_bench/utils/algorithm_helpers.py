@@ -111,9 +111,7 @@ def uniform_initialization(
         raise ValueError(f"Expected high > low, got low={low} and high={high}.")
 
     return {
-        a: iop.rand_like(
-            iop.zeros(shape=a.cost.shape, framework=a.cost.framework, device=a.cost.device), low=low, high=high
-        )
+        a: iop.uniform(framework=a.cost.framework, device=a.cost.device, low=low, high=high, shape=a.cost.shape)
         for a in network.graph
     }
 

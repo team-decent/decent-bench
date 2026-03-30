@@ -621,7 +621,7 @@ algorithms framework-agnostic, always use the interoperability layer :class:`~de
 `iop`, and the :class:`~decent_bench.utils.array.Array` wrapper when creating, manipulating, and exchanging values:
 
 - Use :class:`decent_bench.utils.interoperability.zeros` instead of framework-specific constructors (e.g., `np.zeros`, `torch.zeros`). 
-    Other examples are :meth:`~decent_bench.utils.interoperability.ones_like`, :meth:`~decent_bench.utils.interoperability.rand_like`, :meth:`~decent_bench.utils.interoperability.randn_like`, etc.
+    Other examples are :meth:`~decent_bench.utils.interoperability.ones_like`, :meth:`~decent_bench.utils.interoperability.uniform_like`, :meth:`~decent_bench.utils.interoperability.normal_like`, etc.
     See :mod:`~decent_bench.utils.interoperability` for a full list of available methods and :mod:`~decent_bench.distributed_algorithms` for examples of usage.
 - Avoid calling any framework-specific functions directly within your algorithm. 
     Let the :class:`~decent_bench.costs.Cost` implementations handle framework-specific details for 
@@ -670,6 +670,7 @@ Similarly, in order for the benchmark problem's communication schemes to be appl
 Be sure to use :meth:`~decent_bench.networks.Network.active_agents` during algorithm runtime so that asynchrony is properly handled.
 You can also inspect :attr:`~decent_bench.networks.Network.graph` to use NetworkX utilities (e.g., plotting or listing edges); mutating this graph changes the network topology.
 In :class:`~decent_bench.networks.FedNetwork`, :meth:`~decent_bench.networks.Network.agents` and :meth:`~decent_bench.networks.Network.active_agents` refer to clients (the server is available via :attr:`~decent_bench.networks.FedNetwork.server`/ :attr:`~decent_bench.networks.FedNetwork.coordinator`).
+Federated networks enforce an always-available server: a custom server passed to :class:`~decent_bench.networks.FedNetwork` must use :class:`~decent_bench.schemes.AlwaysActive`, otherwise network construction raises ``ValueError``.
 The agents/clients lists are cached for efficiency, so the network graph should be treated as immutable after construction.
 Client weights (``client_weights``) are used only during aggregation and do not change the objective being optimized.
 If you want to optimize a weighted objective :math:`\min \sum_i w_i f_i(x)`, scale each local cost by ``w_i`` when
