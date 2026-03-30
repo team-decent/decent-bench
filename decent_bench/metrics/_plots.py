@@ -90,7 +90,7 @@ def display_plots(
         Plots are generated from precomputed metric trajectories. If a trajectory diverges, only its finite/plottable
         part is shown (see :func:`compute_plots`).
 
-        For log-scale plots, non-positive y values (due to floating piont errors) are replaced with a small positive
+        For log-scale plots, non-positive y values (due to floating point errors) are replaced with a small positive
         value for rendering stability. A warning is logged when this replacement happens.
 
         .. include:: snippets/computational_cost.rst
