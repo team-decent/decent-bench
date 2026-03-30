@@ -8,6 +8,7 @@ from numpy import linalg as la
 
 import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
+from decent_bench import costs
 from decent_bench.agents import AgentMetricsView
 from decent_bench.metrics._metric import Metric
 
@@ -29,6 +30,9 @@ class Regret(Metric):
 
     .. include:: snippets/global_cost_error.rst
 
+    Note:
+        Requires ``problem.x_optimal``. If it is missing, this metric marks itself unavailable and returns NaN.
+
     """
 
     table_description: str = "regret \n[<1e-9 = exact conv.]"
@@ -40,6 +44,10 @@ class Regret(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
+        if getattr(problem, "x_optimal", None) is None:
+            self.mark_unavailable("requires problem.x_optimal")
+            return (float("nan"),)
+
         return (utils.regret(agents, problem, iteration),)
 
 
@@ -90,6 +98,9 @@ class XError(Metric):
     :math:`\mathbf{x}_j` is agent j's final x,
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
 
+    Note:
+        Requires ``problem.x_optimal``. If it is missing, this metric marks itself unavailable and returns NaN.
+
     """
 
     table_description: str = "x error"
@@ -102,6 +113,7 @@ class XError(Metric):
         iteration: int,
     ) -> list[float]:
         if getattr(problem, "x_optimal", None) is None:
+            self.mark_unavailable("requires problem.x_optimal")
             return [float("nan") for _ in agents]
 
         x_optimal_np = iop.to_numpy(problem.x_optimal)  # type: ignore[arg-type]
@@ -394,6 +406,15 @@ class Accuracy(Metric):
 
     where TP, TN, FP, and FN are true positives, true negatives, false positives, and false negatives, respectively.
 
+    Note:
+        Requires all of the following:
+
+        - ``problem.test_data`` is provided
+        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`
+        - target labels are integer-valued
+
+        If any requirement is not satisfied, this metric marks itself unavailable and returns NaN.
+
     """
 
     table_description: str = "accuracy"
@@ -406,6 +427,19 @@ class Accuracy(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
+        if getattr(problem, "test_data", None) is None:
+            self.mark_unavailable("requires problem.test_data")
+            return [float("nan") for _ in agents]
+
+        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
+            self.mark_unavailable("requires EmpiricalRiskCost agents")
+            return [float("nan") for _ in agents]
+
+        _, test_y = utils.split_dataset(problem.test_data)  # type: ignore[arg-type]
+        if test_y.dtype.kind not in {"i", "u"}:
+            self.mark_unavailable("requires integer targets")
+            return [float("nan") for _ in agents]
+
         return utils.accuracy(agents, problem, iteration)
 
 
@@ -433,6 +467,10 @@ class MSE(Metric):
     where :math:`\hat{y}_i` are the predicted values, :math:`y_i` are the true values, and :math:`n` is
     the number of samples.
 
+    Note:
+        Requires ``problem.test_data`` and all agent costs to be
+        :class:`~decent_bench.costs.EmpiricalRiskCost`. If not, this metric marks itself unavailable and returns NaN.
+
     """
 
     table_description: str = "mse"
@@ -445,6 +483,14 @@ class MSE(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
+        if getattr(problem, "test_data", None) is None:
+            self.mark_unavailable("requires problem.test_data")
+            return [float("nan") for _ in agents]
+
+        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
+            self.mark_unavailable("requires EmpiricalRiskCost agents")
+            return [float("nan") for _ in agents]
+
         return utils.mse(agents, problem, iteration=iteration)
 
 
@@ -471,6 +517,15 @@ class Precision(Metric):
 
     where TP is the number of true positives and FP is the number of false positives.
 
+    Note:
+        Requires all of the following:
+
+        - ``problem.test_data`` is provided
+        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`
+        - target labels are integer-valued
+
+        If any requirement is not satisfied, this metric marks itself unavailable and returns NaN.
+
     """
 
     table_description: str = "precision"
@@ -483,6 +538,19 @@ class Precision(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
+        if getattr(problem, "test_data", None) is None:
+            self.mark_unavailable("requires problem.test_data")
+            return [float("nan") for _ in agents]
+
+        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
+            self.mark_unavailable("requires EmpiricalRiskCost agents")
+            return [float("nan") for _ in agents]
+
+        _, test_y = utils.split_dataset(problem.test_data)  # type: ignore[arg-type]
+        if test_y.dtype.kind not in {"i", "u"}:
+            self.mark_unavailable("requires integer targets")
+            return [float("nan") for _ in agents]
+
         return utils.precision(agents, problem, iteration=iteration)
 
 
@@ -509,6 +577,15 @@ class Recall(Metric):
 
     where TP is the number of true positives and FN is the number of false negatives.
 
+    Note:
+        Requires all of the following:
+
+        - ``problem.test_data`` is provided
+        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`
+        - target labels are integer-valued
+
+        If any requirement is not satisfied, this metric marks itself unavailable and returns NaN.
+
     """
 
     table_description: str = "recall"
@@ -521,6 +598,19 @@ class Recall(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
+        if getattr(problem, "test_data", None) is None:
+            self.mark_unavailable("requires problem.test_data")
+            return [float("nan") for _ in agents]
+
+        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
+            self.mark_unavailable("requires EmpiricalRiskCost agents")
+            return [float("nan") for _ in agents]
+
+        _, test_y = utils.split_dataset(problem.test_data)  # type: ignore[arg-type]
+        if test_y.dtype.kind not in {"i", "u"}:
+            self.mark_unavailable("requires integer targets")
+            return [float("nan") for _ in agents]
+
         return utils.recall(agents, problem, iteration=iteration)
 
 

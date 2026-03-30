@@ -44,6 +44,9 @@ COLORS = [
 ]
 MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p", "P", "X"]
 STYLES = ["-", ":", "--", "-.", (5, (10, 3)), (0, (5, 10)), (0, (3, 1, 1, 1))]
+# Upper bound used when deciding whether a point is still plottable on log y-axis.
+# Values above this threshold are treated as divergence for plotting and trigger truncation.
+MAX_LOG_PLOT_VALUE = 1e100
 
 
 def display_plots(
@@ -84,6 +87,12 @@ def display_plots(
         Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
         weighted by the time or energy it takes to perform them on the specific hardware.
 
+        Plots are generated from precomputed metric trajectories. If a trajectory diverges, only its finite/plottable
+        part is shown (see :func:`compute_plots`).
+
+        For log-scale plots, non-positive y values (due to floating piont errors) are replaced with a small positive
+        value for rendering stability. A warning is logged when this replacement happens.
+
         .. include:: snippets/computational_cost.rst
 
     """
@@ -121,7 +130,7 @@ def display_plots(
     _save_and_show_figures(all_figures, two_columns, plot_path=plot_path, plot_format=plot_format)
 
 
-def compute_plots(
+def compute_plots(  # noqa: PLR0914
     resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]],
     problem: "BenchmarkProblem",
     metrics: list[Metric] | list[list[Metric]],
@@ -144,6 +153,14 @@ def compute_plots(
         {Algorithm: {Metric: (x, y_mean, y_min, y_max)}}, where x is the sequence of x values for the plot,
         y_mean is the sequence of mean y values across trials for each x, and y_min and y_max are the sequences
         of minimum and maximum y values across trials for each x, respectively.
+
+    Note:
+        Plot trajectories are truncated per trial at the first datapoint that is either non-finite or has
+        y > ``MAX_LOG_PLOT_VALUE``. Aggregation is then performed over the common prefix of the remaining trials.
+
+        If no plottable prefix remains for an algorithm/metric pair, that pair is omitted from the returned mapping.
+        This can lead to a metric showing ``nan`` in tables (final iteration diverged) while still being visible in
+        plots (finite prefix exists).
 
     """
     if not metrics:
@@ -171,28 +188,57 @@ def compute_plots(
         )
 
         for metric in flat_metrics:
+            metric.clear_unavailable()
             progress.update(plot_task, status=f"Task: {metric.plot_description}")
 
-            for alg, agent_states in resulting_agent_states.items():
+            for alg_idx, (alg, agent_states) in enumerate(resulting_agent_states.items()):
                 data_per_trial: list[Sequence[tuple[X, Y]]] = _plot_data_per_trial(
                     agent_states,
                     problem,
                     metric,
                 )
 
-                if not _is_finite(data_per_trial):
-                    msg = (
-                        f"Skipping plot computation for {metric.plot_description} "
-                        f"and {alg.name}: found nan or inf in datapoints. "
-                        f"Test data or optimal x may be missing from the benchmark problem."
+                if metric.is_unavailable:
+                    reason = metric.unavailable_reason or "unknown reason"
+                    LOGGER.warning(
+                        f"Skipping plot metric '{metric.plot_description}' because it is unavailable: {reason}"
                     )
-                    LOGGER.warning(msg)
+                    for result in results.values():
+                        result.pop(metric, None)
+                    remaining = len(resulting_agent_states) - alg_idx
+                    for _ in range(remaining):
+                        progress.advance(plot_task)
+                    break
+
+                truncated_data_per_trial, had_non_finite = _truncate_to_common_finite_prefix(data_per_trial)
+
+                if not truncated_data_per_trial:
+                    if had_non_finite:
+                        LOGGER.warning(
+                            f"Skipping plot computation for {metric.plot_description} and {alg.name}: "
+                            "all trials diverged before the first plottable datapoint."
+                        )
+                    else:
+                        LOGGER.warning(
+                            f"Skipping plot computation for {metric.plot_description} and {alg.name}: "
+                            "metric produced no datapoints."
+                        )
                     progress.advance(plot_task)
                     continue
 
-                mean_curve: Sequence[tuple[X, Y]] = _calculate_mean_curve(data_per_trial)
+                if had_non_finite:
+                    retained_trials = len(truncated_data_per_trial)
+                    total_trials = len(data_per_trial)
+                    retained_points = len(truncated_data_per_trial[0])
+                    LOGGER.info(
+                        f"Truncating plot computation for {metric.plot_description} and {alg.name} "
+                        "at the first non-finite or over-threshold datapoint; retained "
+                        f"{retained_points} point(s) from {retained_trials}/{total_trials} trial(s)."
+                    )
+
+                mean_curve: Sequence[tuple[X, Y]] = _calculate_mean_curve(truncated_data_per_trial)
                 x, y_mean = zip(*mean_curve, strict=True)
-                y_min, y_max = _calculate_envelope(data_per_trial)
+                y_min, y_max = _calculate_envelope(truncated_data_per_trial)
 
                 results[alg][metric] = (x, y_mean, y_min, y_max)
                 progress.advance(plot_task)
@@ -444,9 +490,32 @@ def _add_legend_and_save(
         LOGGER.info(f"Saved plot to: {plot_path}")
 
 
-def _is_finite(data_per_trial: list[Sequence[tuple[X, Y]]]) -> bool:
-    flattened_data: list[tuple[X, Y]] = [d for trial in data_per_trial for d in trial]
-    return np.isfinite(flattened_data).all().item()
+def _truncate_to_common_finite_prefix(
+    data_per_trial: list[Sequence[tuple[X, Y]]],
+) -> tuple[list[Sequence[tuple[X, Y]]], bool]:
+    truncated_trials: list[Sequence[tuple[X, Y]]] = []
+    had_non_finite = False
+
+    for trial_data in data_per_trial:
+        finite_prefix: list[tuple[X, Y]] = []
+        for point in trial_data:
+            x_value, y_value = point
+            if not np.isfinite((x_value, y_value)).all().item() or y_value > MAX_LOG_PLOT_VALUE:
+                had_non_finite = True
+                break
+            finite_prefix.append(point)
+
+        if len(finite_prefix) < len(trial_data):
+            had_non_finite = True
+
+        if finite_prefix:
+            truncated_trials.append(finite_prefix)
+
+    if not truncated_trials:
+        return [], had_non_finite
+
+    common_prefix_length = min(len(trial_data) for trial_data in truncated_trials)
+    return [trial_data[:common_prefix_length] for trial_data in truncated_trials], had_non_finite
 
 
 def _plot_subplot(  # noqa: PLR0917

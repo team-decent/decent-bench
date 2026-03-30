@@ -61,6 +61,7 @@ class Metric(ABC):
         self.x_log = x_log
         self.y_log = y_log
         self.fmt = fmt
+        self._unavailable_reason: str | None = None
 
     @property
     @abstractmethod
@@ -81,6 +82,24 @@ class Metric(ABC):
         Has no real impact on calculations of the metric, will not affect plots.
         """
         return True
+
+    @property
+    def unavailable_reason(self) -> str | None:
+        """Reason this metric is unavailable for the current computation, if any."""
+        return self._unavailable_reason
+
+    @property
+    def is_unavailable(self) -> bool:
+        """Whether this metric was marked unavailable during the current computation."""
+        return self._unavailable_reason is not None
+
+    def mark_unavailable(self, reason: str) -> None:
+        """Mark this metric unavailable for the current computation."""
+        self._unavailable_reason = reason
+
+    def clear_unavailable(self) -> None:
+        """Reset unavailable status before a new computation pass."""
+        self._unavailable_reason = None
 
     @abstractmethod
     def get_data_from_trial(

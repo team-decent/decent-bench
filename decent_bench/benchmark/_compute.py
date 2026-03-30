@@ -1,22 +1,23 @@
 import logging
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from json import JSONDecodeError
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.distributed_algorithms import Algorithm
-from decent_bench.metrics import (
-    Metric,
-    compute_plots,
-    compute_tables,
-)
+from decent_bench.metrics import Metric, compute_plots, compute_tables
 from decent_bench.metrics import metric_library as ml
 from decent_bench.networks import Network
 from decent_bench.utils import logger
 
 if TYPE_CHECKING:
     from decent_bench.utils.checkpoint_manager import CheckpointManager
+
+
+PlotMetricData = tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]
 
 
 def compute_metrics(
@@ -62,6 +63,12 @@ def compute_metrics(
         All used table- and plot-metrics will be saved to the checkpoints' metadata if a checkpoint manager is provided,
         in order to know which metrics were computed and can be displayed later.
 
+        Metrics that mark themselves unavailable during computation (through ``Metric.mark_unavailable``), are
+        filtered out from the returned metric lists. Warnings are emitted with the omitted metric names.
+
+        Plot metrics can still be available even when their final table value is ``nan``: plot computation keeps the
+        finite part of a trajectory, while table metrics are evaluated at the final iteration.
+
     """
     logger.start_logger(log_level=log_level)
 
@@ -82,11 +89,18 @@ def compute_metrics(
         if len(benchmark_result.states) == 0:
             raise ValueError("No benchmark result found in checkpoint manager to compute metrics")
 
+    # work on independent metric instances so any metric state does not leak globally
+    table_metrics = deepcopy(table_metrics)
+    plot_metrics = deepcopy(plot_metrics)
+
     resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
     for alg, networks in benchmark_result.states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
     table_results = compute_tables(resulting_agent_states, benchmark_result.problem, table_metrics, confidence_level)
     plot_results = compute_plots(resulting_agent_states, benchmark_result.problem, plot_metrics)
+
+    table_metrics = _filter_table_metrics_with_results(table_metrics, table_results)
+    plot_metrics = _filter_plot_metrics_with_results(plot_metrics, plot_results)
 
     result = MetricResult(
         agent_metrics=resulting_agent_states,
@@ -97,11 +111,11 @@ def compute_metrics(
     )
 
     if checkpoint_manager is not None:
-        flat_metrics: list[Metric] = []
         if any(isinstance(m, list) for m in plot_metrics):
-            flat_metrics = [metric for group in plot_metrics for metric in group]  # type: ignore[union-attr]
+            grouped_plot_metrics = cast("list[list[Metric]]", plot_metrics)
+            flat_metrics = [metric for group in grouped_plot_metrics for metric in group]
         else:
-            flat_metrics = plot_metrics  # type: ignore[assignment]
+            flat_metrics = cast("list[Metric]", plot_metrics)
         metadata = {
             "table_metrics": [metric.table_description for metric in table_metrics],
             "plot_metrics": [metric.plot_description for metric in flat_metrics],
@@ -110,3 +124,49 @@ def compute_metrics(
         checkpoint_manager.append_metadata(metadata)
 
     return result
+
+
+def _filter_table_metrics_with_results(
+    table_metrics: list[Metric],
+    table_results: Mapping[Algorithm[Network], Mapping[Metric, Mapping[str, tuple[float, float]]]],
+) -> list[Metric]:
+    filtered_metrics = [
+        metric for metric in table_metrics if any(metric in results for results in table_results.values())
+    ]
+    omitted = [metric for metric in table_metrics if metric not in filtered_metrics]
+    if omitted:
+        logger.LOGGER.warning(
+            f"Omitting unavailable table metrics: {', '.join(metric.table_description for metric in omitted)}"
+        )
+    return filtered_metrics
+
+
+def _filter_plot_metrics_with_results(
+    plot_metrics: list[Metric] | list[list[Metric]],
+    plot_results: Mapping[Algorithm[Network], Mapping[Metric, PlotMetricData]],
+) -> list[Metric] | list[list[Metric]]:
+    available_metrics = {metric for results in plot_results.values() for metric in results}
+
+    if any(isinstance(metric, list) for metric in plot_metrics):
+        grouped_plot_metrics = cast("list[list[Metric]]", plot_metrics)
+        filtered_groups: list[list[Metric]] = []
+        omitted: list[Metric] = []
+        for group in grouped_plot_metrics:
+            filtered_group = [metric for metric in group if metric in available_metrics]
+            omitted.extend(metric for metric in group if metric not in available_metrics)
+            if filtered_group:
+                filtered_groups.append(filtered_group)
+        if omitted:
+            logger.LOGGER.warning(
+                f"Omitting unavailable plot metrics: {', '.join(metric.plot_description for metric in omitted)}"
+            )
+        return filtered_groups
+
+    flat_plot_metrics = cast("list[Metric]", plot_metrics)
+    filtered_metrics = [metric for metric in flat_plot_metrics if metric in available_metrics]
+    omitted = [metric for metric in flat_plot_metrics if metric not in available_metrics]
+    if omitted:
+        logger.LOGGER.warning(
+            f"Omitting unavailable plot metrics: {', '.join(metric.plot_description for metric in omitted)}"
+        )
+    return filtered_metrics

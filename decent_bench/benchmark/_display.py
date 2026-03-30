@@ -14,6 +14,8 @@ from decent_bench.utils import logger
 from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:
+    from decent_bench.distributed_algorithms import Algorithm
+    from decent_bench.networks import Network
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
 
@@ -23,6 +25,7 @@ def display_metrics(
     *,
     table_metrics: list[Metric] | None = None,
     plot_metrics: list[Metric] | list[list[Metric]] | None = None,
+    algorithms: list["Algorithm[Network]"] | None = None,
     table_fmt: Literal["grid", "latex"] = "grid",
     plot_grid: bool = True,
     individual_plots: bool = False,
@@ -45,6 +48,8 @@ def display_metrics(
         plot_metrics: metrics to plot, defaults to ``None`` which will display all metrics in the metrics_result.
             If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
             metrics will be grouped and plotted in their own figure with subplots.
+        algorithms: algorithms to display. If provided, only these algorithms are included in tables and plots.
+            Defaults to ``None`` which displays all algorithms in the metrics_result.
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         plot_grid: whether to show grid lines on the plots
         individual_plots: whether to plot each metric in a separate figure
@@ -117,6 +122,9 @@ def display_metrics(
     if plot_metrics is not None:
         new_metrics_result.plot_metrics = _get_new_plot_metrics(new_metrics_result, plot_metrics)
 
+    if algorithms is not None:
+        new_metrics_result = _filter_algorithms(new_metrics_result, algorithms)
+
     if save_path is not None:
         save_path = Path(save_path)
     elif save_path is None and checkpoint_manager is not None:
@@ -133,6 +141,36 @@ def display_metrics(
         plot_format=plot_format,
         plot_path=save_path,
     )
+
+
+def _filter_algorithms(
+    metrics_result: MetricResult,
+    algorithms: list["Algorithm[Network]"],
+) -> MetricResult:
+    selected_names = {algorithm.name for algorithm in algorithms}
+
+    if metrics_result.agent_metrics is not None:
+        metrics_result.agent_metrics = {
+            algorithm: metrics
+            for algorithm, metrics in metrics_result.agent_metrics.items()
+            if algorithm in algorithms or algorithm.name in selected_names
+        }
+
+    if metrics_result.table_results is not None:
+        metrics_result.table_results = {
+            algorithm: table_results
+            for algorithm, table_results in metrics_result.table_results.items()
+            if algorithm in algorithms or algorithm.name in selected_names
+        }
+
+    if metrics_result.plot_results is not None:
+        metrics_result.plot_results = {
+            algorithm: plot_results
+            for algorithm, plot_results in metrics_result.plot_results.items()
+            if algorithm in algorithms or algorithm.name in selected_names
+        }
+
+    return metrics_result
 
 
 def _get_new_table_metrics(

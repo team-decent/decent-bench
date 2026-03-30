@@ -182,6 +182,45 @@ If you set ``plot_metrics`` to a list of lists of :class:`~decent_bench.metrics.
 allowing you to control which metrics are plotted together.
 
 
+Interpreting Metric Warnings
+----------------------------
+Warnings during metric computation and display are expected in some scenarios, especially when algorithms diverge or
+when metric prerequisites are not provided.
+
+Unavailable metrics
+~~~~~~~~~~~~~~~~~~~
+Some metrics require additional problem information.
+
+- ``regret`` and ``x error`` require ``problem.x_optimal``.
+- ``accuracy``, ``mse``, ``precision``, and ``recall`` require ``problem.test_data`` and
+    agents with :class:`~decent_bench.costs.EmpiricalRiskCost`.
+- ``accuracy``, ``precision``, and ``recall`` additionally require integer-valued targets.
+
+If these requirements are not met, the metric marks itself unavailable, returns NaN, and is omitted from the final
+metric lists returned by :func:`~decent_bench.benchmark.compute_metrics`.
+
+Plot truncation warnings
+~~~~~~~~~~~~~~~~~~~~~~~~
+Plot metric trajectories are truncated at the first non-finite datapoint (NaN/inf) or first datapoint above the
+internal plotting threshold used for log-scale stability.
+
+Typical messages include:
+
+- ``Truncating plot computation ... retained K point(s) from M/N trial(s).``
+- ``Skipping plot computation ... all trials diverged before the first plottable datapoint.``
+
+These warnings indicate that divergence was detected and handled gracefully for plotting.
+
+Why tables can show NaN while plots still appear
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Tables and plots summarize different parts of the trajectory:
+
+- Table metrics typically use the final iteration.
+- Plot metrics may retain and display an earlier finite prefix.
+
+So it is expected to see ``nan ± nan`` in a table for a metric while still seeing a corresponding curve in the plot.
+
+
 Benchmark problems
 ------------------
 
