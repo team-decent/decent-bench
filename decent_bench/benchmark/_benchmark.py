@@ -268,9 +268,6 @@ def benchmark(
             "Progress cannot be resumed if interrupted."
         )
 
-    if runtime_metrics is not None and len(runtime_metrics) == 0:
-        runtime_metrics = None
-
     results = _benchmark(
         algorithms=algorithms,
         benchmark_problem=benchmark_problem,
@@ -488,8 +485,8 @@ def _run_trials(  # noqa: PLR0917
         partial_result = {alg: [_run_trial(*args) for args in trial_args[alg]] for alg in trial_args}
     else:
         if log_listener is None:
-            # This shouldnt happen
-            raise ValueError(
+            # This shouldn't happen: internal invariant violation
+            raise RuntimeError(
                 "Log listener must be initialized for multiprocessing to handle logs from worker processes"
             )
 
