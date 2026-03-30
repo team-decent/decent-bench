@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Final, cast, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
-from decent_bench.costs import EmpiricalRiskCost
+from decent_bench.costs import Cost, EmpiricalRiskCost
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
@@ -281,10 +281,10 @@ class FedAvg(FedAlgorithm):
     round :math:`k`. In FedAvg, each selected client performs ``num_local_epochs`` local SGD epochs, then the server
     aggregates the final local models to form :math:`\mathbf{x}_{k+1}`. The aggregation uses client weights, defaulting
     to data-size weights when ``client_weights`` is not provided. Client selection (subsampling) defaults to uniform
-    sampling with fraction 1.0 (all active clients) and can be customized via ``selection_scheme``. For
-    :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
-    :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; for generic costs, local
-    updates use full-batch gradients.
+    sampling with fraction 1.0 (all active clients) and can be customized via ``selection_scheme``. Costs that
+    preserve the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use client-side mini-batches of size
+    :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; generic cost wrappers
+    fall back to full-gradient local updates.
     """
 
     # C=0.1; batch size= inf/10/50 (dataset sizes are bigger; normally 1/10 of the total dataset).
@@ -335,12 +335,30 @@ class FedAvg(FedAlgorithm):
             client.x = self._compute_local_update(client, network.server())
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
+    @staticmethod
+    def _cost_for_minibatch_local_updates(cost: Cost) -> EmpiricalRiskCost | None:
+        """
+        Return the empirical cost view to use for FedAvg local mini-batching.
+
+        The repository's batching semantics are carried by the ``EmpiricalRiskCost`` abstraction itself. Wrappers that
+        preserve empirical-risk metadata, such as empirical regularization/scaling and ``PyTorchCost``, inherit from
+        ``EmpiricalRiskCost`` and are therefore batch-capable. Generic wrappers like ``SumCost`` and ``ScaledCost``
+        intentionally erase that abstraction and should use the full-gradient path.
+        """
+        if isinstance(cost, EmpiricalRiskCost):
+            return cost
+        return None
+
     def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
         local_x = iop.copy(client.messages[server]) if server in client.messages else iop.copy(client.x)
-        if isinstance(client.cost, EmpiricalRiskCost):
-            cost = client.cost
-            n_samples = cost.n_samples
-            return self._epoch_minibatch_update(cost, local_x, cost.batch_size, n_samples)
+        empirical_cost = self._cost_for_minibatch_local_updates(client.cost)
+        if empirical_cost is not None:
+            return self._epoch_minibatch_update(
+                empirical_cost,
+                local_x,
+                empirical_cost.batch_size,
+                empirical_cost.n_samples,
+            )
 
         for _ in range(self.num_local_epochs):
             grad = client.cost.gradient(local_x)
