@@ -316,7 +316,7 @@ class FedAvg(FedAlgorithm):
         self.x0 = alg_helpers.initial_states(self.x0, network)
         network.server().initialize(x=self.x0[network.server()])
         for client in network.clients():
-            client.initialize(x=self.x0)
+            client.initialize(x=self.x0[client])
 
     def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
         selected_clients = self._selected_clients_for_round(network, iteration)

@@ -5,7 +5,7 @@ from decent_bench.utils.array import Array
 from decent_bench.utils.types import InitialStates
 
 
-def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":  # noqa: PLR0912
+def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
     """
     Build per-agent initial states, for use in :meth:`~decent_bench.distributed_algorithms.Algorithm.initialize`.
 
@@ -30,7 +30,7 @@ def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
 
     """
     if x0 is None:
-        x0s = {a: iop.zeros(a.cost.shape, a.cost.framework, a.cost.device) for a in network.graph}
+        x0s = {a: iop.zeros(a.cost.framework, a.cost.device, a.cost.shape) for a in network.graph}
     elif isinstance(x0, Array):
         x0s = dict.fromkeys(network.graph, x0)
     elif isinstance(x0, dict):
@@ -79,7 +79,7 @@ def normal_initialization(
 
     """
     return {
-        a: iop.randn(shape=a.cost.shape, framework=a.cost.framework, device=a.cost.device, mean=mean, std=std)
+        a: iop.normal(shape=a.cost.shape, framework=a.cost.framework, device=a.cost.device, mean=mean, std=std)
         for a in network.graph
     }
 

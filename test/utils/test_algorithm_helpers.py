@@ -58,7 +58,7 @@ def test_initial_states_dict_matches_by_agent_id() -> None:
 
 def test_initial_states_non_fed_missing_agent_raises() -> None:
     net = _make_p2p_network(n_agents=3, shape=(2,))
-    x0_dict = {agent: iop.zeros(agent.cost.shape, agent.cost.framework, agent.cost.device) for agent in list(net.graph)[:2]}
+    x0_dict = {agent: iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device) for agent in list(net.graph)[:2]}
 
     with pytest.raises(ValueError, match="x0 not provided for agent"):
         initial_states(x0_dict, net)
