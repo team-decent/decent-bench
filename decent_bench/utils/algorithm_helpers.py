@@ -41,21 +41,16 @@ def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
                 raise TypeError(f"``x0`` must have keys of type Agent, got {type(a)}")
             x0_by_id[a.id] = v
         x0s = {}
+        for a in network.agents():
+            if a.id not in x0_by_id:
+                raise ValueError(f"x0 not provided for agent {a}")
+            x0s[a] = x0_by_id[a.id]
         if isinstance(network, FedNetwork):
-            for a in network.clients():
-                if a.id not in x0_by_id:
-                    raise ValueError(f"x0 not provided for agent {a}")
-                x0s[a] = x0_by_id[a.id]
             server = network.server()
             if server.id not in x0_by_id:
                 x0s[server] = iop.mean(iop.stack([x0s[a] for a in network.clients()], dim=0), dim=0)
             else:
                 x0s[server] = x0_by_id[server.id]
-        else:
-            for a in network.graph:
-                if a.id not in x0_by_id:
-                    raise ValueError(f"x0 not provided for agent {a}")
-                x0s[a] = x0_by_id[a.id]
     else:
         raise ValueError(f"Invalid x0: expected None, an Array instance, or a dict, got {type(x0)}")
 

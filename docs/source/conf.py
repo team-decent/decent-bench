@@ -57,12 +57,6 @@ nitpick_ignore = [
     ("py:class", "JaxArray"),
 ]
 
-nitpick_ignore_regex = [
-    (r"py:class", r"TypeAliasForwardRef.*"),
-    (r"py:class", r"Array"),
-    (r"py:class", r"dict\[Agent, Array\]"),
-]
-
 suppress_warnings = ["toc.duplicate"]
 
 intersphinx_mapping = {
