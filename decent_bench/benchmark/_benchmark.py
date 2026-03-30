@@ -386,13 +386,30 @@ def _init_logging_and_multiprocessing(
 
     use_spawn = _should_use_spawn_context(benchmark_problem)
     mp_context = get_context("spawn") if use_spawn else None
-    manager = Manager() if not use_spawn else get_context("spawn").Manager()
+    try:
+        manager = Manager() if mp_context is None else mp_context.Manager()
+    except RuntimeError as e:
+        if _is_multiprocessing_main_guard_error(e):
+            raise RuntimeError(
+                "Failed to start multiprocessing workers. Benchmark execution "
+                "must be launched inside a guarded main entrypoint. Wrap your benchmark call in:\n\n"
+                "if __name__ == '__main__':\n"
+                "    ... call decent_bench.benchmark(...)\n\n"
+                "This prevents child processes from re-running top-level script code during import."
+            ) from e
+        raise e
     log_listener = logger.start_log_listener(manager, log_level)
 
     if use_spawn:
         LOGGER.debug("Using spawn multiprocessing context for PyTorch/JAX compatibility")
 
     return log_listener, manager, mp_context
+
+
+def _is_multiprocessing_main_guard_error(exc: RuntimeError) -> bool:
+    """Return True for the common spawn bootstrap error caused by missing main guard."""
+    msg = str(exc)
+    return "start a new process before the" in msg and "bootstrapping phase" in msg
 
 
 def _run_trials(  # noqa: PLR0917
