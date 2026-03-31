@@ -4,15 +4,15 @@ import pytest
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
-from decent_bench.costs import L2RegularizerCost, PyTorchCost
-from decent_bench.networks import FedNetwork, P2PNetwork
-from decent_bench.utils.algorithm_helpers import (
+from decent_bench.algorithms.utils import (
     infer_client_weight,
     initial_states,
     normal_initialization,
     pytorch_initialization,
     uniform_initialization,
 )
+from decent_bench.costs import L2RegularizerCost, PyTorchCost
+from decent_bench.networks import FedNetwork, P2PNetwork
 from decent_bench.utils.array import Array
 from decent_bench.utils.pytorch_utils import SimpleLinearModel
 
@@ -58,7 +58,10 @@ def test_initial_states_dict_matches_by_agent_id() -> None:
 
 def test_initial_states_non_fed_missing_agent_raises() -> None:
     net = _make_p2p_network(n_agents=3, shape=(2,))
-    x0_dict = {agent: iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device) for agent in list(net.graph)[:2]}
+    x0_dict = {
+        agent: iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
+        for agent in list(net.graph)[:2]
+    }
 
     with pytest.raises(ValueError, match="x0 not provided for agent"):
         initial_states(x0_dict, net)

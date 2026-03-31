@@ -1,3 +1,10 @@
+"""
+Utilities for algorithm initialization and general helpers.
+
+This includes functions such as :func:`~decent_bench.algorithms.utils.infer_client_weight`, which infers
+default client weights from cost data size when explicit weights are not provided.
+"""
+
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.networks import FedNetwork, Network
@@ -7,7 +14,7 @@ from decent_bench.utils.types import InitialStates
 
 def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
     """
-    Build per-agent initial states, for use in :meth:`~decent_bench.distributed_algorithms.Algorithm.initialize`.
+    Build per-agent initial states, for use in :meth:`~decent_bench.algorithms.Algorithm.initialize`.
 
     Args:
         x0 (InitialStates):

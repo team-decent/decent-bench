@@ -308,7 +308,14 @@ class AgentHistory:
         Record ``x`` at ``iteration``, replacing any existing snapshot at that iteration.
 
         Also available as ``history[iteration] = x``.
+
+        Raises:
+            ValueError: if ``iteration`` is negative.
+
         """
+        if iteration < 0:
+            raise ValueError(f"Iteration must be non-negative, got {iteration}")
+
         if iteration not in self._x_history:
             bisect.insort(self._sorted_keys, iteration)
         self._x_history[iteration] = x
@@ -329,9 +336,15 @@ class AgentHistory:
             iteration: The algorithm iteration to retrieve x for.
 
         Raises:
-            ValueError: if ``iteration`` is before the first recorded snapshot.
+            ValueError: if ``iteration`` is before the first recorded snapshot or if ``iteration < -1``.
 
         """
+        if iteration < -1:
+            raise ValueError(f"Iteration must be positive or -1 for the latest snapshot, got {iteration}")
+
+        if iteration == -1:
+            return self._x_history[self.max()]
+
         if iteration not in self._x_history:
             # Binary search for the closest previous snapshot
             idx = bisect.bisect_right(self._sorted_keys, iteration) - 1

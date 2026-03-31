@@ -3,9 +3,9 @@ from json import JSONDecodeError
 from typing import TYPE_CHECKING
 
 from decent_bench.agents import AgentMetricsView
+from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
 from decent_bench.benchmark._metric_result import MetricResult
-from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics import (
     Metric,
     compute_plots,
