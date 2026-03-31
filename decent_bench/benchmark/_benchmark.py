@@ -14,9 +14,9 @@ from typing import TYPE_CHECKING, Any
 from rich.status import Status
 
 import decent_bench.utils.interoperability as iop
+from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark._benchmark_problem import BenchmarkProblem
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
-from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics import RuntimeMetricPlotter
 from decent_bench.networks import Network
 from decent_bench.utils import logger

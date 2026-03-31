@@ -5,7 +5,6 @@ decent\_bench.utils
 .. toctree::
    :maxdepth: 2
 
-   decent_bench.utils.algorithm_helpers
    decent_bench.utils.array
    decent_bench.utils.checkpoint_manager
    decent_bench.utils.interoperability

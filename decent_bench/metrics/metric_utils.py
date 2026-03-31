@@ -62,10 +62,7 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
         ValueError: if no agent reached *iteration*
 
     """
-    if iteration == -1:
-        all_x_at_iter = [a.x_history[a.x_history.max()] for a in agents]
-    else:
-        all_x_at_iter = [a.x_history[iteration] for a in agents]
+    all_x_at_iter = [a.x_history[iteration] for a in agents]
 
     if len(all_x_at_iter) == 0:
         raise ValueError(f"No agent reached iteration {iteration}")
@@ -172,8 +169,7 @@ def accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", it
     ret: list[float] = []
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
-            agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-            preds = predict_agent(agent, agent_iteration, problem)
+            preds = predict_agent(agent, iteration, problem)
             ret.append(float(sk_metrics.accuracy_score(test_y, preds)))
         else:
             ret.append(np.nan)
@@ -212,8 +208,7 @@ def mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iterati
     _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
-            agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-            preds = predict_agent(agent, agent_iteration, problem)
+            preds = predict_agent(agent, iteration, problem)
             ret.append(sk_metrics.mean_squared_error(test_y, preds))
         else:
             ret.append(np.nan)
@@ -262,8 +257,7 @@ def precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", i
     ret: list[float] = []
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
-            agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-            preds = predict_agent(agent, agent_iteration, problem)
+            preds = predict_agent(agent, iteration, problem)
             ret.append(float(sk_metrics.precision_score(test_y, preds, average="micro")))
         else:
             ret.append(np.nan)
@@ -311,8 +305,7 @@ def recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iter
     ret: list[float] = []
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
-            agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-            preds = predict_agent(agent, agent_iteration, problem)
+            preds = predict_agent(agent, iteration, problem)
             ret.append(float(sk_metrics.recall_score(test_y, preds, average="micro")))
         else:
             ret.append(np.nan)

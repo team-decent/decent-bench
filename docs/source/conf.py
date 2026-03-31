@@ -31,7 +31,8 @@ extensions = [
 ]
 
 tagged_list_modules = [
-    "decent_bench.distributed_algorithms",
+    "decent_bench.algorithms.decentralized",
+    "decent_bench.algorithms.federated",
     "decent_bench.costs",
 ]
 

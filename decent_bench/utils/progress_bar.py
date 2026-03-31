@@ -17,7 +17,7 @@ from rich.progress import (
 from rich.table import Column, Table
 from rich.text import Text
 
-from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.algorithms import Algorithm
 
 if TYPE_CHECKING:
     from rich.progress import Task, TaskID

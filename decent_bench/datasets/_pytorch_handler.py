@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     import torch
 
 try:
+    from torch.utils.data import ConcatDataset as TorchConcatDataset
     from torch.utils.data import Subset as TorchSubset
     from torch.utils.data import random_split as torch_random_split
 
@@ -89,7 +90,7 @@ class PyTorchDatasetHandler(DatasetHandler):
 
     @property
     def n_samples(self) -> int:
-        return len(self.torch_dataset)  # type: ignore[arg-type]
+        return len(self.get_datapoints())  # type: ignore[arg-type]
 
     @property
     def n_partitions(self) -> int:
@@ -104,7 +105,7 @@ class PyTorchDatasetHandler(DatasetHandler):
         return self._n_targets
 
     def get_datapoints(self) -> Dataset:
-        return cast("Dataset", self.torch_dataset)
+        return cast("Dataset", TorchConcatDataset(self.get_partitions()))
 
     def get_partitions(self) -> list[Dataset]:
         """
@@ -135,15 +136,15 @@ class PyTorchDatasetHandler(DatasetHandler):
     def _random_split(self) -> list[Dataset]:
         if self.samples_per_partition is None:
             parts = [1 / self.n_partitions] * self.n_partitions
-        elif self.samples_per_partition * self.n_partitions <= self.n_samples:
+        elif self.samples_per_partition * self.n_partitions <= len(self.torch_dataset):
             parts = [self.samples_per_partition] * self.n_partitions
             # Add the remaining samples to the last partition and remove it
             # to ensure the sum is equal to the total number of samples for random_split
-            parts.append(self.n_samples - sum(parts))
+            parts.append(len(self.torch_dataset) - sum(parts))
         else:
             raise ValueError(
                 f"samples_per_partition ({self.samples_per_partition}) * n_partitions ({self.n_partitions}) "
-                f"must be <= n_datapoints ({self.n_samples})"
+                f"must be <= datapoints in the torch dataset ({len(self.torch_dataset)})"
             )
 
         partitions = cast(

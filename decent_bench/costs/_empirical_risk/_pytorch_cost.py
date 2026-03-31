@@ -237,7 +237,9 @@ class PyTorchCost(EmpiricalRiskCost):
             self.model.eval()
 
         with torch.no_grad():
-            inputs = torch.stack(data).to(self._pytorch_device)
+            if isinstance(data, list):
+                data: torch.Tensor = torch.stack(data)
+            inputs = data.to(self._pytorch_device)
             outputs: torch.Tensor = self.model(inputs)
             outputs = self.final_activation(outputs)
 

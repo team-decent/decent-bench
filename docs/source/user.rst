@@ -622,7 +622,7 @@ algorithms framework-agnostic, always use the interoperability layer :class:`~de
 
 - Use :class:`decent_bench.utils.interoperability.zeros` instead of framework-specific constructors (e.g., `np.zeros`, `torch.zeros`). 
     Other examples are :meth:`~decent_bench.utils.interoperability.ones_like`, :meth:`~decent_bench.utils.interoperability.uniform_like`, :meth:`~decent_bench.utils.interoperability.normal_like`, etc.
-    See :mod:`~decent_bench.utils.interoperability` for a full list of available methods and :mod:`~decent_bench.distributed_algorithms` for examples of usage.
+    See :mod:`~decent_bench.utils.interoperability` for a full list of available methods and :mod:`~decent_bench.algorithms` for examples of usage.
 - Avoid calling any framework-specific functions directly within your algorithm. 
     Let the :class:`~decent_bench.costs.Cost` implementations handle framework-specific details for 
     :func:`~decent_bench.costs.Cost.function`, :func:`~decent_bench.costs.Cost.gradient`, :func:`~decent_bench.costs.Cost.hessian`, and :func:`~decent_bench.costs.Cost.proximal`.
@@ -647,21 +647,21 @@ Algorithms
 ----------
 Create a new algorithm to benchmark against existing ones.
 
-When implementing a custom algorithm by subclassing :class:`~decent_bench.distributed_algorithms.Algorithm`, you need to understand the following methods:
+When implementing a custom algorithm by subclassing :class:`~decent_bench.algorithms.decentralized.P2PAlgorithm`, you need to understand the following methods:
 
 - **initialize(network)**: Called once before the algorithm starts. Use this to set up initial values for agents' primal variables (:attr:`Agent.x <decent_bench.agents.Agent.x>`), auxiliary variables (:attr:`Agent.aux_vars <decent_bench.agents.Agent.aux_vars>`), and received messages (:attr:`Agent.messages <decent_bench.agents.Agent.messages>`). **Implementation required.**
     If you want the agents' primal variable to be a customizable parameter to the algorithm, consider using a field like ``x0: Array | None = None`` in your algorithm class.
-    Use a helper function like :func:`~decent_bench.utils.algorithm_helpers.initial_states` to initialize it properly if the input argument is ``None``. 
-    :func:`~decent_bench.utils.algorithm_helpers.initial_states` initializes x0 to zero if x0 is None, otherwise uses provided x0. 
-    :func:`~decent_bench.utils.algorithm_helpers.normal_initialization` can also be used to create normally distributed random initializations,
-    and :func:`~decent_bench.utils.algorithm_helpers.uniform_initialization` for uniformly distributed;
-    :func:`~decent_bench.utils.algorithm_helpers.pytorch_initialization` can be used with PyTorchCosts.
+    Use a helper function like :func:`~decent_bench.algorithms.utils.initial_states` to initialize it properly if the input argument is ``None``. 
+    :func:`~decent_bench.algorithms.utils.initial_states` initializes x0 to zero if x0 is None, otherwise uses provided x0. 
+    :func:`~decent_bench.algorithms.utils.normal_initialization` can also be used to create normally distributed random initializations,
+    and :func:`~decent_bench.algorithms.utils.uniform_initialization` for uniformly distributed;
+    :func:`~decent_bench.algorithms.utils.pytorch_initialization` can be used with PyTorchCosts.
 
 - **step(network, iteration)**: Called at each iteration of the algorithm. This is where the main algorithm logic goes - updating agent states, computing gradients, exchanging messages, etc. **Implementation required.**
 
 - **finalize(network)**: Called once after all iterations complete. Use this for cleanup operations like clearing auxiliary variables to free memory. **Implementation optional** - the default implementation clears all auxiliary variables.
 
-- **run(network)**: Orchestrates the full algorithm execution by calling :meth:`initialize <decent_bench.distributed_algorithms.Algorithm.initialize>`, then :meth:`step <decent_bench.distributed_algorithms.Algorithm.step>` for each iteration, and finally finalize. **You should NOT implement this** - it is already provided by the base :class:`~decent_bench.distributed_algorithms.Algorithm` class.
+- **run(network)**: Orchestrates the full algorithm execution by calling :meth:`initialize <decent_bench.algorithms.Algorithm.initialize>`, then :meth:`step <decent_bench.algorithms.Algorithm.step>` for each iteration, and finally finalize. **You should NOT implement this** - it is already provided by the base :class:`~decent_bench.algorithms.Algorithm` class.
 
 **Note**: In order for metrics to work, use :attr:`Agent.x <decent_bench.agents.Agent.x>` to update the local primal
 variable **once** every iteration. If you need to perform multiple updates within an iteration, consider accumulating them and applying a single update at the end of the iteration. 
