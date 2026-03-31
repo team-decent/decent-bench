@@ -167,7 +167,7 @@ class ProgressBarController:
     Args:
         manager: A multiprocessing :class:`~multiprocessing.managers.SyncManager` instance used to create a shared queue
             for coordinating progress updates across multiple processes. This enables thread-safe communication between
-            worker processes and the progress bar listener thread.
+            worker processes and the progress bar listener thread. If ``None``, a local in-process queue is used.
         algorithms: algorithms that will be run, each gets its own bar
         n_trials: number of trials the algorithms will run
         progress_step: if provided, the progress bar will step every `progress_step`.
@@ -182,14 +182,17 @@ class ProgressBarController:
 
     def __init__(  # noqa: PLR0917
         self,
-        manager: SyncManager,
+        manager: SyncManager | None,
         algorithms: Sequence[Algorithm[Any]],
         n_trials: int,
         progress_step: int | None,
         show_speed: bool = False,
         show_trial: bool = False,
     ):
-        self._progress_increment_queue: Queue[_ProgressRecord | None] = manager.Queue()
+        # Use a local queue for single-process runs to avoid multiprocessing manager overhead.
+        self._progress_increment_queue: Queue[_ProgressRecord | None] = (
+            manager.Queue() if manager is not None else Queue()
+        )
         self.progress_step = progress_step
         p_cols = [
             (TextColumn("{task.description}"), Text("Algorithm", style="bold")),

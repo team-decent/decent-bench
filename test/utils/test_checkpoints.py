@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import random
+import sys
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,15 @@ except ModuleNotFoundError:
 
 # Suppress JAX debug logs that cause issues during cleanup
 logging.getLogger("jax").setLevel(logging.WARNING)
+
+IS_LINUX = sys.platform.startswith("linux")
+LINUX_ONLY_MP_GT1 = pytest.mark.skipif(not IS_LINUX, reason="max_processes > 1 is Linux-only")
+
+
+def _skip_if_max_processes_exceeds_cpu_count(max_processes: int) -> None:
+    cpu_count = os.cpu_count()
+    if cpu_count is not None and max_processes > cpu_count:
+        pytest.skip(f"max_processes={max_processes} exceeds available CPU cores")
 
 
 @dataclass(eq=False)
@@ -299,7 +309,7 @@ def test_create_backup_and_clear(tmp_path: Path) -> None:  # noqa: D103
     ("cost_cls", "max_processes"),
     [
         (LogisticRegressionCost, 1),
-        (LogisticRegressionCost, 2),
+        pytest.param(LogisticRegressionCost, 2, marks=LINUX_ONLY_MP_GT1),
         pytest.param(
             PyTorchCost,
             1,
@@ -316,8 +326,7 @@ def test_resume_from_checkpoint_with_additional_trials(
     max_processes: int,
     seed: int | None,
 ) -> None:
-    if os.cpu_count() is not None and max_processes > os.cpu_count():
-        pytest.skip(f"max_processes={max_processes} exceeds available CPU cores")
+    _skip_if_max_processes_exceeds_cpu_count(max_processes)
 
     if seed is not None:
         iop.set_seed(seed)
@@ -406,7 +415,7 @@ def test_resume_from_checkpoint_with_additional_trials(
     ("cost_cls", "max_processes"),
     [
         (LogisticRegressionCost, 1),
-        (LogisticRegressionCost, 2),
+        pytest.param(LogisticRegressionCost, 2, marks=LINUX_ONLY_MP_GT1),
         pytest.param(
             PyTorchCost,
             1,
@@ -423,8 +432,7 @@ def test_resume_from_checkpoint_with_additional_iterations(
     max_processes: int,
     seed: int | None,
 ) -> None:
-    if os.cpu_count() is not None and max_processes > os.cpu_count():
-        pytest.skip(f"max_processes={max_processes} exceeds available CPU cores")
+    _skip_if_max_processes_exceeds_cpu_count(max_processes)
 
     if seed is not None:
         iop.set_seed(seed)
@@ -515,7 +523,7 @@ def test_resume_from_checkpoint_with_additional_iterations(
     ("cost_cls", "max_processes"),
     [
         (LogisticRegressionCost, 1),
-        (LogisticRegressionCost, 2),
+        pytest.param(LogisticRegressionCost, 2, marks=LINUX_ONLY_MP_GT1),
         pytest.param(
             PyTorchCost,
             1,
@@ -532,8 +540,7 @@ def test_resume_from_checkpoint_with_additional_iterations_and_trials(
     max_processes: int,
     seed: int | None,
 ) -> None:
-    if os.cpu_count() is not None and max_processes > os.cpu_count():
-        pytest.skip(f"max_processes={max_processes} exceeds available CPU cores")
+    _skip_if_max_processes_exceeds_cpu_count(max_processes)
 
     if seed is not None:
         iop.set_seed(seed)
@@ -625,7 +632,7 @@ def test_resume_from_checkpoint_with_additional_iterations_and_trials(
     ("cost_cls", "max_processes"),
     [
         (LogisticRegressionCost, 1),
-        (LogisticRegressionCost, 2),
+        pytest.param(LogisticRegressionCost, 2, marks=LINUX_ONLY_MP_GT1),
         pytest.param(
             PyTorchCost,
             1,
@@ -642,8 +649,7 @@ def test_resume_from_non_completed_checkpoint(
     max_processes: int,
     seed: int | None,
 ) -> None:
-    if os.cpu_count() is not None and max_processes > os.cpu_count():
-        pytest.skip(f"max_processes={max_processes} exceeds available CPU cores")
+    _skip_if_max_processes_exceeds_cpu_count(max_processes)
 
     if seed is not None:
         iop.set_seed(seed)
@@ -775,7 +781,7 @@ def test_resume_from_non_completed_checkpoint(
     ("cost_cls", "max_processes"),
     [
         (LogisticRegressionCost, 1),
-        (LogisticRegressionCost, 2),
+        pytest.param(LogisticRegressionCost, 2, marks=LINUX_ONLY_MP_GT1),
         pytest.param(
             PyTorchCost,
             1,
@@ -790,8 +796,7 @@ def test_back_to_back_benchmarks(
     cost_cls: type[LogisticRegressionCost | PyTorchCost],
     max_processes: int,
 ) -> None:
-    if os.cpu_count() is not None and max_processes > os.cpu_count():
-        pytest.skip(f"max_processes={max_processes} exceeds available CPU cores")
+    _skip_if_max_processes_exceeds_cpu_count(max_processes)
 
     iop.set_seed(123)
     problem_5, algorithms_5 = _build_problem_and_algorithms(5, cost_cls=cost_cls)
