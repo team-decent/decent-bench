@@ -231,6 +231,9 @@ class PyTorchCost(EmpiricalRiskCost):
         Returns:
             Predicted targets as an array
 
+        Raises:
+            TypeError: If data is not a list of torch.Tensor or a single torch.Tensor.
+
         """
         self._set_model_parameters(x)
         if self.model.training:
@@ -238,8 +241,12 @@ class PyTorchCost(EmpiricalRiskCost):
 
         with torch.no_grad():
             if isinstance(data, list):
-                data: torch.Tensor = torch.stack(data)
-            inputs = data.to(self._pytorch_device)
+                inputs = torch.stack(data)
+            elif isinstance(data, torch.Tensor):
+                inputs = data
+            else:
+                raise TypeError(f"Data must be a list of torch.Tensor or a single torch.Tensor, got {type(data)}.")
+            inputs = inputs.to(self._pytorch_device)
             outputs: torch.Tensor = self.model(inputs)
             outputs = self.final_activation(outputs)
 

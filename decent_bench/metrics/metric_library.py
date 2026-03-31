@@ -615,6 +615,7 @@ DEFAULT_PLOT_METRICS: list[Metric] = [
 - :class:`GradientNorm` (semi-log)
 - :class:`ConsensusError` (semi-log)
 - :class:`Loss` (linear)
+
 :meta hide-value:
 """
 

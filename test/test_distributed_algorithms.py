@@ -1,20 +1,20 @@
 import pytest
 
-from decent_bench.distributed_algorithms import (
+from decent_bench.algorithms.decentralized import (
     ADMM,
     ATC,
-    ATCTracking,
     ATG,
     DGD,
     DLM,
     ED,
     EXTRA,
-    FedAvg,
     NIDS,
+    ATCTracking,
     AugDGM,
     SimpleGT,
     WangElia,
 )
+from decent_bench.algorithms.federated import FedAvg
 
 
 @pytest.mark.parametrize(
