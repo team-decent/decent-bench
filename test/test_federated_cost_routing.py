@@ -180,7 +180,7 @@ def _run_fedavg_local_update(cost: Cost, *, step_size: float = 1.0, num_local_ep
     return algorithm._compute_local_update(client, server)
 
 
-def test_fedavg_uses_minibatches_for_empirical_risk_cost() -> None:
+def test_empirical_costs_use_minibatch_local_updates() -> None:
     cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
 
     updated = _run_fedavg_local_update(cost)
@@ -189,7 +189,7 @@ def test_fedavg_uses_minibatches_for_empirical_risk_cost() -> None:
     assert sorted(len(indices) for indices in cost.gradient_indices) == [1, 2, 2]
 
 
-def test_fedavg_uses_minibatches_for_empirical_regularized_cost() -> None:
+def test_empirical_regularized_costs_keep_minibatch_local_updates() -> None:
     empirical_cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
     regularizer = TrackingRegularizerCost()
     objective = empirical_cost + regularizer
@@ -202,7 +202,7 @@ def test_fedavg_uses_minibatches_for_empirical_regularized_cost() -> None:
     assert all(kwargs == {} for kwargs in regularizer.gradient_kwargs)
 
 
-def test_fedavg_uses_minibatches_for_scaled_empirical_cost() -> None:
+def test_scaled_empirical_costs_keep_minibatch_local_updates() -> None:
     empirical_cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
     objective = 2.0 * empirical_cost
 
@@ -212,7 +212,7 @@ def test_fedavg_uses_minibatches_for_scaled_empirical_cost() -> None:
     assert sorted(len(indices) for indices in empirical_cost.gradient_indices) == [1, 2, 2]
 
 
-def test_fedavg_uses_full_gradients_for_plain_cost() -> None:
+def test_plain_costs_use_full_gradient_local_updates() -> None:
     cost = TrackingCost(gradient_value=1.0)
 
     updated = _run_fedavg_local_update(cost, num_local_epochs=3)
@@ -222,7 +222,7 @@ def test_fedavg_uses_full_gradients_for_plain_cost() -> None:
     assert all(kwargs == {} for kwargs in cost.gradient_kwargs)
 
 
-def test_fedavg_uses_full_gradients_for_sum_cost_over_non_empirical_costs() -> None:
+def test_sum_costs_over_non_empirical_terms_use_full_gradient_local_updates() -> None:
     cost_a = TrackingCost(gradient_value=1.0)
     cost_b = TrackingCost(gradient_value=2.0)
     objective = cost_a + cost_b
@@ -236,7 +236,7 @@ def test_fedavg_uses_full_gradients_for_sum_cost_over_non_empirical_costs() -> N
     assert all(kwargs == {} for kwargs in cost_b.gradient_kwargs)
 
 
-def test_fedavg_uses_full_gradients_for_scaled_cost_over_non_empirical_costs() -> None:
+def test_scaled_costs_over_non_empirical_terms_use_full_gradient_local_updates() -> None:
     cost = TrackingCost(gradient_value=1.0)
     objective = 2.0 * cost
 
@@ -247,7 +247,7 @@ def test_fedavg_uses_full_gradients_for_scaled_cost_over_non_empirical_costs() -
     assert all(kwargs == {} for kwargs in cost.gradient_kwargs)
 
 
-def test_fedavg_treats_regularizers_as_non_batched_costs() -> None:
+def test_regularizers_follow_the_non_batched_local_update_path() -> None:
     regularizer = TrackingRegularizerCost(gradient_value=1.0)
 
     updated = _run_fedavg_local_update(regularizer, num_local_epochs=2)
@@ -257,7 +257,7 @@ def test_fedavg_treats_regularizers_as_non_batched_costs() -> None:
     assert all(kwargs == {} for kwargs in regularizer.gradient_kwargs)
 
 
-def test_fedavg_does_not_need_special_zero_cost_handling() -> None:
+def test_zero_costs_do_not_need_special_local_update_handling() -> None:
     cost = TrackingZeroCost()
 
     updated = _run_fedavg_local_update(cost, num_local_epochs=3)

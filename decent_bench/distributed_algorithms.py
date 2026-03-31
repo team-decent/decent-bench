@@ -179,6 +179,10 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     def _cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
         return [network.server(), *network.clients()]
 
+    def _sync_server_to_clients(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
+        """Send the current server model to the selected clients."""
+        network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x)
+
     def select_clients(
         self,
         clients: Sequence["Agent"],
@@ -327,16 +331,13 @@ class FedAvg(FedAlgorithm):
         self._run_local_updates(network, selected_clients)
         self.aggregate(network, selected_clients)
 
-    def _sync_server_to_clients(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x)
-
     def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
         for client in selected_clients:
             client.x = self._compute_local_update(client, network.server())
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
     @staticmethod
-    def _cost_for_minibatch_local_updates(cost: Cost) -> EmpiricalRiskCost | None:
+    def _empirical_cost_for_local_updates(cost: Cost) -> EmpiricalRiskCost | None:
         """
         Return the empirical cost view to use for FedAvg local mini-batching.
 
@@ -351,32 +352,27 @@ class FedAvg(FedAlgorithm):
 
     def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
         local_x = iop.copy(client.messages[server]) if server in client.messages else iop.copy(client.x)
-        empirical_cost = self._cost_for_minibatch_local_updates(client.cost)
+        empirical_cost = self._empirical_cost_for_local_updates(client.cost)
         if empirical_cost is not None:
-            return self._epoch_minibatch_update(
-                empirical_cost,
-                local_x,
-                empirical_cost.batch_size,
-                empirical_cost.n_samples,
-            )
+            return self._run_minibatch_local_epochs(empirical_cost, local_x)
+        return self._run_full_gradient_local_epochs(client.cost, local_x)
 
+    def _run_full_gradient_local_epochs(self, cost: Cost, local_x: "Array") -> "Array":
         for _ in range(self.num_local_epochs):
-            grad = client.cost.gradient(local_x)
+            grad = cost.gradient(local_x)
             local_x -= self.step_size * grad
         return local_x
 
-    def _epoch_minibatch_update(
+    def _run_minibatch_local_epochs(
         self,
         cost: EmpiricalRiskCost,
         local_x: "Array",
-        per_client_batch: int,
-        n_samples: int,
     ) -> "Array":
         for _ in range(self.num_local_epochs):
-            indices = list(range(n_samples))
+            indices = list(range(cost.n_samples))
             random.shuffle(indices)
-            for start in range(0, n_samples, per_client_batch):
-                batch_indices = indices[start : start + per_client_batch]
+            for start in range(0, cost.n_samples, cost.batch_size):
+                batch_indices = indices[start : start + cost.batch_size]
                 grad = cost.gradient(local_x, indices=batch_indices)
                 local_x -= self.step_size * grad
         return local_x
