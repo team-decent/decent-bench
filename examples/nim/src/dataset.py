@@ -322,7 +322,7 @@ class NIMDatasetHandler(DatasetHandler):
             # Add the pixel to all partitions it belongs to
             for r in range(min_row, max_row + 1):
                 for c in range(min_col, max_col + 1):
-                    spatial_partitions[r * cols + c].append(((x, y), label == 0))
+                    spatial_partitions[r * cols + c].append(((x, y), label == 1))
 
         return spatial_partitions
 

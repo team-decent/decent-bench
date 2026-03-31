@@ -8,7 +8,8 @@ Controls (when the matplotlib window is active):
  - Left click: add a point to the current agent path
  - Right click: finish the current agent path (start a new path)
  - 'u' key: undo last point in current path
- - 's' key: save current paths to output file
+ - 'i' key: save current paths to output file
+ - 'g' key: toggle grid lines for better alignment
  - 'q' or close window: quit without saving (unless already saved)
 
 The output JSON is a list of agents; each agent is a list of [x,y] coordinates (floats, pixel coords).
@@ -27,7 +28,7 @@ from PIL import Image
 
 TITLE_TEXT = (
     "Left click to add point, right click to finish an agent path."
-     "\n'i' to save, 'u' undo, 'g' to toggle grid, 'q' to quit"
+    "\n'i' to save, 'u' undo, 'g' to toggle grid, 'q' to quit"
 )
 
 
@@ -166,13 +167,9 @@ def _connect_loop(
 
 
 def main() -> None:  # noqa: D103
-    parser = argparse.ArgumentParser(
-        description="Draw agent paths on an image and save to JSON."
-    )
+    parser = argparse.ArgumentParser(description="Draw agent paths on an image and save to JSON.")
     parser.add_argument("image", type=str, help="Path to image file")
-    parser.add_argument(
-        "--out", type=str, default="paths.json", help="Output JSON file"
-    )
+    parser.add_argument("--out", type=str, default="paths.json", help="Output JSON file")
     args = parser.parse_args()
     run(Path(args.image), Path(args.out))
 

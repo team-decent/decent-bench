@@ -145,7 +145,7 @@ def simulate_lidar_scan(
 
 def sample_along_path(
     occupancy: NDArray[np.uint8],
-    path: Iterable[tuple[int, int, float | None]],
+    path: Iterable[tuple[int, int, float]],
     *,
     samples_per_pose: int = 5,
     num_beams: int = 36,
@@ -161,7 +161,7 @@ def sample_along_path(
 
     Args:
         occupancy: 2D array of shape (H,W) with 1 for occupied and 0 for free
-        path: iterable of (x,y) or (x,y,theta) poses to simulate the scan from
+        path: iterable of (x,y,theta) poses to simulate the scan from
         samples_per_pose: how many beams to sample from each pose's scan
         num_beams: how many beams in the full scan (before sampling)
         fov: field of view for the scan (radians, default 2pi for full circle)

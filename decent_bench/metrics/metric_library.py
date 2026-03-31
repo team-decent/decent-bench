@@ -9,6 +9,7 @@ from numpy import linalg as la
 import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
+from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.metrics._metric import Metric
 
 if TYPE_CHECKING:
@@ -543,7 +544,12 @@ class Loss(Metric):
         _: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return [agent.cost.function(agent.x_history[iteration], indices="all") for agent in agents]
+        return [
+            a.cost.function(a.x_history[iteration], indices="all")
+            if isinstance(a.cost, EmpiricalRiskCost)
+            else a.cost.function(a.x_history[iteration])
+            for a in agents
+        ]
 
 
 DEFAULT_TABLE_METRICS: list[Metric] = [
