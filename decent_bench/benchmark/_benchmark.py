@@ -135,8 +135,7 @@ def resume_benchmark(  # noqa: PLR0912
             raise ValueError(f"Invalid checkpoint directory: metadata is not valid JSON - {e}") from e
 
     if create_backup:
-        backup_path = checkpoint_manager.create_backup()
-        LOGGER.info(f"Created backup of checkpoint directory at '{backup_path}'")
+        checkpoint_manager.create_backup()
 
     LOGGER.info(
         f"Resuming benchmark from checkpoint '{checkpoint_manager.checkpoint_dir}' with {metadata['n_trials']} trials "
@@ -189,7 +188,8 @@ def resume_benchmark(  # noqa: PLR0912
         checkpoint_manager=checkpoint_manager,
         runtime_metrics=runtime_metrics,
     )
-    log_listener.stop()
+    if log_listener is not None:
+        log_listener.stop()
     return results
 
 
@@ -282,15 +282,16 @@ def benchmark(
         checkpoint_manager=checkpoint_manager,
         runtime_metrics=runtime_metrics,
     )
-    log_listener.stop()
+    if log_listener is not None:
+        log_listener.stop()
     return results
 
 
 def _benchmark(
     algorithms: list[Algorithm[Network]],
     benchmark_problem: BenchmarkProblem,
-    log_listener: QueueListener,
-    manager: "SyncManager",
+    log_listener: QueueListener | None,
+    manager: "SyncManager | None",
     *,
     mp_context: "SpawnContext | None" = None,
     n_trials: int = 30,
@@ -374,16 +375,26 @@ def _init_logging_and_multiprocessing(
     log_level: int,
     max_processes: int | None,
     benchmark_problem: BenchmarkProblem,
-) -> tuple[QueueListener, "SyncManager", "SpawnContext | None"]:
+) -> tuple[QueueListener | None, "SyncManager | None", "SpawnContext | None"]:
     # Detect if PyTorch costs are being used to determine multiprocessing context
-    if max_processes != 1:
-        use_spawn = _should_use_spawn_context(benchmark_problem)
-        mp_context = get_context("spawn") if use_spawn else None
-    else:
-        use_spawn = False
-        mp_context = None
+    if max_processes == 1:
+        logger.start_logger(log_level)
+        return None, None, None
 
-    manager = Manager() if not use_spawn else get_context("spawn").Manager()
+    use_spawn = _should_use_spawn_context(benchmark_problem)
+    mp_context = get_context("spawn") if use_spawn else None
+    try:
+        manager = Manager() if mp_context is None else mp_context.Manager()
+    except RuntimeError as e:
+        if _is_multiprocessing_main_guard_error(e):
+            raise RuntimeError(
+                "Failed to start multiprocessing workers. Benchmark execution "
+                "must be launched inside a guarded main entrypoint. Wrap your benchmark call in:\n\n"
+                "if __name__ == '__main__':\n"
+                "    ... call decent_bench.benchmark(...)\n\n"
+                "This prevents child processes from re-running top-level script code during import."
+            ) from e
+        raise
     log_listener = logger.start_log_listener(manager, log_level)
 
     if use_spawn:
@@ -392,12 +403,18 @@ def _init_logging_and_multiprocessing(
     return log_listener, manager, mp_context
 
 
+def _is_multiprocessing_main_guard_error(exc: RuntimeError) -> bool:
+    """Return True for the common spawn bootstrap error caused by missing main guard."""
+    msg = str(exc)
+    return "start a new process before the" in msg and "bootstrapping phase" in msg
+
+
 def _run_trials(  # noqa: PLR0917
     algorithms: list[Algorithm[Network]],
     n_trials: int,
     problem: BenchmarkProblem,
     progress_bar_ctrl: ProgressBarController,
-    log_listener: QueueListener,
+    log_listener: QueueListener | None,
     max_processes: int | None,
     mp_context: "SpawnContext | None" = None,
     checkpoint_manager: "CheckpointManager | None" = None,
@@ -467,6 +484,12 @@ def _run_trials(  # noqa: PLR0917
     if max_processes == 1:
         partial_result = {alg: [_run_trial(*args) for args in trial_args[alg]] for alg in trial_args}
     else:
+        if log_listener is None:
+            # This shouldn't happen: internal invariant violation
+            raise RuntimeError(
+                "Log listener must be initialized for multiprocessing to handle logs from worker processes"
+            )
+
         with ProcessPoolExecutor(
             initializer=logger.start_queue_logger,
             initargs=(log_listener.queue,),
