@@ -161,9 +161,10 @@ class PyTorchDatasetHandler(DatasetHandler):
         """
         # Group indices by class in a single pass
         class_to_indices: dict[int, list[int]] = defaultdict(list)
-        for idx, (_, label) in enumerate(self.torch_dataset):  # type: ignore[misc, arg-type]
-            if label in class_to_indices or len(class_to_indices) < (self.n_partitions * self.targets_per_partition):  # type: ignore[has-type]
-                class_to_indices[label].append(idx)  # type: ignore[has-type]
+        for idx, sample in enumerate(self.torch_dataset):  # type: ignore[misc]
+            _, label = cast("tuple[Any, int]", sample)
+            if label in class_to_indices or len(class_to_indices) < (self.n_partitions * self.targets_per_partition):
+                class_to_indices[label].append(idx)
 
         # Create partitions from class-grouped indices
         idx_partitions = []

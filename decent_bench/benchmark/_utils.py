@@ -75,8 +75,8 @@ def create_classification_problem(
             )
 
         # Mypy cannot infer that cost_cls is PyTorchCost here
-        costs = [
-            cost_cls(  # type: ignore[call-arg]
+        costs: list[PyTorchCost] = [
+            PyTorchCost(
                 dataset=p,
                 model=model_gen(),
                 loss_fn=torch.nn.CrossEntropyLoss(),
@@ -88,7 +88,9 @@ def create_classification_problem(
         ]
         x_optimal = None
     elif cost_cls is LogisticRegressionCost:
-        costs = [cost_cls(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()]  # type: ignore[call-arg]
+        costs: list[LogisticRegressionCost] = [
+            LogisticRegressionCost(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()
+        ]
         sum_cost = reduce(add, costs)
         x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
     else:
@@ -158,13 +160,15 @@ def create_regression_problem(
                 output_size=1,
             )
 
-        costs = [
-            cost_cls(dataset=p, model=model_gen(), loss_fn=torch.nn.MSELoss(), batch_size=batch_size, device=device)  # type: ignore[call-arg]
+        costs: list[PyTorchCost] = [
+            PyTorchCost(dataset=p, model=model_gen(), loss_fn=torch.nn.MSELoss(), batch_size=batch_size, device=device)
             for p in dataset.get_partitions()
         ]
         x_optimal = None
     elif cost_cls is LinearRegressionCost:
-        costs = [cost_cls(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()]  # type: ignore[call-arg]
+        costs: list[LinearRegressionCost] = [
+            LinearRegressionCost(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()
+        ]
         sum_cost = reduce(add, costs)
         x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
     else:
