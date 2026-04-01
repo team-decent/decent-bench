@@ -1,24 +1,29 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-import torch
-from rich.progress import track
-
-import decent_bench.algorithms.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
+from decent_bench.algorithms.decentralized import P2PAlgorithm
+from decent_bench.algorithms.utils import initial_states
 from decent_bench.costs import PyTorchCost
-from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.networks import P2PNetwork
-from decent_bench.utils.logger import LOGGER
+from decent_bench.utils.types import InitialStates
 
 if TYPE_CHECKING:
-    from decent_bench.utils.array import Array
+    import torch
+
+try:
+    import torch
+except ImportError as e:
+    raise ImportError(
+        "PyTorch is required for LT-ADMM-EMA algorithm, but it is not installed. "
+        "Please install PyTorch to use this algorithm."
+    ) from e
 
 
 @dataclass(eq=False)
-class LT_ADMM_EMA(Algorithm):  # noqa: N801
+class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
     """
     Local Training ADMM with exponential moving averages algorithm for distributed optimization.
 
@@ -31,7 +36,11 @@ class LT_ADMM_EMA(Algorithm):  # noqa: N801
         ema_factor: Exponential moving average factor, ema_factor * old + (1 - ema_factor) * new
         set_x_to_ema: Whether to set final x to EMA values in finalize()
         use_z_ema: Whether to use EMA for z_ij,k updates in auxiliary update
-        use_torch_optim: Whether to use PyTorch optimizers for local training
+        send_ema_x: Whether to send EMA of x in communication phase instead of current x
+        opt_cls: PyTorch optimizer class to use for local training. If provided, it will be used for local training
+        opt_kwargs: Keyword arguments for PyTorch optimizer
+        sched_cls: PyTorch scheduler class for local training (e.g., torch.optim.lr_scheduler.StepLR)
+        sched_kwargs: Keyword arguments for PyTorch scheduler (e.g., {"step_size": 10, "gamma": 0.1})
         x0: Initial parameters (optional)
         name: Algorithm name (default "LT-ADMM-EMA")
 
@@ -42,13 +51,15 @@ class LT_ADMM_EMA(Algorithm):  # noqa: N801
     step_size: float | Callable[[int], float] = 0.01  # Local step size (gamma)
     penalty: float = 1.0  # Penalty parameter (rho)
     alpha: float = 0.5  # Relaxation parameter (alpha)
-    ema_factor: float = (
-        0.9  # Exponential moving average factor, ema_factor * old + (1 - ema_factor) * new
-    )
+    ema_factor: float = 0.9  # Exponential moving average factor, ema_factor * old + (1 - ema_factor) * new
     set_x_to_ema: bool = True  # Whether to set final x to EMA values
     use_z_ema: bool = True  # Whether to use EMA for z_ij,k updates
-    use_torch_optim: bool = True  # Whether to use PyTorch optimizers for local training
-    x0: "Array | None" = None  # Initial parameters (optional)
+    send_ema_x: bool = False  # Whether to send EMA of x in communication phase instead of current x
+    opt_cls: type[torch.optim.Optimizer] | None = None  # PyTorch optimizer class to use for local training
+    opt_kwargs: dict[str, Any] | None = None  # Keyword arguments for PyTorch optimizer
+    sched_cls: type[torch.optim.lr_scheduler.LRScheduler] | None = None  # PyTorch scheduler class for local training
+    sched_kwargs: dict[str, Any] | None = None  # Keyword arguments for PyTorch scheduler
+    x0: InitialStates = None  # Initial parameters (optional)
     name: str = "LT-ADMM-EMA"
 
     def __post_init__(self) -> None:
@@ -60,8 +71,6 @@ class LT_ADMM_EMA(Algorithm):  # noqa: N801
             penalty, or alpha).
 
         """
-        if self.iterations <= 0:
-            raise ValueError("iterations must be positive")
         if self.local_steps <= 0:
             raise ValueError("local_steps must be positive")
         if isinstance(self.step_size, float) and self.step_size <= 0:
@@ -69,92 +78,68 @@ class LT_ADMM_EMA(Algorithm):  # noqa: N801
         if callable(self.step_size):
             test_step_size = [self.step_size(k) for k in range(self.iterations)]
             if any(s <= 0 for s in test_step_size):
-                raise ValueError(
-                    "step_size function must return positive values for all iterations"
-                )
+                raise ValueError("step_size function must return positive values for all iterations")
         if self.penalty <= 0:
             raise ValueError("penalty must be positive")
         if self.alpha <= 0:
             raise ValueError("alpha must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = alg_helpers.zero_initialization(self.x0, network)
-        self.optimizers: dict[Agent, torch.optim.Optimizer] = {}
-        self.schedulers: dict[Agent, torch.optim.lr_scheduler.LambdaLR] = {}
+        self.x0 = initial_states(self.x0, network)
 
         # Initialize agents with auxiliary variables
-        for i in track(
-            network.agents(),
-            description="Initializing agents...",
-            transient=True,
-        ):
+        for i in network.agents():
             if not isinstance(i.cost, PyTorchCost):
-                raise TypeError(
-                    f"LT-ADMM-EMA requires PyTorchCost, but agent {i} has cost of type {type(i.cost)}"
+                raise TypeError(f"LT-ADMM-EMA requires PyTorchCost, but agent {i} has cost of type {type(i.cost)}")
+
+            # Initialize PyTorch optimizer for local training if use_torch_optim is True
+            if self.opt_cls is not None:
+                initial_step_size = self.step_size(0) if callable(self.step_size) else self.step_size
+                if self.opt_kwargs is None:
+                    self.opt_kwargs = {}
+                self.opt_kwargs["lr"] = initial_step_size
+                i.cost.init_local_training(
+                    opt_cls=self.opt_cls,
+                    opt_kwargs=self.opt_kwargs,
+                    sched_cls=self.sched_cls,
+                    sched_kwargs=self.sched_kwargs,
                 )
 
             neighbors = network.neighbors(i)
             z_i = iop.zeros(
-                (len(neighbors), *iop.shape(self.x0)),
+                shape=(len(neighbors), *iop.shape(self.x0[i])),
                 framework=i.cost.framework,
                 device=i.cost.device,
             )
             neighbor_to_idx = {}
 
             for idx, j in enumerate(neighbors):
-                z_i[idx] = iop.copy(self.x0)
+                z_i[idx] = iop.copy(self.x0[i])
                 neighbor_to_idx[j] = idx
 
-            if self.use_torch_optim:
-                self.optimizers[i] = torch.optim.Adam(
-                    i.cost.model.parameters(),
-                    lr=(
-                        self.step_size(0)
-                        if callable(self.step_size)
-                        else self.step_size
-                    ),
-                )
-                if callable(self.step_size):
-                    self.schedulers[i] = torch.optim.lr_scheduler.LambdaLR(
-                        self.optimizers[i], lr_lambda=self.step_size
-                    )
-
             aux_vars = {
-                "phi": self.x0,  # phi_i,k - model parameters
-                "phi_ema": self.x0,  # Exponential moving average of phi_i,k
+                "phi": self.x0[i],  # phi_i,k - model parameters
+                "phi_ema": self.x0[i],  # Exponential moving average of phi_i,k
+                "x_train": self.x0[i],  # x_i,k+1 - model parameters after local training
                 "z_i": z_i,  # z_ij,k+1 - auxiliary consensus variable
                 "neighbor_to_idx": neighbor_to_idx,
             }
-            i.initialize(
-                x=self.x0,
-                aux_vars=aux_vars,
-                received_msgs=dict.fromkeys(neighbors, self.x0),
-            )
-
-        LOGGER.info("Initialization complete")
+            i.initialize(x=self.x0[i], aux_vars=aux_vars)
 
     def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
-        step_size = (
-            self.step_size(iteration) if callable(self.step_size) else self.step_size
-        )
+        step_size = self.step_size(iteration) if callable(self.step_size) else self.step_size
 
         # Step 1: Local training phase
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             self._local_training(i, network, step_size)
 
         # Step 2: Communication phase
-        for i in network.active_agents(iteration):
+        for i in network.active_agents():
             self._communication(i, network)
 
         # Step 3: Auxiliary update phase
-        for i in network.active_agents(iteration):
-            self._auxiliary_update(i, network)
-
-    def finalize(self, network: P2PNetwork) -> None:  # noqa: D102
-        # Set final parameters to EMA values
-        if self.set_x_to_ema:
-            for agent in network.agents():
-                agent.x = iop.copy(agent.aux_vars["phi_ema"])
+        for i in network.active_agents():
+            self._auxiliary_update(i)
 
     def _local_training(
         self,
@@ -173,47 +158,28 @@ class LT_ADMM_EMA(Algorithm):  # noqa: N801
 
         """
         if not isinstance(agent.cost, PyTorchCost):
-            raise TypeError(
-                f"LT-ADMM-EMA requires PyTorchCost, but agent {agent} has cost of type {type(agent.cost)}"
-            )
+            raise TypeError(f"LT-ADMM-EMA requires PyTorchCost, but agent {agent} has cost of type {type(agent.cost)}")
 
         neighbors = network.neighbors(agent)
 
-        agent.aux_vars["phi"] = iop.copy(agent.x)
+        agent.aux_vars["phi"] = iop.copy(agent.aux_vars["x_train"])
         z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
 
-        if self.use_torch_optim:
-            # Set model parameters if using PyTorch optimizers
-            agent.cost._set_model_parameters(agent.aux_vars["phi"])
-            agent.cost.model.train()  # Set model to training mode
-
-        for _ in range(self.local_steps):
-            if self.use_torch_optim:
-                # Use PyTorch optimizer for local training
-                self.optimizers[agent].zero_grad()
-                batch_x, batch_y = agent.cost._get_batch_data("batch")
-                pred_y = agent.cost.model(batch_x)
-                loss = agent.cost.loss_fn(pred_y, batch_y)
-                loss.backward()
-                self.optimizers[agent].step()
-            else:
+        if self.opt_cls is not None:
+            # Use PyTorch optimizer for local training
+            agent.aux_vars["phi"] = agent.cost.local_training(x=agent.aux_vars["phi"], iterations=self.local_steps)
+        else:
+            for _ in range(self.local_steps):
                 # Manual gradient step
                 current_gradient = agent.cost.gradient(agent.aux_vars["phi"])
-                step = (
-                    current_gradient
-                    + self.penalty * len(neighbors) * agent.aux_vars["phi"]
-                    - z_sum
-                )
+                step = current_gradient + self.penalty * len(neighbors) * agent.aux_vars["phi"] - z_sum
                 agent.aux_vars["phi"] -= step_size * step
 
-        if agent in self.schedulers:
-            self.schedulers[agent].step()
-
-        agent.x = agent.aux_vars["phi"]
         agent.aux_vars["phi_ema"] = (
-            self.ema_factor * agent.aux_vars["phi_ema"]
-            + (1 - self.ema_factor) * agent.aux_vars["phi"]
+            self.ema_factor * agent.aux_vars["phi_ema"] + (1 - self.ema_factor) * agent.aux_vars["phi"]
         )
+        agent.aux_vars["x_train"] = agent.aux_vars["phi"]
+        agent.x = agent.aux_vars["phi_ema"] if self.set_x_to_ema else agent.aux_vars["phi"]
 
     def _communication(self, agent: Agent, network: P2PNetwork) -> None:
         """
@@ -223,25 +189,22 @@ class LT_ADMM_EMA(Algorithm):  # noqa: N801
         """
         for j in network.neighbors(agent):
             j_idx = agent.aux_vars["neighbor_to_idx"][j]
-            message = agent.aux_vars["z_i"][j_idx] - 2 * self.penalty * agent.x
+            message = agent.aux_vars["z_i"][j_idx] - 2 * self.penalty * (
+                agent.x if self.send_ema_x else agent.aux_vars["x_train"]
+            )
             network.send(agent, j, message)
 
-    def _auxiliary_update(self, agent: Agent, network: P2PNetwork) -> None:
+    def _auxiliary_update(self, agent: Agent) -> None:
         """
         Auxiliary update phase (Algorithm 1, line 12).
 
         Update z_ij,k+1 according to equation (3b).
         """
-        network.receive_all(agent)
-
         for j, msg in agent.messages.items():
             j_idx = agent.aux_vars["neighbor_to_idx"][j]
             new_z = (1 - self.alpha) * agent.aux_vars["z_i"][j_idx] - self.alpha * msg
             z_update = (
-                (
-                    self.ema_factor * agent.aux_vars["z_i"][j_idx]
-                    + (1 - self.ema_factor) * new_z
-                )
+                (self.ema_factor * agent.aux_vars["z_i"][j_idx] + (1 - self.ema_factor) * new_z)
                 if self.use_z_ema
                 else new_z
             )

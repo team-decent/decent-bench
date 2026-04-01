@@ -32,6 +32,7 @@ class _IndexDataset:
     """A simple dataset wrapper to handle indexing when using a PyTorch dataloader."""
 
     def __init__(self, dataset: Dataset):
+        super().__init__()
         self.dataset = dataset
 
         if not hasattr(self.dataset, "__len__"):
@@ -57,6 +58,12 @@ class PyTorchCost(EmpiricalRiskCost):
 
     """
 
+    _NON_PICKLABLE_STATE_KEYS = (
+        "_ft_compute_grad",
+        "_ft_compute_sample_grad",
+        # "_dataloader_iter", # TODO: Check if this is pickleable
+    )
+
     def __init__(
         self,
         dataset: Dataset,
@@ -65,6 +72,7 @@ class PyTorchCost(EmpiricalRiskCost):
         final_activation: torch.nn.Module | None = None,
         *,
         batch_size: EmpiricalRiskBatchSize = "all",
+        max_batch_size: int | None = None,
         device: SupportedDevices = SupportedDevices.CPU,
         use_dataloader: bool = False,
         dataloader_kwargs: dict[str, Any] | None = None,
@@ -86,13 +94,19 @@ class PyTorchCost(EmpiricalRiskCost):
                 model output when predicting targets using :meth:`predict`.
                 E.g., argmax if classification and model outputs logits.
             batch_size (EmpiricalRiskBatchSize): Size of mini-batches for stochastic methods, or "all" for full-batch.
-            device (SupportedDevices): Device to run computations on.
+            max_batch_size (int | None): Optional maximum batch size to perform computations in, which can be used to
+                avoid out-of-memory errors for large models/datasets. If specified, computations will be calculated in
+                chunks of size at most max_batch_size. This limit will be applied to all computations irregardless of
+                the batch_size or indices parameters; the result will still be the same.
+            device (SupportedDevices): Device to run computations on. Make sure to test CPU vs GPU performance for your
+                specific model and dataset, as it can vary.
             use_dataloader (bool): Whether to use DataLoader for batching.
                 Can be beneficial for large datasets to avoid loading all data into memory.
             dataloader_kwargs (dict | None): Additional arguments for the DataLoader.
             load_dataset (bool): If True, loads the entire dataset into memory to optimize data access.
                 This may lead to major speedups if the dataset is lazily loaded (e.g., loading data from disk), but it
-                might increase memory usage so set to False if memory is an issue.
+                might increase memory usage so set to False if memory is an issue. Setting this to False might break
+                checkpointing if the underlying dataset is not pickleable.
             compile_model (bool): Whether to compile the model using torch.compile for performance.
                 May improve speed after warm-up. Might need to try different modes based on the model and OS,
                 use compile_kwargs.
@@ -126,12 +140,15 @@ class PyTorchCost(EmpiricalRiskCost):
         self.loss_fn = loss_fn
         self.final_activation = final_activation if final_activation is not None else torch.nn.Identity()
         self._batch_size = self.n_samples if batch_size == "all" else batch_size
+        self._max_batch_size = max_batch_size if max_batch_size is not None else self.n_samples
         self._device = device
         self._use_dataloader = use_dataloader
         self._dataloader_kwargs = dataloader_kwargs if dataloader_kwargs is not None else {}
         self._load_dataset = load_dataset
         self._compile_model = compile_model
         self._compile_kwargs = compile_kwargs if compile_kwargs is not None else {}
+        self._optimizer = None
+        self._scheduler = None
 
         self._pytorch_device: str = iop.device_to_framework_device(device, framework=self.framework)
         self.model = self.model.to(self._pytorch_device)
@@ -151,6 +168,27 @@ class PyTorchCost(EmpiricalRiskCost):
         self.param_sizes = [p.numel() for p in self._params_list]
         self.total_params = sum(self.param_sizes)
         self.param_names = [n for n, _ in self.model.named_parameters()]
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Return a checkpoint-safe state for pickling."""
+        state = self.__dict__.copy()
+        for key in self._NON_PICKLABLE_STATE_KEYS:
+            state.pop(key, None)
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore state and clear transient runtime caches."""
+        # TODO: Delete this, only here for backwards compatibility with older checkpoints.
+        for key, value in state.items():
+            setattr(self, key, value)
+        if "_max_batch_size" not in state:
+            self._max_batch_size = self.batch_size
+
+        # for key, value in state.items():
+        #     setattr(self, key, value)
+        # self._dataloader = None
+        # self._last_batch_used = []
+        # self._remaining_batch_indices = []
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -246,11 +284,15 @@ class PyTorchCost(EmpiricalRiskCost):
                 inputs = data
             else:
                 raise TypeError(f"Data must be a list of torch.Tensor or a single torch.Tensor, got {type(data)}.")
-            inputs = inputs.to(self._pytorch_device)
-            outputs: torch.Tensor = self.model(inputs)
-            outputs = self.final_activation(outputs)
 
-        return outputs.detach().cpu().tolist()
+            final_outputs: list[torch.Tensor] = []
+            for i in range(0, inputs.shape[0], self._max_batch_size):
+                inputs_chunk = inputs[i : i + self._max_batch_size].to(self._pytorch_device)
+                outputs: torch.Tensor = self.model(inputs_chunk)
+                outputs = self.final_activation(outputs)
+                final_outputs.extend(outputs.detach().cpu().tolist())
+
+        return final_outputs
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.function)
     def function(self, x: torch.Tensor, indices: EmpiricalRiskIndices = "batch") -> float:
@@ -258,13 +300,16 @@ class PyTorchCost(EmpiricalRiskCost):
         if self.model.training:
             self.model.eval()
 
-        batch_x, batch_y = self._get_batch_data(indices)
+        batches = self._get_batch_data(indices)
+        total_loss = 0.0
 
         with torch.no_grad():
-            outputs = self.model(batch_x)
-            loss: torch.Tensor = self.loss_fn(outputs, batch_y)
+            for batch_x, batch_y in batches:
+                outputs = self.model(batch_x)
+                loss: torch.Tensor = self.loss_fn(outputs, batch_y)
+                total_loss += loss.item() * batch_x.shape[0]
 
-        return float(loss.cpu().item())
+        return float(total_loss / len(self.batch_used))
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.gradient)
     def gradient(
@@ -280,41 +325,82 @@ class PyTorchCost(EmpiricalRiskCost):
         if not self.model.training:
             self.model.train()
 
-        batch_x, batch_y = self._get_batch_data(indices)
+        batches = self._get_batch_data(indices)
 
-        # Forward pass
-        outputs = self.model(batch_x)
-        loss = self.loss_fn(outputs, batch_y)
+        if len(batches) == 1:
+            # Slightly faster path for single batch
+            batch_x, batch_y = batches[0]
+            outputs = self.model(batch_x)
+            loss = self.loss_fn(outputs, batch_y)
+            gradients = torch.autograd.grad(loss, self._params_list)
+            return torch.cat([g.flatten() for g in gradients])
 
-        # Compute gradients using torch.autograd.grad (doesn't modify model parameters)
-        gradients = torch.autograd.grad(loss, self._params_list)
+        # Accumulate chunk gradients with sample-count weighting so the final
+        # result is the mean gradient over all selected samples.
+        inv_total_samples = 1.0 / len(self.batch_used)
+        grad_acc = [torch.zeros_like(param) for param in self._params_list]
 
-        # Return concatenated gradient tensor
-        return torch.cat([g.flatten() for g in gradients])
+        for batch_x, batch_y in batches:
+            outputs = self.model(batch_x)
+            loss = self.loss_fn(outputs, batch_y)
+
+            gradients = torch.autograd.grad(loss, self._params_list)
+            weight = batch_x.shape[0] * inv_total_samples
+            for acc, grad in zip(grad_acc, gradients, strict=True):
+                acc.add_(grad, alpha=weight)
+
+        return torch.cat([g.flatten() for g in grad_acc])
 
     def _per_sample_gradients(self, x: torch.Tensor, indices: EmpiricalRiskIndices = "batch") -> torch.Tensor:
-        """Compute per-sample gradients for the specified indices. May need to batch calls due to memory constraints."""
+        """Compute per-sample gradients for the specified indices."""
         # Credit: https://docs.pytorch.org/tutorials/intermediate/per_sample_grads.html
         self._init_per_sample_grad()
         self._set_model_parameters(x)
         if not self.model.training:
             self.model.train()
 
-        batch_x, batch_y = self._get_batch_data(indices)
+        batches = self._get_batch_data(indices)
 
         params = {k: v.detach() for k, v in self.model.named_parameters()}
         buffers = {k: v.detach() for k, v in self.model.named_buffers()}
 
-        ft_per_sample_grads = self._ft_compute_sample_grad(params, buffers, batch_x, batch_y)
+        if len(batches) == 1:
+            batch_x, batch_y = batches[0]
+            ft_per_sample_grads = self._ft_compute_sample_grad(params, buffers, batch_x, batch_y)
+            batch_size = batch_x.shape[0]
+            grad_list = [
+                ft_per_sample_grads[name].view(batch_size, size)
+                for name, size in zip(self.param_names, self.param_sizes, strict=True)
+            ]
+            return torch.cat(grad_list, dim=1)
 
-        # Collect gradients and flatten them into a single tensor
-        batch_size = batch_x.shape[0]
-        # Concatenate all per-sample gradients
-        grad_list = [
-            ft_per_sample_grads[name].view(batch_size, size)
-            for name, size in zip(self.param_names, self.param_sizes, strict=True)
-        ]
-        return torch.cat(grad_list, dim=1)
+        param_offsets = [0]
+        for size in self.param_sizes:
+            param_offsets.append(param_offsets[-1] + size)
+
+        all_grads = torch.empty(
+            (len(self.batch_used), self.total_params),
+            dtype=self._params_list[0].dtype,
+            device=self._pytorch_device,
+        )
+        row_start = 0
+
+        for batch_x, batch_y in batches:
+            ft_per_sample_grads = self._ft_compute_sample_grad(params, buffers, batch_x, batch_y)
+
+            batch_size = batch_x.shape[0]
+            row_end = row_start + batch_size
+            for name, size, col_start, col_end in zip(
+                self.param_names,
+                self.param_sizes,
+                param_offsets[:-1],
+                param_offsets[1:],
+                strict=True,
+            ):
+                all_grads[row_start:row_end, col_start:col_end] = ft_per_sample_grads[name].view(batch_size, size)
+            row_start = row_end
+
+        return all_grads
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.hessian)
     def hessian(self, x: torch.Tensor, indices: EmpiricalRiskIndices = "batch") -> torch.Tensor:
@@ -343,6 +429,87 @@ class PyTorchCost(EmpiricalRiskCost):
 
         """
         raise NotImplementedError("Proximal operator is not implemented for NeuralNetworkCostFunction.")
+
+    def init_local_training(
+        self,
+        opt_cls: type[torch.optim.Optimizer],
+        opt_kwargs: dict[str, Any] | None = None,
+        sched_cls: type[torch.optim.lr_scheduler.LRScheduler] | None = None,
+        sched_kwargs: dict[str, Any] | None = None,
+    ) -> None:
+        """
+        Initialize the optimizer and scheduler for local training.
+
+        This method is required to be called before using :meth:`local_training` to set up the optimizer and scheduler.
+
+        Args:
+            opt_cls (type[torch.optim.Optimizer]): PyTorch optimizer class to use for local training.
+            opt_kwargs (dict[str, Any] | None): Keyword arguments for initializing the optimizer. The model parameters
+                will be passed as the first argument, so do not include them in opt_kwargs.
+            sched_cls (type[torch.optim.lr_scheduler.LRScheduler] | None): Optional PyTorch learning rate scheduler
+                class to use for local training. The scheduler will be stepped once at the end of each call to
+                :meth:`local_training`.
+            sched_kwargs (dict[str, Any] | None): Keyword arguments for initializing the scheduler. The optimizer will
+                be passed as the first argument, so do not include it in sched_kwargs.
+
+        Raises:
+            RuntimeError: If the optimizer is already initialized. This method is intended to be called only once
+            to set the optimizer for local training.
+
+        """
+        if self._optimizer is not None:
+            raise RuntimeError(
+                "Optimizer is already initialized. This method is intended to be called "
+                "only once to set the optimizer for local training."
+            )
+
+        if opt_kwargs is None:
+            opt_kwargs = {}
+        self._optimizer = opt_cls(self._params_list, **opt_kwargs)
+        if sched_cls is not None:
+            self._scheduler = sched_cls(self._optimizer, **(sched_kwargs or {}))
+
+    def local_training(self, x: torch.Tensor, iterations: int, indices: EmpiricalRiskIndices = "batch") -> torch.Tensor:
+        """
+        Perform local training steps using the provided optimizer.
+
+        Note:
+            This method
+            It is intended to be used in decentralized algorithms that support local training.
+
+        Args:
+            x (torch.Tensor): Initial parameters to start local training from.
+            iterations (int): Number of local training iterations to perform.
+            indices (EmpiricalRiskIndices): Indices of the samples to use for local training.
+
+        Raises:
+            RuntimeError: If no optimizer was provided during initialization.
+
+        """
+        if self._optimizer is None:
+            raise RuntimeError(
+                "Local training is not available because no optimizer was provided."
+                " Please call init_local_training to set up the optimizer before using local_training."
+            )
+
+        self._set_model_parameters(x)
+        if not self.model.training:
+            self.model.train()
+
+        for _ in range(iterations):
+            batches = self._get_batch_data(indices)
+
+            for batch_x, batch_y in batches:
+                self._optimizer.zero_grad()
+                outputs = self.model(batch_x)
+                loss = self.loss_fn(outputs, batch_y)
+                loss.backward()
+                self._optimizer.step()
+
+        if self._scheduler is not None:
+            self._scheduler.step()
+
+        return self._get_model_parameters()
 
     @override
     def _sample_batch_indices(self, indices: EmpiricalRiskIndices = "batch") -> list[int]:
@@ -380,7 +547,16 @@ class PyTorchCost(EmpiricalRiskCost):
 
         return batch_x, batch_y, batch_idx
 
-    def _get_batch_data(self, indices: EmpiricalRiskIndices = "batch") -> tuple[torch.Tensor, torch.Tensor]:
+    def _get_batch_data(self, indices: EmpiricalRiskIndices = "batch") -> list[tuple[torch.Tensor, torch.Tensor]]:
+        """
+        Get a list of batch data for the specified indices, each list item contains a tuple of (batch_x, batch_y).
+
+        The max size of each batch is determined by self._max_batch_size.
+
+        Raises:
+            RuntimeError: If batch data could not be retrieved, which should not happen under normal circumstances
+
+        """
         batch_x, batch_y, batch_idx = self._handle_indices(indices)
 
         if batch_x is None or batch_y is None or batch_idx is None:
@@ -390,7 +566,13 @@ class PyTorchCost(EmpiricalRiskCost):
         self._last_batch_x = batch_x.to(self._pytorch_device, non_blocking=True)
         self._last_batch_y = batch_y.to(self._pytorch_device, non_blocking=True)
 
-        return self._last_batch_x, self._last_batch_y
+        batches = []
+        for i in range(0, batch_x.shape[0], self._max_batch_size):
+            batch_x_chunk = self._last_batch_x[i : i + self._max_batch_size]
+            batch_y_chunk = self._last_batch_y[i : i + self._max_batch_size]
+            batches.append((batch_x_chunk, batch_y_chunk))
+
+        return batches
 
     def _handle_indices(
         self,

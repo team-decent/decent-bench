@@ -135,7 +135,8 @@ def resume_benchmark(  # noqa: PLR0912
             raise ValueError(f"Invalid checkpoint directory: metadata is not valid JSON - {e}") from e
 
     if create_backup:
-        checkpoint_manager.create_backup()
+        with Status("Creating backup of existing checkpoint directory..."):
+            checkpoint_manager.create_backup()
 
     LOGGER.info(
         f"Resuming benchmark from checkpoint '{checkpoint_manager.checkpoint_dir}' with {metadata['n_trials']} trials "

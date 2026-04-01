@@ -5,6 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from rich.progress import track
+
 import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, MetricResult
@@ -495,13 +497,17 @@ class CheckpointManager:  # noqa: PLR0904
             metadata: dict[str, Any] = json.load(f)
         return metadata
 
-    def load_benchmark_result(self) -> BenchmarkResult:
+    def load_benchmark_result(self, progress_bar: bool = False) -> BenchmarkResult:
         """
         Load benchmark problem configuration and states from checkpoint.
 
         If an algorithm does not have all trials completed, its results will be skipped and not included in the loaded
         benchmark result. This is to ensure that the metrics are not skewed by incomplete data and only include
         algorithms with full results. A warning will be logged for any incomplete algorithms.
+
+        Args:
+            progress_bar: Whether to show a progress bar while loading trials. This can be helpful if there are many
+                algorithms and trials, as loading can take some time.
 
         Returns:
             BenchmarkResult object containing the loaded benchmark problem, initial algorithms, and initial network.
@@ -512,7 +518,13 @@ class CheckpointManager:  # noqa: PLR0904
         metadata = self.load_metadata()
         n_trials = metadata["n_trials"]
         states: dict[Algorithm[Network], list[Network]] = {}
-        for idx, alg in enumerate(algorithms):
+        for idx, alg in track(
+            enumerate(algorithms),
+            total=len(algorithms),
+            description="Loading benchmark results...",
+            transient=True,
+            disable=not progress_bar,
+        ):
             completed_trials = self.get_completed_trials(idx, n_trials)
             if len(completed_trials) != n_trials:
                 LOGGER.warning(
@@ -586,6 +598,20 @@ class CheckpointManager:  # noqa: PLR0904
         if self.checkpoint_dir.exists():
             shutil.rmtree(self.checkpoint_dir)
             LOGGER.info(f"Cleared checkpoint directory: {self.checkpoint_dir}")
+
+    def checkpoint_size(self) -> int:
+        """
+        Calculate the total size of all checkpoint files in MB.
+
+        Returns:
+            Total size of checkpoint files in MB.
+
+        """
+        total_size = 0
+        for file in self.checkpoint_dir.rglob("*"):
+            if file.is_file():
+                total_size += file.stat().st_size
+        return total_size // (1024 * 1024)  # Convert to MB
 
     def _get_algorithm_dir(self, alg_idx: int) -> Path:
         """Get directory path for an algorithm."""

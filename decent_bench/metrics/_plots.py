@@ -56,6 +56,7 @@ def display_plots(
     plot_grid: bool = True,
     plot_format: Literal["png", "pdf", "svg"] = "png",
     plot_path: Path | None = None,
+    show_plots: bool = True,
 ) -> None:
     """
     Display plots for the metric results.
@@ -78,6 +79,8 @@ def display_plots(
         plot_path: optional directory path to save the generated plots as image files.
             Will be saved as "plot.png" or "plot_fig1.png", "plot_fig2.png", etc. if multiple figures.
             If not provided, the plots will only be displayed.
+        show_plots: whether to show the plots after creating them, defaults to ``True``. Can be useful to set to
+            ``False`` when running in a non-interactive environment or when only saving the plots without displaying.
 
     Note:
         Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
@@ -118,7 +121,13 @@ def display_plots(
         return
 
     # Save and show figures
-    _save_and_show_figures(all_figures, two_columns, plot_path=plot_path, plot_format=plot_format)
+    _save_and_show_figures(
+        all_figures,
+        two_columns,
+        plot_path=plot_path,
+        plot_format=plot_format,
+        show_plots=show_plots,
+    )
 
 
 def compute_plots(
@@ -297,6 +306,7 @@ def _save_and_show_figures(
     *,
     plot_path: Path | None,
     plot_format: Literal["png", "pdf", "svg"],
+    show_plots: bool,
 ) -> None:
     """Add legends, save figures to files, and display them."""
     for fig_idx, (fig, metric_subplots) in enumerate(figures_to_show):
@@ -311,7 +321,8 @@ def _save_and_show_figures(
         _add_legend_and_save(fig, metric_subplots, two_columns, current_plot_path)
 
     # Show all figures at once
-    plt.show()
+    if show_plots:
+        plt.show()
 
 
 def _organize_metrics_into_groups(

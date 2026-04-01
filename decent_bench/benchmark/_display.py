@@ -32,6 +32,7 @@ def display_metrics(
     compare_iterations_and_computational_cost: bool = False,
     save_path: str | Path | None = None,
     plot_format: Literal["png", "pdf", "svg"] = "png",
+    show_plots: bool = True,
     log_level: int = logging.INFO,
 ) -> None:
     """
@@ -68,6 +69,8 @@ def display_metrics(
             the provided ``save_path`` will be used. If neither a checkpoint manager or a save path is provided,
             the tables and plots are not saved to disk.
         plot_format: format to save plots in, defaults to ``png``. Can be ``png``, ``pdf``, or ``svg``.
+        show_plots: whether to show the plots after creating them, defaults to ``True``. Can be useful to set to
+            ``False`` when running in a non-interactive environment or when only saving the plots without displaying.
         log_level: minimum level to log, e.g. :data:`logging.INFO`
 
     Raises:
@@ -132,6 +135,7 @@ def display_metrics(
         plot_grid=plot_grid,
         plot_format=plot_format,
         plot_path=save_path,
+        show_plots=show_plots,
     )
 
 

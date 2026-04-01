@@ -2,6 +2,8 @@ import logging
 from json import JSONDecodeError
 from typing import TYPE_CHECKING
 
+from rich.status import Status
+
 from decent_bench.agents import AgentMetricsView
 from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
@@ -73,7 +75,8 @@ def compute_metrics(
             )
 
         try:
-            benchmark_result = checkpoint_manager.load_benchmark_result()
+            progress_bar_threshold = 1_000  # How many MB of checkpoint data should trigger showing a progress bar
+            benchmark_result = checkpoint_manager.load_benchmark_result(progress_bar=checkpoint_manager.checkpoint_size() > progress_bar_threshold)
         except (FileNotFoundError, KeyError) as e:
             raise ValueError(f"Invalid checkpoint directory: missing or corrupted metadata - {e}") from e
         except JSONDecodeError as e:
@@ -97,16 +100,17 @@ def compute_metrics(
     )
 
     if checkpoint_manager is not None:
-        flat_metrics: list[Metric] = []
-        if any(isinstance(m, list) for m in plot_metrics):
-            flat_metrics = [metric for group in plot_metrics for metric in group]  # type: ignore[union-attr]
-        else:
-            flat_metrics = plot_metrics  # type: ignore[assignment]
-        metadata = {
-            "table_metrics": [metric.table_description for metric in table_metrics],
-            "plot_metrics": [metric.plot_description for metric in flat_metrics],
-        }
-        checkpoint_manager.save_metrics_result(result)
-        checkpoint_manager.append_metadata(metadata)
+        with Status("Saving computed metrics..."):
+            flat_metrics: list[Metric] = []
+            if any(isinstance(m, list) for m in plot_metrics):
+                flat_metrics = [metric for group in plot_metrics for metric in group]  # type: ignore[union-attr]
+            else:
+                flat_metrics = plot_metrics  # type: ignore[assignment]
+            metadata = {
+                "table_metrics": [metric.table_description for metric in table_metrics],
+                "plot_metrics": [metric.plot_description for metric in flat_metrics],
+            }
+            checkpoint_manager.save_metrics_result(result)
+            checkpoint_manager.append_metadata(metadata)
 
     return result

@@ -19,8 +19,8 @@ if __name__ == "__main__":
         fov=math.pi,
         max_range=100,
         scan_spacing=5.0,
-        transform=torch.tensor,
-        label_transform=torch.tensor,
+        transform=torch.tensor,  # type: ignore[arg-type]
+        label_transform=torch.tensor,  # type: ignore[arg-type]
     )
 
     anim = visualize_nim_dataset(
