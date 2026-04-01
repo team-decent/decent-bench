@@ -15,8 +15,8 @@ class Cost(ABC):  # noqa: PLR0904
         self,
         other: object,
         *,
-        check_framework: bool = False,
-        check_device: bool = False,
+        check_framework: bool = True,
+        check_device: bool = True,
     ) -> None:
         """
         Validate that another object can participate in a binary cost operation.

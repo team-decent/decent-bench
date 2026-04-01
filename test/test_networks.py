@@ -6,6 +6,7 @@ from decent_bench.agents import Agent
 from decent_bench.networks import P2PNetwork, FedNetwork
 from decent_bench.costs import L2RegularizerCost
 from decent_bench.utils import interoperability as iop
+from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 from decent_bench.schemes import (
     AgentActivationScheme,
     AlwaysActive,
@@ -121,6 +122,36 @@ def test_fed_network_default_server_is_always_active() -> None:
     net = FedNetwork(clients=clients)
 
     assert isinstance(net.server()._activation, AlwaysActive)  # noqa: SLF001
+
+
+def test_p2p_network_rejects_mixed_framework_costs() -> None:
+    agents = [
+        Agent(0, L2RegularizerCost((2,), framework=SupportedFrameworks.NUMPY)),
+        Agent(1, L2RegularizerCost((2,), framework=SupportedFrameworks.PYTORCH)),
+    ]
+
+    with pytest.raises(ValueError, match="same shape, framework, and device"):
+        P2PNetwork(graph=nx.complete_graph(2), agents=agents)
+
+
+def test_p2p_network_rejects_mixed_device_costs() -> None:
+    agents = [
+        Agent(0, L2RegularizerCost((2,), device=SupportedDevices.CPU)),
+        Agent(1, L2RegularizerCost((2,), device=SupportedDevices.GPU)),
+    ]
+
+    with pytest.raises(ValueError, match="same shape, framework, and device"):
+        P2PNetwork(graph=nx.complete_graph(2), agents=agents)
+
+
+def test_fed_network_rejects_mixed_framework_clients() -> None:
+    clients = [
+        Agent(0, L2RegularizerCost((2,), framework=SupportedFrameworks.NUMPY)),
+        Agent(1, L2RegularizerCost((2,), framework=SupportedFrameworks.PYTORCH)),
+    ]
+
+    with pytest.raises(ValueError, match="same shape, framework, and device"):
+        FedNetwork(clients=clients)
 
 
 def test_initialize_message_schemes_with_dict_all_agents() -> None:
