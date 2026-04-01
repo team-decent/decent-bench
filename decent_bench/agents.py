@@ -383,7 +383,7 @@ class AgentHistory:
         return self._x_history.__repr__()
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class AgentMetricsView:
     """Immutable view of agent that exposes useful properties for calculating metrics."""
 

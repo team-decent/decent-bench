@@ -22,11 +22,12 @@ from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 from examples.nim.src.algorithms.lt_admm_ema import LT_ADMM_EMA
 
 if __name__ == "__main__":
+    folder = "results/heterogeneous_2"
     iterations = 1000
     n_trials = 3
     n_agents = 5
     n_neighbors = 4
-    state_snapshot_period = 25
+    state_snapshot_period = 50
     samples_per_partition = 1000
     heterogeneity = False
     targets_per_partition = 2
@@ -96,7 +97,7 @@ if __name__ == "__main__":
     for batch_size in batch_sizes:
         for ss in step_sizes:
             checkpoint_path = Path(
-                f"results/mnist_bs_{batch_size}_ss_{ss}_hg_{heterogeneity}_tp_{targets_per_partition}"
+                f"{folder}/mnist_bs_{batch_size}_ss_{ss}_hg_{heterogeneity}_tp_{targets_per_partition}"
             )
             if checkpoint_path.exists():
                 print(f"Checkpoint already exists at {checkpoint_path}. Skipping benchmark.")
@@ -124,6 +125,7 @@ if __name__ == "__main__":
                     loss_fn=nn.CrossEntropyLoss(),
                     final_activation=ArgmaxActivation(),
                     batch_size=batch_size,
+                    max_batch_size=batch_size,
                     device=device,
                     use_dataloader=use_dataloader,
                     dataloader_kwargs={} if device == SupportedDevices.GPU else {"pin_memory": True},

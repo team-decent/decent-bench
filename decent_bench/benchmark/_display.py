@@ -3,6 +3,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from rich.status import Status
+
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.metrics import (
     ComputationalCost,
@@ -104,7 +106,8 @@ def display_metrics(
                 "to load the metrics result from."
             )
         try:
-            metrics_result = checkpoint_manager.load_metrics_result()
+            with Status("Loading metrics result from checkpoint manager..."):
+                metrics_result = checkpoint_manager.load_metrics_result()
         except FileNotFoundError as e:
             raise FileNotFoundError(f"Metrics result file not found in checkpoint manager: {e}") from e
 

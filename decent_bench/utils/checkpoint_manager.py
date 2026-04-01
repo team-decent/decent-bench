@@ -8,6 +8,7 @@ from typing import Any
 from rich.progress import track
 
 import decent_bench.utils.interoperability as iop
+from decent_bench.agents import AgentMetricsView
 from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, MetricResult
 from decent_bench.networks import Network
@@ -559,6 +560,11 @@ class CheckpointManager:  # noqa: PLR0904
 
         """
         metric_path = self.checkpoint_dir / "metric_computation.pkl"
+
+        # Remove agent metrics from checkpoint to save space (can be a lot),
+        # this can be loaded again from the benchmark result
+        metrics_result.agent_metrics = None
+
         with metric_path.open("wb") as f:
             pickle.dump(metrics_result, f)
         LOGGER.info(f"Saved computed metrics result to {metric_path}")
@@ -574,6 +580,14 @@ class CheckpointManager:  # noqa: PLR0904
         metric_path = self.checkpoint_dir / "metric_computation.pkl"
         with metric_path.open("rb") as f:
             metrics_result: MetricResult = pickle.load(f)  # noqa: S301
+
+        if metrics_result.agent_metrics is None:
+            benchmark_result = self.load_benchmark_result()
+            resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
+            for alg, networks in benchmark_result.states.items():
+                resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
+            metrics_result.agent_metrics = resulting_agent_states
+
         LOGGER.info(f"Loaded computed metrics result from {metric_path}")
         return metrics_result
 

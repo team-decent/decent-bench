@@ -32,7 +32,6 @@ class _IndexDataset:
     """A simple dataset wrapper to handle indexing when using a PyTorch dataloader."""
 
     def __init__(self, dataset: Dataset):
-        super().__init__()
         self.dataset = dataset
 
         if not hasattr(self.dataset, "__len__"):
@@ -62,6 +61,13 @@ class PyTorchCost(EmpiricalRiskCost):
         "_ft_compute_grad",
         "_ft_compute_sample_grad",
         # "_dataloader_iter", # TODO: Check if this is pickleable
+        "_last_batch_x",
+        "_last_batch_y",
+        "_params_list",
+        "param_shapes",
+        "param_sizes",
+        "total_params",
+        "param_names",
     )
 
     def __init__(
@@ -159,15 +165,10 @@ class PyTorchCost(EmpiricalRiskCost):
             self.model = cast("torch.nn.Module", torch.compile(self.model, **self._compile_kwargs))
 
         self._dataloader: torch.utils.data.DataLoader[Any] | None = None
-        self._last_batch_used = []  # Pre-allocate list for last used batch for efficiency in _get_batch_data
+        self._last_batch_used: list[int] = []
         self._remaining_batch_indices: list[int] = []  # Used for tracking remaining indices when not using dataloader
 
-        # Store parameter shapes for flattening/unflattening
-        self._params_list = list(self.model.parameters())  # Cache for faster access
-        self.param_shapes = [p.shape for p in self._params_list]
-        self.param_sizes = [p.numel() for p in self._params_list]
-        self.total_params = sum(self.param_sizes)
-        self.param_names = [n for n, _ in self.model.named_parameters()]
+        self._init_param_caches()
 
     def __getstate__(self) -> dict[str, Any]:
         """Return a checkpoint-safe state for pickling."""
@@ -178,17 +179,16 @@ class PyTorchCost(EmpiricalRiskCost):
 
     def __setstate__(self, state: dict[str, Any]) -> None:
         """Restore state and clear transient runtime caches."""
-        # TODO: Delete this, only here for backwards compatibility with older checkpoints.
         for key, value in state.items():
             setattr(self, key, value)
+        self._init_param_caches()
+        # TODO: Delete this, only here for backwards compatibility with older checkpoints.
         if "_max_batch_size" not in state:
             self._max_batch_size = self.batch_size
 
         # for key, value in state.items():
         #     setattr(self, key, value)
         # self._dataloader = None
-        # self._last_batch_used = []
-        # self._remaining_batch_indices = []
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -221,11 +221,6 @@ class PyTorchCost(EmpiricalRiskCost):
     @property
     def m_cvx(self) -> float:
         return float("nan")
-
-    def _clean(self) -> None:
-        """Clean up cache."""
-        self._last_batch_x = torch.empty(0)
-        self._last_batch_y = torch.empty(0)
 
     def _set_model_parameters(self, x: torch.Tensor) -> None:
         """
@@ -603,7 +598,7 @@ class PyTorchCost(EmpiricalRiskCost):
             indices = [indices]
 
         if isinstance(indices, list):
-            if len(indices) == len(self.batch_used) and indices == self.batch_used:
+            if len(indices) == len(self.batch_used) and indices == self.batch_used and hasattr(self, "_last_batch_x"):
                 # Use cached batch so we don't have to re-stack
                 return self._last_batch_x, self._last_batch_y, self._last_batch_used
 
@@ -646,6 +641,15 @@ class PyTorchCost(EmpiricalRiskCost):
             self._ft_compute_sample_grad = torch.compile(self._ft_compute_sample_grad, **self._compile_kwargs)
         except Exception as e:
             LOGGER.warning(f"Error compiling per-sample gradient function: {e}\n\nContinuing without compilation.")
+
+    def _init_param_caches(self) -> None:
+        """Initialize parameter caches for flattening/unflattening."""
+        # Store parameter shapes for flattening/unflattening
+        self._params_list = list(self.model.parameters())  # Cache for faster access
+        self.param_shapes = [p.shape for p in self._params_list]
+        self.param_sizes = [p.numel() for p in self._params_list]
+        self.total_params = sum(self.param_sizes)
+        self.param_names = [n for n, _ in self.model.named_parameters()]
 
     def __add__(self, other: Cost) -> Cost:
         return super().__add__(other)
