@@ -144,6 +144,16 @@ def test_p2p_network_rejects_mixed_device_costs() -> None:
         P2PNetwork(graph=nx.complete_graph(2), agents=agents)
 
 
+def test_p2p_network_rejects_mismatched_cost_shapes() -> None:
+    agents = [
+        Agent(0, L2RegularizerCost((2,))),
+        Agent(1, L2RegularizerCost((3,))),
+    ]
+
+    with pytest.raises(ValueError, match="same shape, framework, and device"):
+        P2PNetwork(graph=nx.complete_graph(2), agents=agents)
+
+
 def test_fed_network_rejects_mixed_framework_clients() -> None:
     clients = [
         Agent(0, L2RegularizerCost((2,), framework=SupportedFrameworks.NUMPY)),
@@ -152,6 +162,14 @@ def test_fed_network_rejects_mixed_framework_clients() -> None:
 
     with pytest.raises(ValueError, match="same shape, framework, and device"):
         FedNetwork(clients=clients)
+
+
+def test_fed_network_rejects_custom_server_with_mixed_framework() -> None:
+    clients = [Agent(i, L2RegularizerCost((2,), framework=SupportedFrameworks.NUMPY)) for i in range(2)]
+    server = Agent(99, L2RegularizerCost((2,), framework=SupportedFrameworks.PYTORCH), activation=AlwaysActive())
+
+    with pytest.raises(ValueError, match="same shape, framework, and device"):
+        FedNetwork(clients=clients, server=server)
 
 
 def test_initialize_message_schemes_with_dict_all_agents() -> None:
