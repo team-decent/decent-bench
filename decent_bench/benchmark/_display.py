@@ -153,21 +153,21 @@ def _filter_algorithms(
         metrics_result.agent_metrics = {
             algorithm: metrics
             for algorithm, metrics in metrics_result.agent_metrics.items()
-            if algorithm in algorithms or algorithm.name in selected_names
+            if algorithm.name in selected_names
         }
 
     if metrics_result.table_results is not None:
         metrics_result.table_results = {
             algorithm: table_results
             for algorithm, table_results in metrics_result.table_results.items()
-            if algorithm in algorithms or algorithm.name in selected_names
+            if algorithm.name in selected_names
         }
 
     if metrics_result.plot_results is not None:
         metrics_result.plot_results = {
             algorithm: plot_results
             for algorithm, plot_results in metrics_result.plot_results.items()
-            if algorithm in algorithms or algorithm.name in selected_names
+            if algorithm.name in selected_names
         }
 
     return metrics_result

@@ -35,6 +35,14 @@ if TYPE_CHECKING:
     from decent_bench.utils.progress_bar import ProgressBarHandle
 
 
+def _validate_unique_algorithm_names(algorithms: list[Algorithm[Network]]) -> None:
+    names = [alg.name for alg in algorithms]
+    duplicate_names = sorted({n for n in names if names.count(n) > 1})
+    if duplicate_names:
+        duplicates = ", ".join(duplicate_names)
+        raise ValueError(f"Algorithm names must be unique, duplicates found: {duplicates}")
+
+
 def resume_benchmark(  # noqa: PLR0912
     checkpoint_manager: "CheckpointManager",
     increase_iterations: int = 0,
@@ -101,6 +109,7 @@ def resume_benchmark(  # noqa: PLR0912
     Raises:
         ValueError: If the checkpoint directory does not exist, is empty, or contains invalid metadata.
         ValueError: If increase_iterations or increase_trials is negative.
+        ValueError: If any two algorithms loaded from the checkpoint share the same name.
 
     """
     if not checkpoint_manager.checkpoint_dir.exists():
@@ -121,6 +130,7 @@ def resume_benchmark(  # noqa: PLR0912
             algorithms = checkpoint_manager.load_initial_algorithms()
             if algorithms is None:
                 raise ValueError("Initial algorithms not found in checkpoint metadata")
+            _validate_unique_algorithm_names(algorithms)
 
             problem = checkpoint_manager.load_benchmark_problem()
             if problem is None:
@@ -250,8 +260,10 @@ def benchmark(
 
     Raises:
         ValueError: If the checkpoint directory is not empty when initializing the CheckpointManager.
+        ValueError: If any two algorithms share the same name.
 
     """
+    _validate_unique_algorithm_names(algorithms)
     log_listener, manager, mp_context = _init_logging_and_multiprocessing(log_level, max_processes, benchmark_problem)
 
     if checkpoint_manager is not None:

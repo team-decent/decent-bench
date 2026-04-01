@@ -269,13 +269,13 @@ def test_xerror_not_unavailable_with_x_optimal() -> None:  # noqa: D103
 
 
 def test_metrics_short_circuit_without_test_data(monkeypatch) -> None:  # noqa: D103
-    def _fail(*args, **kwargs):  # noqa: ANN002, ANN003
-        raise AssertionError("metric util should not be called without test_data")
+    def _unavailable(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise metric_utils.MetricUnavailableError("requires problem.test_data")
 
-    monkeypatch.setattr(metric_utils, "accuracy", _fail)
-    monkeypatch.setattr(metric_utils, "mse", _fail)
-    monkeypatch.setattr(metric_utils, "precision", _fail)
-    monkeypatch.setattr(metric_utils, "recall", _fail)
+    monkeypatch.setattr(metric_utils, "accuracy", _unavailable)
+    monkeypatch.setattr(metric_utils, "mse", _unavailable)
+    monkeypatch.setattr(metric_utils, "precision", _unavailable)
+    monkeypatch.setattr(metric_utils, "recall", _unavailable)
 
     agents = [_agent_metrics_view(1.0), _agent_metrics_view(2.0)]
     problem = SimpleNamespace(test_data=None)
@@ -291,50 +291,91 @@ def test_metrics_short_circuit_without_test_data(monkeypatch) -> None:  # noqa: 
 
 
 def test_metrics_short_circuit_without_empirical_risk_cost(monkeypatch) -> None:  # noqa: D103
-    def _fail(*args, **kwargs):  # noqa: ANN002, ANN003
-        raise AssertionError("metric util should not be called without EmpiricalRiskCost")
-
-    monkeypatch.setattr(metric_utils, "accuracy", _fail)
-    monkeypatch.setattr(metric_utils, "mse", _fail)
-    monkeypatch.setattr(metric_utils, "precision", _fail)
-    monkeypatch.setattr(metric_utils, "recall", _fail)
-    monkeypatch.setattr(metric_utils, "split_dataset", _fail)
+    monkeypatch.setattr(
+        metric_utils,
+        "accuracy",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            metric_utils.MetricUnavailableError("accuracy only applies if all agents have EmpiricalRiskCost")
+        ),
+    )
+    monkeypatch.setattr(
+        metric_utils,
+        "mse",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            metric_utils.MetricUnavailableError("MSE only applies if all agents have EmpiricalRiskCost")
+        ),
+    )
+    monkeypatch.setattr(
+        metric_utils,
+        "precision",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            metric_utils.MetricUnavailableError("precision only applies if all agents have EmpiricalRiskCost")
+        ),
+    )
+    monkeypatch.setattr(
+        metric_utils,
+        "recall",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            metric_utils.MetricUnavailableError("recall only applies if all agents have EmpiricalRiskCost")
+        ),
+    )
 
     agents = [_agent_metrics_view(1.0), _agent_metrics_view(2.0)]
-    # test_data exists, so any NaN output must come from non-EmpiricalRiskCost short-circuit.
     problem = SimpleNamespace(test_data=[(np.array([0.0]), 0)])
     metrics = [Accuracy([np.average]), MSE([np.average]), Precision([np.average]), Recall([np.average])]
+    expected_reasons = {
+        Accuracy: "accuracy only applies if all agents have EmpiricalRiskCost",
+        MSE: "MSE only applies if all agents have EmpiricalRiskCost",
+        Precision: "precision only applies if all agents have EmpiricalRiskCost",
+        Recall: "recall only applies if all agents have EmpiricalRiskCost",
+    }
 
     for metric in metrics:
         metric.clear_unavailable()
         values = metric.get_table_data(agents, problem)
         assert metric.is_unavailable
-        assert metric.unavailable_reason == "requires EmpiricalRiskCost agents"
+        assert metric.unavailable_reason == expected_reasons[type(metric)]
         assert len(values) == len(agents)
         assert all(np.isnan(value) for value in values)
 
 
 def test_classification_metrics_short_circuit_without_integer_targets(monkeypatch) -> None:  # noqa: D103
-    def _fail(*args, **kwargs):  # noqa: ANN002, ANN003
-        raise AssertionError("classification util should not be called with non-integer targets")
-
-    monkeypatch.setattr(metric_utils, "accuracy", _fail)
-    monkeypatch.setattr(metric_utils, "precision", _fail)
-    monkeypatch.setattr(metric_utils, "recall", _fail)
-    monkeypatch.setattr(metric_utils, "split_dataset", lambda _: ((), np.array([0.1, 0.2])))
-
-    # Patch the class used in isinstance checks so these stub agents pass the EmpiricalRiskCost gate.
-    monkeypatch.setattr("decent_bench.metrics.metric_library.costs.EmpiricalRiskCost", object)
+    monkeypatch.setattr(
+        metric_utils,
+        "accuracy",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            metric_utils.MetricUnavailableError("accuracy only applies for integer targets, dtype float64 found")
+        ),
+    )
+    monkeypatch.setattr(
+        metric_utils,
+        "precision",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            metric_utils.MetricUnavailableError("precision only applies for integer targets, dtype float64 found")
+        ),
+    )
+    monkeypatch.setattr(
+        metric_utils,
+        "recall",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            metric_utils.MetricUnavailableError("recall only applies for integer targets, dtype float64 found")
+        ),
+    )
 
     agents = [_agent_metrics_view(1.0), _agent_metrics_view(2.0)]
     problem = SimpleNamespace(test_data=[(np.array([0.0]), 0.1)])
     metrics = [Accuracy([np.average]), Precision([np.average]), Recall([np.average])]
+    expected_reasons = {
+        Accuracy: "accuracy only applies for integer targets, dtype float64 found",
+        Precision: "precision only applies for integer targets, dtype float64 found",
+        Recall: "recall only applies for integer targets, dtype float64 found",
+    }
 
     for metric in metrics:
         metric.clear_unavailable()
         values = metric.get_table_data(agents, problem)
         assert metric.is_unavailable
-        assert metric.unavailable_reason == "requires integer targets"
+        assert metric.unavailable_reason == expected_reasons[type(metric)]
         assert len(values) == len(agents)
         assert all(np.isnan(value) for value in values)
 

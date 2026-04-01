@@ -17,9 +17,6 @@ if TYPE_CHECKING:
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
 
-PlotMetricData = tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]
-
-
 def compute_metrics(
     benchmark_result: BenchmarkResult | None = None,
     checkpoint_manager: "CheckpointManager | None" = None,
@@ -130,43 +127,25 @@ def _filter_table_metrics_with_results(
     table_metrics: list[Metric],
     table_results: Mapping[Algorithm[Network], Mapping[Metric, Mapping[str, tuple[float, float]]]],
 ) -> list[Metric]:
-    filtered_metrics = [
-        metric for metric in table_metrics if any(metric in results for results in table_results.values())
-    ]
-    omitted = [metric for metric in table_metrics if metric not in filtered_metrics]
-    if omitted:
-        logger.LOGGER.warning(
-            f"Omitting unavailable table metrics: {', '.join(metric.table_description for metric in omitted)}"
-        )
-    return filtered_metrics
+    return [metric for metric in table_metrics if any(metric in results for results in table_results.values())]
 
 
 def _filter_plot_metrics_with_results(
     plot_metrics: list[Metric] | list[list[Metric]],
-    plot_results: Mapping[Algorithm[Network], Mapping[Metric, PlotMetricData]],
+    plot_results: Mapping[
+        Algorithm[Network], Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]
+    ],
 ) -> list[Metric] | list[list[Metric]]:
     available_metrics = {metric for results in plot_results.values() for metric in results}
 
     if any(isinstance(metric, list) for metric in plot_metrics):
         grouped_plot_metrics = cast("list[list[Metric]]", plot_metrics)
         filtered_groups: list[list[Metric]] = []
-        omitted: list[Metric] = []
         for group in grouped_plot_metrics:
             filtered_group = [metric for metric in group if metric in available_metrics]
-            omitted.extend(metric for metric in group if metric not in available_metrics)
             if filtered_group:
                 filtered_groups.append(filtered_group)
-        if omitted:
-            logger.LOGGER.warning(
-                f"Omitting unavailable plot metrics: {', '.join(metric.plot_description for metric in omitted)}"
-            )
         return filtered_groups
 
     flat_plot_metrics = cast("list[Metric]", plot_metrics)
-    filtered_metrics = [metric for metric in flat_plot_metrics if metric in available_metrics]
-    omitted = [metric for metric in flat_plot_metrics if metric not in available_metrics]
-    if omitted:
-        logger.LOGGER.warning(
-            f"Omitting unavailable plot metrics: {', '.join(metric.plot_description for metric in omitted)}"
-        )
-    return filtered_metrics
+    return [metric for metric in flat_plot_metrics if metric in available_metrics]
