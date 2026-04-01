@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Iterable
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, cast
 
@@ -161,7 +162,7 @@ class PyTorchDatasetHandler(DatasetHandler):
         """
         # Group indices by class in a single pass
         class_to_indices: dict[int, list[int]] = defaultdict(list)
-        for idx, sample in enumerate(self.torch_dataset):  # type: ignore[misc]
+        for idx, sample in enumerate(cast("Iterable[Any]", self.torch_dataset)):
             _, label = cast("tuple[Any, int]", sample)
             if label in class_to_indices or len(class_to_indices) < (self.n_partitions * self.targets_per_partition):
                 class_to_indices[label].append(idx)

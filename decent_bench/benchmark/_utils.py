@@ -75,7 +75,7 @@ def create_classification_problem(
             )
 
         # Mypy cannot infer that cost_cls is PyTorchCost here
-        costs: list[PyTorchCost] = [
+        pytorch_costs: list[PyTorchCost] = [
             PyTorchCost(
                 dataset=p,
                 model=model_gen(),
@@ -86,13 +86,15 @@ def create_classification_problem(
             )
             for p in dataset.get_partitions()
         ]
+        costs: Sequence[Cost] = pytorch_costs
         x_optimal = None
     elif cost_cls is LogisticRegressionCost:
-        costs: list[LogisticRegressionCost] = [
+        classification_costs: list[LogisticRegressionCost] = [
             LogisticRegressionCost(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()
         ]
-        sum_cost = reduce(add, costs)
+        sum_cost = reduce(add, classification_costs)
         x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
+        costs = classification_costs
     else:
         raise ValueError(f"Unsupported cost class: {cost_cls}")
 
@@ -160,17 +162,19 @@ def create_regression_problem(
                 output_size=1,
             )
 
-        costs: list[PyTorchCost] = [
+        pytorch_costs: list[PyTorchCost] = [
             PyTorchCost(dataset=p, model=model_gen(), loss_fn=torch.nn.MSELoss(), batch_size=batch_size, device=device)
             for p in dataset.get_partitions()
         ]
+        costs: Sequence[Cost] = pytorch_costs
         x_optimal = None
     elif cost_cls is LinearRegressionCost:
-        costs: list[LinearRegressionCost] = [
+        regression_costs: list[LinearRegressionCost] = [
             LinearRegressionCost(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()
         ]
-        sum_cost = reduce(add, costs)
+        sum_cost = reduce(add, regression_costs)
         x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
+        costs = regression_costs
     else:
         raise ValueError(f"Unsupported cost class: {cost_cls}")
 
