@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Iterable
 from collections import defaultdict
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, cast
 
 import decent_bench.utils.interoperability as iop
