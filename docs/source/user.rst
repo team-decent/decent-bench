@@ -22,6 +22,12 @@ Generally benchmark execution involves three steps:
 2. Compute metrics from the benchmark results, which returns a :class:`~decent_bench.benchmark.MetricResult` object.
 3. Display the computed metrics in tables and plots.
 
+Note:
+    When running benchmarks, be sure to guard the execution code with ``if __name__ == "__main__":`` to avoid issues with multiprocessing on some platforms (e.g., Windows).
+    This is a common Python practice to ensure that the benchmark code only runs when the script is executed directly, and not when it is imported as a module or when worker 
+    processes are spawned for multiprocessing. If you forget to include this guard and you are using multiprocessing, i.e. with ``max_processes > 1`` in :func:`~decent_bench.benchmark.benchmark`, 
+    you may encounter errors or unexpected behavior due to the way multiprocessing works on different platforms.
+
 **The following is a working example. The remainder of the user guide will be updated soon.**
 
 .. code-block:: python
@@ -36,39 +42,40 @@ Generally benchmark execution involves three steps:
 
     import networkx as nx
 
-    ## problem definition
-    n_agents = 10
+    if __name__ == "__main__":
+        ## problem definition
+        n_agents = 10
 
-    costs, x_optimal = create_quadratic_problem(10, n_agents)
+        costs, x_optimal = create_quadratic_problem(10, n_agents)
 
-    agents = [Agent(i, cost) for i, cost in enumerate(costs)]
-    graph = nx.complete_graph(n_agents)
-    
-    net = P2PNetwork(
-        graph=graph,
-        agents=agents,
-    )
-
-    bp = benchmark.BenchmarkProblem(net, x_optimal)
-
-    ## benchmarking
-    cm = CheckpointManager(checkpoint_dir="results/benchmark_1", checkpoint_step=100, keep_n_checkpoints=2)
-
-    num_iter = 1000
-    step = 0.001
-
-    res = benchmark.benchmark(algorithms=[
-            DGD(iterations=num_iter, step_size=step),
-            ATC(iterations=num_iter, step_size=step),
-        ],
-        benchmark_problem=bp,
-        checkpoint_manager=cm,
-        n_trials=1,
+        agents = [Agent(i, cost) for i, cost in enumerate(costs)]
+        graph = nx.complete_graph(n_agents)
+        
+        net = P2PNetwork(
+            graph=graph,
+            agents=agents,
         )
 
-    metr = benchmark.compute_metrics(res, checkpoint_manager=cm)
+        bp = benchmark.BenchmarkProblem(net, x_optimal)
 
-    benchmark.display_metrics(metr, checkpoint_manager=cm)
+        ## benchmarking
+        cm = CheckpointManager(checkpoint_dir="results/benchmark_1", checkpoint_step=100, keep_n_checkpoints=2)
+
+        num_iter = 1000
+        step = 0.001
+
+        res = benchmark.benchmark(algorithms=[
+                DGD(iterations=num_iter, step_size=step),
+                ATC(iterations=num_iter, step_size=step),
+            ],
+            benchmark_problem=bp,
+            checkpoint_manager=cm,
+            n_trials=1,
+            )
+
+        metr = benchmark.compute_metrics(res, checkpoint_manager=cm)
+
+        benchmark.display_metrics(metr, checkpoint_manager=cm)
 
 
 Benchmark executions will have outputs like these:
