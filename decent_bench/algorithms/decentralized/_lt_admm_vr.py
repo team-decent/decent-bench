@@ -28,6 +28,7 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
         iterations: Total number of communication rounds (K)
         local_steps: Number of local training steps (tau)
         step_size: Local step size (gamma), can be a constant or a function of iteration
+        aux_step_size: Local step size (beta), can be a constant or a function of iteration
         penalty: Penalty parameter (rho)
         alpha: Relaxation parameter (alpha)
         x0: Initial parameters (optional)
@@ -72,7 +73,7 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
             }
             i.initialize(x=self.x0[i], aux_vars=aux_vars)
 
-    def _local_training(self, agent: Agent, network: P2PNetwork, step_size: float) -> None:
+    def _local_training(self, agent: Agent, network: P2PNetwork, step_size: float, aux_step_size: float) -> None:
         """
         Enhanced local training with variance reduction.
 
@@ -84,10 +85,11 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
         if not isinstance(agent.cost, EmpiricalRiskCost):
             raise TypeError("LT-ADMM-VR is only compatible with EmpiricalRiskCost.")
 
-        neighbors = network.neighbors(agent)
+        neighbors = network.active_neighbors(agent)
 
         agent.aux_vars["phi"] = iop.copy(agent.x)
         z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
+        multiplier = self.penalty * len(neighbors)
 
         if not self.v2:
             r_grads = agent.cost.gradient(agent.x, indices="all", reduction=None)
@@ -99,8 +101,8 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
             r_grads = iop.mean(agent.aux_vars["r_grads"][batch_used], dim=0)
             current_gradient = (batch_grad - r_grads) + iop.mean(agent.aux_vars["r_grads"], dim=0)
 
-            step = current_gradient + self.penalty * len(neighbors) * agent.aux_vars["phi"] - z_sum
-            agent.aux_vars["phi"] -= step_size * step
+            step = step_size * current_gradient + aux_step_size * (multiplier * agent.x - z_sum)
+            agent.aux_vars["phi"] -= step
 
             r_grads = agent.cost.gradient(agent.aux_vars["phi"], indices=batch_used, reduction=None)
             agent.aux_vars["r_grads"][batch_used] = r_grads

@@ -104,7 +104,7 @@ class DiNNO(P2PAlgorithm):
 
     def _local_training(self, agent: Agent, step_size: float) -> None:
         # Initialize psi^0 = theta_i^k (line 11)
-        psi = agent.x
+        psi = iop.copy(agent.x)
 
         neighbor_thetas = []
         neighbor_thetas_sum: Array | None = None

@@ -118,7 +118,7 @@ class KGT(P2PAlgorithm):
         # Perform K local gradient steps (line 6)
         # x_i^(t)+k+1 = x_i^(t)+k - eta_c(grad F_i(x_i^(t)+k; xi_i^(t)+k) + c_i^(t))
         for _ in range(self.local_steps):
-            gradient = agent.cost.gradient(agent.x)
+            gradient = agent.cost.gradient(x_k)
             x_k -= step_size * (gradient + agent.aux_vars["c"])
         agent.x = x_k
 
