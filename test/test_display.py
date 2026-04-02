@@ -2,11 +2,11 @@ import numpy as np
 import pytest
 from types import SimpleNamespace
 
-import decent_bench.metrics.metric_utils as metric_utils
 from decent_bench.agents import AgentHistory, AgentMetricsView
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, compute_metrics
 from decent_bench.benchmark._display import display_metrics
 from decent_bench.benchmark._metric_result import MetricResult
+from decent_bench.costs import LinearRegressionCost
 from decent_bench.metrics._metric import Metric
 from decent_bench.metrics._plots import MAX_LOG_PLOT_VALUE, compute_plots
 from decent_bench.metrics.metric_library import Accuracy, MSE, Precision, Recall, Regret, XError
@@ -119,55 +119,69 @@ def _build_minimal_benchmark_result() -> BenchmarkResult:
     )
 
 
+def _build_display_metric_result(
+    algorithms: list[_AlgorithmStub],
+    table_metrics: list[_MetricStub],
+    plot_metrics: list[_MetricStub] | list[list[_MetricStub]],
+    *,
+    agent_x_values: list[float] | None = None,
+    table_results: dict[_AlgorithmStub, dict[_MetricStub, dict[str, tuple[float, float]]]] | None = None,
+    plot_results: dict[_AlgorithmStub, dict[_MetricStub, tuple[list[float], list[float], list[float], list[float]]]] | None = None,
+) -> MetricResult:
+    if agent_x_values is None:
+        agent_x_values = [1.0] * len(algorithms)
+
+    flat_plot_metrics = plot_metrics if isinstance(plot_metrics[0], _MetricStub) else [
+        metric for group in plot_metrics for metric in group
+    ]
+
+    default_table_results: dict[_AlgorithmStub, dict[_MetricStub, dict[str, tuple[float, float]]]] = {}
+    default_plot_results: dict[_AlgorithmStub, dict[_MetricStub, tuple[list[float], list[float], list[float], list[float]]]] = {}
+
+    for alg_idx, alg in enumerate(algorithms):
+        default_table_results[alg] = {}
+        default_plot_results[alg] = {}
+        for metric_idx, metric in enumerate(table_metrics):
+            value = float(alg_idx + metric_idx + 1)
+            default_table_results[alg][metric] = {"avg": (value, 0.0)}
+        for metric_idx, metric in enumerate(flat_plot_metrics):
+            value = float(alg_idx + metric_idx + 1)
+            default_plot_results[alg][metric] = ([0.0], [value], [value], [value])
+
+    return MetricResult(
+        agent_metrics={alg: [[_agent_metrics_view(agent_x_values[idx])]] for idx, alg in enumerate(algorithms)},
+        table_metrics=table_metrics,
+        plot_metrics=plot_metrics,
+        table_results=table_results or default_table_results,
+        plot_results=plot_results or default_plot_results,
+    )
+
+
 # -----------------------------------------------------------------------------
 # display_metrics Filtering Tests
 # -----------------------------------------------------------------------------
 
-def test_display_metrics_filters_algorithms(monkeypatch) -> None:  # noqa: D103
+@pytest.mark.parametrize(
+    ("algorithm_filter", "expected_algorithms"),
+    [
+        ("object", ["B"]),
+        ("name", ["A"]),
+    ],
+)
+def test_display_metrics_filters_algorithms(monkeypatch, algorithm_filter: str, expected_algorithms: list[str]) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
     alg_b = _AlgorithmStub("B")
     metric = _MetricStub("table one", "plot one")
 
-    metrics_result = MetricResult(
-        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]], alg_b: [[_agent_metrics_view(1.0)]]},
-        table_metrics=[metric],
-        plot_metrics=[[metric]],
-        table_results={alg_a: {metric: {"avg": (1.0, 0.0)}}, alg_b: {metric: {"avg": (2.0, 0.0)}}},
-        plot_results={
-            alg_a: {metric: ([0.0], [1.0], [1.0], [1.0])},
-            alg_b: {metric: ([0.0], [2.0], [2.0], [2.0])},
-        },
-    )
-
-    captured = _run_display_with_capture(monkeypatch, metrics_result, algorithms=[alg_b])
+    metrics_result = _build_display_metric_result([alg_a, alg_b], [metric], [[metric]])
+    algorithms = [alg_b] if algorithm_filter == "object" else ["A"]
+    captured = _run_display_with_capture(monkeypatch, metrics_result, algorithms=algorithms)
 
     assert "table" in captured
     assert "plot" in captured
-    assert [alg.name for alg in captured["table"].table_results] == ["B"]
-    assert [alg.name for alg in captured["table"].plot_results] == ["B"]
-    assert [alg.name for alg in captured["table"].agent_metrics] == ["B"]
-
-
-def test_display_metrics_filters_algorithms_by_name(monkeypatch) -> None:  # noqa: D103
-    alg_a = _AlgorithmStub("A")
-    alg_b = _AlgorithmStub("B")
-    metric = _MetricStub("table one", "plot one")
-
-    metrics_result = MetricResult(
-        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]], alg_b: [[_agent_metrics_view(1.0)]]},
-        table_metrics=[metric],
-        plot_metrics=[[metric]],
-        table_results={alg_a: {metric: {"avg": (1.0, 0.0)}}, alg_b: {metric: {"avg": (2.0, 0.0)}}},
-        plot_results={
-            alg_a: {metric: ([0.0], [1.0], [1.0], [1.0])},
-            alg_b: {metric: ([0.0], [2.0], [2.0], [2.0])},
-        },
-    )
-
-    captured = _run_display_with_capture(monkeypatch, metrics_result, algorithms=["A"])
-
-    assert "table" in captured
-    assert [alg.name for alg in captured["table"].table_results] == ["A"]
+    assert [alg.name for alg in captured["table"].table_results] == expected_algorithms
+    assert [alg.name for alg in captured["table"].plot_results] == expected_algorithms
+    assert [alg.name for alg in captured["table"].agent_metrics] == expected_algorithms
 
 
 def test_display_metrics_keeps_nan_table_metrics(monkeypatch) -> None:  # noqa: D103
@@ -176,10 +190,11 @@ def test_display_metrics_keeps_nan_table_metrics(monkeypatch) -> None:  # noqa: 
     valid_metric = _MetricStub("valid table", "valid plot")
     nan_metric = _MetricStub("nan table", "nan plot")
 
-    metrics_result = MetricResult(
-        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]], alg_b: [[_agent_metrics_view(2.0)]]},
-        table_metrics=[valid_metric, nan_metric],
-        plot_metrics=[valid_metric, nan_metric],
+    metrics_result = _build_display_metric_result(
+        [alg_a, alg_b],
+        [valid_metric, nan_metric],
+        [valid_metric, nan_metric],
+        agent_x_values=[1.0, 2.0],
         table_results={
             alg_a: {
                 valid_metric: {"avg": (1.0, 0.1)},
@@ -211,18 +226,7 @@ def test_display_metrics_filters_metrics_by_name(monkeypatch) -> None:  # noqa: 
     metric_1 = _MetricStub("table one", "plot one")
     metric_2 = _MetricStub("table two", "plot two")
 
-    metrics_result = MetricResult(
-        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]]},
-        table_metrics=[metric_1, metric_2],
-        plot_metrics=[[metric_1], [metric_2]],
-        table_results={alg_a: {metric_1: {"avg": (1.0, 0.0)}, metric_2: {"avg": (2.0, 0.0)}}},
-        plot_results={
-            alg_a: {
-                metric_1: ([0.0], [1.0], [1.0], [1.0]),
-                metric_2: ([0.0], [2.0], [2.0], [2.0]),
-            }
-        },
-    )
+    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [[metric_1], [metric_2]])
 
     captured = _run_display_with_capture(
         monkeypatch,
@@ -244,18 +248,7 @@ def test_display_metrics_filters_metrics_with_mixed_objects_and_names(monkeypatc
     metric_1 = _MetricStub("table one", "plot one")
     metric_2 = _MetricStub("table two", "plot two")
 
-    metrics_result = MetricResult(
-        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]]},
-        table_metrics=[metric_1, metric_2],
-        plot_metrics=[[metric_1], [metric_2]],
-        table_results={alg_a: {metric_1: {"avg": (1.0, 0.0)}, metric_2: {"avg": (2.0, 0.0)}}},
-        plot_results={
-            alg_a: {
-                metric_1: ([0.0], [1.0], [1.0], [1.0]),
-                metric_2: ([0.0], [2.0], [2.0], [2.0]),
-            }
-        },
-    )
+    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [[metric_1], [metric_2]])
 
     captured = _run_display_with_capture(
         monkeypatch,
@@ -278,17 +271,7 @@ def test_display_metrics_filters_algorithms_with_mixed_objects_and_names(monkeyp
     alg_c = _AlgorithmStub("C")
     metric = _MetricStub("table one", "plot one")
 
-    metrics_result = MetricResult(
-        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]], alg_b: [[_agent_metrics_view(1.0)]], alg_c: [[_agent_metrics_view(1.0)]]},
-        table_metrics=[metric],
-        plot_metrics=[[metric]],
-        table_results={alg_a: {metric: {"avg": (1.0, 0.0)}}, alg_b: {metric: {"avg": (2.0, 0.0)}}, alg_c: {metric: {"avg": (3.0, 0.0)}}},
-        plot_results={
-            alg_a: {metric: ([0.0], [1.0], [1.0], [1.0])},
-            alg_b: {metric: ([0.0], [2.0], [2.0], [2.0])},
-            alg_c: {metric: ([0.0], [3.0], [3.0], [3.0])},
-        },
-    )
+    metrics_result = _build_display_metric_result([alg_a, alg_b, alg_c], [metric], [[metric]])
 
     captured = _run_display_with_capture(monkeypatch, metrics_result, algorithms=[alg_a, "C"])
 
@@ -350,23 +333,7 @@ def test_display_metrics_shows_only_tables_when_plot_metrics_empty(monkeypatch) 
     metric_1 = _MetricStub("table one", "plot one")
     metric_2 = _MetricStub("table two", "plot two")
 
-    metrics_result = MetricResult(
-        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]]},
-        table_metrics=[metric_1, metric_2],
-        plot_metrics=[[metric_1], [metric_2]],
-        table_results={
-            alg_a: {
-                metric_1: {"avg": (1.0, 0.0)},
-                metric_2: {"avg": (2.0, 0.0)},
-            }
-        },
-        plot_results={
-            alg_a: {
-                metric_1: ([0.0], [1.0], [1.0], [1.0]),
-                metric_2: ([0.0], [2.0], [2.0], [2.0]),
-            }
-        },
-    )
+    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [[metric_1], [metric_2]])
 
     captured = _run_display_with_capture(
         monkeypatch,
@@ -384,23 +351,7 @@ def test_display_metrics_shows_only_plots_when_table_metrics_empty(monkeypatch) 
     metric_1 = _MetricStub("table one", "plot one")
     metric_2 = _MetricStub("table two", "plot two")
 
-    metrics_result = MetricResult(
-        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]]},
-        table_metrics=[metric_1, metric_2],
-        plot_metrics=[[metric_1], [metric_2]],
-        table_results={
-            alg_a: {
-                metric_1: {"avg": (1.0, 0.0)},
-                metric_2: {"avg": (2.0, 0.0)},
-            }
-        },
-        plot_results={
-            alg_a: {
-                metric_1: ([0.0], [1.0], [1.0], [1.0]),
-                metric_2: ([0.0], [2.0], [2.0], [2.0]),
-            }
-        },
-    )
+    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [[metric_1], [metric_2]])
 
     captured = _run_display_with_capture(
         monkeypatch,
@@ -555,139 +506,65 @@ def test_compute_plots_truncates_trials_at_over_threshold_value() -> None:  # no
 # Metric Availability Tests
 # -----------------------------------------------------------------------------
 
-def test_xerror_marks_unavailable_without_x_optimal() -> None:  # noqa: D103
+def test_xerror_unavailable_without_x_optimal() -> None:  # noqa: D103
     x_error = XError([np.average])
-    x_error.clear_unavailable()
-    _ = x_error.get_table_data([_agent_metrics_view(1.0)], SimpleNamespace(x_optimal=None))
-    assert x_error.is_unavailable
-    assert x_error.unavailable_reason == "requires problem.x_optimal"
+    available, reason = x_error.is_available(SimpleNamespace(x_optimal=None))
+    assert not available
+    assert reason == "requires problem.x_optimal"
 
 
-def test_xerror_not_unavailable_with_x_optimal() -> None:  # noqa: D103
+def test_xerror_available_with_x_optimal() -> None:  # noqa: D103
     x_error = XError([np.average])
-    x_error.clear_unavailable()
-    _ = x_error.get_table_data([_agent_metrics_view(1.0)], SimpleNamespace(x_optimal=np.array([0.0])))
-    assert not x_error.is_unavailable
+    available, reason = x_error.is_available(SimpleNamespace(x_optimal=np.array([0.0])))
+    assert available
+    assert reason is None
 
 
-def test_metrics_short_circuit_without_test_data(monkeypatch) -> None:  # noqa: D103
-    def _unavailable(*args, **kwargs):  # noqa: ANN002, ANN003
-        raise metric_utils.MetricUnavailableError("requires problem.test_data")
+def test_regret_unavailable_without_x_optimal() -> None:  # noqa: D103
+    regret = Regret([np.average])
+    available, reason = regret.is_available(SimpleNamespace(x_optimal=None))
+    assert not available
+    assert reason == "requires problem.x_optimal"
 
-    monkeypatch.setattr(metric_utils, "accuracy", _unavailable)
-    monkeypatch.setattr(metric_utils, "mse", _unavailable)
-    monkeypatch.setattr(metric_utils, "precision", _unavailable)
-    monkeypatch.setattr(metric_utils, "recall", _unavailable)
 
-    agents = [_agent_metrics_view(1.0), _agent_metrics_view(2.0)]
+def test_metrics_unavailable_without_test_data() -> None:  # noqa: D103
     problem = SimpleNamespace(test_data=None)
     metrics = [Accuracy([np.average]), MSE([np.average]), Precision([np.average]), Recall([np.average])]
 
     for metric in metrics:
-        metric.clear_unavailable()
-        values = metric.get_table_data(agents, problem)
-        assert metric.is_unavailable
-        assert metric.unavailable_reason == "requires problem.test_data"
-        assert len(values) == len(agents)
-        assert all(np.isnan(value) for value in values)
+        available, reason = metric.is_available(problem)
+        assert not available
+        assert reason == "requires problem.test_data"
 
 
-def test_metrics_short_circuit_without_empirical_risk_cost(monkeypatch) -> None:  # noqa: D103
-    monkeypatch.setattr(
-        metric_utils,
-        "accuracy",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            metric_utils.MetricUnavailableError("accuracy only applies if all agents have EmpiricalRiskCost")
-        ),
-    )
-    monkeypatch.setattr(
-        metric_utils,
-        "mse",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            metric_utils.MetricUnavailableError("MSE only applies if all agents have EmpiricalRiskCost")
-        ),
-    )
-    monkeypatch.setattr(
-        metric_utils,
-        "precision",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            metric_utils.MetricUnavailableError("precision only applies if all agents have EmpiricalRiskCost")
-        ),
-    )
-    monkeypatch.setattr(
-        metric_utils,
-        "recall",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            metric_utils.MetricUnavailableError("recall only applies if all agents have EmpiricalRiskCost")
-        ),
-    )
-
-    agents = [_agent_metrics_view(1.0), _agent_metrics_view(2.0)]
-    problem = SimpleNamespace(test_data=[(np.array([0.0]), 0)])
+def test_metrics_unavailable_without_empirical_risk_cost() -> None:  # noqa: D103
+    network = SimpleNamespace(agents=lambda: [SimpleNamespace(cost=object())])
+    problem = SimpleNamespace(test_data=[(np.array([1.0]), 0)], network=network)
     metrics = [Accuracy([np.average]), MSE([np.average]), Precision([np.average]), Recall([np.average])]
-    expected_reasons = {
-        Accuracy: "accuracy only applies if all agents have EmpiricalRiskCost",
-        MSE: "MSE only applies if all agents have EmpiricalRiskCost",
-        Precision: "precision only applies if all agents have EmpiricalRiskCost",
-        Recall: "recall only applies if all agents have EmpiricalRiskCost",
-    }
 
     for metric in metrics:
-        metric.clear_unavailable()
-        values = metric.get_table_data(agents, problem)
-        assert metric.is_unavailable
-        assert metric.unavailable_reason == expected_reasons[type(metric)]
-        assert len(values) == len(agents)
-        assert all(np.isnan(value) for value in values)
+        available, reason = metric.is_available(problem)
+        assert not available
+        assert "EmpiricalRiskCost" in reason
 
 
-def test_classification_metrics_short_circuit_without_integer_targets(monkeypatch) -> None:  # noqa: D103
-    monkeypatch.setattr(
-        metric_utils,
-        "accuracy",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            metric_utils.MetricUnavailableError("accuracy only applies for integer targets, dtype float64 found")
-        ),
-    )
-    monkeypatch.setattr(
-        metric_utils,
-        "precision",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            metric_utils.MetricUnavailableError("precision only applies for integer targets, dtype float64 found")
-        ),
-    )
-    monkeypatch.setattr(
-        metric_utils,
-        "recall",
-        lambda *args, **kwargs: (_ for _ in ()).throw(
-            metric_utils.MetricUnavailableError("recall only applies for integer targets, dtype float64 found")
-        ),
-    )
+def test_classification_metrics_unavailable_with_float_targets() -> None:  # noqa: D103
+    lr_cost = LinearRegressionCost([(np.array([1.0]), np.array([1.0]))])
+    network = SimpleNamespace(agents=lambda: [SimpleNamespace(cost=lr_cost)])
+    problem = SimpleNamespace(test_data=[(np.array([0.0]), 0.1)], network=network)
 
-    agents = [_agent_metrics_view(1.0), _agent_metrics_view(2.0)]
-    problem = SimpleNamespace(test_data=[(np.array([0.0]), 0.1)])
-    metrics = [Accuracy([np.average]), Precision([np.average]), Recall([np.average])]
-    expected_reasons = {
-        Accuracy: "accuracy only applies for integer targets, dtype float64 found",
-        Precision: "precision only applies for integer targets, dtype float64 found",
-        Recall: "recall only applies for integer targets, dtype float64 found",
-    }
-
-    for metric in metrics:
-        metric.clear_unavailable()
-        values = metric.get_table_data(agents, problem)
-        assert metric.is_unavailable
-        assert metric.unavailable_reason == expected_reasons[type(metric)]
-        assert len(values) == len(agents)
-        assert all(np.isnan(value) for value in values)
+    for metric in [Accuracy([np.average]), Precision([np.average]), Recall([np.average])]:
+        available, reason = metric.is_available(problem)
+        assert not available
+        assert "integer targets" in reason
 
 
-def test_regret_marks_unavailable_without_x_optimal() -> None:  # noqa: D103
-    regret = Regret([np.average])
-    regret.clear_unavailable()
-    _ = regret.get_table_data([_agent_metrics_view(1.0)], SimpleNamespace(x_optimal=None))
-    assert regret.is_unavailable
-    assert regret.unavailable_reason == "requires problem.x_optimal"
+def test_is_available_default_returns_true() -> None:  # noqa: D103
+    """Base Metric.is_available default: always available."""
+    metric = _MetricStub("t", "p")
+    available, reason = metric.is_available(SimpleNamespace())
+    assert available
+    assert reason is None
 
 
 # -----------------------------------------------------------------------------

@@ -11,28 +11,12 @@ from rich.table import Column
 from sklearn import metrics as sk_metrics
 
 import decent_bench.utils.interoperability as iop
-from decent_bench import costs
 from decent_bench.agents import AgentMetricsView
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import Dataset
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
-
-
-class MetricUnavailableError(Exception):
-    """
-    Exception raised when a requested metric cannot be computed.
-
-    For example when ``x_optimal`` is not available and :func:`regret` cannot be computed.
-
-    Args:
-        message: motivation for unavailability
-
-    """
-
-    def __init__(self, message: str):
-        super().__init__(message)
 
 
 class MetricProgressBar(Progress):
@@ -91,7 +75,7 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
     return iop.mean(iop.stack(all_x_at_iter), dim=0)
 
 
-def regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
+def _regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
     r"""
     Calculate the global regret at *iteration* (or using the agents' final x if *iteration* is -1).
 
@@ -99,13 +83,7 @@ def regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iter
 
     .. include:: snippets/global_cost_error.rst
 
-    Raises:
-        MetricUnavailableError: if ``problem.x_optimal`` is not available
-
     """
-    if getattr(problem, "x_optimal", None) is None:
-        raise MetricUnavailableError("requires problem.x_optimal")
-
     x_opt = problem.x_optimal
     mean_x = x_mean(tuple(agents), iteration)
     optimal_cost = sum(a.cost.function(x_opt) for a in agents)  # type: ignore[arg-type, misc]
@@ -113,7 +91,7 @@ def regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iter
     return actual_cost - optimal_cost
 
 
-def gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> float:
+def _gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> float:
     r"""
     Calculate the global gradient norm at *iteration* (or using the agents' final x if *iteration* is -1).
 
@@ -126,7 +104,7 @@ def gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> fl
     return float(la.norm(grad_avg)) ** 2
 
 
-def x_error(agent: AgentMetricsView, problem: "BenchmarkProblem", iteration: int = -1) -> float:
+def _x_error(agent: AgentMetricsView, problem: "BenchmarkProblem", iteration: int = -1) -> float:
     r"""
     Calculate x error at *iteration* (or at the agent's final x if *iteration* is -1).
 
@@ -136,20 +114,14 @@ def x_error(agent: AgentMetricsView, problem: "BenchmarkProblem", iteration: int
     where :math:`\mathbf{x}_k` is the agent's local x at iteration k,
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
 
-    Raises:
-        MetricUnavailableError: if ``problem.x_optimal`` is not available
-
     """
-    if getattr(problem, "x_optimal", None) is None:
-        raise MetricUnavailableError("requires problem.x_optimal")
-
     agent_iteration = agent.x_history.max() if iteration == -1 else iteration
     x_at_iteration = iop.to_numpy(agent.x_history[agent_iteration])
     opt_x = iop.to_numpy(problem.x_optimal)  # type: ignore[arg-type]
     return float(la.norm(x_at_iteration - opt_x))
 
 
-def accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
+def _accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the accuracy per agent.
 
@@ -163,30 +135,17 @@ def accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", it
     Returns:
         list of accuracies per agent at *iteration*
 
-    Raises:
-        MetricUnavailableError: if ``problem.test_data`` is missing, if any agent cost is not
-            :class:`~decent_bench.costs.EmpiricalRiskCost`, or if the targets are not integer-valued
-
     """
-    if getattr(problem, "test_data", None) is None:
-        raise MetricUnavailableError("requires problem.test_data")
-    if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
-        raise MetricUnavailableError("accuracy only applies if all agents have EmpiricalRiskCost")
-
-    _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
-
-    if test_y.dtype.kind not in {"i", "u"}:
-        raise MetricUnavailableError(f"accuracy only applies for integer targets, dtype {test_y.dtype} found")
-
+    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
     ret: list[float] = []
     for agent in agents:
         agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-        preds = predict_agent(agent, agent_iteration, problem)
+        preds = _predict_agent(agent, agent_iteration, problem)
         ret.append(float(sk_metrics.accuracy_score(test_y, preds)))
     return ret
 
 
-def mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
+def _mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the mean squared error (MSE) per agent.
 
@@ -200,26 +159,17 @@ def mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iterati
     Returns:
         list of MSE per agent
 
-    Raises:
-        MetricUnavailableError: if ``problem.test_data`` is missing or if any agent cost is not
-            :class:`~decent_bench.costs.EmpiricalRiskCost`
-
     """
-    if getattr(problem, "test_data", None) is None:
-        raise MetricUnavailableError("requires problem.test_data")
-    if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
-        raise MetricUnavailableError("MSE only applies if all agents have EmpiricalRiskCost")
-
     ret: list[float] = []
-    _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
+    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
     for agent in agents:
         agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-        preds = predict_agent(agent, agent_iteration, problem)
+        preds = _predict_agent(agent, agent_iteration, problem)
         ret.append(sk_metrics.mean_squared_error(test_y, preds))
     return ret
 
 
-def precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
+def _precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the precision per agent.
 
@@ -234,30 +184,17 @@ def precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", i
     Returns:
         list of precision per agent at *iteration*
 
-    Raises:
-        MetricUnavailableError: if ``problem.test_data`` is missing, if any agent cost is not
-            :class:`~decent_bench.costs.EmpiricalRiskCost`, or if the targets are not integer-valued
-
     """
-    if getattr(problem, "test_data", None) is None:
-        raise MetricUnavailableError("requires problem.test_data")
-    if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
-        raise MetricUnavailableError("precision only applies if all agents have EmpiricalRiskCost")
-
-    _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
-
-    if test_y.dtype.kind not in {"i", "u"}:
-        raise MetricUnavailableError(f"precision only applies for integer targets, dtype {test_y.dtype} found")
-
+    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
     ret: list[float] = []
     for agent in agents:
         agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-        preds = predict_agent(agent, agent_iteration, problem)
+        preds = _predict_agent(agent, agent_iteration, problem)
         ret.append(float(sk_metrics.precision_score(test_y, preds, average="micro")))
     return ret
 
 
-def recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
+def _recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the recall per agent.
 
@@ -272,30 +209,17 @@ def recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iter
     Returns:
         list of recall per agent at *iteration*
 
-    Raises:
-        MetricUnavailableError: if ``problem.test_data`` is missing, if any agent cost is not
-            :class:`~decent_bench.costs.EmpiricalRiskCost`, or if the targets are not integer-valued
-
     """
-    if getattr(problem, "test_data", None) is None:
-        raise MetricUnavailableError("requires problem.test_data")
-    if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
-        raise MetricUnavailableError("recall only applies if all agents have EmpiricalRiskCost")
-
-    _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
-
-    if test_y.dtype.kind not in {"i", "u"}:
-        raise MetricUnavailableError(f"recall only applies for integer targets, dtype {test_y.dtype} found")
-
+    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
     ret: list[float] = []
     for agent in agents:
         agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-        preds = predict_agent(agent, agent_iteration, problem)
+        preds = _predict_agent(agent, agent_iteration, problem)
         ret.append(float(sk_metrics.recall_score(test_y, preds, average="micro")))
     return ret
 
 
-def split_dataset(data: Dataset) -> tuple[tuple[Array, ...], NDArray[float64]]:
+def _split_dataset(data: Dataset) -> tuple[tuple[Array, ...], NDArray[float64]]:
     """
     Split dataset into features and labels.
 
@@ -313,34 +237,10 @@ def split_dataset(data: Dataset) -> tuple[tuple[Array, ...], NDArray[float64]]:
 
 
 @cache
-def predict_agent(agent: AgentMetricsView, iteration: int, problem: "BenchmarkProblem") -> NDArray[float64]:
-    """
-    Get the predictions of *agent* at *iteration* on *test_x*.
-
-    This function is cached since predictions can be expensive to compute and are used in multiple metrics.
-
-    Args:
-        agent: agent to get predictions from
-        iteration: iteration to get predictions at
-        problem: benchmark problem containing test data
-
-    Returns:
-        predictions of *agent* at *iteration* on *test_x*
-
-    Raises:
-        TypeError: if *agent* does not have an :class:`~decent_bench.costs.EmpiricalRiskCost` cost
-        ValueError: if *problem* does not have test data
-
-    """
-    if not isinstance(agent.cost, costs.EmpiricalRiskCost):
-        raise TypeError("Predictions can only be obtained for agents with EmpiricalRiskCost")
-
-    if getattr(problem, "test_data", None) is None:
-        raise ValueError("Test data is required to get predictions but is not provided in the problem")
-
-    test_x, _ = split_dataset(problem.test_data)  # type: ignore[arg-type]
-
-    return iop.to_numpy(agent.cost.predict(agent.x_history[iteration], list(test_x)))
+def _predict_agent(agent: AgentMetricsView, iteration: int, problem: "BenchmarkProblem") -> NDArray[float64]:
+    """Get the predictions of *agent* at *iteration*. Cached since predictions may be expensive."""
+    test_x, _ = _split_dataset(problem.test_data)  # type: ignore[arg-type]
+    return iop.to_numpy(agent.cost.predict(agent.x_history[iteration], list(test_x)))  # type: ignore[attr-defined]
 
 
 def all_sorted_iterations(agents: Sequence[AgentMetricsView]) -> list[int]:

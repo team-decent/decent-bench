@@ -63,7 +63,7 @@ def compute_metrics(
         All used table- and plot-metrics will be saved to the checkpoints' metadata if a checkpoint manager is provided,
         in order to know which metrics were computed and can be displayed later.
 
-        Metrics that mark themselves unavailable during computation (through ``Metric.mark_unavailable``), are
+        Metrics that return ``False`` from :meth:`~decent_bench.metrics.Metric.is_available` for the given problem
         filtered out from the returned metric lists. Warnings are emitted with the omitted metric names.
 
         Plot metrics can still be available even when their final table value is ``nan``: plot computation keeps the

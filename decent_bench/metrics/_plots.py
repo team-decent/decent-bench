@@ -184,27 +184,20 @@ def compute_plots(  # noqa: PLR0914
         )
 
         for metric in flat_metrics:
-            metric.clear_unavailable()
             progress.update(plot_task, status=f"Task: {metric.plot_description}")
+            available, reason = metric.is_available(problem)
 
-            for alg_idx, (alg, agent_states) in enumerate(resulting_agent_states.items()):
+            if not available:
+                LOGGER.warning(f"Skipping plot metric '{metric.plot_description}' because it is unavailable: {reason}")
+                progress.advance(plot_task, advance=len(resulting_agent_states))
+                continue
+
+            for alg, agent_states in resulting_agent_states.items():
                 data_per_trial: list[Sequence[tuple[X, Y]]] = _plot_data_per_trial(
                     agent_states,
                     problem,
                     metric,
                 )
-
-                if metric.is_unavailable:
-                    reason = metric.unavailable_reason or "unknown reason"
-                    LOGGER.warning(
-                        f"Skipping plot metric '{metric.plot_description}' because it is unavailable: {reason}"
-                    )
-                    for result in results.values():
-                        result.pop(metric, None)
-                    remaining = len(resulting_agent_states) - alg_idx
-                    for _ in range(remaining):
-                        progress.advance(plot_task)
-                    break
 
                 truncated_data_per_trial, had_non_finite = _truncate_to_common_finite_prefix(data_per_trial)
 

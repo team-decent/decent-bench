@@ -7,6 +7,7 @@ import numpy as np
 
 import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
+from decent_bench import costs
 from decent_bench.agents import AgentMetricsView
 from decent_bench.metrics._metric import Metric
 
@@ -29,12 +30,20 @@ class Regret(Metric):
     .. include:: snippets/global_cost_error.rst
 
     Note:
-        Requires ``problem.x_optimal``. If it is missing, this metric marks itself unavailable and returns NaN.
+        Available only when ``problem.x_optimal`` is provided.
 
     """
 
     table_description: str = "regret \n[<1e-9 = exact conv.]"
     plot_description: str = "regret"
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "x_optimal", None) is None:
+            return False, "requires problem.x_optimal"
+        return True, None
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -42,11 +51,7 @@ class Regret(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        try:
-            return (utils.regret(agents, problem, iteration),)
-        except utils.MetricUnavailableError as e:
-            self.mark_unavailable(str(e))
-            return (float("nan"),)
+        return (utils._regret(agents, problem, iteration),)  # noqa: SLF001
 
 
 class GradientNorm(Metric):
@@ -74,7 +79,7 @@ class GradientNorm(Metric):
         _: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        return (utils.gradient_norm(agents, iteration),)
+        return (utils._gradient_norm(agents, iteration),)  # noqa: SLF001
 
 
 class XError(Metric):
@@ -97,12 +102,20 @@ class XError(Metric):
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
 
     Note:
-        Requires ``problem.x_optimal``. If it is missing, this metric marks itself unavailable and returns NaN.
+        Available only when ``problem.x_optimal`` is provided.
 
     """
 
     table_description: str = "x error"
     plot_description: str = "x error"
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "x_optimal", None) is None:
+            return False, "requires problem.x_optimal"
+        return True, None
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -110,11 +123,7 @@ class XError(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        try:
-            return [utils.x_error(a, problem, iteration) for a in agents]
-        except utils.MetricUnavailableError as e:
-            self.mark_unavailable(str(e))
-            return [float("nan") for _ in agents]
+        return [utils._x_error(a, problem, iteration) for a in agents]  # noqa: SLF001
 
 
 class ConsensusError(Metric):
@@ -401,13 +410,11 @@ class Accuracy(Metric):
     where TP, TN, FP, and FN are true positives, true negatives, false positives, and false negatives, respectively.
 
     Note:
-        Requires all of the following:
+        Available only when:
 
-        - ``problem.test_data`` is provided
-        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`
-        - target labels are integer-valued
-
-        If any requirement is not satisfied, this metric marks itself unavailable and returns NaN.
+        - ``problem.test_data`` is provided,
+        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`,
+        - target labels are integer-valued.
 
     """
 
@@ -415,17 +422,26 @@ class Accuracy(Metric):
     plot_description: str = "accuracy"
     can_diverge: bool = False
 
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "test_data", None) is None:
+            return False, "requires problem.test_data"
+        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+            return False, "accuracy only applies if all agents have EmpiricalRiskCost"
+        _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type] # noqa: SLF001
+        if test_y.dtype.kind not in {"i", "u"}:
+            return False, f"accuracy only applies for integer targets, dtype {test_y.dtype} found"
+        return True, None
+
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        try:
-            return utils.accuracy(agents, problem, iteration)
-        except utils.MetricUnavailableError as e:
-            self.mark_unavailable(str(e))
-            return [float("nan") for _ in agents]
+        return utils._accuracy(agents, problem, iteration)  # noqa: SLF001
 
 
 class MSE(Metric):
@@ -453,8 +469,8 @@ class MSE(Metric):
     the number of samples.
 
     Note:
-        Requires ``problem.test_data`` and all agent costs to be
-        :class:`~decent_bench.costs.EmpiricalRiskCost`. If not, this metric marks itself unavailable and returns NaN.
+        Available only when ``problem.test_data`` is provided and all agent costs are
+        :class:`~decent_bench.costs.EmpiricalRiskCost`.
 
     """
 
@@ -462,17 +478,23 @@ class MSE(Metric):
     plot_description: str = "mse"
     can_diverge: bool = False
 
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "test_data", None) is None:
+            return False, "requires problem.test_data"
+        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+            return False, "MSE only applies if all agents have EmpiricalRiskCost"
+        return True, None
+
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        try:
-            return utils.mse(agents, problem, iteration)
-        except utils.MetricUnavailableError as e:
-            self.mark_unavailable(str(e))
-            return [float("nan") for _ in agents]
+        return utils._mse(agents, problem, iteration)  # noqa: SLF001
 
 
 class Precision(Metric):
@@ -499,13 +521,11 @@ class Precision(Metric):
     where TP is the number of true positives and FP is the number of false positives.
 
     Note:
-        Requires all of the following:
+        Available only when:
 
-        - ``problem.test_data`` is provided
-        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`
-        - target labels are integer-valued
-
-        If any requirement is not satisfied, this metric marks itself unavailable and returns NaN.
+        - ``problem.test_data`` is provided,
+        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`,
+        - target labels are integer-valued.
 
     """
 
@@ -513,17 +533,26 @@ class Precision(Metric):
     plot_description: str = "precision"
     can_diverge: bool = False
 
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "test_data", None) is None:
+            return False, "requires problem.test_data"
+        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+            return False, "precision only applies if all agents have EmpiricalRiskCost"
+        _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type] # noqa: SLF001
+        if test_y.dtype.kind not in {"i", "u"}:
+            return False, f"precision only applies for integer targets, dtype {test_y.dtype} found"
+        return True, None
+
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        try:
-            return utils.precision(agents, problem, iteration)
-        except utils.MetricUnavailableError as e:
-            self.mark_unavailable(str(e))
-            return [float("nan") for _ in agents]
+        return utils._precision(agents, problem, iteration)  # noqa: SLF001
 
 
 class Recall(Metric):
@@ -550,13 +579,11 @@ class Recall(Metric):
     where TP is the number of true positives and FN is the number of false negatives.
 
     Note:
-        Requires all of the following:
+        Available only when:
 
-        - ``problem.test_data`` is provided
-        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`
-        - target labels are integer-valued
-
-        If any requirement is not satisfied, this metric marks itself unavailable and returns NaN.
+        - ``problem.test_data`` is provided,
+        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`,
+        - target labels are integer-valued.
 
     """
 
@@ -564,17 +591,26 @@ class Recall(Metric):
     plot_description: str = "recall"
     can_diverge: bool = False
 
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "test_data", None) is None:
+            return False, "requires problem.test_data"
+        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+            return False, "recall only applies if all agents have EmpiricalRiskCost"
+        _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type]  # noqa: SLF001
+        if test_y.dtype.kind not in {"i", "u"}:
+            return False, f"recall only applies for integer targets, dtype {test_y.dtype} found"
+        return True, None
+
     def get_data_from_trial(  # noqa: D102
         self,
         agents: Sequence[AgentMetricsView],
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        try:
-            return utils.recall(agents, problem, iteration)
-        except utils.MetricUnavailableError as e:
-            self.mark_unavailable(str(e))
-            return [float("nan") for _ in agents]
+        return utils._recall(agents, problem, iteration)  # noqa: SLF001
 
 
 DEFAULT_TABLE_METRICS: list[Metric] = [

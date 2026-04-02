@@ -143,18 +143,17 @@ def compute_tables(
             status="",
         )
         for metric in metrics:
-            metric.clear_unavailable()
             progress.update(table_task, status=f"Task: {metric.table_description}")
-            data_per_trial = [_table_data_per_trial(resulting_agent_states[a], problem, metric) for a in algs]
+            available, reason = metric.is_available(problem)
 
-            if metric.is_unavailable:
-                reason = metric.unavailable_reason or "unknown reason"
+            if not available:
                 LOGGER.warning(
                     f"Skipping table metric '{metric.table_description}' because it is unavailable: {reason}"
                 )
-                for _ in metric.statistics:
-                    progress.advance(table_task)
+                progress.advance(table_task, advance=len(metric.statistics))
                 continue
+
+            data_per_trial = [_table_data_per_trial(resulting_agent_states[a], problem, metric) for a in algs]
 
             for statistic in metric.statistics:
                 statistic_name = STATISTICS_ABBR.get(statistic.__name__) or statistic.__name__

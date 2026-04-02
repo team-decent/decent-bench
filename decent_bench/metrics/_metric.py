@@ -61,7 +61,6 @@ class Metric(ABC):
         self.x_log = x_log
         self.y_log = y_log
         self.fmt = fmt
-        self._unavailable_reason: str | None = None
 
     @property
     @abstractmethod
@@ -83,23 +82,27 @@ class Metric(ABC):
         """
         return True
 
-    @property
-    def unavailable_reason(self) -> str | None:
-        """Reason this metric is unavailable for the current computation, if any."""
-        return self._unavailable_reason
+    def is_available(
+        self,
+        problem: "BenchmarkProblem",  # noqa: ARG002
+    ) -> tuple[bool, str | None]:
+        """
+        Check whether this metric can be computed for the given problem.
 
-    @property
-    def is_unavailable(self) -> bool:
-        """Whether this metric was marked unavailable during the current computation."""
-        return self._unavailable_reason is not None
+        Override in subclasses that have availability preconditions (e.g. requiring
+        ``problem.x_optimal`` or ``problem.test_data``). The default implementation
+        always returns available.
 
-    def mark_unavailable(self, reason: str) -> None:
-        """Mark this metric unavailable for the current computation."""
-        self._unavailable_reason = reason
+        Args:
+            problem: the benchmark problem being evaluated
 
-    def clear_unavailable(self) -> None:
-        """Reset unavailable status before a new computation pass."""
-        self._unavailable_reason = None
+        Returns:
+            A tuple ``(available, reason)``. When *available* is ``True``, *reason* is
+            ``None``. When *available* is ``False``, *reason* contains a human-readable
+            explanation.
+
+        """
+        return True, None
 
     @abstractmethod
     def get_data_from_trial(
