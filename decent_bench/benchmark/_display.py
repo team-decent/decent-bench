@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
 
-def display_metrics(
+def display_metrics(  # noqa: PLR0912
     metrics_result: MetricResult | None = None,
     checkpoint_manager: "CheckpointManager | None" = None,
     *,
@@ -141,13 +141,14 @@ def display_metrics(
             f"Available algorithms: {', '.join(metrics_result.available_algorithms)}"
         )
 
-    if table_metrics is not None and plot_metrics is not None:
-        if not new_metrics_result.available_table_metrics and not new_metrics_result.available_plot_metrics:
-            raise ValueError(
-                f"No table or plot metrics remain after filtering. "
-                f"Available table metrics: {', '.join(metrics_result.available_table_metrics)}. "
-                f"Available plot metrics: {', '.join(metrics_result.available_plot_metrics)}"
-            )
+    if (table_metrics is not None and not new_metrics_result.available_table_metrics) and (
+        plot_metrics is not None and not new_metrics_result.available_plot_metrics
+    ):
+        raise ValueError(
+            f"No table or plot metrics remain after filtering. "
+            f"Available table metrics: {', '.join(metrics_result.available_table_metrics)}. "
+            f"Available plot metrics: {', '.join(metrics_result.available_plot_metrics)}"
+        )
 
     if save_path is not None:
         save_path = Path(save_path)
