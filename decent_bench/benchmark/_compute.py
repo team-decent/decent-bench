@@ -75,10 +75,7 @@ def compute_metrics(
             )
 
         try:
-            progress_bar_threshold = 1_000  # How many MB of checkpoint data should trigger showing a progress bar
-            benchmark_result = checkpoint_manager.load_benchmark_result(
-                progress_bar=checkpoint_manager.checkpoint_size() > progress_bar_threshold
-            )
+            benchmark_result = checkpoint_manager.load_benchmark_result()
         except (FileNotFoundError, KeyError) as e:
             raise ValueError(f"Invalid checkpoint directory: missing or corrupted metadata - {e}") from e
         except JSONDecodeError as e:

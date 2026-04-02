@@ -498,7 +498,7 @@ class CheckpointManager:  # noqa: PLR0904
             metadata: dict[str, Any] = json.load(f)
         return metadata
 
-    def load_benchmark_result(self, progress_bar: bool = False) -> BenchmarkResult:
+    def load_benchmark_result(self) -> BenchmarkResult:
         """
         Load benchmark problem configuration and states from checkpoint.
 
@@ -506,14 +506,12 @@ class CheckpointManager:  # noqa: PLR0904
         benchmark result. This is to ensure that the metrics are not skewed by incomplete data and only include
         algorithms with full results. A warning will be logged for any incomplete algorithms.
 
-        Args:
-            progress_bar: Whether to show a progress bar while loading trials. This can be helpful if there are many
-                algorithms and trials, as loading can take some time.
-
         Returns:
             BenchmarkResult object containing the loaded benchmark problem, initial algorithms, and initial network.
 
         """
+        progress_bar_threshold = 1_000  # How many MB of checkpoint data should trigger showing a progress bar
+        progress_bar = self.checkpoint_size() > progress_bar_threshold
         problem = self.load_benchmark_problem()
         algorithms = self.load_initial_algorithms()
         metadata = self.load_metadata()
@@ -582,11 +580,20 @@ class CheckpointManager:  # noqa: PLR0904
             metrics_result: MetricResult = pickle.load(f)  # noqa: S301
 
         if metrics_result.agent_metrics is None:
-            benchmark_result = self.load_benchmark_result()
-            resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
-            for alg, networks in benchmark_result.states.items():
-                resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
-            metrics_result.agent_metrics = resulting_agent_states
+            try:
+                benchmark_result = self.load_benchmark_result()
+                resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
+                for alg, networks in benchmark_result.states.items():
+                    resulting_agent_states[alg] = [
+                        [AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks
+                    ]
+                metrics_result.agent_metrics = resulting_agent_states
+            except Exception as e:
+                LOGGER.warning(
+                    f"Failed to load benchmark result to reconstruct agent metrics: {e}"
+                    "Some functionality may be limited without agent metrics available."
+                )
+                metrics_result.agent_metrics = None
 
         LOGGER.info(f"Loaded computed metrics result from {metric_path}")
         return metrics_result

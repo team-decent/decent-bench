@@ -167,7 +167,13 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
 
         if self.opt_cls is not None:
             # Use PyTorch optimizer for local training
-            agent.aux_vars["phi"] = agent.cost.local_training(x=agent.aux_vars["phi"], iterations=self.local_steps)
+            for _ in range(self.local_steps):
+                agent.aux_vars["phi"] = agent.cost.local_training(
+                    x=agent.aux_vars["phi"],
+                    iterations=1,
+                    agent=agent,
+                )
+                agent.aux_vars["phi"] -= step_size * (self.penalty * len(neighbors) * agent.aux_vars["phi"] - z_sum)
         else:
             for _ in range(self.local_steps):
                 # Manual gradient step

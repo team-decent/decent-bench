@@ -24,16 +24,16 @@ from examples.nim.src.algorithms.lt_admm_ema import LT_ADMM_EMA
 if __name__ == "__main__":
     folder = "results/heterogeneous_2"
     iterations = 1000
-    n_trials = 3
+    n_trials = 1
     n_agents = 5
     n_neighbors = 4
     state_snapshot_period = 50
     samples_per_partition = 1000
-    heterogeneity = False
+    heterogeneity = True
     targets_per_partition = 2
     batch_sizes = [32, 64, 128]
-    local_steps = [1, 5, 10]
     step_sizes = [0.01, 0.001]
+    local_steps = [1, 5, 10]
     comm_probs = [0.2, 0.5, 0.9]
     device = SupportedDevices.CPU
     use_dataloader = False

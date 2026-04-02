@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     import torch
 
 try:
+    import torch
     from torch.utils.data import ConcatDataset as TorchConcatDataset
     from torch.utils.data import Subset as TorchSubset
     from torch.utils.data import random_split as torch_random_split
@@ -105,7 +106,18 @@ class PyTorchDatasetHandler(DatasetHandler):
         return self._n_targets
 
     def get_datapoints(self) -> Dataset:
-        return cast("Dataset", TorchConcatDataset(self.get_partitions()))  # type: ignore[arg-type]
+        """
+        Return all datapoints in the dataset.
+
+        Can be used for evaluation on the full dataset or creation of test datasets.
+
+        Warning:
+            This method will load the entire dataset into memory. If :prop:`samples_per_partition` *
+            :prop:`n_partitions` is large then this might lead to out-of-memory issues if the underlying
+            PyTorch dataset contains large tensors.
+
+        """
+        return cast("Dataset", list(TorchConcatDataset(self.get_partitions())))  # type: ignore[arg-type]
 
     def get_partitions(self) -> list[Dataset]:
         """
@@ -163,13 +175,16 @@ class PyTorchDatasetHandler(DatasetHandler):
         """
         # Group indices by class in a single pass
         class_to_indices: dict[int, list[int]] = defaultdict(list)
-        for idx, (_, label) in enumerate(self.torch_dataset):  # type: ignore[misc, arg-type]
-            if label in class_to_indices or len(class_to_indices) < (self.n_partitions * self.targets_per_partition):  # type: ignore[has-type]
-                class_to_indices[label].append(idx)  # type: ignore[has-type]
+        for idx, (_, label) in enumerate(self.torch_dataset):
+            label_key = int(label.item()) if isinstance(label, torch.Tensor) else int(label)
+            if label_key in class_to_indices or len(class_to_indices) < (
+                self.n_partitions * self.targets_per_partition
+            ):
+                class_to_indices[label_key].append(idx)
 
         # Create partitions from class-grouped indices
         idx_partitions = []
-        min_n_datapoints = int("inf")
+        min_n_datapoints = int(1e10)
         class_idxs = sorted(class_to_indices.keys())
         # Group classes for each partition
         class_idxs_groups = [

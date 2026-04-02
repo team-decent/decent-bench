@@ -5,10 +5,11 @@ from decent_bench.metrics import metric_library as ml
 from decent_bench.utils.checkpoint_manager import CheckpointManager
 
 if __name__ == "__main__":
+    folder = "results/heterogeneous_2"
     iterations = 1000
-    batch_size = 32
+    batch_size = 64
     ss = 0.01
-    heterogeneity = False
+    heterogeneity = True
     targets_per_partition = 2
     backup = input("Create backup before resuming? (y/n): ").lower() == "y"
 
@@ -31,8 +32,8 @@ if __name__ == "__main__":
     ]
 
     cm = CheckpointManager(
-        checkpoint_dir=f"results/mnist_bs_{batch_size}_ss_{ss}_hg_{heterogeneity}_tp_{targets_per_partition}",
-        checkpoint_step=iterations // 5,
+        checkpoint_dir=f"{folder}/mnist_bs_{batch_size}_ss_{ss}_hg_{heterogeneity}_tp_{targets_per_partition}",
+        checkpoint_step=iterations // 3,
     )
 
     result = benchmark.resume_benchmark(

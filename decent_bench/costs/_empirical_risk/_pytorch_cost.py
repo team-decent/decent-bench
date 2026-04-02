@@ -20,6 +20,8 @@ from decent_bench.utils.types import (
 if TYPE_CHECKING:
     import torch
 
+    from decent_bench.agents import Agent
+
 try:
     import torch
 
@@ -464,7 +466,13 @@ class PyTorchCost(EmpiricalRiskCost):
         if sched_cls is not None:
             self._scheduler = sched_cls(self._optimizer, **(sched_kwargs or {}))
 
-    def local_training(self, x: torch.Tensor, iterations: int, indices: EmpiricalRiskIndices = "batch") -> torch.Tensor:
+    def local_training(
+        self,
+        x: torch.Tensor,
+        iterations: int,
+        agent: Agent,
+        indices: EmpiricalRiskIndices = "batch",
+    ) -> torch.Tensor:
         """
         Perform local training steps using the provided optimizer.
 
@@ -475,7 +483,11 @@ class PyTorchCost(EmpiricalRiskCost):
         Args:
             x (torch.Tensor): Initial parameters to start local training from.
             iterations (int): Number of local training iterations to perform.
+            agent (Agent): The agent performing the local training.
             indices (EmpiricalRiskIndices): Indices of the samples to use for local training.
+
+        Returns:
+            torch.Tensor: Updated parameters after local training.
 
         Raises:
             RuntimeError: If no optimizer was provided during initialization.
@@ -500,6 +512,10 @@ class PyTorchCost(EmpiricalRiskCost):
                 loss = self.loss_fn(outputs, batch_y)
                 loss.backward()
                 self._optimizer.step()
+
+            # Since we are not calling the gradient method,
+            # we need to manually update the agent's gradient call count for benchmarking purposes.
+            agent._n_gradient_calls += len(self.batch_used)  # noqa: SLF001
 
         if self._scheduler is not None:
             self._scheduler.step()
