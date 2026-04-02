@@ -644,6 +644,8 @@ The new metrics will be saved to the checkpoint directory as described above.
 Loading :class:`~decent_bench.benchmark.MetricResult` for displaying metrics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Similarly, you can load previously computed metrics by setting ``metrics_result`` to ``None`` in :func:`~decent_bench.benchmark.display_metrics` and providing the same checkpoint manager.
+The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``available_algorithms``,
+``available_table_metrics``, and ``available_plot_metrics`` to discover valid filter values.
 
 .. code-block:: python
 
@@ -653,9 +655,20 @@ Similarly, you can load previously computed metrics by setting ``metrics_result`
     if __name__ == "__main__":
         checkpoint_manager = CheckpointManager(checkpoint_dir="benchmark_results/my_experiment")
 
+        metrics_result = checkpoint_manager.load_metrics_result()
+        if metrics_result is None:
+            raise ValueError("No computed metrics found in checkpoint directory")
+
+        print("Available algorithms:", metrics_result.available_algorithms)
+        print("Available table metrics:", metrics_result.available_table_metrics)
+        print("Available plot metrics:", metrics_result.available_plot_metrics)
+
         benchmark.display_metrics(
-            metrics_result=None, 
+            metrics_result=metrics_result,
             checkpoint_manager=checkpoint_manager,
+            algorithms=["DGD"],
+            table_metrics=["nr gradient calls"],
+            plot_metrics=["regret"],
             save_path=checkpoint_manager.get_results_path(),
         )
 

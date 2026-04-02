@@ -1,7 +1,7 @@
 import logging
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.metrics import (
@@ -23,9 +23,9 @@ def display_metrics(
     metrics_result: MetricResult | None = None,
     checkpoint_manager: "CheckpointManager | None" = None,
     *,
-    table_metrics: list[Metric] | None = None,
-    plot_metrics: list[Metric] | list[list[Metric]] | None = None,
-    algorithms: list["Algorithm[Network]"] | None = None,
+    table_metrics: list[Metric | str] | None = None,
+    plot_metrics: list[Metric | str] | list[list[Metric | str]] | None = None,
+    algorithms: list["Algorithm[Network] | str"] | None = None,
     table_fmt: Literal["grid", "latex"] = "grid",
     plot_grid: bool = True,
     individual_plots: bool = False,
@@ -45,10 +45,16 @@ def display_metrics(
             the result will be loaded from the checkpoint manager
         checkpoint_manager: if provided, will be used to load metrics result.
         table_metrics: metrics to tabulate, defaults to ``None`` which will display all metrics in the metrics_result.
+            Entries can be :class:`~decent_bench.metrics.Metric` objects or strings
+            (matching :attr:`~decent_bench.metrics.Metric.table_description`).
         plot_metrics: metrics to plot, defaults to ``None`` which will display all metrics in the metrics_result.
+            Entries can be :class:`~decent_bench.metrics.Metric` objects or strings
+            (matching :attr:`~decent_bench.metrics.Metric.plot_description`).
             If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
             metrics will be grouped and plotted in their own figure with subplots.
         algorithms: algorithms to display. If provided, only these algorithms are included in tables and plots.
+            Entries can be :class:`~decent_bench.distributed_algorithms.Algorithm` objects or strings
+            (matching :attr:`~decent_bench.distributed_algorithms.Algorithm.name`).
             Defaults to ``None`` which displays all algorithms in the metrics_result.
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         plot_grid: whether to show grid lines on the plots
@@ -145,9 +151,16 @@ def display_metrics(
 
 def _filter_algorithms(
     metrics_result: MetricResult,
-    algorithms: list["Algorithm[Network]"],
+    algorithms: list["Algorithm[Network] | str"],
 ) -> MetricResult:
-    selected_names = {algorithm.name for algorithm in algorithms}
+    selected_names = {_get_algorithm_name(algorithm) for algorithm in algorithms}
+    available_names = set(metrics_result.available_algorithms)
+    missing_names = sorted(selected_names - available_names)
+    if missing_names:
+        LOGGER.warning(
+            "Requested algorithm(s) not found in metrics result, skipping: "
+            f"{', '.join(missing_names)}. Available algorithms: {', '.join(metrics_result.available_algorithms)}"
+        )
 
     if metrics_result.agent_metrics is not None:
         metrics_result.agent_metrics = {
@@ -175,21 +188,22 @@ def _filter_algorithms(
 
 def _get_new_table_metrics(
     metrics_result: MetricResult,
-    table_metrics: list[Metric],
+    table_metrics: list[Metric | str],
 ) -> list[Metric]:
     if metrics_result.table_metrics is None:
         return []
 
     new_table_metrics = []
-    for metric in table_metrics:
+    for metric_or_name in table_metrics:
+        metric_name = _get_table_metric_name(metric_or_name)
         # Find the original metric object in the metrics result that matches the requested metric description,
         # and use that one to prevent KeyErrors in the computed metrics dict
         original_metric = next(
-            (m for m in metrics_result.table_metrics if m.table_description == metric.table_description),
+            (m for m in metrics_result.table_metrics if m.table_description == metric_name),
             None,
         )
         if original_metric is None:
-            LOGGER.warning(f"Requested table metric '{metric.table_description}' not found in metrics result, skipping")
+            LOGGER.warning(f"Requested table metric '{metric_name}' not found in metrics result, skipping")
             continue
         new_table_metrics.append(original_metric)
 
@@ -198,44 +212,57 @@ def _get_new_table_metrics(
 
 def _get_new_plot_metrics(
     metrics_result: MetricResult,
-    plot_metrics: list[Metric] | list[list[Metric]],
+    plot_metrics: list[Metric | str] | list[list[Metric | str]],
 ) -> list[Metric] | list[list[Metric]]:
     if metrics_result.plot_metrics is None:
         return []
 
-    flat_metrics: list[Metric] = []
-    if any(isinstance(m, list) for m in metrics_result.plot_metrics):
-        flat_metrics = [metric for group in metrics_result.plot_metrics for metric in group]  # type: ignore[union-attr]
-    else:
-        flat_metrics = metrics_result.plot_metrics  # type: ignore[assignment]
+    flat_metrics = _flatten_plot_metrics(metrics_result.plot_metrics)
 
     new_plot_metrics = []
     for group in plot_metrics:
         if isinstance(group, list):
             new_group = []
-            for metric in group:
+            for metric_or_name in group:
+                metric_name = _get_plot_metric_name(metric_or_name)
                 original_metric = next(
-                    (m for m in flat_metrics if m.plot_description == metric.plot_description),
+                    (m for m in flat_metrics if m.plot_description == metric_name),
                     None,
                 )
                 if original_metric is None:
-                    LOGGER.warning(
-                        f"Requested plot metric '{metric.plot_description}' not found in metrics result, skipping"
-                    )
+                    LOGGER.warning(f"Requested plot metric '{metric_name}' not found in metrics result, skipping")
                     continue
                 new_group.append(original_metric)
             if new_group:
                 new_plot_metrics.append(new_group)
         else:
+            metric_name = _get_plot_metric_name(group)
             original_metric = next(
-                (m for m in flat_metrics if m.plot_description == group.plot_description),
+                (m for m in flat_metrics if m.plot_description == metric_name),
                 None,
             )
             if original_metric is None:
-                LOGGER.warning(
-                    f"Requested plot metric '{group.plot_description}' not found in metrics result, skipping"
-                )
+                LOGGER.warning(f"Requested plot metric '{metric_name}' not found in metrics result, skipping")
                 continue
             new_plot_metrics.append(original_metric)  # type: ignore[arg-type]
 
     return new_plot_metrics
+
+
+def _flatten_plot_metrics(plot_metrics: list[Metric] | list[list[Metric]]) -> list[Metric]:
+    if any(isinstance(metric, list) for metric in plot_metrics):
+        return [metric for group in cast("list[list[Metric]]", plot_metrics) for metric in group]
+
+    return cast("list[Metric]", plot_metrics)
+
+
+def _get_algorithm_name(algorithm_or_name: "Algorithm[Network] | str") -> str:
+    return algorithm_or_name if isinstance(algorithm_or_name, str) else algorithm_or_name.name
+
+
+def _get_table_metric_name(metric_or_name: Metric | str) -> str:
+    return metric_or_name if isinstance(metric_or_name, str) else metric_or_name.table_description
+
+
+def _get_plot_metric_name(metric_or_name: Metric | str) -> str:
+    return metric_or_name if isinstance(metric_or_name, str) else metric_or_name.plot_description

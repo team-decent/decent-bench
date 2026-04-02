@@ -51,6 +51,8 @@ def compute_metrics(
     Raises:
         ValueError: If neither ``benchmark_result`` nor ``checkpoint_manager`` is provided, or
             if the checkpoint manager does not contain a valid benchmark result to load.
+        ValueError: If duplicate metrics (i.e. with same ``table_description`` or ``plot_description``) are provided
+            in ``table_metrics`` or ``plot_metrics``.
 
     Note:
         If ``benchmark_result`` is not provided, it will be loaded from the checkpoint manager. If both are provided,
@@ -89,6 +91,7 @@ def compute_metrics(
     # work on independent metric instances so any metric state does not leak globally
     table_metrics = deepcopy(table_metrics)
     plot_metrics = deepcopy(plot_metrics)
+    _validate_unique_metric_descriptions(table_metrics, plot_metrics)
 
     resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
     for alg, networks in benchmark_result.states.items():
@@ -149,3 +152,31 @@ def _filter_plot_metrics_with_results(
 
     flat_plot_metrics = cast("list[Metric]", plot_metrics)
     return [metric for metric in flat_plot_metrics if metric in available_metrics]
+
+
+def _validate_unique_metric_descriptions(
+    table_metrics: list[Metric],
+    plot_metrics: list[Metric] | list[list[Metric]],
+) -> None:
+    duplicate_table_descriptions = _find_duplicates([metric.table_description for metric in table_metrics])
+    if duplicate_table_descriptions:
+        duplicates = ", ".join(duplicate_table_descriptions)
+        raise ValueError(f"Table metric descriptions must be unique, duplicates found: {duplicates}")
+
+    flat_plot_metrics = _flatten_plot_metrics(plot_metrics)
+    duplicate_plot_descriptions = _find_duplicates([metric.plot_description for metric in flat_plot_metrics])
+    if duplicate_plot_descriptions:
+        duplicates = ", ".join(duplicate_plot_descriptions)
+        raise ValueError(f"Plot metric descriptions must be unique, duplicates found: {duplicates}")
+
+
+def _flatten_plot_metrics(plot_metrics: list[Metric] | list[list[Metric]]) -> list[Metric]:
+    if any(isinstance(metric, list) for metric in plot_metrics):
+        grouped_plot_metrics = cast("list[list[Metric]]", plot_metrics)
+        return [metric for group in grouped_plot_metrics for metric in group]
+
+    return cast("list[Metric]", plot_metrics)
+
+
+def _find_duplicates(items: list[str]) -> list[str]:
+    return sorted({item for item in items if items.count(item) > 1})
