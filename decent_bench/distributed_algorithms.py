@@ -387,9 +387,11 @@ class FedProx(FedAlgorithm):
     where :math:`\mathbf{w}^t` is the server model broadcast at the start of round :math:`k`, held fixed
     throughout each selected client's local epochs, :math:`\mu \geq 0` is the proximal coefficient,
     :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients. Setting ``mu=0.0``
-    recovers FedAvg. As in FedAvg, aggregation uses client weights, defaulting to data-size weights when
-    ``client_weights`` is not provided, and client selection defaults to uniform sampling with fraction 1.0.
-    For :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
+    recovers FedAvg exactly. The default ``mu=0.01`` is a sensible benchmark starting point, but users are
+    strongly encouraged to tune ``mu`` for each problem; a practical grid is ``[0.001, 0.01, 0.1, 0.5, 1.0]``.
+    As in FedAvg, aggregation uses client weights, defaulting to data-size weights when ``client_weights`` is not
+    provided, and client selection defaults to uniform sampling with fraction 1.0. For
+    :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
     :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; for generic costs,
     local updates use full-batch gradients.
     """
