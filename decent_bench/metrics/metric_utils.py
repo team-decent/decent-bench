@@ -7,6 +7,7 @@ from numpy import float64
 from numpy import linalg as la
 from numpy.typing import NDArray
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
+from rich.table import Column
 from sklearn import metrics as sk_metrics
 
 import decent_bench.utils.interoperability as iop
@@ -44,7 +45,10 @@ class MetricProgressBar(Progress):
 
     def __init__(self) -> None:
         super().__init__(
-            TextColumn("[progress.description]{task.description}"),
+            TextColumn(
+                "[progress.description]{task.description}",
+                table_column=Column(width=24, no_wrap=True),
+            ),
             BarColumn(),
             TaskProgressColumn(),
             TimeRemainingColumn(elapsed_when_finished=True),

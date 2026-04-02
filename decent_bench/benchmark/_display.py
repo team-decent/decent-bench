@@ -1,7 +1,7 @@
 import logging
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal
 
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.metrics import (
@@ -11,6 +11,7 @@ from decent_bench.metrics import (
     display_tables,
 )
 from decent_bench.utils import logger
+from decent_bench.utils._metric_helpers import _flatten_plot_metrics
 from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:
@@ -83,7 +84,9 @@ def display_metrics(
 
     Raises:
         ValueError: If neither ``metrics_result`` nor ``checkpoint_manager`` is provided, or
-            if the checkpoint manager does not contain a valid metrics result to load.
+            if the checkpoint manager does not contain a valid metrics result to load. Also raised if
+            ``algorithms`` filtering results in no algorithms remaining, or if both ``table_metrics`` and
+            ``plot_metrics`` are specified and both result in no metrics remaining after filtering.
         FileNotFoundError: If ``metrics_result`` is not provided and the checkpoint manager does not contain a metrics
             result file to load.
 
@@ -119,7 +122,7 @@ def display_metrics(
         if metrics_result is None:
             raise ValueError("No metrics result found in checkpoint manager to display")
 
-    # Update metrics to display based on provided plot_metrics and table_metrics (if provided)
+    # filter `metrics_result` based on `plot_metrics`, `table_metrics`, and `algorithms` (if provided)
     new_metrics_result = deepcopy(metrics_result)
 
     if table_metrics is not None:
@@ -131,29 +134,51 @@ def display_metrics(
     if algorithms is not None:
         new_metrics_result = _filter_algorithms(new_metrics_result, algorithms)
 
+    # check that filtering didn't empty out the displayable results
+    if algorithms is not None and not new_metrics_result.available_algorithms:
+        raise ValueError(
+            f"No algorithms remain after filtering. Requested algorithms not found in metrics result. "
+            f"Available algorithms: {', '.join(metrics_result.available_algorithms)}"
+        )
+
+    if table_metrics is not None and plot_metrics is not None:
+        if not new_metrics_result.available_table_metrics and not new_metrics_result.available_plot_metrics:
+            raise ValueError(
+                f"No table or plot metrics remain after filtering. "
+                f"Available table metrics: {', '.join(metrics_result.available_table_metrics)}. "
+                f"Available plot metrics: {', '.join(metrics_result.available_plot_metrics)}"
+            )
+
     if save_path is not None:
         save_path = Path(save_path)
     elif save_path is None and checkpoint_manager is not None:
         save_path = checkpoint_manager.get_results_path()
 
-    display_tables(new_metrics_result, table_fmt=table_fmt, scale_compute=scale_compute, table_path=save_path)
-    display_plots(
-        new_metrics_result,
-        computational_cost=computational_cost,
-        scale_x_axis=scale_x_axis,
-        compare_iterations_and_computational_cost=compare_iterations_and_computational_cost,
-        individual_plots=individual_plots,
-        plot_grid=plot_grid,
-        plot_format=plot_format,
-        plot_path=save_path,
-    )
+    if new_metrics_result.table_metrics:
+        display_tables(new_metrics_result, table_fmt=table_fmt, scale_compute=scale_compute, table_path=save_path)
+    else:
+        LOGGER.warning("No table metrics to display, skipping tables")
+
+    if new_metrics_result.plot_metrics:
+        display_plots(
+            new_metrics_result,
+            computational_cost=computational_cost,
+            scale_x_axis=scale_x_axis,
+            compare_iterations_and_computational_cost=compare_iterations_and_computational_cost,
+            individual_plots=individual_plots,
+            plot_grid=plot_grid,
+            plot_format=plot_format,
+            plot_path=save_path,
+        )
+    else:
+        LOGGER.warning("No plot metrics to display, skipping plots")
 
 
 def _filter_algorithms(
     metrics_result: MetricResult,
     algorithms: list["Algorithm[Network] | str"],
 ) -> MetricResult:
-    selected_names = {_get_algorithm_name(algorithm) for algorithm in algorithms}
+    selected_names = {_get_name_or_value(algorithm, "name") for algorithm in algorithms}
     available_names = set(metrics_result.available_algorithms)
     missing_names = sorted(selected_names - available_names)
     if missing_names:
@@ -162,26 +187,14 @@ def _filter_algorithms(
             f"{', '.join(missing_names)}. Available algorithms: {', '.join(metrics_result.available_algorithms)}"
         )
 
-    if metrics_result.agent_metrics is not None:
-        metrics_result.agent_metrics = {
-            algorithm: metrics
-            for algorithm, metrics in metrics_result.agent_metrics.items()
-            if algorithm.name in selected_names
-        }
-
-    if metrics_result.table_results is not None:
-        metrics_result.table_results = {
-            algorithm: table_results
-            for algorithm, table_results in metrics_result.table_results.items()
-            if algorithm.name in selected_names
-        }
-
-    if metrics_result.plot_results is not None:
-        metrics_result.plot_results = {
-            algorithm: plot_results
-            for algorithm, plot_results in metrics_result.plot_results.items()
-            if algorithm.name in selected_names
-        }
+    for attribute in ("agent_metrics", "table_results", "plot_results"):
+        mapping = getattr(metrics_result, attribute)
+        if mapping is not None:
+            setattr(
+                metrics_result,
+                attribute,
+                {algorithm: values for algorithm, values in mapping.items() if algorithm.name in selected_names},
+            )
 
     return metrics_result
 
@@ -193,15 +206,12 @@ def _get_new_table_metrics(
     if metrics_result.table_metrics is None:
         return []
 
+    table_lookup = _build_metric_lookup(metrics_result.table_metrics, description_type="table")
+
     new_table_metrics = []
     for metric_or_name in table_metrics:
-        metric_name = _get_table_metric_name(metric_or_name)
-        # Find the original metric object in the metrics result that matches the requested metric description,
-        # and use that one to prevent KeyErrors in the computed metrics dict
-        original_metric = next(
-            (m for m in metrics_result.table_metrics if m.table_description == metric_name),
-            None,
-        )
+        metric_name = _get_name_or_value(metric_or_name, "table_description")
+        original_metric = table_lookup.get(metric_name)
         if original_metric is None:
             LOGGER.warning(f"Requested table metric '{metric_name}' not found in metrics result, skipping")
             continue
@@ -218,17 +228,15 @@ def _get_new_plot_metrics(
         return []
 
     flat_metrics = _flatten_plot_metrics(metrics_result.plot_metrics)
+    plot_lookup = _build_metric_lookup(flat_metrics, description_type="plot")
 
     new_plot_metrics = []
     for group in plot_metrics:
         if isinstance(group, list):
             new_group = []
             for metric_or_name in group:
-                metric_name = _get_plot_metric_name(metric_or_name)
-                original_metric = next(
-                    (m for m in flat_metrics if m.plot_description == metric_name),
-                    None,
-                )
+                metric_name = _get_name_or_value(metric_or_name, "plot_description")
+                original_metric = plot_lookup.get(metric_name)
                 if original_metric is None:
                     LOGGER.warning(f"Requested plot metric '{metric_name}' not found in metrics result, skipping")
                     continue
@@ -236,11 +244,8 @@ def _get_new_plot_metrics(
             if new_group:
                 new_plot_metrics.append(new_group)
         else:
-            metric_name = _get_plot_metric_name(group)
-            original_metric = next(
-                (m for m in flat_metrics if m.plot_description == metric_name),
-                None,
-            )
+            metric_name = _get_name_or_value(group, "plot_description")
+            original_metric = plot_lookup.get(metric_name)
             if original_metric is None:
                 LOGGER.warning(f"Requested plot metric '{metric_name}' not found in metrics result, skipping")
                 continue
@@ -249,20 +254,14 @@ def _get_new_plot_metrics(
     return new_plot_metrics
 
 
-def _flatten_plot_metrics(plot_metrics: list[Metric] | list[list[Metric]]) -> list[Metric]:
-    if any(isinstance(metric, list) for metric in plot_metrics):
-        return [metric for group in cast("list[list[Metric]]", plot_metrics) for metric in group]
+def _build_metric_lookup(metrics: list[Metric], *, description_type: Literal["table", "plot"]) -> dict[str, Metric]:
+    lookup: dict[str, Metric] = {}
+    for metric in metrics:
+        description = metric.table_description if description_type == "table" else metric.plot_description
+        lookup.setdefault(description, metric)
 
-    return cast("list[Metric]", plot_metrics)
-
-
-def _get_algorithm_name(algorithm_or_name: "Algorithm[Network] | str") -> str:
-    return algorithm_or_name if isinstance(algorithm_or_name, str) else algorithm_or_name.name
+    return lookup
 
 
-def _get_table_metric_name(metric_or_name: Metric | str) -> str:
-    return metric_or_name if isinstance(metric_or_name, str) else metric_or_name.table_description
-
-
-def _get_plot_metric_name(metric_or_name: Metric | str) -> str:
-    return metric_or_name if isinstance(metric_or_name, str) else metric_or_name.plot_description
+def _get_name_or_value(value: object, attribute: str) -> str:
+    return value if isinstance(value, str) else str(getattr(value, attribute))

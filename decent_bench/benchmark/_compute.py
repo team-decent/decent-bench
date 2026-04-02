@@ -12,6 +12,7 @@ from decent_bench.metrics import Metric, compute_plots, compute_tables
 from decent_bench.metrics import metric_library as ml
 from decent_bench.networks import Network
 from decent_bench.utils import logger
+from decent_bench.utils._metric_helpers import _find_duplicates, _flatten_plot_metrics
 
 if TYPE_CHECKING:
     from decent_bench.utils.checkpoint_manager import CheckpointManager
@@ -111,11 +112,7 @@ def compute_metrics(
     )
 
     if checkpoint_manager is not None:
-        if any(isinstance(m, list) for m in plot_metrics):
-            grouped_plot_metrics = cast("list[list[Metric]]", plot_metrics)
-            flat_metrics = [metric for group in grouped_plot_metrics for metric in group]
-        else:
-            flat_metrics = cast("list[Metric]", plot_metrics)
+        flat_metrics = _flatten_plot_metrics(plot_metrics)
         metadata = {
             "table_metrics": [metric.table_description for metric in table_metrics],
             "plot_metrics": [metric.plot_description for metric in flat_metrics],
@@ -168,15 +165,3 @@ def _validate_unique_metric_descriptions(
     if duplicate_plot_descriptions:
         duplicates = ", ".join(duplicate_plot_descriptions)
         raise ValueError(f"Plot metric descriptions must be unique, duplicates found: {duplicates}")
-
-
-def _flatten_plot_metrics(plot_metrics: list[Metric] | list[list[Metric]]) -> list[Metric]:
-    if any(isinstance(metric, list) for metric in plot_metrics):
-        grouped_plot_metrics = cast("list[list[Metric]]", plot_metrics)
-        return [metric for group in grouped_plot_metrics for metric in group]
-
-    return cast("list[Metric]", plot_metrics)
-
-
-def _find_duplicates(items: list[str]) -> list[str]:
-    return sorted({item for item in items if items.count(item) > 1})

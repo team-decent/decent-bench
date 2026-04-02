@@ -6,6 +6,7 @@ from decent_bench.agents import AgentMetricsView
 from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics import Metric
 from decent_bench.networks import Network
+from decent_bench.utils._metric_helpers import _flatten_plot_metrics
 
 
 @dataclass
@@ -86,16 +87,9 @@ class MetricResult:
 
         descriptions: list[str] = []
         seen: set[str] = set()
-        for metric in self._flatten_plot_metrics(self.plot_metrics):
+        for metric in _flatten_plot_metrics(self.plot_metrics):
             if metric.plot_description not in seen:
                 seen.add(metric.plot_description)
                 descriptions.append(metric.plot_description)
 
         return descriptions
-
-    @staticmethod
-    def _flatten_plot_metrics(plot_metrics: list[Metric] | list[list[Metric]]) -> list[Metric]:
-        if any(isinstance(metric, list) for metric in plot_metrics):
-            return [metric for group in cast("list[list[Metric]]", plot_metrics) for metric in group]
-
-        return cast("list[Metric]", plot_metrics)

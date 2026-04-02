@@ -19,6 +19,7 @@ from decent_bench.metrics._metric import Metric, X, Y
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 
+from decent_bench.utils._metric_helpers import _flatten_plot_metrics
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem, MetricResult
 
@@ -166,12 +167,7 @@ def compute_plots(  # noqa: PLR0914
     if not metrics:
         return {}
 
-    # Flatten metrics if needed
-    flat_metrics: list[Metric] = []
-    if any(isinstance(m, list) for m in metrics):
-        flat_metrics = [metric for group in metrics for metric in group]  # type: ignore[union-attr]
-    else:
-        flat_metrics = metrics  # type: ignore[assignment]
+    flat_metrics = _flatten_plot_metrics(metrics)
 
     algs = list(resulting_agent_states)
     results: dict[

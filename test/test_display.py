@@ -126,13 +126,17 @@ def _build_minimal_benchmark_result() -> BenchmarkResult:
 def test_display_metrics_filters_algorithms(monkeypatch) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
     alg_b = _AlgorithmStub("B")
+    metric = _MetricStub("table one", "plot one")
 
     metrics_result = MetricResult(
-        agent_metrics={alg_a: [[[]]], alg_b: [[[]]]},
-        table_metrics=[],
-        plot_metrics=[],
-        table_results={alg_a: {}, alg_b: {}},
-        plot_results={alg_a: {}, alg_b: {}},
+        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]], alg_b: [[_agent_metrics_view(1.0)]]},
+        table_metrics=[metric],
+        plot_metrics=[[metric]],
+        table_results={alg_a: {metric: {"avg": (1.0, 0.0)}}, alg_b: {metric: {"avg": (2.0, 0.0)}}},
+        plot_results={
+            alg_a: {metric: ([0.0], [1.0], [1.0], [1.0])},
+            alg_b: {metric: ([0.0], [2.0], [2.0], [2.0])},
+        },
     )
 
     captured = _run_display_with_capture(monkeypatch, metrics_result, algorithms=[alg_b])
@@ -147,13 +151,17 @@ def test_display_metrics_filters_algorithms(monkeypatch) -> None:  # noqa: D103
 def test_display_metrics_filters_algorithms_by_name(monkeypatch) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
     alg_b = _AlgorithmStub("B")
+    metric = _MetricStub("table one", "plot one")
 
     metrics_result = MetricResult(
-        agent_metrics={alg_a: [[[]]], alg_b: [[[]]]},
-        table_metrics=[],
-        plot_metrics=[],
-        table_results={alg_a: {}, alg_b: {}},
-        plot_results={alg_a: {}, alg_b: {}},
+        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]], alg_b: [[_agent_metrics_view(1.0)]]},
+        table_metrics=[metric],
+        plot_metrics=[[metric]],
+        table_results={alg_a: {metric: {"avg": (1.0, 0.0)}}, alg_b: {metric: {"avg": (2.0, 0.0)}}},
+        plot_results={
+            alg_a: {metric: ([0.0], [1.0], [1.0], [1.0])},
+            alg_b: {metric: ([0.0], [2.0], [2.0], [2.0])},
+        },
     )
 
     captured = _run_display_with_capture(monkeypatch, metrics_result, algorithms=["A"])
@@ -268,13 +276,18 @@ def test_display_metrics_filters_algorithms_with_mixed_objects_and_names(monkeyp
     alg_a = _AlgorithmStub("A")
     alg_b = _AlgorithmStub("B")
     alg_c = _AlgorithmStub("C")
+    metric = _MetricStub("table one", "plot one")
 
     metrics_result = MetricResult(
-        agent_metrics={alg_a: [[[]]], alg_b: [[[]]], alg_c: [[[]]]},
-        table_metrics=[],
-        plot_metrics=[],
-        table_results={alg_a: {}, alg_b: {}, alg_c: {}},
-        plot_results={alg_a: {}, alg_b: {}, alg_c: {}},
+        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]], alg_b: [[_agent_metrics_view(1.0)]], alg_c: [[_agent_metrics_view(1.0)]]},
+        table_metrics=[metric],
+        plot_metrics=[[metric]],
+        table_results={alg_a: {metric: {"avg": (1.0, 0.0)}}, alg_b: {metric: {"avg": (2.0, 0.0)}}, alg_c: {metric: {"avg": (3.0, 0.0)}}},
+        plot_results={
+            alg_a: {metric: ([0.0], [1.0], [1.0], [1.0])},
+            alg_b: {metric: ([0.0], [2.0], [2.0], [2.0])},
+            alg_c: {metric: ([0.0], [3.0], [3.0], [3.0])},
+        },
     )
 
     captured = _run_display_with_capture(monkeypatch, metrics_result, algorithms=[alg_a, "C"])
@@ -283,6 +296,121 @@ def test_display_metrics_filters_algorithms_with_mixed_objects_and_names(monkeyp
     assert [alg.name for alg in captured["table"].table_results] == ["A", "C"]
     assert [alg.name for alg in captured["table"].plot_results] == ["A", "C"]
     assert [alg.name for alg in captured["table"].agent_metrics] == ["A", "C"]
+
+
+def test_display_metrics_raises_when_all_algorithms_filtered_out(monkeypatch) -> None:  # noqa: D103
+    alg_a = _AlgorithmStub("A")
+    metric = _MetricStub("table one", "plot one")
+
+    metrics_result = MetricResult(
+        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]]},
+        table_metrics=[metric],
+        plot_metrics=[[metric]],
+        table_results={alg_a: {metric: {"avg": (1.0, 0.0)}}},
+        plot_results={alg_a: {metric: ([0.0], [1.0], [1.0], [1.0])}},
+    )
+
+    with pytest.raises(ValueError, match="No algorithms remain after filtering"):
+        display_metrics(metrics_result=metrics_result, algorithms=["NonExistent"])
+
+
+def test_display_metrics_raises_when_all_table_and_plot_metrics_filtered_out(monkeypatch) -> None:  # noqa: D103
+    alg_a = _AlgorithmStub("A")
+    metric_1 = _MetricStub("table one", "plot one")
+    metric_2 = _MetricStub("table two", "plot two")
+
+    metrics_result = MetricResult(
+        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]]},
+        table_metrics=[metric_1, metric_2],
+        plot_metrics=[[metric_1], [metric_2]],
+        table_results={
+            alg_a: {
+                metric_1: {"avg": (1.0, 0.0)},
+                metric_2: {"avg": (2.0, 0.0)},
+            }
+        },
+        plot_results={
+            alg_a: {
+                metric_1: ([0.0], [1.0], [1.0], [1.0]),
+                metric_2: ([0.0], [2.0], [2.0], [2.0]),
+            }
+        },
+    )
+
+    with pytest.raises(ValueError, match="No table or plot metrics remain after filtering"):
+        display_metrics(
+            metrics_result=metrics_result,
+            table_metrics=["NonExistent"],
+            plot_metrics=["NonExistent"],
+        )
+
+
+def test_display_metrics_shows_only_tables_when_plot_metrics_empty(monkeypatch) -> None:  # noqa: D103
+    alg_a = _AlgorithmStub("A")
+    metric_1 = _MetricStub("table one", "plot one")
+    metric_2 = _MetricStub("table two", "plot two")
+
+    metrics_result = MetricResult(
+        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]]},
+        table_metrics=[metric_1, metric_2],
+        plot_metrics=[[metric_1], [metric_2]],
+        table_results={
+            alg_a: {
+                metric_1: {"avg": (1.0, 0.0)},
+                metric_2: {"avg": (2.0, 0.0)},
+            }
+        },
+        plot_results={
+            alg_a: {
+                metric_1: ([0.0], [1.0], [1.0], [1.0]),
+                metric_2: ([0.0], [2.0], [2.0], [2.0]),
+            }
+        },
+    )
+
+    captured = _run_display_with_capture(
+        monkeypatch,
+        metrics_result,
+        table_metrics=[metric_1],
+        plot_metrics=["NonExistent"],
+    )
+
+    assert "table" in captured
+    assert "plot" not in captured
+
+
+def test_display_metrics_shows_only_plots_when_table_metrics_empty(monkeypatch) -> None:  # noqa: D103
+    alg_a = _AlgorithmStub("A")
+    metric_1 = _MetricStub("table one", "plot one")
+    metric_2 = _MetricStub("table two", "plot two")
+
+    metrics_result = MetricResult(
+        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]]},
+        table_metrics=[metric_1, metric_2],
+        plot_metrics=[[metric_1], [metric_2]],
+        table_results={
+            alg_a: {
+                metric_1: {"avg": (1.0, 0.0)},
+                metric_2: {"avg": (2.0, 0.0)},
+            }
+        },
+        plot_results={
+            alg_a: {
+                metric_1: ([0.0], [1.0], [1.0], [1.0]),
+                metric_2: ([0.0], [2.0], [2.0], [2.0]),
+            }
+        },
+    )
+
+    captured = _run_display_with_capture(
+        monkeypatch,
+        metrics_result,
+        table_metrics=["NonExistent"],
+        plot_metrics=[metric_1],
+    )
+
+    assert "plot" in captured
+    assert "table" not in captured
 
 
 def test_metric_result_available_discovery_properties() -> None:  # noqa: D103
