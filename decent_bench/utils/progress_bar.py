@@ -195,7 +195,10 @@ class ProgressBarController:
         )
         self.progress_step = progress_step
         p_cols = [
-            (TextColumn("{task.description}"), Text("Algorithm", style="bold")),
+            (
+                TextColumn("{task.description}", table_column=Column(no_wrap=True, max_width=24)),
+                Text("Algorithm", style="bold"),
+            ),
             (BarColumn(finished_style="bold green", pulse_style="none"), Text("Progress Bar", style="bold")),
             (TaskProgressColumn(), Text("", style="bold")),  # Skip % Completed header as it's part of progress bar
             *([(SpeedColumn(progress_step), Text("Speed", style="bold"))] if show_speed else []),
