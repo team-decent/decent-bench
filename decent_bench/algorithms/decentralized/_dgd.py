@@ -16,7 +16,7 @@ class DGD(P2PAlgorithm):
     Distributed gradient descent characterized by the update step below.
 
     .. math::
-        \mathbf{x}_{i, k+1} = (\sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k}) - \rho \nabla f_i(\mathbf{x}_{i,k})
+        \mathbf{x}_{i, k+1} = \gamma (\sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k}) - \rho \nabla f_i(\mathbf{x}_{i,k})
 
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
@@ -29,6 +29,7 @@ class DGD(P2PAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
+    aux_step_size: float = 1.0
     x0: InitialStates = None
     name: str = "DGD"
 
@@ -42,6 +43,8 @@ class DGD(P2PAlgorithm):
         """
         if self.step_size <= 0:
             raise ValueError("`step_size` must be positive")
+        if self.aux_step_size <= 0:
+            raise ValueError("`aux_step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:
         self.x0 = initial_states(self.x0, network)
@@ -59,4 +62,4 @@ class DGD(P2PAlgorithm):
             if len(i.messages) > 0:
                 s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
                 neighborhood_avg += iop.sum(s, dim=0)
-            i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
+            i.x = self.aux_step_size * neighborhood_avg - self.step_size * i.cost.gradient(i.x)

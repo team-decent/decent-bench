@@ -166,6 +166,7 @@ if __name__ == "__main__":
                         ),
                     ],
                 )
+            # TODO: Double check parameters for all ALGS
             for ls in local_steps:
                 algorithms.extend(
                     [

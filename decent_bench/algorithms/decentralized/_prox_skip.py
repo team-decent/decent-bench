@@ -102,22 +102,18 @@ class ProxSkip(P2PAlgorithm):
 
         # Step 2: Flip coins to determine communication (line 2)
         # Generate Bernoulli random variables theta_i for each agent
-        communication_decisions = {}
+        # theta_i ~ Bernoulli(p), with P(theta_i = 1) = p
+        theta_i = random.random() < self.comm_probability
 
         # Step 3: Communication and updates (lines 6-11)
-        for i in network.active_agents():
-            # theta_i ~ Bernoulli(p), with P(theta_i = 1) = p
-            # Replace with global RNG
-            theta_i = random.random() < self.comm_probability
-            communication_decisions[i] = theta_i
-
-            if theta_i:  # theta_i = 1 (communicate with probability p)
+        if theta_i:  # theta_i = 1 (communicate with probability p)
+            for i in network.active_agents():
                 # Line 7: Broadcast z_i^t for weighted averaging
                 network.broadcast(i, i.aux_vars["z"])
 
         # Update based on communication decision
         for i in network.active_agents():
-            if communication_decisions[i]:  # Line 7-8: communicate and update
+            if theta_i:  # Line 7-8: communicate and update
                 self._communication_update(i, aux_step_size)
             else:  # Line 10: skip communication
                 self._no_communication_update(i)

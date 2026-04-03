@@ -257,8 +257,14 @@ class ProgressBarController:
             self.listener_thread.join(timeout=2.0)
 
     @staticmethod
+    def _visible_capacity(orchestrator: Progress) -> int:
+        return max(1, orchestrator.console.size.height - 5)
+
+    @staticmethod
     def _progress_listener(orchestrator: Progress, queue: Queue[_ProgressRecord | None]) -> None:
         started_progress_bar_ids = set()
+        started_order = []
+        height = ProgressBarController._visible_capacity(orchestrator)
         while not orchestrator.finished:
             progress_record = queue.get()
             if progress_record is None:
@@ -267,6 +273,10 @@ class ProgressBarController:
             if progress_record.progress_bar_id not in started_progress_bar_ids:
                 orchestrator.reset(progress_record.progress_bar_id)
                 started_progress_bar_ids.add(progress_record.progress_bar_id)
+                started_order.append(progress_record.progress_bar_id)
+                # If we have more progress bars than visible capacity, keep the most recently started ones visible
+                while len(started_order) > height:
+                    orchestrator.update(started_order.pop(0), visible=False)
             if progress_record.trial is not None:
                 orchestrator.update(progress_record.progress_bar_id, fields={"trial": str(progress_record.trial)})
             orchestrator.advance(progress_record.progress_bar_id, progress_record.increment)

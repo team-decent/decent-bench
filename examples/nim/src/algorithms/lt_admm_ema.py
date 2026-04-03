@@ -105,7 +105,7 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
                 initial_step_size = self.step_size(0) if callable(self.step_size) else self.step_size
                 if self.opt_kwargs is None:
                     self.opt_kwargs = {}
-                self.opt_kwargs["lr"] = initial_step_size
+                self.opt_kwargs.setdefault("lr", initial_step_size)
                 i.cost.init_local_training(
                     opt_cls=self.opt_cls,
                     opt_kwargs=self.opt_kwargs,

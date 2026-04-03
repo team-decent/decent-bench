@@ -125,6 +125,7 @@ def uniform_initialization(
 
 def pytorch_initialization(
     network: Network,
+    all_same: bool = False,
 ) -> "dict[Agent, Array]":
     """
     Build per-agent initial states using ``PyTorchCost.model`` initialization routine.
@@ -149,14 +150,27 @@ def pytorch_initialization(
     from decent_bench.costs import PyTorchCost  # noqa: PLC0415
 
     x0s = {}
+    x0 = None
     for a in network.graph:
         if not isinstance(a.cost, PyTorchCost):
             raise TypeError(f"Agent {a} has cost of type {type(a.cost).__name__!r}, expected PyTorchCost.")
-        x0s[a] = iop.to_array(
-            a.cost._get_model_parameters(),  # noqa: SLF001
-            framework=a.cost.framework,
-            device=a.cost.device,
+
+        if all_same and x0 is None:
+            x0 = iop.to_array(
+                a.cost._get_model_parameters(),  # noqa: SLF001
+                framework=a.cost.framework,
+                device=a.cost.device,
+            )
+        val = (
+            iop.copy(x0)
+            if all_same
+            else iop.to_array(
+                a.cost._get_model_parameters(),  # noqa: SLF001
+                framework=a.cost.framework,
+                device=a.cost.device,
+            )
         )
+        x0s[a] = val
     return x0s
 
 

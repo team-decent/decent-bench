@@ -94,16 +94,18 @@ class KGT(P2PAlgorithm):
             self._local_training(i, step_size)
 
         # Step 2: Compute z_i and store in aux_vars
+        multiplier = self.local_steps * aux_step_size * step_size
         for i in network.active_agents():
             # Compute z_i^(t) = (1/K eta_c)(x_i^(t) - x_i^(t+K))
             i.aux_vars["z_i"] = (i.aux_vars["x_before_local"] - i.x) / (self.local_steps * step_size)
-            # Step 3: Communication phase - broadcast (x_before_local, z_i)
-            message = iop.stack([i.aux_vars["x_before_local"], i.aux_vars["z_i"]])
+            msg = i.aux_vars["x_before_local"] - multiplier * i.aux_vars["z_i"]
+            # Step 3: Communication phase
+            message = iop.stack([msg, i.aux_vars["z_i"]])
             network.broadcast(i, message)
 
         # Step 5: Update tracking variable and model parameters (lines 9-10)
         for i in network.active_agents():
-            self._update_tracking_and_params(i, step_size, aux_step_size)
+            self._update_tracking_and_params(i, multiplier)
 
     def _local_training(self, agent: Agent, step_size: float) -> None:
         """
@@ -125,8 +127,7 @@ class KGT(P2PAlgorithm):
     def _update_tracking_and_params(
         self,
         agent: Agent,
-        step_size: float,
-        aux_step_size: float,
+        multiplier: float,
     ) -> None:
         """
         Update tracking variable c_i and model parameters x_i.
@@ -147,11 +148,10 @@ class KGT(P2PAlgorithm):
         agent.aux_vars["c"] = agent.aux_vars["c"] - z_i + weighted_neighbor_z
 
         # Line 10: Update model parameters
-        multiplier = self.local_steps * aux_step_size * step_size
         weighted_sum = self.W[agent, agent] * (agent.aux_vars["x_before_local"] - multiplier * z_i)
         if len(agent.messages) > 0:
             weighted_sum += iop.sum(
-                iop.stack([self.W[agent, j] * (msg[0] - multiplier * msg[1]) for j, msg in agent.messages.items()]),
+                iop.stack([self.W[agent, j] * msg[0] for j, msg in agent.messages.items()]),
                 dim=0,
             )
         agent.x = weighted_sum

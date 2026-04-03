@@ -439,6 +439,28 @@ class CheckpointManager:  # noqa: PLR0904
         trial_dir = self._get_trial_dir(alg_idx, trial)
         return (trial_dir / "complete.json").exists()
 
+    def is_completed(self) -> bool:
+        """
+        Check if all trials for all algorithms have been completed.
+
+        Returns:
+            True if all trials for all algorithms are marked as complete, False otherwise.
+
+        """
+        metadata = self.load_metadata()
+
+        if metadata is None or "n_trials" not in metadata or "algorithms" not in metadata:
+            return False
+
+        n_trials = metadata["n_trials"]
+        algorithms = metadata["algorithms"]
+        for alg in algorithms:
+            alg_idx = alg["index"]
+            for trial in range(n_trials):
+                if not self.is_trial_complete(alg_idx, trial):
+                    return False
+        return True
+
     def load_trial_result(self, alg_idx: int, trial: int) -> tuple[Algorithm[Network], Network]:
         """
         Load final result of a completed trial.
@@ -567,9 +589,15 @@ class CheckpointManager:  # noqa: PLR0904
             pickle.dump(metrics_result, f)
         LOGGER.info(f"Saved computed metrics result to {metric_path}")
 
-    def load_metrics_result(self) -> MetricResult:
+    def load_metrics_result(self, skip_agent_metrics: bool = False) -> MetricResult:
         """
         Load the computed metrics result from the checkpoint directory.
+
+        Args:
+            skip_agent_metrics: If True, do not attempt to load agent metrics from the benchmark
+                result if they are not present in the checkpoint. This can save time if agent metrics
+                are not needed for the intended analysis, which can be useful for automatic analysis.
+                Agent metrics are needed for :class:`ComputationalCost` and may be used if :class:`EmpiricalRiskCost` is used.
 
         Returns:
             MetricsResult object containing the computed metrics.
@@ -579,7 +607,7 @@ class CheckpointManager:  # noqa: PLR0904
         with metric_path.open("rb") as f:
             metrics_result: MetricResult = pickle.load(f)  # noqa: S301
 
-        if metrics_result.agent_metrics is None:
+        if metrics_result.agent_metrics is None and not skip_agent_metrics:
             try:
                 benchmark_result = self.load_benchmark_result()
                 resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
