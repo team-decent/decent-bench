@@ -38,6 +38,13 @@ class MetricProgressBar(Progress):
         )
 
 
+def _clear_caches() -> None:
+    """Clear module-level functools caches used by metric utilities."""
+    x_mean.cache_clear()
+    x_error.cache_clear()
+    predict_agent.cache_clear()
+
+
 def single(values: Sequence[float]) -> float:
     """
     Assert that *values* contain exactly one element and return it.

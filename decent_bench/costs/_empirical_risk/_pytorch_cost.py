@@ -105,7 +105,10 @@ class PyTorchCost(EmpiricalRiskCost):
             max_batch_size (int | None): Optional maximum batch size to perform computations in, which can be used to
                 avoid out-of-memory errors for large models/datasets. If specified, computations will be calculated in
                 chunks of size at most max_batch_size. This limit will be applied to all computations irregardless of
-                the batch_size or indices parameters; the result will still be the same.
+                the batch_size or indices parameters; the result will still be the same. This is especially useful for
+                when `indices` is set to "all" but the dataset is too large to fit in memory at once. If not specified,
+                it will default to the batch_size (if batch_size is an int) or the total number of samples
+                (if batch_size is "all").
             device (SupportedDevices): Device to run computations on. Make sure to test CPU vs GPU performance for your
                 specific model and dataset, as it can vary.
             use_dataloader (bool): Whether to use DataLoader for batching.
@@ -460,9 +463,7 @@ class PyTorchCost(EmpiricalRiskCost):
                 "only once to set the optimizer for local training."
             )
 
-        if opt_kwargs is None:
-            opt_kwargs = {}
-        self._optimizer = opt_cls(self._params_list, **opt_kwargs)
+        self._optimizer = opt_cls(self._params_list, **(opt_kwargs or {}))
         if sched_cls is not None:
             self._scheduler = sched_cls(self._optimizer, **(sched_kwargs or {}))
 
@@ -477,8 +478,7 @@ class PyTorchCost(EmpiricalRiskCost):
         Perform local training steps using the provided optimizer.
 
         Note:
-            This method
-            It is intended to be used in decentralized algorithms that support local training.
+            This method is intended to be used in decentralized algorithms that support local training.
 
         Args:
             x (torch.Tensor): Initial parameters to start local training from.
@@ -669,3 +669,22 @@ class PyTorchCost(EmpiricalRiskCost):
 
     def __add__(self, other: Cost) -> Cost:
         return super().__add__(other)
+
+    def cleanup(self) -> None:
+        """Release transient buffers that are only useful while actively training."""
+        self._dataloader = None
+        if hasattr(self, "_dataloader_iter"):
+            del self._dataloader_iter
+
+        if hasattr(self, "_last_batch_x"):
+            del self._last_batch_x
+        if hasattr(self, "_last_batch_y"):
+            del self._last_batch_y
+
+        if self._pytorch_device.startswith("cuda"):
+            torch.cuda.empty_cache()
+
+        if hasattr(self, "_ft_compute_grad"):
+            del self._ft_compute_grad
+        if hasattr(self, "_ft_compute_sample_grad"):
+            del self._ft_compute_sample_grad

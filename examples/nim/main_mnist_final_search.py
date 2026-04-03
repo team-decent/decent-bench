@@ -1,3 +1,4 @@
+import ctypes
 import gc
 from pathlib import Path
 
@@ -21,6 +22,16 @@ from decent_bench.utils.checkpoint_manager import CheckpointManager
 from decent_bench.utils.pytorch_utils import ArgmaxActivation, SimpleLinearModel
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 from examples.nim.src.algorithms.lt_admm_ema import LT_ADMM_EMA
+
+
+def _trim_process_memory() -> None:
+    """Best-effort return of freed heap pages back to the OS on glibc systems."""
+    try:
+        libc = ctypes.CDLL("libc.so.6")
+        libc.malloc_trim(0)
+    except OSError:
+        return
+
 
 if __name__ == "__main__":
     iterations = 1000
@@ -135,7 +146,8 @@ if __name__ == "__main__":
                     },
                 )
 
-                if cm.is_completed():
+                is_benchmark_completed = cm.is_benchmark_completed()
+                if is_benchmark_completed and cm.are_metrics_computed():
                     print(f"Benchmark already completed for {checkpoint_path}. Skipping.")
                     continue
 
@@ -343,24 +355,27 @@ if __name__ == "__main__":
                     # Take second half
                     algorithms = algorithms[len(algorithms) // 2 :]
 
-                if resume_benchmark:
-                    print(f"Resuming benchmark for {checkpoint_path}...")
-                    result = benchmark.resume_benchmark(
-                        checkpoint_manager=cm,
-                        create_backup=False,
-                        show_speed=True,
-                        show_trial=True,
-                    )
+                if not is_benchmark_completed:
+                    if resume_benchmark:
+                        print(f"Resuming benchmark for {checkpoint_path}...")
+                        result = benchmark.resume_benchmark(
+                            checkpoint_manager=cm,
+                            create_backup=False,
+                            show_speed=True,
+                            show_trial=True,
+                        )
+                    else:
+                        result = benchmark.benchmark(
+                            algorithms=algorithms,
+                            benchmark_problem=problem,
+                            # More trials for ProxSkip to account for its stochasticity
+                            n_trials=2 if alg == "ProxSkip" else 1,
+                            show_speed=True,
+                            show_trial=True,
+                            checkpoint_manager=cm,
+                        )
                 else:
-                    result = benchmark.benchmark(
-                        algorithms=algorithms,
-                        benchmark_problem=problem,
-                        # More trials for ProxSkip to account for its stochasticity
-                        n_trials=2 if alg == "ProxSkip" else 1,
-                        show_speed=True,
-                        show_trial=True,
-                        checkpoint_manager=cm,
-                    )
+                    result = None
 
                 metric_result = benchmark.compute_metrics(
                     benchmark_result=result,
@@ -374,8 +389,14 @@ if __name__ == "__main__":
                     checkpoint_manager=cm,
                     show_plots=False,
                 )
+                metric_result.agent_metrics = None
+                metric_result.plot_results = None
+                metric_result.table_results = None
+                metric_result.plot_metrics = None
+                metric_result.table_metrics = None
                 del result, metric_result, costs, agents, network, problem, algorithms
                 # Garbage collection to free up memory before the next benchmark
                 gc.collect()
+                _trim_process_memory()
 
     print("All benchmarks completed.")

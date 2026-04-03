@@ -439,7 +439,7 @@ class CheckpointManager:  # noqa: PLR0904
         trial_dir = self._get_trial_dir(alg_idx, trial)
         return (trial_dir / "complete.json").exists()
 
-    def is_completed(self) -> bool:
+    def is_benchmark_completed(self) -> bool:
         """
         Check if all trials for all algorithms have been completed.
 
@@ -460,6 +460,17 @@ class CheckpointManager:  # noqa: PLR0904
                 if not self.is_trial_complete(alg_idx, trial):
                     return False
         return True
+
+    def are_metrics_computed(self) -> bool:
+        """
+        Check if the metrics have been computed and saved in the checkpoint.
+
+        Returns:
+            True if the metrics result file exists, False otherwise.
+
+        """
+        metric_path = self.checkpoint_dir / "metric_computation_complete.json"
+        return metric_path.exists()
 
     def load_trial_result(self, alg_idx: int, trial: int) -> tuple[Algorithm[Network], Network]:
         """
@@ -580,6 +591,7 @@ class CheckpointManager:  # noqa: PLR0904
 
         """
         metric_path = self.checkpoint_dir / "metric_computation.pkl"
+        metric_marker_path = self.checkpoint_dir / "metric_computation_complete.json"
 
         # Remove agent metrics from checkpoint to save space (can be a lot),
         # this can be loaded again from the benchmark result
@@ -587,6 +599,13 @@ class CheckpointManager:  # noqa: PLR0904
 
         with metric_path.open("wb") as f:
             pickle.dump(metrics_result, f)
+
+        # Save a small marker file to indicate that metric computation was saved successfully.
+        # This is used to avoid issues where the process is killed while writing the potentially
+        # large metric_computation.pkl file,
+        with metric_marker_path.open("w") as f:
+            json.dump({"metric_computation_complete": True}, f)
+
         LOGGER.info(f"Saved computed metrics result to {metric_path}")
 
     def load_metrics_result(self, skip_agent_metrics: bool = False) -> MetricResult:

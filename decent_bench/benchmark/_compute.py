@@ -12,6 +12,7 @@ from decent_bench.metrics import (
     Metric,
     compute_plots,
     compute_tables,
+    metric_utils,
 )
 from decent_bench.metrics import metric_library as ml
 from decent_bench.networks import Network
@@ -111,5 +112,7 @@ def compute_metrics(
             }
             checkpoint_manager.save_metrics_result(result)
             checkpoint_manager.append_metadata(metadata)
+
+    metric_utils._clear_caches()  # noqa: SLF001
 
     return result
