@@ -374,8 +374,7 @@ if __name__ == "__main__":
                     checkpoint_manager=cm,
                     show_plots=False,
                 )
-                del result
-                del metric_result
+                del result, metric_result, costs, agents, network, problem, algorithms
                 # Garbage collection to free up memory before the next benchmark
                 gc.collect()
 

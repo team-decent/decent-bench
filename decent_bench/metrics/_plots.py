@@ -323,6 +323,10 @@ def _save_and_show_figures(
     # Show all figures at once
     if show_plots:
         plt.show()
+    else:
+        # Prevent figure objects from accumulating across repeated benchmark runs.
+        for fig, _ in figures_to_show:
+            plt.close(fig)
 
 
 def _organize_metrics_into_groups(

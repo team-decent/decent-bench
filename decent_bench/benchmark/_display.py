@@ -115,22 +115,23 @@ def display_metrics(
             raise ValueError("No metrics result found in checkpoint manager to display")
 
     # Update metrics to display based on provided plot_metrics and table_metrics (if provided)
-    new_metrics_result = deepcopy(metrics_result)
+    prev_table_metrics = metrics_result.table_metrics
+    prev_plot_metrics = metrics_result.plot_metrics
 
     if table_metrics is not None:
-        new_metrics_result.table_metrics = _get_new_table_metrics(new_metrics_result, table_metrics)
+        metrics_result.table_metrics = _get_new_table_metrics(metrics_result, table_metrics)
 
     if plot_metrics is not None:
-        new_metrics_result.plot_metrics = _get_new_plot_metrics(new_metrics_result, plot_metrics)
+        metrics_result.plot_metrics = _get_new_plot_metrics(metrics_result, plot_metrics)
 
     if save_path is not None:
         save_path = Path(save_path)
     elif save_path is None and checkpoint_manager is not None:
         save_path = checkpoint_manager.get_results_path()
 
-    display_tables(new_metrics_result, table_fmt=table_fmt, scale_compute=scale_compute, table_path=save_path)
+    display_tables(metrics_result, table_fmt=table_fmt, scale_compute=scale_compute, table_path=save_path)
     display_plots(
-        new_metrics_result,
+        metrics_result,
         computational_cost=computational_cost,
         scale_x_axis=scale_x_axis,
         compare_iterations_and_computational_cost=compare_iterations_and_computational_cost,
@@ -140,6 +141,9 @@ def display_metrics(
         plot_path=save_path,
         show_plots=show_plots,
     )
+
+    metrics_result.table_metrics = prev_table_metrics
+    metrics_result.plot_metrics = prev_plot_metrics
 
 
 def _get_new_table_metrics(
