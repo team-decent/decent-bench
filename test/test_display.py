@@ -1,5 +1,8 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 
 from decent_bench.agents import AgentHistory, AgentMetricsView
@@ -8,7 +11,14 @@ from decent_bench.benchmark._display import display_metrics
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.costs import LinearRegressionCost
 from decent_bench.metrics._metric import Metric
-from decent_bench.metrics._plots import MAX_LOG_PLOT_VALUE, compute_plots
+from decent_bench.metrics._plots import (
+    MAX_LOG_PLOT_VALUE,
+    _add_legend_and_save,
+    _create_separate_legend_figure,
+    _get_separate_legend_path,
+    _select_legend_mode,
+    compute_plots,
+)
 from decent_bench.metrics.metric_library import Accuracy, MSE, Precision, Recall, Regret, XError
 
 
@@ -500,6 +510,101 @@ def test_compute_plots_truncates_trials_at_over_threshold_value() -> None:  # no
     assert list(y_mean) == [2.0, 3.0]
     assert list(y_min) == [1.0, 2.0]
     assert list(y_max) == [3.0, 4.0]
+
+
+# -----------------------------------------------------------------------------
+# Legend Layout Threshold Tests
+# -----------------------------------------------------------------------------
+
+def test_select_legend_mode_prefers_same_figure_for_small_label_sets() -> None:  # noqa: D103
+    mode, cols, rows = _select_legend_mode(["A", "B", "C", "D"])
+
+    assert mode == "same-figure"
+    assert cols == 3
+    assert rows == 2
+
+
+def test_select_legend_mode_prefers_same_figure_for_medium_label_sets() -> None:  # noqa: D103
+    labels = [f"alg_{i}" for i in range(8)]
+    mode, cols, rows = _select_legend_mode(labels)
+
+    assert mode == "same-figure"
+    assert cols == 3
+    assert rows == 3
+
+
+def test_select_legend_mode_uses_separate_for_many_labels() -> None:  # noqa: D103
+    labels = [f"alg_{i}" for i in range(9)]
+    mode, cols, rows = _select_legend_mode(labels)
+
+    assert mode == "separate"
+    assert cols == 3
+    assert rows == 3
+
+
+def test_select_legend_mode_uses_separate_for_long_labels() -> None:  # noqa: D103
+    long_label = "algorithm_with_a_very_long_name"
+    labels = [f"{long_label}_{i}" for i in range(6)]
+    mode, cols, rows = _select_legend_mode(labels)
+
+    assert mode == "separate"
+    assert cols == 3
+    assert rows == 2
+
+
+def test_select_legend_mode_uses_separate_for_many_estimated_rows() -> None:  # noqa: D103
+    labels = [f"alg_{i}" for i in range(16)]
+    mode, cols, rows = _select_legend_mode(labels)
+
+    assert mode == "separate"
+    assert cols == 3
+    assert rows == 6
+
+
+def test_get_separate_legend_path_appends_legend_suffix() -> None:  # noqa: D103
+    plot_path = Path("plots/plot_fig1.png")
+
+    legend_path = _get_separate_legend_path(plot_path)
+
+    assert legend_path.as_posix() == "plots/plot_fig1_legend.png"
+
+
+def test_create_separate_legend_figure_tightly_fits_legend() -> None:  # noqa: D103
+    fig, ax = plt.subplots()
+    ax.plot([0.0, 1.0], [0.0, 1.0], label="Algorithm A")
+    ax.plot([0.0, 1.0], [1.0, 0.0], label="Algorithm B")
+    handles, labels = ax.get_legend_handles_labels()
+
+    legend_fig = _create_separate_legend_figure(handles, labels, label_cols=2, estimated_rows=1)
+
+    legend = legend_fig.legends[0]
+    legend_fig.canvas.draw()
+    renderer = legend_fig.canvas.get_renderer()
+    legend_bbox = legend.get_window_extent(renderer)
+    figure_width, figure_height = legend_fig.get_size_inches()
+    legend_width = legend_bbox.width / legend_fig.dpi
+    legend_height = legend_bbox.height / legend_fig.dpi
+
+    assert figure_width >= legend_width
+    assert figure_height >= legend_height
+    assert figure_width - legend_width < 0.5
+    assert figure_height - legend_height < 0.5
+
+    plt.close(fig)
+    plt.close(legend_fig)
+
+
+def test_add_legend_and_save_creates_missing_parent_directory() -> None:  # noqa: D103
+    fig, ax = plt.subplots()
+    ax.plot([0.0, 1.0], [0.0, 1.0], label="A")
+
+    with tempfile.TemporaryDirectory(dir=".") as temp_dir:
+        target = Path(temp_dir) / "nested" / "results" / "plot.png"
+        assert not target.parent.exists()
+
+        _add_legend_and_save(fig, [ax], plot_path=target)
+
+        assert target.exists()
 
 
 # -----------------------------------------------------------------------------

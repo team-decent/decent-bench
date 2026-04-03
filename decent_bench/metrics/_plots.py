@@ -48,6 +48,11 @@ STYLES = ["-", ":", "--", "-.", (5, (10, 3)), (0, (5, 10)), (0, (3, 1, 1, 1))]
 # Upper bound used when deciding whether a point is still plottable on log y-axis.
 # Values above this threshold are treated as divergence for plotting and trigger truncation.
 MAX_LOG_PLOT_VALUE = 1e100
+# thresholds to decide when to plot the legend as a separate figure
+LEGEND_MAX_COLS = 3
+SEPARATE_LEGEND_MIN_LABELS = 9
+SEPARATE_LEGEND_MIN_ROWS = 4
+SEPARATE_LEGEND_MAX_LABEL_LENGTH = 24
 
 
 def display_plots(
@@ -128,7 +133,7 @@ def display_plots(
         return
 
     # Save and show figures
-    _save_and_show_figures(all_figures, two_columns, plot_path=plot_path, plot_format=plot_format)
+    _save_and_show_figures(all_figures, plot_path=plot_path, plot_format=plot_format)
 
 
 def compute_plots(  # noqa: PLR0914
@@ -328,7 +333,6 @@ def _create_and_plot_figures(
 
 def _save_and_show_figures(
     figures_to_show: list[tuple[Figure, list[SubPlot]]],
-    two_columns: bool,
     *,
     plot_path: Path | None,
     plot_format: Literal["png", "pdf", "svg"],
@@ -343,7 +347,7 @@ def _save_and_show_figures(
             else:
                 current_plot_path = plot_path / f"plot.{plot_format}"
 
-        _add_legend_and_save(fig, metric_subplots, two_columns, current_plot_path)
+        _add_legend_and_save(fig, metric_subplots, current_plot_path)
 
     # Show all figures at once
     plt.show()
@@ -449,7 +453,6 @@ def _create_metric_subplots(
 def _add_legend_and_save(
     fig: Figure,
     metric_subplots: list[SubPlot],
-    two_columns: bool,
     plot_path: Path | None = None,
 ) -> None:
     # Find the first subplot with data to get legend handles
@@ -461,21 +464,91 @@ def _add_legend_and_save(
             break
 
     # Only add legend if there are any handles to display
+    legend_fig: Figure | None = None
     if handles:
-        label_cols = min(len(labels), 4 if two_columns else 3)
+        legend_mode, label_cols, estimated_legend_rows = _select_legend_mode(labels)
 
-        # Create the legend to get the height of the legend box
-        fig.legend(
-            handles,
-            labels,
-            loc="outside upper center",
-            ncol=label_cols,
-            frameon=True,
-        )
+        if legend_mode == "same-figure":
+            fig.legend(
+                handles,
+                labels,
+                loc="outside upper center",
+                ncol=label_cols,
+                frameon=True,
+            )
+        else:
+            legend_fig = _create_separate_legend_figure(
+                handles,
+                labels,
+                label_cols=label_cols,
+                estimated_rows=estimated_legend_rows,
+            )
 
     if plot_path is not None:
+        plot_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(plot_path, dpi=600)
         LOGGER.info(f"Saved plot to: {plot_path}")
+
+        if legend_fig is not None:
+            legend_path = _get_separate_legend_path(plot_path)
+            legend_fig.savefig(legend_path, dpi=600)
+            LOGGER.info(f"Saved legend to: {legend_path}")
+
+
+def _select_legend_mode(labels: Sequence[str]) -> tuple[Literal["same-figure", "separate"], int, int]:
+    label_count = len(labels)
+    max_label_len = max((len(label) for label in labels), default=0)
+
+    max_cols = LEGEND_MAX_COLS
+    label_cols = min(max(label_count, 1), max_cols)
+    estimated_legend_rows = math.ceil(label_count / label_cols)
+
+    # legend should be plotted as separate figure
+    force_separate = (
+        label_count >= SEPARATE_LEGEND_MIN_LABELS
+        or estimated_legend_rows >= SEPARATE_LEGEND_MIN_ROWS
+        or (max_label_len > SEPARATE_LEGEND_MAX_LABEL_LENGTH and label_count >= 6)
+    )
+
+    if force_separate:
+        return "separate", label_cols, estimated_legend_rows
+
+    # legend should be plotted in the same figure, positioned outside the subplots
+    return "same-figure", label_cols, estimated_legend_rows
+
+
+def _create_separate_legend_figure(
+    handles: Sequence[Artist],
+    labels: Sequence[str],
+    *,
+    label_cols: int,
+    estimated_rows: int,
+) -> Figure:
+    # create the legend figure with an initial size guess ...
+    initial_width = max(6.0, 1.8 * label_cols)
+    initial_height = max(2.0, 0.8 * max(estimated_rows, 1) + 0.8)
+    legend_padding_inches = 0.15
+
+    legend_fig = plt.figure(figsize=(initial_width, initial_height))
+    legend = legend_fig.legend(handles, labels, loc="center", ncol=label_cols, frameon=True)
+
+    # ... and resize the figure based on the actual legend size
+    legend_fig.canvas.draw()
+    renderer = legend_fig.canvas.get_renderer()  # type: ignore[attr-defined]
+    legend_bbox = legend.get_window_extent(renderer)
+
+    legend_width = legend_bbox.width / legend_fig.dpi
+    legend_height = legend_bbox.height / legend_fig.dpi
+    fitted_width = legend_width + 2 * legend_padding_inches
+    fitted_height = legend_height + 2 * legend_padding_inches
+
+    legend_fig.set_size_inches(fitted_width, fitted_height, forward=True)
+    legend_fig.canvas.draw()
+    return legend_fig
+
+
+def _get_separate_legend_path(plot_path: Path) -> Path:
+    return plot_path.with_name(f"{plot_path.stem}_legend{plot_path.suffix}")
 
 
 def _truncate_to_common_finite_prefix(
