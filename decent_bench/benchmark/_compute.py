@@ -1,8 +1,7 @@
 import logging
-from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from json import JSONDecodeError
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from decent_bench.agents import AgentMetricsView
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
@@ -11,10 +10,11 @@ from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics import Metric, compute_plots, compute_tables
 from decent_bench.metrics import metric_library as ml
 from decent_bench.networks import Network
-from decent_bench.utils import logger
 from decent_bench.utils._metric_helpers import _find_duplicates, _flatten_plot_metrics
+from decent_bench.utils.logger import LOGGER, start_logger
 
 if TYPE_CHECKING:
+    from decent_bench.benchmark import BenchmarkProblem
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
 
@@ -70,7 +70,7 @@ def compute_metrics(
         finite part of a trajectory, while table metrics are evaluated at the final iteration.
 
     """
-    logger.start_logger(log_level=log_level)
+    start_logger(log_level=log_level)
 
     if benchmark_result is None:
         if checkpoint_manager is None:
@@ -89,19 +89,30 @@ def compute_metrics(
         if len(benchmark_result.states) == 0:
             raise ValueError("No benchmark result found in checkpoint manager to compute metrics")
 
-    # work on independent metric instances so any metric state does not leak globally
+    # work on independent metric instances
     table_metrics = deepcopy(table_metrics)
     plot_metrics = deepcopy(plot_metrics)
+
+    # check metrics are unique, which also checks that plot_metrics is either list or list of lists
     _validate_unique_metric_descriptions(table_metrics, plot_metrics)
 
+    # remove unavailable tables
+    table_metrics = _remove_unavailable(table_metrics, benchmark_result.problem, "table")
+
+    if any(isinstance(metric, list) for metric in plot_metrics):
+        grouped_plot_metrics = cast("list[list[Metric]]", plot_metrics)
+        for i, group in enumerate(grouped_plot_metrics):
+            grouped_plot_metrics[i] = _remove_unavailable(group, benchmark_result.problem, "plot")
+        plot_metrics = grouped_plot_metrics
+    else:
+        plot_metrics = _remove_unavailable(cast("list[Metric]", plot_metrics), benchmark_result.problem, "plot")
+
+    # compute table and plot results
     resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
     for alg, networks in benchmark_result.states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
     table_results = compute_tables(resulting_agent_states, benchmark_result.problem, table_metrics, confidence_level)
     plot_results = compute_plots(resulting_agent_states, benchmark_result.problem, plot_metrics)
-
-    table_metrics = _filter_table_metrics_with_results(table_metrics, table_results)
-    plot_metrics = _filter_plot_metrics_with_results(plot_metrics, plot_results)
 
     result = MetricResult(
         agent_metrics=resulting_agent_states,
@@ -123,34 +134,6 @@ def compute_metrics(
     return result
 
 
-def _filter_table_metrics_with_results(
-    table_metrics: list[Metric],
-    table_results: Mapping[Algorithm[Network], Mapping[Metric, Mapping[str, tuple[float, float]]]],
-) -> list[Metric]:
-    return [metric for metric in table_metrics if any(metric in results for results in table_results.values())]
-
-
-def _filter_plot_metrics_with_results(
-    plot_metrics: list[Metric] | list[list[Metric]],
-    plot_results: Mapping[
-        Algorithm[Network], Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]
-    ],
-) -> list[Metric] | list[list[Metric]]:
-    available_metrics = {metric for results in plot_results.values() for metric in results}
-
-    if any(isinstance(metric, list) for metric in plot_metrics):
-        grouped_plot_metrics = cast("list[list[Metric]]", plot_metrics)
-        filtered_groups: list[list[Metric]] = []
-        for group in grouped_plot_metrics:
-            filtered_group = [metric for metric in group if metric in available_metrics]
-            if filtered_group:
-                filtered_groups.append(filtered_group)
-        return filtered_groups
-
-    flat_plot_metrics = cast("list[Metric]", plot_metrics)
-    return [metric for metric in flat_plot_metrics if metric in available_metrics]
-
-
 def _validate_unique_metric_descriptions(
     table_metrics: list[Metric],
     plot_metrics: list[Metric] | list[list[Metric]],
@@ -160,8 +143,25 @@ def _validate_unique_metric_descriptions(
         duplicates = ", ".join(duplicate_table_descriptions)
         raise ValueError(f"Table metric descriptions must be unique, duplicates found: {duplicates}")
 
-    flat_plot_metrics = _flatten_plot_metrics(plot_metrics)
-    duplicate_plot_descriptions = _find_duplicates([metric.plot_description for metric in flat_plot_metrics])
+    duplicate_plot_descriptions = _find_duplicates([
+        metric.plot_description for metric in _flatten_plot_metrics(plot_metrics)
+    ])
     if duplicate_plot_descriptions:
         duplicates = ", ".join(duplicate_plot_descriptions)
         raise ValueError(f"Plot metric descriptions must be unique, duplicates found: {duplicates}")
+
+
+def _remove_unavailable(
+    metrics: list[Metric], problem: "BenchmarkProblem", type_: Literal["table", "plot"]
+) -> list[Metric]:
+    available_metrics: list[Metric] = []
+    for metric in metrics:
+        available, reason = metric.is_available(problem)
+        if not available:
+            description = metric.table_description if type_ == "table" else metric.plot_description
+            LOGGER.warning(f"Skipping {type_} metric '{description}' because it is unavailable: {reason}")
+            continue
+
+        available_metrics.append(metric)
+
+    return available_metrics

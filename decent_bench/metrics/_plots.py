@@ -102,13 +102,12 @@ def display_plots(
         .. include:: snippets/computational_cost.rst
 
     """
-    if not metrics_result.plot_results or not metrics_result.plot_metrics:
-        LOGGER.warning("No plot metrics to display.")
-        return
-
     plot_results = metrics_result.plot_results
     metrics = metrics_result.plot_metrics
     agent_metrics = metrics_result.agent_metrics
+
+    if plot_results is None or metrics is None:
+        return
 
     # Normalize metrics into list of groups (each group will be one figure)
     metric_groups = _organize_metrics_into_groups(metrics, individual_plots)
@@ -190,12 +189,6 @@ def compute_plots(  # noqa: PLR0914
 
         for metric in flat_metrics:
             progress.update(plot_task, status=f"Task: {metric.plot_description}")
-            available, reason = metric.is_available(problem)
-
-            if not available:
-                LOGGER.warning(f"Skipping plot metric '{metric.plot_description}' because it is unavailable: {reason}")
-                progress.advance(plot_task, advance=len(resulting_agent_states))
-                continue
 
             for alg, agent_states in resulting_agent_states.items():
                 data_per_trial: list[Sequence[tuple[X, Y]]] = _plot_data_per_trial(

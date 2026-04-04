@@ -130,7 +130,6 @@ def resume_benchmark(  # noqa: PLR0912
             algorithms = checkpoint_manager.load_initial_algorithms()
             if algorithms is None:
                 raise ValueError("Initial algorithms not found in checkpoint metadata")
-            _validate_unique_algorithm_names(algorithms)
 
             problem = checkpoint_manager.load_benchmark_problem()
             if problem is None:

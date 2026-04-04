@@ -6,6 +6,8 @@ if TYPE_CHECKING:
 
 def _flatten_plot_metrics(plot_metrics: list["Metric"] | list[list["Metric"]]) -> list["Metric"]:
     if any(isinstance(metric, list) for metric in plot_metrics):
+        if not all(isinstance(metric, list) for metric in plot_metrics):
+            raise ValueError("If passing lists in ``plot_metrics``, all items must be lists.")
         return [metric for group in plot_metrics for metric in group]  # type: ignore[union-attr]
 
     return plot_metrics  # type: ignore[return-value]

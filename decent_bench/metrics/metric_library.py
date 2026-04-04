@@ -34,7 +34,7 @@ class Regret(Metric):
 
     """
 
-    table_description: str = "regret \n[<1e-9 = exact conv.]"
+    table_description: str = "regret"
     plot_description: str = "regret"
 
     def is_available(  # noqa: D102

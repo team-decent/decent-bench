@@ -1,6 +1,5 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import cast
 
 from decent_bench.agents import AgentMetricsView
 from decent_bench.distributed_algorithms import Algorithm
@@ -47,49 +46,19 @@ class MetricResult:
     @property
     def available_algorithms(self) -> list[str]:
         """Return ``name`` of available algorithms, which can be used for filtering in :func:`~decent_bench.benchmark.display_metrics`."""  # noqa: E501
-        names: list[str] = []
-        seen: set[str] = set()
-
-        def _collect(mapping: Mapping[Algorithm[Network], object] | None) -> None:
-            if mapping is None:
-                return
-            for algorithm in mapping:
-                if algorithm.name not in seen:
-                    seen.add(algorithm.name)
-                    names.append(algorithm.name)
-
-        _collect(cast("Mapping[Algorithm[Network], object] | None", self.agent_metrics))
-        _collect(cast("Mapping[Algorithm[Network], object] | None", self.table_results))
-        _collect(cast("Mapping[Algorithm[Network], object] | None", self.plot_results))
-
-        return names
+        return sorted({
+            algorithm.name
+            for mapping in (self.agent_metrics, self.table_results, self.plot_results)
+            if mapping is not None
+            for algorithm in mapping
+        })
 
     @property
     def available_table_metrics(self) -> list[str]:
         """Return ``table_description`` of available metrics, which can be used for filtering in :func:`~decent_bench.benchmark.display_metrics`."""  # noqa: E501
-        if self.table_metrics is None:
-            return []
-
-        descriptions: list[str] = []
-        seen: set[str] = set()
-        for metric in self.table_metrics:
-            if metric.table_description not in seen:
-                seen.add(metric.table_description)
-                descriptions.append(metric.table_description)
-
-        return descriptions
+        return sorted({metric.table_description for metric in (self.table_metrics or [])})
 
     @property
     def available_plot_metrics(self) -> list[str]:
         """Return ``plot_descriptions`` of available metrics, which can be used for filtering in :func:`~decent_bench.benchmark.display_metrics`."""  # noqa: E501
-        if self.plot_metrics is None:
-            return []
-
-        descriptions: list[str] = []
-        seen: set[str] = set()
-        for metric in _flatten_plot_metrics(self.plot_metrics):
-            if metric.plot_description not in seen:
-                seen.add(metric.plot_description)
-                descriptions.append(metric.plot_description)
-
-        return descriptions
+        return sorted({metric.plot_description for metric in (_flatten_plot_metrics(self.plot_metrics or []))})

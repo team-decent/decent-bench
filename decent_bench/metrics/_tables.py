@@ -51,8 +51,7 @@ def display_tables(
             If not provided, the tables will only be displayed.
 
     """
-    if not metrics_result.table_results or not metrics_result.table_metrics:
-        LOGGER.warning("No table metrics to display.")
+    if metrics_result.table_metrics is None or metrics_result.table_results is None:
         return
 
     if (
@@ -144,14 +143,6 @@ def compute_tables(
         )
         for metric in metrics:
             progress.update(table_task, status=f"Task: {metric.table_description}")
-            available, reason = metric.is_available(problem)
-
-            if not available:
-                LOGGER.warning(
-                    f"Skipping table metric '{metric.table_description}' because it is unavailable: {reason}"
-                )
-                progress.advance(table_task, advance=len(metric.statistics))
-                continue
 
             data_per_trial = [_table_data_per_trial(resulting_agent_states[a], problem, metric) for a in algs]
 
