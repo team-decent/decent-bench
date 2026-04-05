@@ -350,6 +350,7 @@ if __name__ == "__main__":
                         show_plots=False,
                     )
 
+                    metric_result.agent_metrics = None
                     del result, metric_result, costs, agents, network, problem, algorithms
                     # Garbage collection to free up memory before the next benchmark
                     gc.collect()
