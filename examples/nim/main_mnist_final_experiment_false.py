@@ -73,7 +73,7 @@ if __name__ == "__main__":
             output_size=10,
         )
 
-    for heterogeneity in [True]:
+    for heterogeneity in [False]:
         for n_agents, n_neighbors in [(5, 4), (5, 2), (10, 9), (10, 4), (10, 2)]:
             for drops, activity, compression, noise in [
                 (True, True, True, True),
