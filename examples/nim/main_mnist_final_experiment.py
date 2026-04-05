@@ -329,7 +329,7 @@ if __name__ == "__main__":
                             result = benchmark.benchmark(
                                 algorithms=algorithms,
                                 benchmark_problem=problem,
-                                n_trials=3,
+                                n_trials=3 if alg == "ProxSkip" or any((drops, activity, noise)) else 1,
                                 show_speed=True,
                                 show_trial=True,
                                 checkpoint_manager=cm,
