@@ -175,11 +175,28 @@ class Quantization(CompressionScheme):
     """Scheme that rounds each element in a message to *significant_digits*."""
 
     def __init__(self, n_significant_digits: int):
+        if n_significant_digits <= 0:
+            raise ValueError("`n_significant_digits` must be a positive integer")
         self.n_significant_digits = n_significant_digits
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
-        res = np.vectorize(lambda x: float(f"%.{self.n_significant_digits - 1}e" % x))(iop.to_numpy(msg))  # noqa: RUF073
-        return iop.to_array_like(res, msg)
+        # TODO:
+        # x = iop.copy(msg)
+        # mask = iop.logical_and(iop.isfinite(x), iop.not_equal(x, 0))
+        # mag = iop.floor(iop.log10(iop.absolute(x)))
+        # scale = iop.power(10.0, self.n_significant_digits - 1 - mag)
+        # q = iop.div(iop.round(iop.mul(x, scale)), scale)
+        # return iop.where(mask, q, x)
+        msg_np = iop.to_numpy(msg, dtype=np.float64)
+
+        # Round finite non-zero entries to the requested number of significant digits.
+        mask = np.isfinite(msg_np) & (msg_np != 0)
+        if np.any(mask):
+            magnitudes = np.floor(np.log10(np.abs(msg_np[mask])))
+            scale = np.power(10.0, self.n_significant_digits - 1 - magnitudes)
+            msg_np[mask] = np.round(msg_np[mask] * scale) / scale
+
+        return iop.to_array_like(msg_np, msg)
 
 
 class TopK(CompressionScheme):
@@ -200,7 +217,7 @@ class TopK(CompressionScheme):
         self.k = k
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
-        msg_np = np.copy(iop.to_numpy(msg))
+        msg_np = iop.to_numpy(msg)
         k = min(self.k, msg_np.size)
         idx = np.argpartition(np.abs(msg_np), -k, axis=None)[-k:]
         mask = np.isin(np.arange(msg_np.size), idx).reshape(msg_np.shape)
@@ -226,7 +243,7 @@ class RandK(CompressionScheme):
         self.k = k
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
-        msg_np = np.copy(iop.to_numpy(msg))
+        msg_np = iop.to_numpy(msg)
         k = min(self.k, msg_np.size)
         idx = iop.rng_numpy().choice(msg_np.size, size=k, replace=False)
         mask = np.isin(np.arange(msg_np.size), idx).reshape(msg_np.shape)
