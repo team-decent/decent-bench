@@ -44,64 +44,6 @@ if __name__ == "__main__":
     device = SupportedDevices.CPU
     opt_cls = torch.optim.Adam
 
-    # # DGD
-    # ss1 = 0.1
-    # ss2 = 1.0
-
-    # # KGT
-    # ss1 = 0.01
-    # ss2 = 0.5
-    # ls = 15
-
-    # # LED
-    # ss1 = 0.01
-    # ss2 = 0.01
-    # ls = 20
-
-    # # ProxSkip
-    # ss1 = 0.1
-    # ss2 = 0.1
-    # p = 0.2
-
-    # # LT-ADMM
-    # ss1 = 0.01
-    # ss2 = 0.01
-    # ls = 20
-
-    # # LT-ADMM-VR
-    # ss1 = 0.01
-    # ss2 = 0.01
-    # ls = 20
-
-    # # LT-ADMM-TORCH
-    # ss1 = 0.001
-    # ss2 = 0.01
-    # ls = 20
-
-    # # LT-ADMM-EMA
-    # ss1 = 0.01  # 0.005
-    # ss2 = 0.01
-    # ls = 15
-    # ema = 0.8
-
-    # # LT-ADMM-EMA-OPT
-    # ss1 = 0.001
-    # ss2 = 0.01
-    # ls = 10
-    # ema = 0.8
-
-    # for alg in [
-    #                 "DGD",
-    #                 "KGT",
-    #                 "LED",
-    #                 "ProxSkip",
-    #                 "LT-ADMM",
-    #                 "LT-ADMM-EMA",
-    #                 "LT-ADMM-EMA-OPT",
-    #                 "LT-ADMM-TORCH",
-    #                 "LT-ADMM-VR",
-    #             ]:
-
     table_metrics = [
         ml.ConsensusError([min, np.average, max]),
         ml.GradientCalls([np.average, sum]),
