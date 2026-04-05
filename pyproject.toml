@@ -19,6 +19,7 @@ dependencies = [
   "scipy",
   "scikit-learn",
   "tabulate",
+  "zstandard",
 ]
 
 [project.urls]

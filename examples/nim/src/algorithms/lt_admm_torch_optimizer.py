@@ -63,7 +63,7 @@ class LT_ADMM_TORCH(LT_ADMM):  # noqa: D101, N801
                     iterations=1,
                     agent=agent,
                 )
-                agent.aux_vars["phi"] += aux_step_size * (multiplier * agent.x - z_sum)
+                agent.aux_vars["phi"] -= aux_step_size * (multiplier * agent.x - z_sum)
             else:
                 current_gradient = agent.cost.gradient(agent.aux_vars["phi"])
                 step = step_size * current_gradient + aux_step_size * (multiplier * agent.x - z_sum)
