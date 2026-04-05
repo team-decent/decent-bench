@@ -228,6 +228,10 @@ def _get_new_plot_metrics(
     if metrics_result.plot_metrics is None:
         return []
 
+    are_lists = [isinstance(item, list) for item in plot_metrics]
+    if any(are_lists) and not all(are_lists):
+        raise ValueError("If passing lists in ``plot_metrics``, all items must be lists.")
+
     flat_metrics = _flatten_plot_metrics(metrics_result.plot_metrics)
     plot_lookup = _build_metric_lookup(flat_metrics, description_type="plot")
 

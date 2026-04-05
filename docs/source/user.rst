@@ -203,7 +203,7 @@ Some metrics require additional problem information.
     agents with :class:`~decent_bench.costs.EmpiricalRiskCost`.
 - ``accuracy``, ``precision``, and ``recall`` additionally require integer-valued targets.
 
-If these requirements are not met, the metric marks itself unavailable, returns NaN, and is omitted from the final
+If these requirements are not met, the metric marks itself unavailable, a warning is given, and is omitted from the final
 metric lists returned by :func:`~decent_bench.benchmark.compute_metrics`.
 
 Plot truncation warnings

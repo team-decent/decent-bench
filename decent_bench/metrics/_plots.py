@@ -45,9 +45,9 @@ COLORS = [
 ]
 MARKERS = ["o", "s", "v", "^", "*", "D", "H", "<", ">", "p", "P", "X"]
 STYLES = ["-", ":", "--", "-.", (5, (10, 3)), (0, (5, 10)), (0, (3, 1, 1, 1))]
-# Upper bound used when deciding whether a point is still plottable on log y-axis.
-# Values above this threshold are treated as divergence for plotting and trigger truncation.
-MAX_LOG_PLOT_VALUE = 1e100
+# upper bound to values that can be plotted on the y-axis (both in linear and log scale)
+# values above this threshold will be removed
+MAX_Y_PLOT_VALUE = 1e100
 # thresholds to decide when to plot the legend as a separate figure
 LEGEND_MAX_COLS = 3
 SEPARATE_LEGEND_MIN_LABELS = 9
@@ -161,7 +161,7 @@ def compute_plots(  # noqa: PLR0914
 
     Note:
         Plot trajectories are truncated per trial at the first datapoint that is either non-finite or has
-        y > ``MAX_LOG_PLOT_VALUE``. Aggregation is then performed over the common prefix of the remaining trials.
+        y > ``MAX_Y_PLOT_VALUE``. Aggregation is then performed over the common prefix of the remaining trials.
 
         If no plottable prefix remains for an algorithm/metric pair, that pair is omitted from the returned mapping.
         This can lead to a metric showing ``nan`` in tables (final iteration diverged) while still being visible in
@@ -554,7 +554,7 @@ def _truncate_to_common_finite_prefix(
         finite_prefix: list[tuple[X, Y]] = []
         for point in trial_data:
             x_value, y_value = point
-            if not np.isfinite((x_value, y_value)).all().item() or y_value > MAX_LOG_PLOT_VALUE:
+            if not np.isfinite((x_value, y_value)).all().item() or y_value > MAX_Y_PLOT_VALUE:
                 had_non_finite = True
                 break
             finite_prefix.append(point)

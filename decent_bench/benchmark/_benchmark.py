@@ -36,10 +36,17 @@ if TYPE_CHECKING:
 
 
 def _validate_unique_algorithm_names(algorithms: list[Algorithm[Network]]) -> None:
-    names = [alg.name for alg in algorithms]
-    duplicate_names = sorted({n for n in names if names.count(n) > 1})
-    if duplicate_names:
-        duplicates = ", ".join(duplicate_names)
+    seen: set[str] = set()
+    duplicate_names: set[str] = set()
+    for alg in algorithms:
+        if alg.name in seen:
+            duplicate_names.add(alg.name)
+        else:
+            seen.add(alg.name)
+
+    duplicate_names_sorted = sorted(duplicate_names)
+    if duplicate_names_sorted:
+        duplicates = ", ".join(duplicate_names_sorted)
         raise ValueError(f"Algorithm names must be unique, duplicates found: {duplicates}")
 
 
@@ -109,7 +116,6 @@ def resume_benchmark(  # noqa: PLR0912
     Raises:
         ValueError: If the checkpoint directory does not exist, is empty, or contains invalid metadata.
         ValueError: If increase_iterations or increase_trials is negative.
-        ValueError: If any two algorithms loaded from the checkpoint share the same name.
 
     """
     if not checkpoint_manager.checkpoint_dir.exists():

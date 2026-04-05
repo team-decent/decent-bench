@@ -399,7 +399,7 @@ class Accuracy(Metric):
         Accuracy is calculated as the mean accuracy across agents, where each agent's accuracy is calculated using its
         recorded x at that iteration.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets, returns NaN otherwise.
+    Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
 
     Accuracy measures the proportion of correct predictions:
 
@@ -457,7 +457,7 @@ class MSE(Metric):
         MSE is calculated as the mean MSE across agents, where each agent's MSE is calculated using its
         recorded x at that iteration.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
+    Only available for :class:`~decent_bench.costs.EmpiricalRiskCost`.
 
     MSE measures the average squared difference between predictions and true values:
 
@@ -510,7 +510,7 @@ class Precision(Metric):
         Precision is calculated as the mean precision across agents, where each agent's precision is calculated using
         its recorded x at that iteration.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets, returns NaN otherwise.
+    Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
 
     Precision measures the proportion of positive predictions that are correct:
 
@@ -568,7 +568,7 @@ class Recall(Metric):
         Recall is calculated as the mean recall across agents, where each agent's recall is calculated using its
         recorded x at that iteration.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets, returns NaN otherwise.
+    Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
 
     Recall measures the proportion of actual positives that are correctly identified:
 

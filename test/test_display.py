@@ -12,7 +12,7 @@ from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.costs import LinearRegressionCost
 from decent_bench.metrics._metric import Metric
 from decent_bench.metrics._plots import (
-    MAX_LOG_PLOT_VALUE,
+    MAX_Y_PLOT_VALUE,
     _add_legend_and_save,
     _create_separate_legend_figure,
     _get_separate_legend_path,
@@ -275,6 +275,20 @@ def test_display_metrics_filters_metrics_with_mixed_objects_and_names(monkeypatc
     assert [metric.plot_description for metric in grouped_plot_metrics[0]] == ["plot one", "plot two"]
 
 
+def test_display_metrics_rejects_mixed_shape_plot_metrics() -> None:  # noqa: D103
+    alg_a = _AlgorithmStub("A")
+    metric_1 = _MetricStub("table one", "plot one")
+    metric_2 = _MetricStub("table two", "plot two")
+
+    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [[metric_1], [metric_2]])
+
+    with pytest.raises(ValueError, match="all items must be lists"):
+        display_metrics(
+            metrics_result=metrics_result,
+            plot_metrics=[metric_1, [metric_2]],
+        )
+
+
 def test_display_metrics_filters_algorithms_with_mixed_objects_and_names(monkeypatch) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
     alg_b = _AlgorithmStub("B")
@@ -493,7 +507,7 @@ def test_compute_plots_truncates_trials_at_over_threshold_value() -> None:  # no
     metric = _PlotMetricStub(
         "over-threshold plot",
         {
-            1.0: [(0.0, 1.0), (1.0, 2.0), (2.0, MAX_LOG_PLOT_VALUE * 10)],
+            1.0: [(0.0, 1.0), (1.0, 2.0), (2.0, MAX_Y_PLOT_VALUE * 10)],
             2.0: [(0.0, 3.0), (1.0, 4.0), (2.0, 5.0)],
         },
     )
