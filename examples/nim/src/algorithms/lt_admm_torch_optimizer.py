@@ -53,8 +53,10 @@ class LT_ADMM_TORCH(LT_ADMM):  # noqa: D101, N801
         neighbors = network.active_neighbors(agent)
 
         agent.aux_vars["phi"] = iop.copy(agent.x)
-        z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
+        mask = [agent.aux_vars["neighbor_to_idx"][j] for j in neighbors]
+        z_sum = iop.sum(agent.aux_vars["z_i"][mask], dim=0)
         multiplier = self.penalty * len(neighbors)
+        correction = aux_step_size * (multiplier * agent.x - z_sum)
 
         for _ in range(self.local_steps):
             if self.opt_cls is not None:
@@ -63,10 +65,10 @@ class LT_ADMM_TORCH(LT_ADMM):  # noqa: D101, N801
                     iterations=1,
                     agent=agent,
                 )
-                agent.aux_vars["phi"] -= aux_step_size * (multiplier * agent.x - z_sum)
+                agent.aux_vars["phi"] -= correction
             else:
                 current_gradient = agent.cost.gradient(agent.aux_vars["phi"])
-                step = step_size * current_gradient + aux_step_size * (multiplier * agent.x - z_sum)
+                step = step_size * current_gradient + correction
                 # Update phi_i,k according to gradient step (line 7)
                 agent.aux_vars["phi"] -= step
 

@@ -88,8 +88,10 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
         neighbors = network.active_neighbors(agent)
 
         agent.aux_vars["phi"] = iop.copy(agent.x)
-        z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
+        mask = [agent.aux_vars["neighbor_to_idx"][j] for j in neighbors]
+        z_sum = iop.sum(agent.aux_vars["z_i"][mask], dim=0)
         multiplier = self.penalty * len(neighbors)
+        correction = aux_step_size * (multiplier * agent.x - z_sum)
 
         if not self.v2:
             r_grads = agent.cost.gradient(agent.x, indices="all", reduction=None)
@@ -101,7 +103,7 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
             r_grads = iop.mean(agent.aux_vars["r_grads"][batch_used], dim=0)
             current_gradient = (batch_grad - r_grads) + iop.mean(agent.aux_vars["r_grads"], dim=0)
 
-            step = step_size * current_gradient + aux_step_size * (multiplier * agent.x - z_sum)
+            step = step_size * current_gradient + correction
             agent.aux_vars["phi"] -= step
 
             r_grads = agent.cost.gradient(agent.aux_vars["phi"], indices=batch_used, reduction=None)

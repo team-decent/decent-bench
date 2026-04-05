@@ -167,8 +167,10 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
         neighbors = network.active_neighbors(agent)
 
         agent.aux_vars["phi"] = iop.copy(agent.aux_vars["x_train"])
-        z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
+        mask = [agent.aux_vars["neighbor_to_idx"][j] for j in neighbors]
+        z_sum = iop.sum(agent.aux_vars["z_i"][mask], dim=0)
         multiplier = self.penalty * len(neighbors)
+        correction = aux_step_size * (multiplier * agent.aux_vars["x_train"] - z_sum)
 
         if self.opt_cls is not None:
             # Use PyTorch optimizer for local training
@@ -178,12 +180,12 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
                     iterations=1,
                     agent=agent,
                 )
-                agent.aux_vars["phi"] -= aux_step_size * (multiplier * agent.aux_vars["x_train"] - z_sum)
+                agent.aux_vars["phi"] -= correction
         else:
             for _ in range(self.local_steps):
                 # Manual gradient step
                 current_gradient = agent.cost.gradient(agent.aux_vars["phi"])
-                step = step_size * current_gradient + aux_step_size * (multiplier * agent.aux_vars["x_train"] - z_sum)
+                step = step_size * current_gradient + correction
                 agent.aux_vars["phi"] -= step
 
         agent.aux_vars["phi_ema"] = (
