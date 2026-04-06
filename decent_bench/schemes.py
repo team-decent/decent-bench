@@ -201,54 +201,62 @@ class Quantization(CompressionScheme):
 
 class TopK(CompressionScheme):
     """
-    Top-k compression which transmits only the k elements with largest magnitude.
+    Top-k compression which transmits only the top k fraction of elements by magnitude.
 
     Raises:
-        ValueError: if ``k <= 0``
+        ValueError: if ``k`` is not in :math:`(0, 1]`
 
     Note:
-        If the message has fewer than ``k`` elements, no compression is applied.
+        If ``k * n_elements < 1``, at least one element is still transmitted.
 
     """
 
-    def __init__(self, k: int):
-        if k <= 0:
-            raise ValueError(f"`k` must be a positive integer, got {k}")
+    def __init__(self, k: float):
+        if k <= 0 or k > 1:
+            raise ValueError(f"`k` must be in (0, 1], got {k}")
         self.k = k
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
         msg_np = iop.to_numpy(msg)
-        k = min(self.k, msg_np.size)
-        idx = np.argpartition(np.abs(msg_np), -k, axis=None)[-k:]
-        mask = np.isin(np.arange(msg_np.size), idx).reshape(msg_np.shape)
-        msg_np[~mask] = 0
-        return iop.to_array_like(msg_np, msg)
+        n_elements = msg_np.size
+        k_count = max(1, int(np.ceil(self.k * n_elements)))
+
+        flat_msg = msg_np.reshape(-1)
+        idx = np.argpartition(np.abs(flat_msg), -k_count)[-k_count:]
+        compressed_flat = np.zeros_like(flat_msg)
+        compressed_flat[idx] = flat_msg[idx]
+
+        return iop.to_array_like(compressed_flat.reshape(msg_np.shape), msg)
 
 
 class RandK(CompressionScheme):
     """
-    Rand-k compression which transmits only k randomly selected elements.
+    Rand-k compression which transmits a random k fraction of elements.
 
     Raises:
-        ValueError: if ``k <= 0``
+        ValueError: if ``k`` is not in :math:`(0, 1]`
 
     Note:
-        If the message has fewer than ``k`` elements, no compression is applied.
+        If ``k * n_elements < 1``, at least one element is still transmitted.
 
     """
 
-    def __init__(self, k: int):
-        if k <= 0:
-            raise ValueError("`k` must be a positive integer")
+    def __init__(self, k: float):
+        if k <= 0 or k > 1:
+            raise ValueError("`k` must be in (0, 1]")
         self.k = k
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
         msg_np = iop.to_numpy(msg)
-        k = min(self.k, msg_np.size)
-        idx = iop.rng_numpy().choice(msg_np.size, size=k, replace=False)
-        mask = np.isin(np.arange(msg_np.size), idx).reshape(msg_np.shape)
-        msg_np[~mask] = 0
-        return iop.to_array_like(msg_np, msg)
+        n_elements = msg_np.size
+        k_count = max(1, int(np.ceil(self.k * n_elements)))
+
+        flat_msg = msg_np.reshape(-1)
+        idx = iop.rng_numpy().choice(n_elements, size=k_count, replace=False)
+        compressed_flat = np.zeros_like(flat_msg)
+        compressed_flat[idx] = flat_msg[idx]
+
+        return iop.to_array_like(compressed_flat.reshape(msg_np.shape), msg)
 
 
 class DropScheme(ABC):

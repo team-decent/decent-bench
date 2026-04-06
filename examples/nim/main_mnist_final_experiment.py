@@ -40,7 +40,7 @@ if __name__ == "__main__":
     state_snapshot_period = 50
     samples_per_partition = 1000
     batch_size = 32
-    local_steps = [5, 10, 15]
+    local_steps = [5, 10]
     device = SupportedDevices.CPU
     opt_cls = torch.optim.Adam
 
@@ -185,7 +185,7 @@ if __name__ == "__main__":
                         graph=graph,
                         agents=agents,
                         message_noise=GaussianNoise(0.0, 0.01) if noise else None,
-                        message_compression=TopK(int(agents[0].cost.shape[0] * 0.7)) if compression else None,
+                        message_compression=TopK(0.1) if compression else None,
                         message_drop=UniformDropRate(0.2) if drops else None,
                     )
                     problem = benchmark.BenchmarkProblem(
