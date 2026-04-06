@@ -142,7 +142,7 @@ class ConsensusError(Metric):
         \{ \|\mathbf{x}_i - \bar{\mathbf{x}}\|, \|\mathbf{x}_j - \bar{\mathbf{x}}\|, ... \}
 
     where :math:`\mathbf{x}_i` is agent i's current state,
-    and :math:`\bar{\mathbf{x}}` is the average of all agents' states.
+    :math:`\bar{\mathbf{x}}` is the average of all agents' states, and :math:`\| \cdot \|` is the 2-norm.
 
     .. seealso::
         :class:`~decent_bench.metrics.runtime_library.RuntimeConsensusError` for the runtime version.
