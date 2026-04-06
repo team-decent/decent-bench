@@ -39,6 +39,7 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
     alpha: float = 0.5  # Relaxation parameter (alpha)
     x0: InitialStates = None  # Initial parameters (optional)
     name: str = "LT-ADMM"
+    mask_z: bool = True
 
     def __post_init__(self) -> None:
         """
@@ -117,10 +118,16 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
         neighbors = network.active_neighbors(agent)
 
         agent.aux_vars["phi"] = iop.copy(agent.x)
-        mask = [agent.aux_vars["neighbor_to_idx"][j] for j in neighbors]
-        z_sum = iop.sum(agent.aux_vars["z_i"][mask], dim=0)
-        multiplier = self.penalty * len(neighbors)
-        correction = aux_step_size * (multiplier * agent.x - z_sum)
+
+        if self.mask_z:
+            mask = [agent.aux_vars["neighbor_to_idx"][j] for j in neighbors]
+            z_sum = iop.sum(agent.aux_vars["z_i"][mask], dim=0)
+            multiplier = self.penalty * len(neighbors)
+            correction = aux_step_size * (multiplier * agent.x - z_sum)
+        else:
+            z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
+            multiplier = self.penalty * len(network.neighbors(agent))
+            correction = aux_step_size * (multiplier * agent.x - z_sum)
 
         for _ in range(self.local_steps):
             current_gradient = agent.cost.gradient(agent.aux_vars["phi"])

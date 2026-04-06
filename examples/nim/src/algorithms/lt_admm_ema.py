@@ -63,6 +63,7 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
     sched_kwargs: dict[str, Any] | None = None  # Keyword arguments for PyTorch scheduler
     x0: InitialStates = None  # Initial parameters (optional)
     name: str = "LT-ADMM-EMA"
+    mask_z: bool = True
 
     def __post_init__(self) -> None:
         """
@@ -167,10 +168,16 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
         neighbors = network.active_neighbors(agent)
 
         agent.aux_vars["phi"] = iop.copy(agent.aux_vars["x_train"])
-        mask = [agent.aux_vars["neighbor_to_idx"][j] for j in neighbors]
-        z_sum = iop.sum(agent.aux_vars["z_i"][mask], dim=0)
-        multiplier = self.penalty * len(neighbors)
-        correction = aux_step_size * (multiplier * agent.aux_vars["x_train"] - z_sum)
+
+        if self.mask_z:
+            mask = [agent.aux_vars["neighbor_to_idx"][j] for j in neighbors]
+            z_sum = iop.sum(agent.aux_vars["z_i"][mask], dim=0)
+            multiplier = self.penalty * len(neighbors)
+            correction = aux_step_size * (multiplier * agent.aux_vars["x_train"] - z_sum)
+        else:
+            z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
+            multiplier = self.penalty * len(network.neighbors(agent))
+            correction = aux_step_size * (multiplier * agent.aux_vars["x_train"] - z_sum)
 
         if self.opt_cls is not None:
             # Use PyTorch optimizer for local training

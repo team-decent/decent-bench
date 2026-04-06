@@ -74,13 +74,14 @@ if __name__ == "__main__":
         )
 
     for heterogeneity in [True]:
-        for n_agents, n_neighbors in [(5, 4), (5, 2), (10, 9), (10, 4), (10, 2)]:
+        # for n_agents, n_neighbors in [(5, 4), (5, 2), (10, 9), (10, 4), (10, 2)]:
+        for n_agents, n_neighbors in [(10, 4)]:
             for drops, activity, compression, noise in [
-                (True, True, True, True),
-                (True, None, None, None),
-                (None, True, None, None),
+                # (True, True, True, True),
+                # (True, None, None, None),
+                # (None, True, None, None),
                 (None, None, True, None),
-                (None, None, None, True),
+                # (None, None, None, True),
                 (None, None, None, None),
             ]:
                 for alg in [
@@ -284,24 +285,23 @@ if __name__ == "__main__":
                             LT_ADMM_EMA(
                                 iterations=iterations,
                                 local_steps=ls,
-                                step_size=ss1,
+                                step_size=0.005,
                                 aux_step_size=0.01,
                                 penalty=1.0,
                                 ema_factor=0.8,
                                 send_ema_x=False,
                                 use_z_ema=False,
                                 x0=x0,
-                                name=f"LT-ADMM-EMA (ls={ls}, ss={ss1})",
+                                name=f"LT-ADMM-EMA (ls={ls})",
                             )
                             for ls in local_steps
-                            for ss1 in [0.01, 0.005]
                         ]
                     elif alg == "LT-ADMM-EMA-TORCH":
                         algorithms = [
                             LT_ADMM_EMA(
                                 iterations=iterations,
                                 local_steps=ls,
-                                step_size=ss1,
+                                step_size=0.0005,
                                 aux_step_size=0.01,
                                 penalty=1.0,
                                 ema_factor=0.8,
@@ -309,10 +309,9 @@ if __name__ == "__main__":
                                 use_z_ema=False,
                                 x0=x0,
                                 opt_cls=opt_cls,
-                                name=f"LT-ADMM-EMA-TORCH (ls={ls}, ss={ss1})",
+                                name=f"LT-ADMM-EMA-TORCH (ls={ls})",
                             )
                             for ls in local_steps
-                            for ss1 in [0.001, 0.0005]
                         ]
 
                     algorithms = sorted(algorithms, key=lambda alg: alg.name)
