@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import random
+from collections import Counter
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -33,12 +34,12 @@ class NIMDatasetHandler(DatasetHandler):
         n_partitions: int,
         samples_per_partition: int | None = None,
         transform: Callable[[tuple[int, int]], Array] | None = None,
-        label_transform: Callable[[bool], Array] | None = None,
+        label_transform: Callable[[int], Array] | None = None,
         *,
+        label_balance: float | None = None,
+        occupancy_threshold: float = 0.5,
         # Random sampling options
         leakage: float = 0.0,
-        seed: int | None = None,
-        balance_labels: bool = False,
         # Path-based lidar sampling options
         paths: list[list[tuple[int, int]]] | str | None = None,
         samples_per_pose: int = 5,
@@ -46,16 +47,16 @@ class NIMDatasetHandler(DatasetHandler):
         fov: float = 2 * math.pi,
         max_range: float | None = None,
         scan_spacing: float | None = None,
+        add_empty_lidar_samples: bool = False,
     ) -> None:
         self.image_file = image_file
         self._n_partitions = n_partitions
         self.samples_per_partition = samples_per_partition
-        self.transform = transform
-        self.label_transform = label_transform
+        self.transform = transform or self._identity_transform
+        self.label_transform = label_transform or self._identity_transform
         # Random sampling options
         self.leakage = leakage
-        self.seed = seed
-        self.balance_labels = balance_labels
+        self.label_balance = label_balance
         # Path-based lidar sampling options
         self.paths = paths
         self.samples_per_pose = samples_per_pose
@@ -63,11 +64,11 @@ class NIMDatasetHandler(DatasetHandler):
         self.fov = fov
         self.max_range = max_range
         self.scan_spacing = scan_spacing
+        self.add_empty_lidar_samples = add_empty_lidar_samples
+        self.occupancy_threshold = occupancy_threshold
 
-        self._n_samples: int | None = None
-        # Set random seed for reproducible sampling
-        if self.seed is not None:
-            random.seed(self.seed)
+        if self.label_balance is not None and self.label_balance < 1:
+            raise ValueError("label_balance must be >= 1")
 
         # Load and process the image
         image = Image.open(self.image_file).convert("L")
@@ -76,11 +77,7 @@ class NIMDatasetHandler(DatasetHandler):
         self.feature_norm = max(self.height, self.width)
 
         # If configured to use provided paths for LIDAR sampling, do that and return
-        res = (
-            self._lidar(image_array)
-            if self.paths is not None
-            else self._random_sampling(image_array)
-        )
+        res = self._lidar(image_array) if self.paths is not None else self._create_spatial_partitions(image_array)
 
         if len(res) != self.n_partitions:
             raise ValueError(
@@ -90,16 +87,16 @@ class NIMDatasetHandler(DatasetHandler):
                 f"configuration and input data at the decent-bench Github repository."
             )
 
-        self._partitions = self._normalize_features(res)
+        res = self._balance_partitions(
+            res,
+            label_balance=self.label_balance,
+            samples_per_partition=self.samples_per_partition,
+        )
+        self._partitions = self._normalize_features(self._apply_transforms(res))
 
     @property
     def n_samples(self) -> int:  # noqa: D102
-        if self._n_samples is None:
-            raise ValueError(
-                "n_samples is not set until get_partitions or get_datapoints is accessed at least once"
-            )
-
-        return self._n_samples
+        return len(self.get_datapoints())
 
     @property
     def n_partitions(self) -> int:  # noqa: D102
@@ -125,14 +122,32 @@ class NIMDatasetHandler(DatasetHandler):
     def get_partitions(self) -> Sequence[Dataset]:  # noqa: D102
         return self._partitions
 
+    def get_test_set(self, label_balance: float | None = None, num_samples: int | None = None) -> Dataset:
+        """Return occupancy grid as the test set."""
+        image = Image.open(self.image_file).convert("L")
+        image_array = np.array(image, dtype=float64) / 255.0
+        occ = image_to_occupancy(image_array, threshold=self.occupancy_threshold)
+        y_coords, x_coords = np.meshgrid(range(self.height), range(self.width), indexing="ij")
+        features = np.column_stack([x_coords.flatten(), y_coords.flatten()]).astype(int)
+        labels = occ.flatten().astype(int)
+
+        raw_test_set: list[tuple[tuple[int, int], int]] = []
+        for (x, y), label in zip(features, labels, strict=True):
+            raw_test_set.append(((int(x), int(y)), int(label)))
+
+        raw_test_set = self._balance_partitions(
+            [raw_test_set],
+            label_balance=label_balance,
+            samples_per_partition=num_samples,
+        )[0]
+        transformed_test_set = self._apply_transforms([raw_test_set])[0]
+        return self._normalize_features([transformed_test_set])[0]
+
     def _identity_transform(self, x: object) -> Array:
         return x  # type: ignore[return-value]
 
-    def _lidar(  # noqa: PLR0912
-        self,
-        image_array: NDArray[float64],
-    ) -> Sequence[Dataset]:
-        occ = image_to_occupancy(image_array, threshold=0.5)
+    def _lidar(self, image_array: NDArray[float64]) -> list[list[tuple[tuple[int, int], int]]]:
+        occ = image_to_occupancy(image_array, threshold=self.occupancy_threshold)
 
         # Load paths either from provided list or file
         if isinstance(self.paths, list):
@@ -142,9 +157,7 @@ class NIMDatasetHandler(DatasetHandler):
                 with Path(self.paths).open("r", encoding="utf-8") as f:
                     paths_list = json.load(f)
             except Exception as e:
-                raise RuntimeError(
-                    f"Unable to load paths file {self.paths}: {e}"
-                ) from e
+                raise RuntimeError(f"Unable to load paths file {self.paths}: {e}") from e
         else:
             raise ValueError("Paths must be provided as a list or a file path")
 
@@ -155,17 +168,14 @@ class NIMDatasetHandler(DatasetHandler):
 
         if len(paths_list) > self.n_partitions:
             LOGGER.warning(
-                f"Truncated paths list to {self.n_partitions} partitions from "
-                f"{len(paths_list)} available paths."
+                f"Truncated paths list to {self.n_partitions} partitions from {len(paths_list)} available paths."
             )
             paths_list = paths_list[: self.n_partitions]
 
-        res_paths: list[Dataset] = []
+        res_paths: list[list[tuple[tuple[int, int], int]]] = []
         for path in paths_list:
             # densify based on scan_spacing; always compute headings if requested
-            positions = (
-                densify_path(path, self.scan_spacing) if self.scan_spacing else path
-            )
+            positions = densify_path(path, self.scan_spacing) if self.scan_spacing else path
             poses = compute_headings(positions)
             samples = sample_along_path(
                 occ,
@@ -173,97 +183,17 @@ class NIMDatasetHandler(DatasetHandler):
                 samples_per_pose=self.samples_per_pose,
                 num_beams=self.num_beams,
                 fov=self.fov,
-                max_range=(
-                    max(self.height, self.width) / 2
-                    if self.max_range is None
-                    else self.max_range
-                ),
+                max_range=(max(self.height, self.width) / 2 if self.max_range is None else self.max_range),
+                add_empty_space=self.add_empty_lidar_samples,
             )
-
-            # Limit to samples_per_partition if set
-            if self.samples_per_partition is not None:
-                if len(samples) > self.samples_per_partition:
-                    sampled = random.sample(samples, self.samples_per_partition)
-                else:
-                    sampled = samples
-                    LOGGER.warning(
-                        f"Partition has {len(samples)} samples, which is less than the requested "
-                        f"{self.samples_per_partition}. Using as many samples as available without duplication."
-                    )
-            else:
-                sampled = samples
-
-            # Apply transforms
-            if not self.transform:
-                self.transform = self._identity_transform
-            if not self.label_transform:
-                self.label_transform = self._identity_transform
-
-            sampled_partition = [
-                (
-                    self.transform(s[0]),
-                    self.label_transform(s[1]),
-                )
-                for s in sampled
-            ]
-            res_paths.append(sampled_partition)
+            res_paths.append(samples)
 
         return res_paths
-
-    def _random_sampling(self, image_array: NDArray[float64]) -> Sequence[Dataset]:
-        # Get spatial partitions from the image
-        spatial_partitions = self._create_spatial_partitions(image_array)
-
-        res: list[Dataset] = []
-        for partition_data in spatial_partitions:
-            data = partition_data
-            if self.balance_labels:
-                # Balance classes in this partition by removing the majority class
-                labels = np.array([item[1] for item in data])
-                unique, counts = np.unique(labels, return_counts=True)
-                class_counts = dict(zip(unique, counts, strict=True))
-                min_count = min(class_counts.values())
-
-                balanced_partition = []
-                for cls in unique:
-                    cls_samples = [item for item in data if item[1] == cls]
-                    # Randomly sample from the class to match the minimum count
-                    balanced_partition.extend(random.sample(cls_samples, min_count))
-
-                data = balanced_partition
-
-            # Sample from this spatial partition
-            if self.samples_per_partition is not None:
-                if len(data) > self.samples_per_partition:
-                    sampled_partition = random.sample(data, self.samples_per_partition)
-                else:
-                    sampled_partition = data
-                    LOGGER.warning(
-                        f"Partition has {len(data)} samples, which is less than the requested "
-                        f"{self.samples_per_partition}. Using as many samples as available without duplication."
-                    )
-            else:
-                sampled_partition = data
-
-            if sampled_partition:
-                if not self.transform:
-                    self.transform = self._identity_transform
-                if not self.label_transform:
-                    self.label_transform = self._identity_transform
-
-                res.append(
-                    [
-                        (self.transform(item[0]), self.label_transform(item[1]))
-                        for item in sampled_partition
-                    ]
-                )
-
-        return res
 
     def _create_spatial_partitions(
         self,
         image_array: NDArray[float64],
-    ) -> list[list[tuple[tuple[int, int], bool]]]:
+    ) -> list[list[tuple[tuple[int, int], int]]]:
         """
         Divide the image into spatial partitions (squares) and group pixels by partition.
 
@@ -272,12 +202,10 @@ class NIMDatasetHandler(DatasetHandler):
 
         """
         # Create coordinate arrays for all pixels
-        y_coords, x_coords = np.meshgrid(
-            range(self.height), range(self.width), indexing="ij"
-        )
+        y_coords, x_coords = np.meshgrid(range(self.height), range(self.width), indexing="ij")
 
         # Create labels: 1 for black (< 0.5), 0 for white (>= 0.5)
-        labels = image_to_occupancy(image_array.flatten()).reshape(-1, 1)
+        labels = image_to_occupancy(image_array.flatten(), threshold=self.occupancy_threshold).reshape(-1, 1)
         features = np.column_stack([x_coords.flatten(), y_coords.flatten()]).astype(int)
 
         # Find grid dimensions that give exactly the requested number of partitions
@@ -306,9 +234,7 @@ class NIMDatasetHandler(DatasetHandler):
         )
 
         # Initialize partition lists
-        spatial_partitions: list[list[tuple[tuple[int, int], bool]]] = [
-            [] for _ in range(self.n_partitions)
-        ]
+        spatial_partitions: list[list[tuple[tuple[int, int], int]]] = [[] for _ in range(self.n_partitions)]
 
         # Group pixels by their spatial partition
         for (x, y), label in zip(features, labels, strict=True):
@@ -322,9 +248,105 @@ class NIMDatasetHandler(DatasetHandler):
             # Add the pixel to all partitions it belongs to
             for r in range(min_row, max_row + 1):
                 for c in range(min_col, max_col + 1):
-                    spatial_partitions[r * cols + c].append(((x, y), label == 1))
+                    spatial_partitions[r * cols + c].append(((int(x), int(y)), label.item()))
 
         return spatial_partitions
+
+    def _apply_transforms(self, partitions: list[list[tuple[tuple[int, int], int]]]) -> list[Dataset]:
+        transformed_partitions: list[Dataset] = []
+        for partition in partitions:
+            transformed_partition = []
+            for feature, label in partition:
+                transformed_partition.append((self.transform(feature), self.label_transform(label)))
+            transformed_partitions.append(transformed_partition)
+
+        return transformed_partitions
+
+    def _balance_partitions(
+        self,
+        partitions: list[list[tuple[tuple[int, int], int]]],
+        label_balance: float | None = None,
+        samples_per_partition: int | None = None,
+    ) -> list[list[tuple[tuple[int, int], int]]]:
+        if label_balance is None and samples_per_partition is None:
+            return partitions  # No balancing needed
+
+        balanced_partitions: list[list[tuple[tuple[int, int], int]]] = []
+        for partition in partitions:
+            if not partition:
+                balanced_partitions.append([])
+                continue
+
+            # Only want to have samples_per_partition but not balanced
+            if label_balance is None and samples_per_partition is not None:
+                # If only samples_per_partition is set, sample randomly from the partition without balancing
+                balanced_partition = random.sample(partition, min(samples_per_partition, len(partition)))
+                balanced_partitions.append(balanced_partition)
+                continue
+
+            labels = [item[1] for item in partition]
+            class_counts = dict(Counter(labels))
+            min_count = min(class_counts.values())
+
+            if len(class_counts) < 2:
+                # If there's only one class present, we can't balance, so we just sample if needed
+                if samples_per_partition is not None and len(partition) > samples_per_partition:
+                    balanced_partition = random.sample(partition, samples_per_partition)
+                else:
+                    balanced_partition = partition
+                balanced_partitions.append(balanced_partition)
+                LOGGER.warning(
+                    f"Partition has only one class present. Unable to balance labels. "
+                    f"{len(partition)} samples in this partition, class distribution: {class_counts}."
+                )
+                continue
+
+            LOGGER.info(
+                f"Balancing partition with {len(partition)} samples, class distribution: "
+                f"{sorted(class_counts.items())}, min class count: {min_count}, label_balance: {label_balance}, "
+                f"samples_per_partition: {samples_per_partition}."
+            )
+
+            desired_counts: dict[int, int] = {}
+            if label_balance is not None and samples_per_partition is None:
+                # If only label_balance is set, calculate samples_per_partition
+                # based on the minority class and balance ratio
+                desired_counts[1] = int(min_count * label_balance)
+                desired_counts[0] = int(min_count * label_balance)
+            elif label_balance is not None and samples_per_partition is not None:
+                # If both label_balance and samples_per_partition are set, calculate the number
+                # of samples for each class based on the balance ratio and total samples per partition
+                if min_count >= samples_per_partition // 2:
+                    desired_counts[1] = samples_per_partition // 2
+                    desired_counts[0] = samples_per_partition // 2
+                else:
+                    minority_label = min(class_counts, key=lambda label: class_counts[label])
+                    majority_label = max(class_counts, key=lambda label: class_counts[label])
+                    desired_counts[minority_label] = class_counts[minority_label]
+                    desired_counts[majority_label] = min(
+                        int(class_counts[minority_label] * label_balance),
+                        samples_per_partition - class_counts[minority_label],
+                    )
+
+            balanced_partition = []
+            for label, count in class_counts.items():
+                if count > desired_counts[label]:
+                    # If there are more samples than the max allowed for this class, sample down to the max allowed
+                    label_partition = [item for item in partition if item[1] == label]
+                    subset = random.sample(label_partition, desired_counts[label])
+                else:
+                    # If there are fewer samples than the max allowed, keep all samples for this class
+                    subset = [item for item in partition if item[1] == label]
+                balanced_partition.extend(subset)
+
+            balanced_partitions.append(balanced_partition)
+
+            LOGGER.info(
+                f"After balancing, partition has {len(balanced_partition)} samples, class distribution: "
+                f"{sorted(dict(Counter([item[1] for item in balanced_partition])).items())}."
+            )
+
+        return balanced_partitions
 
     def _normalize_features(self, partitions: Sequence[Dataset]) -> list[Dataset]:
         """Normalize features in each partition to [0,1] range based on image norm."""

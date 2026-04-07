@@ -21,6 +21,18 @@ from src.lidar import (
 from decent_bench.utils.array import Array
 
 
+def _make_red_occupancy_overlay(
+    occ_bool: NDArray[np.bool_],
+    *,
+    alpha: float = 0.4,
+) -> NDArray[np.float64]:
+    """Build an RGBA image with pure red occupancy pixels and transparent background."""
+    overlay = np.zeros((*occ_bool.shape, 4), dtype=np.float64)
+    overlay[..., 0] = 1.0  # Red channel
+    overlay[..., 3] = occ_bool.astype(np.float64) * alpha  # Per-pixel alpha
+    return overlay
+
+
 def visualize_nim_dataset(
     nim_data: NIMDatasetHandler,
     *,
@@ -92,7 +104,19 @@ def _visualize_random_sampling(
 
     # Create figure and display image
     fig, ax = plt.subplots(figsize=figsize)
-    ax.imshow(np.array(image), cmap="gray")
+    img_array = np.array(image)
+    ax.imshow(img_array, cmap="gray", origin="upper")
+
+    # Overlay occupied pixels in red for easier map interpretation.
+    img_float = img_array.astype(np.float64) / 255.0
+    occ = image_to_occupancy(img_float, threshold=nim_data.occupancy_threshold)
+    occ_bool = occ.astype(bool)
+    occ_overlay = _make_red_occupancy_overlay(occ_bool, alpha=0.4)
+    ax.imshow(
+        occ_overlay,
+        origin="upper",
+        interpolation="nearest",
+    )
 
     # Calculate grid dimensions using the same algorithm as _create_spatial_partitions
     rows = int(np.floor(np.sqrt(nim_data.n_partitions)))
@@ -133,9 +157,7 @@ def _visualize_random_sampling(
     # Plot sampled points from each partition
     for i, partition_data in enumerate(nim_data.get_partitions()):
         if partition_data:
-            features = (
-                np.array([item[0] for item in partition_data]) * nim_data.feature_norm
-            )
+            features = np.array([item[0] for item in partition_data]) * nim_data.feature_norm
             labels = np.array([item[1] for item in partition_data])
 
             # Plot points with different markers based on label
@@ -165,17 +187,13 @@ def _visualize_random_sampling(
         for i in range(nim_data.n_partitions)
     ]
     # Add boundary lines to legend
-    handles.append(
-        Line2D([0], [0], color="blue", linestyle="--", label="Partition Boundaries")
-    )
+    handles.append(Line2D([0], [0], color="blue", linestyle="--", label="Partition Boundaries"))
     if nim_data.leakage > 0:
-        handles.append(
-            Line2D([0], [0], color="red", linestyle=":", label="Leakage Boundaries")
-        )
+        handles.append(Line2D([0], [0], color="red", linestyle=":", label="Leakage Boundaries"))
 
     ax.legend(handles=handles, bbox_to_anchor=(1.05, 1), loc="upper left")
 
-    ax.set_title(f"NIMData Partitions Visualization\n{nim_data.image_file}")
+    # ax.set_title(f"NIMData Partitions Visualization\n{nim_data.image_file}")
     plt.tight_layout()
 
     if save_path:
@@ -230,9 +248,7 @@ def _visualize_lidar_sampling(  # noqa: PLR0914, PLR0915
         if isinstance(nim_data.paths, str):
             with Path(nim_data.paths).open("r", encoding="utf-8") as fh:
                 return json.load(fh)  # type: ignore[no-any-return]
-        raise ValueError(
-            "nim_data.paths must be a list of paths or a path to a JSON file"
-        )
+        raise ValueError("nim_data.paths must be a list of paths or a path to a JSON file")
 
     def _to_pixel(feature: Array) -> NDArray[np.float64]:
         """Convert a (possibly transformed) normalised feature back to pixel coords."""
@@ -242,13 +258,11 @@ def _visualize_lidar_sampling(  # noqa: PLR0914, PLR0915
     image = Image.open(nim_data.image_file).convert("L")
     img_array = np.array(image)
     img_float = img_array.astype(np.float64) / 255.0
-    occ = image_to_occupancy(img_float, threshold=0.5)
+    occ = image_to_occupancy(img_float, threshold=nim_data.occupancy_threshold)
+    occ_bool = occ.astype(bool)
+    occ_overlay = _make_red_occupancy_overlay(occ_bool, alpha=0.4)
 
-    max_range = (
-        max(nim_data.height, nim_data.width) / 2
-        if nim_data.max_range is None
-        else nim_data.max_range
-    )
+    max_range = max(nim_data.height, nim_data.width) / 2 if nim_data.max_range is None else nim_data.max_range
 
     paths_list = _load_paths()
     n_paths = len(paths_list)
@@ -268,8 +282,13 @@ def _visualize_lidar_sampling(  # noqa: PLR0914, PLR0915
 
         fig, ax = plt.subplots(figsize=figsize)
         ax.imshow(img_array, cmap="gray", origin="upper")
+        ax.imshow(
+            occ_overlay,
+            origin="upper",
+            interpolation="nearest",
+        )
         label = f"Paths {indices}" if len(indices) > 1 else f"Path {indices[0]}"
-        ax.set_title(f"LiDAR Scan Animation – {label}\n{nim_data.image_file}")
+        # ax.set_title(f"LiDAR Scan Animation – {label}\n{nim_data.image_file}")
         ax.axis("off")
 
         # Per-agent data and artists
@@ -283,11 +302,7 @@ def _visualize_lidar_sampling(  # noqa: PLR0914, PLR0915
         for pi in indices:
             color = colors[pi % len(colors)]
             raw_path = paths_list[pi]
-            positions = (
-                densify_path(raw_path, nim_data.scan_spacing)
-                if nim_data.scan_spacing
-                else raw_path
-            )
+            positions = densify_path(raw_path, nim_data.scan_spacing) if nim_data.scan_spacing else raw_path
             poses = compute_headings(positions)
 
             scans: list[tuple[float, float, list[RayCastHit]]] = []
@@ -338,9 +353,7 @@ def _visualize_lidar_sampling(  # noqa: PLR0914, PLR0915
             return all_artists
 
         def _update(frame: int) -> list[Line2D | PathCollection]:
-            for i, (dot, segs, scatter) in enumerate(
-                zip(agent_dots, agent_beam_segs, agent_hit_scatters, strict=True)
-            ):
+            for i, (dot, segs, scatter) in enumerate(zip(agent_dots, agent_beam_segs, agent_hit_scatters, strict=True)):
                 agent_scans_i = agent_scans[i]
                 if frame >= len(agent_scans_i):
                     continue
@@ -356,9 +369,7 @@ def _visualize_lidar_sampling(  # noqa: PLR0914, PLR0915
                         agent_hits_y[i].append(float(hit.hit_point[1]))
 
                 if agent_hits_x[i]:
-                    scatter.set_offsets(
-                        np.column_stack([agent_hits_x[i], agent_hits_y[i]])
-                    )
+                    scatter.set_offsets(np.column_stack([agent_hits_x[i], agent_hits_y[i]]))
             return all_artists
 
         anim = FuncAnimation(
@@ -386,6 +397,11 @@ def _visualize_lidar_sampling(  # noqa: PLR0914, PLR0915
 
     fig, ax = plt.subplots(figsize=figsize)
     ax.imshow(img_array, cmap="gray", origin="upper")
+    ax.imshow(
+        occ_overlay,
+        origin="upper",
+        interpolation="nearest",
+    )
     ax.axis("off")
 
     handles: list[Line2D] = []
@@ -405,9 +421,7 @@ def _visualize_lidar_sampling(  # noqa: PLR0914, PLR0915
             partition = partitions[pi]
             if partition:
                 features = np.array([_to_pixel(item[0]) for item in partition])
-                labels = np.array(
-                    [np.asarray(item[1]).flatten()[0] for item in partition]
-                )
+                labels = np.array([np.asarray(item[1]).flatten()[0] for item in partition])
                 hit_mask = labels.astype(bool)
                 if hit_mask.any():
                     ax.scatter(
@@ -432,7 +446,7 @@ def _visualize_lidar_sampling(  # noqa: PLR0914, PLR0915
         handles.append(Line2D([0], [0], color=color, linewidth=2, label=f"Path {pi}"))
 
     ax.legend(handles=handles, bbox_to_anchor=(1.05, 1), loc="upper left")
-    ax.set_title(f"NIMData LiDAR Paths\n{nim_data.image_file}")
+    # ax.set_title(f"NIMData LiDAR Paths\n{nim_data.image_file}")
     plt.tight_layout()
 
     if save_path:

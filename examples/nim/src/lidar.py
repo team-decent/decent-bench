@@ -85,9 +85,7 @@ def ray_cast(
             clamped_y = min(max(cy, 0), h - 1)
             # compute distance to clamped cell center
             dist = math.hypot(clamped_x - ox, clamped_y - oy)
-            return RayCastHit(
-                hit_point=(clamped_x, clamped_y), distance=dist, hit=False
-            )
+            return RayCastHit(hit_point=(clamped_x, clamped_y), distance=dist, hit=False)
 
         if occupancy[cy, cx]:
             # Hit an occupied cell; report the cell center as hit point
@@ -151,7 +149,8 @@ def sample_along_path(
     num_beams: int = 36,
     fov: float = math.pi * 2,
     max_range: float = 50.0,
-) -> list[tuple[tuple[int, int], bool]]:
+    add_empty_space: bool = False,
+) -> list[tuple[tuple[int, int], int]]:
     """
     Generate dataset samples by moving along a path and doing lidar scans.
 
@@ -166,13 +165,28 @@ def sample_along_path(
         num_beams: how many beams in the full scan (before sampling)
         fov: field of view for the scan (radians, default 2pi for full circle)
         max_range: maximum range for the lidar beams
+        add_empty_space: if True, also add samples for empty space along the ray to the hit point
+            (not just the hit point)
 
     Returns:
         List of tuples: [((x,y), hit), ...] where (x,y) are the coordinates of the beam hit (or max range endpoint)
             and hit is a boolean label for hitting a wall.
 
     """
-    samples: list[tuple[tuple[int, int], bool]] = []
+    samples: list[tuple[tuple[int, int], int]] = []
+    point_to_idx: dict[tuple[int, int], int] = {}
+
+    def _add_sample(point: tuple[int, int], hit: bool) -> None:
+        """Add a sample once per point; promote label to hit=True if seen later."""
+        existing_idx = point_to_idx.get(point)
+        if existing_idx is None:
+            point_to_idx[point] = len(samples)
+            samples.append((point, 1 if hit else 0))
+            return
+
+        if hit and not samples[existing_idx][1]:
+            samples[existing_idx] = (point, 1)
+
     for pose in path:
         # pose can be (x,y) or (x,y,theta)
         ox, oy, heading = pose
@@ -187,15 +201,19 @@ def sample_along_path(
 
         # Randomly sample beams
         beam_indices = list(range(len(scan_hits)))
-        chosen = (
-            random.sample(beam_indices, samples_per_pose)
-            if samples_per_pose < len(beam_indices)
-            else beam_indices
-        )
+        chosen = random.sample(beam_indices, samples_per_pose) if samples_per_pose < len(beam_indices) else beam_indices
 
         for bi in chosen:
             hit = scan_hits[bi]
-            samples.append((hit.hit_point, hit.hit))
+            _add_sample(hit.hit_point, hit=hit.hit)
+            if add_empty_space:
+                # Add samples along the ray from origin to hit point (excluding hit point)
+                num_empty = max(1, int(hit.distance))  # sample every 1 unit of distance
+                for i in range(1, num_empty + 1):
+                    t = i / (num_empty + 1)
+                    empty_x = int(ox + t * (hit.hit_point[0] - ox))
+                    empty_y = int(oy + t * (hit.hit_point[1] - oy))
+                    _add_sample((empty_x, empty_y), hit=False)
 
     return samples
 

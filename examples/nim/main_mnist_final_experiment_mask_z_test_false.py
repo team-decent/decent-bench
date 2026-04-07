@@ -75,10 +75,10 @@ if __name__ == "__main__":
 
     for heterogeneity in [False]:
         # for n_agents, n_neighbors in [(5, 4), (5, 2), (10, 9), (10, 4), (10, 2)]:
-        for n_agents, n_neighbors in [(5, 4), (5, 2)]:
+        for n_agents, n_neighbors in [(5, 4), (5, 2), (10, 2)]:
             for drops, activity, compression, noise in [
                 (True, True, True, True),
-                (None, True, None, None),
+                # (None, True, None, None),
             ]:
                 iop.set_seed(47)
                 mnist_train = MNIST(

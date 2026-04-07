@@ -67,7 +67,7 @@ def run(image_path: Path, out_path: Path) -> None:  # noqa: D103, PLR0915
         if current_path:
             xs = [pt[0] for pt in current_path]
             ys = [pt[1] for pt in current_path]
-            ax.plot(xs, ys, marker="x", linestyle="--", color="yellow")
+            ax.plot(xs, ys, marker="x", linestyle="--", color="red")
         fig.canvas.draw_idle()
 
     def on_click(event: Event) -> None:
@@ -171,7 +171,7 @@ def main() -> None:  # noqa: D103
     parser.add_argument("image", type=str, help="Path to image file")
     parser.add_argument("--out", type=str, default="paths.json", help="Output JSON file")
     args = parser.parse_args()
-    run(Path(args.image), Path(args.out))
+    run(Path(args.image), Path(args.out if ".json" in args.out else args.out + ".json"))
 
 
 if __name__ == "__main__":
