@@ -9,7 +9,12 @@ from decent_bench import centralized_algorithms as ca
 from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCost, PyTorchCost, QuadraticCost
 from decent_bench.datasets import SyntheticClassificationDatasetHandler, SyntheticRegressionDatasetHandler
 from decent_bench.utils.array import Array
+from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import Dataset, EmpiricalRiskBatchSize, SupportedDevices, SupportedFrameworks
+
+SOLVE_MAX_ITER = 10000
+SOLVE_STOP_TOL = 1e-20
+SOLVE_MAX_TOL = 1e-16
 
 
 def create_classification_problem(
@@ -37,6 +42,7 @@ def create_classification_problem(
         ImportError: if PyTorchCost is selected but PyTorch is not installed
 
     """
+    LOGGER.info("Creating cost functions ...")
     dataset = SyntheticClassificationDatasetHandler(
         n_targets=2,
         n_partitions=n_agents,
@@ -86,11 +92,13 @@ def create_classification_problem(
             )
             for p in dataset.get_partitions()
         ]
+        LOGGER.info("... done!")
         x_optimal = None
     elif cost_cls is LogisticRegressionCost:
         costs = [cost_cls(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()]  # type: ignore[call-arg]
+        LOGGER.info("... done!")
         sum_cost = reduce(add, costs)
-        x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
+        x_optimal = ca.solve(sum_cost, max_iter=SOLVE_MAX_ITER, stop_tol=SOLVE_STOP_TOL, max_tol=SOLVE_MAX_TOL)
     else:
         raise ValueError(f"Unsupported cost class: {cost_cls}")
 
@@ -122,6 +130,7 @@ def create_regression_problem(
         ImportError: if PyTorchCost is selected but PyTorch is not installed
 
     """
+    LOGGER.info("Creating cost functions ...")
     dataset = SyntheticRegressionDatasetHandler(
         n_targets=1,
         n_partitions=n_agents,
@@ -162,11 +171,13 @@ def create_regression_problem(
             cost_cls(dataset=p, model=model_gen(), loss_fn=torch.nn.MSELoss(), batch_size=batch_size, device=device)  # type: ignore[call-arg]
             for p in dataset.get_partitions()
         ]
+        LOGGER.info("... done!")
         x_optimal = None
     elif cost_cls is LinearRegressionCost:
         costs = [cost_cls(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()]  # type: ignore[call-arg]
+        LOGGER.info("... done!")
         sum_cost = reduce(add, costs)
-        x_optimal = ca.accelerated_gradient_descent(sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16)
+        x_optimal = ca.solve(sum_cost, max_iter=SOLVE_MAX_ITER, stop_tol=SOLVE_STOP_TOL, max_tol=SOLVE_MAX_TOL)
     else:
         raise ValueError(f"Unsupported cost class: {cost_cls}")
 
@@ -185,6 +196,7 @@ def create_quadratic_problem(
         n_agents: number of agents
 
     """
+    LOGGER.info("Creating cost functions ...")
     A, b = [], []  # noqa: N806
     for _ in range(n_agents):
         A_i = iop.uniform(shape=(size, size), framework=SupportedFrameworks.NUMPY, device=SupportedDevices.CPU)  # noqa: N806
@@ -192,7 +204,9 @@ def create_quadratic_problem(
         b.append(iop.normal(shape=(size,), std=10, framework=SupportedFrameworks.NUMPY, device=SupportedDevices.CPU))
 
     costs = [QuadraticCost(A[i], b[i]) for i in range(n_agents)]
+    LOGGER.info("... done!")
+
     sum_cost = reduce(add, costs)
-    x_optimal = Array(np.linalg.solve(sum_cost.A, -sum_cost.b))
+    x_optimal = ca.solve(sum_cost, max_iter=SOLVE_MAX_ITER, stop_tol=SOLVE_STOP_TOL, max_tol=SOLVE_MAX_TOL)
 
     return costs, x_optimal
