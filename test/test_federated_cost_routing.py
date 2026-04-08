@@ -186,7 +186,9 @@ def test_empirical_costs_use_minibatch_local_updates() -> None:
     updated = _run_fedavg_local_update(cost)
 
     np.testing.assert_allclose(updated, np.array([-3.0]))
-    assert sorted(len(indices) for indices in cost.gradient_indices) == [1, 2, 2]
+    assert len(cost.gradient_indices) == 3
+    assert all(len(indices) == 2 for indices in cost.gradient_indices)
+    assert set().union(*(set(indices) for indices in cost.gradient_indices)) == set(range(cost.n_samples))
 
 
 def test_empirical_regularized_costs_keep_minibatch_local_updates() -> None:
@@ -197,7 +199,11 @@ def test_empirical_regularized_costs_keep_minibatch_local_updates() -> None:
     updated = _run_fedavg_local_update(objective)
 
     np.testing.assert_allclose(updated, np.array([-3.0]))
-    assert sorted(len(indices) for indices in empirical_cost.gradient_indices) == [1, 2, 2]
+    assert len(empirical_cost.gradient_indices) == 3
+    assert all(len(indices) == 2 for indices in empirical_cost.gradient_indices)
+    assert set().union(*(set(indices) for indices in empirical_cost.gradient_indices)) == set(
+        range(empirical_cost.n_samples)
+    )
     assert len(regularizer.gradient_kwargs) == 3
     assert all(kwargs == {} for kwargs in regularizer.gradient_kwargs)
 
@@ -209,7 +215,11 @@ def test_scaled_empirical_costs_keep_minibatch_local_updates() -> None:
     updated = _run_fedavg_local_update(objective)
 
     np.testing.assert_allclose(updated, np.array([-6.0]))
-    assert sorted(len(indices) for indices in empirical_cost.gradient_indices) == [1, 2, 2]
+    assert len(empirical_cost.gradient_indices) == 3
+    assert all(len(indices) == 2 for indices in empirical_cost.gradient_indices)
+    assert set().union(*(set(indices) for indices in empirical_cost.gradient_indices)) == set(
+        range(empirical_cost.n_samples)
+    )
 
 
 def test_plain_costs_use_full_gradient_local_updates() -> None:

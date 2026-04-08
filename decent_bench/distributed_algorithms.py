@@ -1,4 +1,3 @@
-import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -179,7 +178,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     def _cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
         return [network.server(), *network.clients()]
 
-    def _sync_server_to_clients(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
+    def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
         """Send the current server model to the selected clients."""
         network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x)
 
@@ -327,7 +326,7 @@ class FedAvg(FedAlgorithm):
         if not selected_clients:
             return
 
-        self._sync_server_to_clients(network, selected_clients)
+        self.server_broadcast(network, selected_clients)
         self._run_local_updates(network, selected_clients)
         self.aggregate(network, selected_clients)
 
@@ -369,11 +368,8 @@ class FedAvg(FedAlgorithm):
         local_x: "Array",
     ) -> "Array":
         for _ in range(self.num_local_epochs):
-            indices = list(range(cost.n_samples))
-            random.shuffle(indices)
-            for start in range(0, cost.n_samples, cost.batch_size):
-                batch_indices = indices[start : start + cost.batch_size]
-                grad = cost.gradient(local_x, indices=batch_indices)
+            for _ in range(0, cost.n_samples, cost.batch_size):
+                grad = cost.gradient(local_x)
                 local_x -= self.step_size * grad
         return local_x
 
@@ -1233,10 +1229,8 @@ class ATG(P2PAlgorithm):
                 network.send(i, j, s)
         for i in network.active_agents():
             for j, msg in i.messages.items():
-                i.aux_vars["z_y"][j] = (1 - self.alpha) * i.aux_vars["z_y"][j] \
-                                        + self.alpha * msg[0]  # fmt: skip
-                i.aux_vars["z_s"][j] = (1 - self.alpha) * i.aux_vars["z_s"][j] \
-                                        + self.alpha * msg[1]  # fmt: skip
+                i.aux_vars["z_y"][j] = (1 - self.alpha) * i.aux_vars["z_y"][j] + self.alpha * msg[0]
+                i.aux_vars["z_s"][j] = (1 - self.alpha) * i.aux_vars["z_s"][j] + self.alpha * msg[1]
 
 
 ADMMTracking = ATG  # alias
