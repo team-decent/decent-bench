@@ -370,16 +370,16 @@ class FedProx(FedAlgorithm):
     r"""
     Federated Proximal (FedProx) with local SGD epochs.
 
-    FedProx follows the same communication and aggregation pattern as
-    :class:`FedAvg <decent_bench.distributed_algorithms.FedAvg>`, but each client solves a proximalized local
-    subproblem around the round's server model:
+    Each client solves a proximalized local subproblem around the round's server model:
 
     .. math::
         h_k(\mathbf{w}; \mathbf{w}^t) = F_k(\mathbf{w}) + \frac{\mu}{2} \|\mathbf{w} - \mathbf{w}^t\|^2
 
     .. math::
-        \mathbf{x}_{i, k}^{(t+1)} = \mathbf{x}_{i, k}^{(t)} - \eta \left(
-        \nabla f_i(\mathbf{x}_{i, k}^{(t)}) + \mu (\mathbf{x}_{i, k}^{(t)} - \mathbf{w}^t) \right)
+        \mathbf{x}_{i, k}^{(t+1)} = \mathbf{x}_{i, k}^{(t)} - \eta
+        \nabla h_k(\mathbf{x}_{i, k}^{(t)}; \mathbf{w}^t)
+
+    where :math:`\nabla h_k(\mathbf{w}; \mathbf{w}^t) = \nabla F_k(\mathbf{w}) + \mu (\mathbf{w} - \mathbf{w}^t)`.
 
     .. math::
         \mathbf{x}_{k+1} = \frac{1}{|S_k|} \sum_{i \in S_k} \mathbf{x}_{i, k}^{(E)}
@@ -387,10 +387,9 @@ class FedProx(FedAlgorithm):
     where :math:`\mathbf{w}^t` is the server model broadcast at the start of round :math:`k`, held fixed
     throughout each selected client's local epochs, :math:`\mu \geq 0` is the proximal coefficient,
     :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients. Setting ``mu=0.0``
-    recovers FedAvg exactly. The default ``mu=0.01`` is a sensible benchmark starting point, but users are
-    strongly encouraged to tune ``mu`` for each problem; a practical grid is ``[0.001, 0.01, 0.1, 0.5, 1.0]``.
-    As in FedAvg, aggregation uses client weights, defaulting to data-size weights when ``client_weights`` is not
-    provided, and client selection defaults to uniform sampling with fraction 1.0. For
+    recovers :class:`FedAvg <decent_bench.distributed_algorithms.FedAvg>` exactly. Aggregation uses client weights,
+    defaulting to data-size weights when ``client_weights`` is not provided, and client selection defaults to uniform
+    sampling with fraction 1.0. For
     :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
     :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; for generic costs,
     local updates use full-batch gradients.
@@ -399,7 +398,7 @@ class FedProx(FedAlgorithm):
     iterations: int = 100
     step_size: float = 0.001
     num_local_epochs: int = 1
-    mu: float = 0.01  # Sensible benchmark default; tune over {0.001, 0.01, 0.1, 0.5, 1} for new settings.
+    mu: float = 0.01
     client_weights: ClientWeights | None = None
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
