@@ -180,12 +180,16 @@ class PyTorchCost(EmpiricalRiskCost):
         state = self.__dict__.copy()
         for key in self._NON_PICKLABLE_STATE_KEYS:
             state.pop(key, None)
+        state["model"] = self.model.to("cpu")
+        state["loss_fn"] = self.loss_fn.to("cpu")
         return state
 
     def __setstate__(self, state: dict[str, Any]) -> None:
         """Restore state and clear transient runtime caches."""
         for key, value in state.items():
             setattr(self, key, value)
+        self.model = self.model.to(self._pytorch_device)
+        self.loss_fn = self.loss_fn.to(self._pytorch_device)
         self._init_param_caches()
         # TODO: Delete this, only here for backwards compatibility with older checkpoints.
         if "_max_batch_size" not in state:

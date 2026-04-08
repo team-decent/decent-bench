@@ -113,3 +113,4 @@ class SupportedDevices(Enum):
 
     CPU = "cpu"
     GPU = "gpu"
+    MPS = "mps"

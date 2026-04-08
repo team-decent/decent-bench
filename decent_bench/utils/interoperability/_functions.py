@@ -112,6 +112,7 @@ def to_torch(array: Array | SupportedArrayTypes, device: SupportedDevices, dtype
 
     value = array.value if isinstance(array, Array) else array
     framework_device = device_to_framework_device(device, SupportedFrameworks.PYTORCH)
+    dtype = dtype if dtype is not None else torch.float32
 
     if isinstance(value, torch.Tensor):
         return cast("TorchTensor", value.to(device=framework_device, dtype=dtype))
