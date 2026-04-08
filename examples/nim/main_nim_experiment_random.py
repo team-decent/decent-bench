@@ -97,10 +97,9 @@ if __name__ == "__main__":
     state_snapshot_period = 500
     test_samples = 50_000
     leakage = 0.0
-    label_balance = 2.5
-    image_file = "data/kth_floorplan.png"
+    label_balance = 2.0
+    image_file = "data/kth_floorplan_sample.png"
     batch_size = 512
-    local_steps = [5, 10]
     device = SupportedDevices.CPU
 
     table_metrics = [
@@ -153,7 +152,7 @@ if __name__ == "__main__":
 
                 cm = CheckpointManager(
                     checkpoint_dir=checkpoint_path,
-                    checkpoint_step=iterations // 3,
+                    checkpoint_step=iterations // 2,
                     keep_n_checkpoints=1,
                     benchmark_metadata={
                         "dataset": "NIM",
@@ -174,7 +173,8 @@ if __name__ == "__main__":
                         dataset=p,
                         model=model_generator(),
                         loss_fn=nn.BCEWithLogitsLoss(),
-                        final_activation=FinalActivation(threshold=0.5),
+                        # final_activation=FinalActivation(threshold=0.5),
+                        final_activation=nn.Sigmoid(),
                         batch_size=batch_size,
                         max_batch_size=batch_size,
                         device=device,
@@ -208,19 +208,25 @@ if __name__ == "__main__":
                             aux_step_size=1.0,
                             iterations=iterations,
                             x0=x0,
+                            name="DGD (ss=0.1)",
+                        ),
+                        dec_algorithms.DGD(
+                            step_size=0.5,
+                            aux_step_size=1.0,
+                            iterations=iterations,
+                            name="DGD (ss=0.5)",
+                            x0=x0,
                         ),
                     ]
                 elif alg == "KGT":
                     algorithms = [
                         dec_algorithms.KGT(
                             iterations=iterations,
-                            local_steps=ls,
-                            step_size=0.01,
+                            local_steps=10,
+                            step_size=0.05,
                             aux_step_size=0.5,
                             x0=x0,
-                            name=f"KGT (ls={ls})",
                         )
-                        for ls in local_steps
                     ]
                 elif alg == "ProxSkip":
                     algorithms = [
@@ -228,55 +234,47 @@ if __name__ == "__main__":
                             iterations=iterations,
                             step_size=0.1,
                             aux_step_size=0.1,
-                            comm_probability=1.0 / ls,
+                            comm_probability=0.2,
                             chi=1.0,
                             x0=x0,
-                            name=f"ProxSkip (p={1.0 / ls:.2f})",
                         )
-                        for ls in local_steps
                     ]
                 elif alg == "LED":
                     algorithms = [
                         dec_algorithms.LED(
                             iterations=iterations,
-                            local_steps=ls,
-                            step_size=0.01,
-                            aux_step_size=0.01,
+                            local_steps=10,
+                            step_size=0.05,
+                            aux_step_size=0.05,
                             x0=x0,
-                            name=f"LED (ls={ls})",
                         )
-                        for ls in local_steps
                     ]
                 elif alg == "LT-ADMM":
                     algorithms = [
                         dec_algorithms.LT_ADMM(
                             iterations=iterations,
-                            local_steps=ls,
-                            step_size=0.01,
-                            aux_step_size=0.01,
+                            local_steps=10,
+                            step_size=0.05,
+                            aux_step_size=0.05,
                             penalty=1.0,
                             mask_z=False,
                             x0=x0,
-                            name=f"LT-ADMM (ls={ls})",
                         )
-                        for ls in local_steps
                     ]
                 elif alg == "LT-ADMM-EMA":
                     algorithms = [
                         LT_ADMM_EMA(
                             iterations=iterations,
-                            local_steps=ls,
-                            step_size=0.01,
-                            aux_step_size=0.01,
+                            local_steps=10,
+                            step_size=0.05,
+                            aux_step_size=0.05,
                             penalty=1.0,
                             ema_factor=0.8,
                             send_ema_x=False,
                             use_z_ema=False,
                             mask_z=False,
                             x0=x0,
-                            name=f"LT-ADMM-EMA (ls={ls})",
                         )
-                        for ls in local_steps
                     ]
 
                 algorithms = sorted(algorithms, key=lambda alg: alg.name)

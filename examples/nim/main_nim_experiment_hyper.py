@@ -93,13 +93,14 @@ def create_heatmap_plots(image_file: str | Path, result: benchmark.BenchmarkResu
 
 
 if __name__ == "__main__":
-    iterations = 15_000
-    state_snapshot_period = 500
+    iterations = 3_000
+    state_snapshot_period = 250
     test_samples = 50_000
     leakage = 0.0
     label_balance = 2.0
     image_file = "data/kth_floorplan_sample.png"
     batch_size = 512
+    local_steps = [5, 10]
     device = SupportedDevices.CPU
 
     table_metrics = [
@@ -120,7 +121,7 @@ if __name__ == "__main__":
     ]
 
     # for n_agents, n_neighbors in [(5, 4), (5, 2)]:
-    for n_agents, n_neighbors in [(5, 2)]:
+    for n_agents, n_neighbors in [(5, 4)]:
         train_dataset = NIMDatasetHandler(
             image_file=image_file,
             n_partitions=n_agents,
@@ -132,27 +133,30 @@ if __name__ == "__main__":
         test_data = train_dataset.get_test_set(label_balance=1.0, num_samples=test_samples)
         for drops, activity in [
             (None, None),
-            (True, None),
-            (None, True),
+            # (True, None),
+            # (None, True),
         ]:
             for alg in [
-                "DGD",
-                "KGT",
-                "LED",
+                # "DGD",
+                # "KGT",
+                # "LED",
                 "ProxSkip",
                 "LT-ADMM",
                 "LT-ADMM-EMA",
             ]:
+                if drops and alg in {"ProxSkip", "LT-ADMM", "LT-ADMM-EMA"}:
+                    continue
+
                 iop.set_seed(47)
                 resume_benchmark = False
-                folder = "results/nim"
-                checkpoint_path = Path(f"{folder}/{n_agents}_{n_neighbors}/test_{drops}_{activity}/{alg}")
+                folder = "results/nim_hyper_2"
+                checkpoint_path = Path(f"{folder}/{n_agents}_{n_neighbors}/{alg}")
                 if checkpoint_path.exists():
                     resume_benchmark = True
 
                 cm = CheckpointManager(
                     checkpoint_dir=checkpoint_path,
-                    checkpoint_step=iterations // 2,
+                    checkpoint_step=None,
                     keep_n_checkpoints=1,
                     benchmark_metadata={
                         "dataset": "NIM",
@@ -204,77 +208,81 @@ if __name__ == "__main__":
                 if alg == "DGD":
                     algorithms = [
                         dec_algorithms.DGD(
-                            step_size=0.1,
+                            step_size=0.1 * ss,
                             aux_step_size=1.0,
                             iterations=iterations,
                             x0=x0,
-                            name="DGD (ss=0.1)",
-                        ),
-                        dec_algorithms.DGD(
-                            step_size=0.5,
-                            aux_step_size=1.0,
-                            iterations=iterations,
-                            name="DGD (ss=0.5)",
-                            x0=x0,
-                        ),
+                            name=f"DGD (ss={0.1 * ss})",
+                        )
+                        for ss in [5, 1]
                     ]
                 elif alg == "KGT":
                     algorithms = [
                         dec_algorithms.KGT(
                             iterations=iterations,
                             local_steps=10,
-                            step_size=0.05,
+                            step_size=0.01 * ss,
                             aux_step_size=0.5,
                             x0=x0,
+                            name=f"KGT (ss={0.01 * ss})",
                         )
+                        for ss in [5, 1]
                     ]
                 elif alg == "ProxSkip":
                     algorithms = [
                         dec_algorithms.ProxSkip(
                             iterations=iterations,
-                            step_size=0.1,
-                            aux_step_size=0.1,
-                            comm_probability=0.2,
+                            step_size=0.1 * ss,
+                            aux_step_size=0.1 * ss,
+                            comm_probability=1.0 / 10,
                             chi=1.0,
                             x0=x0,
+                            name=f"ProxSkip (ss={0.1 * ss})",
                         )
+                        for ss in [5, 1]
                     ]
                 elif alg == "LED":
                     algorithms = [
                         dec_algorithms.LED(
                             iterations=iterations,
                             local_steps=10,
-                            step_size=0.05,
-                            aux_step_size=0.05,
+                            step_size=0.01 * ss,
+                            aux_step_size=0.01 * ss,
                             x0=x0,
+                            name=f"LED (ss={0.01 * ss})",
                         )
+                        for ss in [5, 1]
                     ]
                 elif alg == "LT-ADMM":
                     algorithms = [
                         dec_algorithms.LT_ADMM(
                             iterations=iterations,
                             local_steps=10,
-                            step_size=0.05,
-                            aux_step_size=0.05,
+                            step_size=0.01 * ss,
+                            aux_step_size=0.01 * ss,
                             penalty=1.0,
                             mask_z=False,
                             x0=x0,
+                            name=f"LT-ADMM (ss={0.01 * ss})",
                         )
+                        for ss in [5, 1]
                     ]
                 elif alg == "LT-ADMM-EMA":
                     algorithms = [
                         LT_ADMM_EMA(
                             iterations=iterations,
                             local_steps=10,
-                            step_size=0.05,
-                            aux_step_size=0.05,
+                            step_size=0.01 * ss,
+                            aux_step_size=0.01 * ss,
                             penalty=1.0,
                             ema_factor=0.8,
                             send_ema_x=False,
                             use_z_ema=False,
                             mask_z=False,
                             x0=x0,
+                            name=f"LT-ADMM-EMA (ss={0.01 * ss})",
                         )
+                        for ss in [5, 2, 1]
                     ]
 
                 algorithms = sorted(algorithms, key=lambda alg: alg.name)
@@ -282,7 +290,7 @@ if __name__ == "__main__":
                 if not is_benchmark_completed:
                     if resume_benchmark:
                         result = benchmark.resume_benchmark(
-                            checkpoint_manager=cm,
+                            # checkpoint_manager=cm,
                             create_backup=False,
                             show_speed=True,
                             show_trial=True,
@@ -291,24 +299,25 @@ if __name__ == "__main__":
                         result = benchmark.benchmark(
                             algorithms=algorithms,
                             benchmark_problem=problem,
-                            n_trials=3 if alg == "ProxSkip" or any((drops, activity)) else 1,
+                            n_trials=1,
                             show_speed=True,
                             show_trial=True,
-                            checkpoint_manager=cm,
+                            # checkpoint_manager=cm,
                         )
                 else:
                     result = cm.load_benchmark_result()
 
                 metric_result = benchmark.compute_metrics(
                     benchmark_result=result,
-                    checkpoint_manager=cm,
+                    # checkpoint_manager=cm,
                     table_metrics=table_metrics,
                     plot_metrics=plot_metrics,
                 )
 
                 benchmark.display_metrics(
                     metrics_result=metric_result,
-                    checkpoint_manager=cm,
+                    # checkpoint_manager=cm,
+                    save_path=cm.get_results_path(),
                     show_plots=False,
                 )
 

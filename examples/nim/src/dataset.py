@@ -93,7 +93,7 @@ class NIMDatasetHandler(DatasetHandler):
             label_balance=self.label_balance,
             samples_per_partition=self.samples_per_partition,
         )
-        self._partitions = self._normalize_features(self._apply_transforms(res))
+        self._partitions = self._apply_transforms_and_normalize(res)
 
     @property
     def n_samples(self) -> int:  # noqa: D102
@@ -141,8 +141,7 @@ class NIMDatasetHandler(DatasetHandler):
             label_balance=label_balance,
             samples_per_partition=num_samples,
         )[0]
-        transformed_test_set = self._apply_transforms([raw_test_set])[0]
-        return self._normalize_features([transformed_test_set])[0]
+        return self._apply_transforms_and_normalize([raw_test_set])[0]
 
     def _identity_transform(self, x: object) -> Array:
         return x  # type: ignore[return-value]
@@ -253,16 +252,6 @@ class NIMDatasetHandler(DatasetHandler):
 
         return spatial_partitions
 
-    def _apply_transforms(self, partitions: list[list[tuple[tuple[int, int], int]]]) -> list[Dataset]:
-        transformed_partitions: list[Dataset] = []
-        for partition in partitions:
-            transformed_partition = []
-            for feature, label in partition:
-                transformed_partition.append((self.transform(feature), self.label_transform(label)))
-            transformed_partitions.append(transformed_partition)
-
-        return transformed_partitions
-
     def _balance_partitions(
         self,
         partitions: list[list[tuple[tuple[int, int], int]]],
@@ -349,12 +338,12 @@ class NIMDatasetHandler(DatasetHandler):
 
         return balanced_partitions
 
-    def _normalize_features(self, partitions: Sequence[Dataset]) -> list[Dataset]:
+    def _apply_transforms_and_normalize(self, partitions: list[list[tuple[tuple[int, int], int]]]) -> list[Dataset]:
         """Normalize features in each partition to [0,1] range based on image norm."""
-        normalized_partitions: list[list[tuple[Array, Array]]] = []
+        transformed_partitions: list[Dataset] = []
         for partition in partitions:
-            normalized_data = []
+            transformed_partition = []
             for feature, label in partition:
-                normalized_data.append((feature / self.feature_norm, label))
-            normalized_partitions.append(normalized_data)
-        return normalized_partitions
+                transformed_partition.append((self.transform(feature) / self.feature_norm, self.label_transform(label)))
+            transformed_partitions.append(transformed_partition)
+        return transformed_partitions

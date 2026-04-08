@@ -216,6 +216,12 @@ def mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iterati
     for agent in agents:
         if isinstance(agent.cost, costs.EmpiricalRiskCost):
             preds = predict_agent(agent, iteration, problem)
+            # Return np.nan if any of the preds are nan or inf
+            if np.any(~np.isfinite(preds)):
+                LOGGER.warning(
+                    "Predictions contain NaN or Inf values, which are not valid for MSE calculation, returning NaN for MSE"
+                )
+                return [np.nan for _ in agents]
             ret.append(sk_metrics.mean_squared_error(test_y, preds))
         else:
             ret.append(np.nan)

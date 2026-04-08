@@ -321,6 +321,19 @@ class CheckpointManager:  # noqa: PLR0904
 
         # Save both algorithm and network in a single pickle file to preserve shared object references
         checkpoint_path = trial_dir / f"checkpoint_{iteration:07d}.pkl.zst"
+        progress_path = trial_dir / "progress.json"
+
+        # Check if checkpoint already exists to avoid overwriting
+        if checkpoint_path.exists() and progress_path.exists():
+            with progress_path.open(encoding="utf-8") as f:
+                progress = json.load(f)
+            last_completed_iteration: int = progress.get("last_completed_iteration", -1)
+            if last_completed_iteration == iteration:
+                LOGGER.debug(
+                    f"Checkpoint already exists for alg={alg_idx}, trial={trial}, iter={iteration}, skipping save"
+                )
+                return checkpoint_path
+
         checkpoint_data: _CheckpointData = {
             "algorithm": algorithm,
             "network": network,
@@ -331,7 +344,6 @@ class CheckpointManager:  # noqa: PLR0904
 
         # Update progress
         progress = {"last_completed_iteration": iteration}
-        progress_path = trial_dir / "progress.json"
         with progress_path.open("w", encoding="utf-8") as f:
             json.dump(progress, f)
 
@@ -618,7 +630,8 @@ class CheckpointManager:  # noqa: PLR0904
 
         # Remove agent metrics from checkpoint to save space (can be a lot),
         # this can be loaded again from the benchmark result
-        metrics_result.agent_metrics = None
+        if self.is_benchmark_completed():
+            metrics_result.agent_metrics = None
 
         self._save_pickle(metric_path, metrics_result)
 
