@@ -152,7 +152,6 @@ class CheckpointManager:  # noqa: PLR0904
         self.keep_n_checkpoints = keep_n_checkpoints
         self._metadata = benchmark_metadata
         self.compression_level = compression_level
-        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     def is_empty(self) -> bool:
         """Check if checkpoint directory is empty or doesn't exist."""
@@ -654,7 +653,15 @@ class CheckpointManager:  # noqa: PLR0904
                 benchmark_result = self.load_benchmark_result()
                 resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
                 for alg, networks in benchmark_result.states.items():
-                    resulting_agent_states[alg] = [
+                    algorithms = metrics_result.table_results or metrics_result.plot_results or []
+                    original_alg = next((a for a in algorithms if a.name == alg.name), None)
+                    if original_alg is None:
+                        LOGGER.warning(
+                            f"Original algorithm '{alg.name}' not found in benchmark problem configuration. "
+                            "Cannot reconstruct agent metrics for this algorithm."
+                        )
+                        continue
+                    resulting_agent_states[original_alg] = [
                         [AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks
                     ]
                 metrics_result.agent_metrics = resulting_agent_states

@@ -62,21 +62,21 @@ class LED(P2PAlgorithm):
 
     def initialize(self, network: P2PNetwork) -> None:
         """Initialize agents with x_i^0, y_i^0, and phi_i,0^r."""
-        self.x0 = initial_states(self.x0, network)
+        x0 = initial_states(self.x0, network)
         self.W = network.weights
 
         for i in network.agents():
             # Initialize y_i^0 = 0 (simplified initialization)
-            y_0 = iop.zeros_like(self.x0[i])
+            y_0 = iop.zeros_like(x0[i])
 
             # Initialize auxiliary variables
             aux_vars = {
                 "y": y_0,  # Dual variable y_i^r
-                "phi": self.x0[i],  # phi_i,tau^r (to be broadcasted)
+                "phi": x0[i],  # phi_i,tau^r (to be broadcasted)
             }
 
             i.initialize(
-                x=self.x0[i],
+                x=x0[i],
                 aux_vars=aux_vars,
             )
 

@@ -14,7 +14,7 @@ from PIL import Image
 
 from decent_bench.datasets import DatasetHandler
 from decent_bench.utils.array import Array
-from decent_bench.utils.logger import LOGGER
+from decent_bench.utils.logger import LOGGER, start_logger
 from decent_bench.utils.types import Dataset
 
 from .lidar import (
@@ -49,6 +49,7 @@ class NIMDatasetHandler(DatasetHandler):
         scan_spacing: float | None = None,
         add_empty_lidar_samples: bool = False,
     ) -> None:
+        start_logger()
         self.image_file = image_file
         self._n_partitions = n_partitions
         self.samples_per_partition = samples_per_partition

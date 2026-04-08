@@ -47,9 +47,9 @@ class DGD(P2PAlgorithm):
             raise ValueError("`aux_step_size` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:
-        self.x0 = initial_states(self.x0, network)
+        x0 = initial_states(self.x0, network)
         for i in network.agents():
-            i.initialize(x=self.x0[i])
+            i.initialize(x=x0[i])
 
         self.W = network.weights
 

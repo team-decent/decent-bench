@@ -94,7 +94,7 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
             raise ValueError("alpha must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
-        self.x0 = initial_states(self.x0, network)
+        x0 = initial_states(self.x0, network)
 
         # Initialize agents with auxiliary variables
         for i in network.agents():
@@ -116,24 +116,24 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
 
             neighbors = network.neighbors(i)
             z_i = iop.zeros(
-                shape=(len(neighbors), *iop.shape(self.x0[i])),
+                shape=(len(neighbors), *iop.shape(x0[i])),
                 framework=i.cost.framework,
                 device=i.cost.device,
             )
             neighbor_to_idx = {}
 
             for idx, j in enumerate(neighbors):
-                z_i[idx] = iop.copy(self.x0[i])
+                z_i[idx] = iop.copy(x0[i])
                 neighbor_to_idx[j] = idx
 
             aux_vars = {
-                "phi": self.x0[i],  # phi_i,k - model parameters
-                "phi_ema": self.x0[i],  # Exponential moving average of phi_i,k
-                "x_train": self.x0[i],  # x_i,k+1 - model parameters after local training
+                "phi": x0[i],  # phi_i,k - model parameters
+                "phi_ema": x0[i],  # Exponential moving average of phi_i,k
+                "x_train": x0[i],  # x_i,k+1 - model parameters after local training
                 "z_i": z_i,  # z_ij,k+1 - auxiliary consensus variable
                 "neighbor_to_idx": neighbor_to_idx,
             }
-            i.initialize(x=self.x0[i], aux_vars=aux_vars)
+            i.initialize(x=x0[i], aux_vars=aux_vars)
 
     def step(self, network: P2PNetwork, iteration: int) -> None:  # noqa: D102
         step_size = self.step_size(iteration) if callable(self.step_size) else self.step_size

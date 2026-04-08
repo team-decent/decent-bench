@@ -71,7 +71,7 @@ class ProxSkip(P2PAlgorithm):
 
         Algorithm 1, line 1:
         """
-        self.x0 = initial_states(self.x0, network)
+        x0 = initial_states(self.x0, network)
         agents = network.agents()
 
         # Compute weights W_a = I - 1/(2χ)(I - W)
@@ -82,14 +82,14 @@ class ProxSkip(P2PAlgorithm):
 
         for i in agents:
             # Initialize y_i^0 = 0 (dual variable)
-            y_0 = iop.zeros_like(self.x0[i])
+            y_0 = iop.zeros_like(x0[i])
 
             # Initialize auxiliary variables
             aux_vars = {
                 "y": y_0,  # Dual/control variable y_i^t
-                "z": self.x0[i],  # Prediction variable z_i^t
+                "z": x0[i],  # Prediction variable z_i^t
             }
-            i.initialize(x=self.x0[i], aux_vars=aux_vars)
+            i.initialize(x=x0[i], aux_vars=aux_vars)
 
     def step(self, network: P2PNetwork, iteration: int) -> None:
         # Main algorithm loop (line 3)

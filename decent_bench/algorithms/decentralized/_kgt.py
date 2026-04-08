@@ -66,21 +66,21 @@ class KGT(P2PAlgorithm):
 
         Algorithm 1, line 2.
         """
-        self.x0 = initial_states(self.x0, network)
+        x0 = initial_states(self.x0, network)
         # Get mixing matrix weights
         self.W = network.weights
 
         for i in network.agents():
             # Initialize c_i^(0) according to line 2
             # In practice, we can initialize c_i^(0) = 0 (as noted in the paper)
-            c_0 = iop.zeros_like(self.x0[i])
+            c_0 = iop.zeros_like(x0[i])
 
             i.initialize(
-                x=self.x0[i],
+                x=x0[i],
                 aux_vars={
                     "c": c_0,
-                    "x_before_local": self.x0[i],
-                    "z_i": self.x0[i],
+                    "x_before_local": x0[i],
+                    "z_i": x0[i],
                 },
             )
 

@@ -279,10 +279,16 @@ def _create_and_plot_figures(
 
                 # Transform x-axis for computational cost if needed
                 x_to_plot = x
-                if use_cost and computational_cost is not None and resulting_agent_states is not None:
-                    agent_states_for_alg = [list(trial) for trial in resulting_agent_states[alg]]
-                    total_computational_cost = _calc_total_cost(agent_states_for_alg, computational_cost)
-                    x_to_plot = tuple(val * total_computational_cost * scale_x_axis for val in x)
+                if use_cost and computational_cost is not None:
+                    if resulting_agent_states is None:
+                        LOGGER.warning(
+                            f"Computational cost provided but resulting agent states are missing. Cannot compute "
+                            f"total computational cost for algorithm {alg.name}. Plotting against iterations instead."
+                        )
+                    else:
+                        agent_states_for_alg = [list(trial) for trial in resulting_agent_states[alg]]
+                        total_computational_cost = _calc_total_cost(agent_states_for_alg, computational_cost)
+                        x_to_plot = tuple(val * total_computational_cost * scale_x_axis for val in x)
 
                 # Plot iterations version if comparing
                 if two_columns:

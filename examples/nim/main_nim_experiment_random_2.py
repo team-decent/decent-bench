@@ -2,10 +2,13 @@ import ctypes
 import gc
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import torch
+from PIL import Image
 from src.dataset import NIMDatasetHandler
+from src.nim_helpers import FinalActivation, NimModel
 from torch import nn
 
 import decent_bench.algorithms.decentralized as dec_algorithms
@@ -16,13 +19,12 @@ from decent_bench.algorithms.utils import pytorch_initialization
 from decent_bench.costs import PyTorchCost
 from decent_bench.metrics import metric_library as ml
 from decent_bench.metrics import runtime_library
-from decent_bench.networks import P2PNetwork
-from decent_bench.schemes import GaussianNoise, TopK, UniformActivationRate, UniformDropRate
+from decent_bench.metrics.metric_utils import single
+from decent_bench.networks import Network, P2PNetwork
+from decent_bench.schemes import UniformActivationRate, UniformDropRate
 from decent_bench.utils.checkpoint_manager import CheckpointManager
-from decent_bench.utils.pytorch_utils import SimpleLinearModel
 from decent_bench.utils.types import SupportedDevices
 from examples.nim.src.algorithms.lt_admm_ema import LT_ADMM_EMA
-from examples.nim.src.algorithms.lt_admm_torch_optimizer import LT_ADMM_TORCH
 
 
 def _trim_process_memory() -> None:
@@ -34,23 +36,80 @@ def _trim_process_memory() -> None:
         return
 
 
+def model_generator() -> torch.nn.Module:
+    """Generate a model for the NIM dataset."""
+    return NimModel(
+        input_size=2,
+        hidden_sizes=[256, 64, 64],
+        output_size=1,
+    )
+
+
+def create_heatmap_plots(image_file: str | Path, result: benchmark.BenchmarkResult, save_path: Path) -> None:
+    def heatmap_plot(
+        network: Network,
+        width: int,
+        height: int,
+        norm: float,
+    ) -> list[list[float]]:
+        xs = np.arange(0, width) / norm
+        ys = np.arange(0, height) / norm
+        X, Y = np.meshgrid(xs, ys, indexing="xy")
+        nx, ny = X.shape
+        points = np.column_stack((X.ravel(), Y.ravel()))
+        mats = []
+        for agent in network.agents():
+            if not isinstance(agent.cost, PyTorchCost):
+                continue
+            agent_activation = agent.cost.final_activation
+            agent.cost.final_activation = nn.Sigmoid()
+            out = agent.cost.predict(agent.x, torch.tensor(points, dtype=torch.float32))
+            agent.cost.final_activation = agent_activation
+            out_np = np.array(out)
+
+            mats.append(out_np.reshape((nx, ny)))
+
+        return mats
+
+    image = Image.open(image_file).convert("L")
+    image_array = np.array(image)
+    height, width = image_array.shape
+    feature_norm = max(height, width)
+
+    for alg, networks in result.states.items():
+        for j, n in enumerate(networks):
+            heatmaps = heatmap_plot(n, width, height, feature_norm)
+            fig, ax = plt.subplots(1, 5, figsize=(15, 10))
+            fig.suptitle(f"{alg.name} - Trial {j + 1}")
+            for i, hm in enumerate(heatmaps):
+                ax[i].imshow(image_array, cmap="gray")
+                ax[i].imshow(hm, cmap="hot", interpolation="nearest", vmin=0, vmax=1, alpha=0.8)
+                ax[i].invert_yaxis()
+                ax[i].axis("off")
+                ax[i].set_title(f"Agent {i + 1}")
+            plt.tight_layout()
+            plt.savefig(save_path / f"heatmaps_{alg.name}_{j + 1}.png")
+            plt.close()
+
+
 if __name__ == "__main__":
-    iterations = 10_000
-    state_snapshot_period = 100
-    samples_per_partition = 2000
-    test_samples = 10_000
+    iterations = 15_000
+    state_snapshot_period = 500
+    test_samples = 50_000
     leakage = 0.0
-    label_balance = 2.0
+    label_balance = 2.5
     image_file = "data/kth_floorplan.png"
-    batch_size = 32
+    batch_size = 512
     local_steps = [5, 10]
     device = SupportedDevices.CPU
-    opt_cls = torch.optim.Adam
 
     table_metrics = [
         ml.ConsensusError([min, np.average, max]),
         ml.GradientCalls([np.average, sum]),
         ml.SentMessages([np.average, sum]),
+        ml.ReceivedMessages([np.average, sum]),
+        ml.SentMessagesDropped([np.average, sum]),
+        ml.GradientNorm([single]),
         ml.MSE([min, np.average, max]),
         ml.Loss([min, np.average, max]),
     ]
@@ -61,31 +120,21 @@ if __name__ == "__main__":
         [ml.Loss([], x_log=False, y_log=False)],
     ]
 
-    def model_generator() -> torch.nn.Module:
-        """Generate a simple linear model for the NIM dataset."""
-        return SimpleLinearModel(
-            input_size=2,
-            hidden_sizes=[32, 16],
-            output_size=1,
+    # for n_agents, n_neighbors in [(5, 4), (5, 2)]:
+    for n_agents, n_neighbors in [(5, 2)]:
+        train_dataset = NIMDatasetHandler(
+            image_file=image_file,
+            n_partitions=n_agents,
+            transform=torch.tensor,  # type: ignore[arg-type]
+            label_transform=lambda x: torch.tensor(x, dtype=torch.float32).unsqueeze(0),  # type: ignore[arg-type]
+            label_balance=label_balance,
+            leakage=leakage,
         )
-
-    class FinalActivation(nn.Module):  # noqa: D101
-        def __init__(self, threshold: float = 0.5):
-            super().__init__()
-            self.sigmoid = nn.Sigmoid()
-            self.threshold = threshold
-
-        def forward(self, x: torch.Tensor) -> torch.Tensor:  # noqa: D102
-            return (self.sigmoid(x) > self.threshold).long()
-
-    for n_agents, n_neighbors in [(5, 4), (5, 2)]:
-        for drops, activity, compression, noise in [
-            (True, True, True, True),
-            (True, None, None, None),
-            (None, True, None, None),
-            (None, None, True, None),
-            (None, None, None, True),
-            (None, None, None, None),
+        test_data = train_dataset.get_test_set(label_balance=1.0, num_samples=test_samples)
+        for drops, activity in [
+            (None, None),
+            (True, None),
+            (None, True),
         ]:
             for alg in [
                 "DGD",
@@ -93,33 +142,18 @@ if __name__ == "__main__":
                 "LED",
                 "ProxSkip",
                 "LT-ADMM",
-                "LT-ADMM-TORCH",
-                "LT-ADMM-VR",
                 "LT-ADMM-EMA",
-                "LT-ADMM-EMA-TORCH",
             ]:
                 iop.set_seed(47)
-                train_dataset = NIMDatasetHandler(
-                    image_file=image_file,
-                    n_partitions=n_agents,
-                    samples_per_partition=samples_per_partition,
-                    transform=torch.tensor,  # type: ignore[arg-type]
-                    label_transform=lambda x: torch.tensor(x, dtype=torch.float32).unsqueeze(0),  # type: ignore[arg-type]
-                    label_balance=label_balance,
-                    leakage=leakage,
-                )
-
                 resume_benchmark = False
                 folder = "results/nim"
-                checkpoint_path = Path(
-                    f"{folder}/{n_agents}_{n_neighbors}/test_{drops}_{activity}_{compression}_{noise}/{alg}"
-                )
+                checkpoint_path = Path(f"{folder}/{n_agents}_{n_neighbors}/test_{drops}_{activity}/{alg}")
                 if checkpoint_path.exists():
                     resume_benchmark = True
 
                 cm = CheckpointManager(
                     checkpoint_dir=checkpoint_path,
-                    checkpoint_step=iterations // 2,
+                    checkpoint_step=iterations // 3,
                     keep_n_checkpoints=1,
                     benchmark_metadata={
                         "dataset": "NIM",
@@ -127,8 +161,6 @@ if __name__ == "__main__":
                         "n_neighbors": n_neighbors,
                         "drops": drops,
                         "activity": activity,
-                        "compression": compression,
-                        "noise": noise,
                     },
                 )
 
@@ -144,7 +176,7 @@ if __name__ == "__main__":
                         loss_fn=nn.BCEWithLogitsLoss(),
                         final_activation=FinalActivation(threshold=0.5),
                         batch_size=batch_size,
-                        max_batch_size=batch_size * 4,
+                        max_batch_size=batch_size,
                         device=device,
                     )
                     for p in train_dataset.get_partitions()
@@ -162,13 +194,11 @@ if __name__ == "__main__":
                 network = P2PNetwork(
                     graph=graph,
                     agents=agents,
-                    message_noise=GaussianNoise(0.0, 0.01) if noise else None,
-                    message_compression=TopK(0.1) if compression else None,
                     message_drop=UniformDropRate(0.2) if drops else None,
                 )
                 problem = benchmark.BenchmarkProblem(
                     network=network,
-                    test_data=train_dataset.get_test_set(label_balance=1.0, num_samples=test_samples),
+                    test_data=test_data,
                 )
                 x0 = pytorch_initialization(network, all_same=True)
                 if alg == "DGD":
@@ -231,41 +261,12 @@ if __name__ == "__main__":
                         )
                         for ls in local_steps
                     ]
-                elif alg == "LT-ADMM-TORCH":
-                    algorithms = [
-                        LT_ADMM_TORCH(
-                            iterations=iterations,
-                            local_steps=ls,
-                            step_size=0.001,
-                            aux_step_size=0.01,
-                            penalty=1.0,
-                            mask_z=False,
-                            x0=x0,
-                            opt_cls=opt_cls,
-                            name=f"LT-ADMM-TORCH (ls={ls})",
-                        )
-                        for ls in local_steps
-                    ]
-                elif alg == "LT-ADMM-VR":
-                    algorithms = [
-                        dec_algorithms.LT_ADMM_VR(
-                            iterations=iterations,
-                            local_steps=ls,
-                            step_size=0.01,
-                            aux_step_size=0.01,
-                            penalty=1.0,
-                            mask_z=False,
-                            x0=x0,
-                            name=f"LT-ADMM-VR (ls={ls})",
-                        )
-                        for ls in local_steps
-                    ]
                 elif alg == "LT-ADMM-EMA":
                     algorithms = [
                         LT_ADMM_EMA(
                             iterations=iterations,
                             local_steps=ls,
-                            step_size=0.005,
+                            step_size=0.01,
                             aux_step_size=0.01,
                             penalty=1.0,
                             ema_factor=0.8,
@@ -274,24 +275,6 @@ if __name__ == "__main__":
                             mask_z=False,
                             x0=x0,
                             name=f"LT-ADMM-EMA (ls={ls})",
-                        )
-                        for ls in local_steps
-                    ]
-                elif alg == "LT-ADMM-EMA-TORCH":
-                    algorithms = [
-                        LT_ADMM_EMA(
-                            iterations=iterations,
-                            local_steps=ls,
-                            step_size=0.0005,
-                            aux_step_size=0.01,
-                            penalty=1.0,
-                            ema_factor=0.8,
-                            send_ema_x=False,
-                            use_z_ema=False,
-                            mask_z=False,
-                            x0=x0,
-                            opt_cls=opt_cls,
-                            name=f"LT-ADMM-EMA-TORCH (ls={ls})",
                         )
                         for ls in local_steps
                     ]
@@ -305,20 +288,18 @@ if __name__ == "__main__":
                             create_backup=False,
                             show_speed=True,
                             show_trial=True,
-                            runtime_metrics=[runtime_library.RuntimeLoss(250)],
                         )
                     else:
                         result = benchmark.benchmark(
                             algorithms=algorithms,
                             benchmark_problem=problem,
-                            n_trials=3 if alg == "ProxSkip" or any((drops, activity, noise)) else 1,
+                            n_trials=3 if alg == "ProxSkip" or any((drops, activity)) else 1,
                             show_speed=True,
                             show_trial=True,
                             checkpoint_manager=cm,
-                            runtime_metrics=[runtime_library.RuntimeLoss(250)],
                         )
                 else:
-                    result = None
+                    result = cm.load_benchmark_result()
 
                 metric_result = benchmark.compute_metrics(
                     benchmark_result=result,
@@ -331,6 +312,12 @@ if __name__ == "__main__":
                     metrics_result=metric_result,
                     checkpoint_manager=cm,
                     show_plots=False,
+                )
+
+                create_heatmap_plots(
+                    image_file=image_file,
+                    result=result,
+                    save_path=cm.get_results_path(),
                 )
 
                 metric_result.agent_metrics = None
