@@ -445,28 +445,16 @@ class FedProx(FedAlgorithm):
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
     def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
+        """
+        Run local proximal gradient steps using the batching semantics of ``client.cost.gradient``.
+
+        Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so FedProx
+        performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
+        """
         reference_x = iop.copy(client.messages[server]) if server in client.messages else iop.copy(client.x)
         local_x = iop.copy(reference_x)
-        if isinstance(client.cost, EmpiricalRiskCost):
-            cost = client.cost
-            n_samples = cost.n_samples
-            return self._epoch_minibatch_update(cost, local_x, reference_x, cost.batch_size, n_samples)
-
         for _ in range(self.num_local_epochs):
             grad = client.cost.gradient(local_x) + self.mu * (local_x - reference_x)
-            local_x -= self.step_size * grad
-        return local_x
-
-    def _epoch_minibatch_update(
-        self,
-        cost: EmpiricalRiskCost,
-        local_x: "Array",
-        reference_x: "Array",
-        per_client_batch: int,
-        n_samples: int,
-    ) -> "Array":
-        for _ in range(self.num_local_epochs):
-            grad = cost.gradient(local_x) + self.mu * (local_x - reference_x)
             local_x -= self.step_size * grad
         return local_x
 
