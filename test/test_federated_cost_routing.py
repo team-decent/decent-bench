@@ -183,7 +183,7 @@ def _run_fedavg_local_update(cost: Cost, *, step_size: float = 1.0, num_local_ep
 def test_empirical_costs_use_minibatch_local_updates() -> None:
     cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
 
-    updated = _run_fedavg_local_update(cost)
+    updated = _run_fedavg_local_update(cost, num_local_epochs=3)
 
     np.testing.assert_allclose(updated, np.array([-3.0]))
     assert len(cost.gradient_indices) == 3
@@ -196,7 +196,7 @@ def test_empirical_regularized_costs_keep_minibatch_local_updates() -> None:
     regularizer = TrackingRegularizerCost()
     objective = empirical_cost + regularizer
 
-    updated = _run_fedavg_local_update(objective)
+    updated = _run_fedavg_local_update(objective, num_local_epochs=3)
 
     np.testing.assert_allclose(updated, np.array([-3.0]))
     assert len(empirical_cost.gradient_indices) == 3
@@ -212,7 +212,7 @@ def test_scaled_empirical_costs_keep_minibatch_local_updates() -> None:
     empirical_cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
     objective = 2.0 * empirical_cost
 
-    updated = _run_fedavg_local_update(objective)
+    updated = _run_fedavg_local_update(objective, num_local_epochs=3)
 
     np.testing.assert_allclose(updated, np.array([-6.0]))
     assert len(empirical_cost.gradient_indices) == 3
