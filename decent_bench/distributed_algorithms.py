@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, Final, cast, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
-from decent_bench.costs import Cost, EmpiricalRiskCost
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
@@ -335,40 +334,16 @@ class FedAvg(FedAlgorithm):
             client.x = self._compute_local_update(client, network.server())
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
-    @staticmethod
-    def _empirical_cost_for_local_updates(cost: Cost) -> EmpiricalRiskCost | None:
-        """
-        Return the empirical cost view to use for FedAvg local mini-batching.
-
-        The repository's batching semantics are carried by the ``EmpiricalRiskCost`` abstraction itself. Wrappers that
-        preserve empirical-risk metadata, such as empirical regularization/scaling and ``PyTorchCost``, inherit from
-        ``EmpiricalRiskCost`` and are therefore batch-capable. Generic wrappers like ``SumCost`` and ``ScaledCost``
-        intentionally erase that abstraction and should use the full-gradient path.
-        """
-        if isinstance(cost, EmpiricalRiskCost):
-            return cost
-        return None
-
     def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
+        """
+        Run local gradient steps using the batching semantics of ``client.cost.gradient``.
+
+        Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so FedAvg
+        performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
+        """
         local_x = iop.copy(client.messages[server]) if server in client.messages else iop.copy(client.x)
-        empirical_cost = self._empirical_cost_for_local_updates(client.cost)
-        if empirical_cost is not None:
-            return self._run_minibatch_local_epochs(empirical_cost, local_x)
-        return self._run_full_gradient_local_epochs(client.cost, local_x)
-
-    def _run_full_gradient_local_epochs(self, cost: Cost, local_x: "Array") -> "Array":
         for _ in range(self.num_local_epochs):
-            grad = cost.gradient(local_x)
-            local_x -= self.step_size * grad
-        return local_x
-
-    def _run_minibatch_local_epochs(
-        self,
-        cost: EmpiricalRiskCost,
-        local_x: "Array",
-    ) -> "Array":
-        for _ in range(self.num_local_epochs):
-            grad = cost.gradient(local_x)
+            grad = client.cost.gradient(local_x)
             local_x -= self.step_size * grad
         return local_x
 
