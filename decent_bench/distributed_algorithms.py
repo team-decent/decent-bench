@@ -466,12 +466,8 @@ class FedProx(FedAlgorithm):
         n_samples: int,
     ) -> "Array":
         for _ in range(self.num_local_epochs):
-            indices = list(range(n_samples))
-            random.shuffle(indices)
-            for start in range(0, n_samples, per_client_batch):
-                batch_indices = indices[start : start + per_client_batch]
-                grad = cost.gradient(local_x, indices=batch_indices) + self.mu * (local_x - reference_x)
-                local_x -= self.step_size * grad
+            grad = cost.gradient(local_x) + self.mu * (local_x - reference_x)
+            local_x -= self.step_size * grad
         return local_x
 
 
