@@ -26,15 +26,12 @@ def solve(cost: "Cost", max_iter: int = 100, stop_tol: float | None = None, max_
     Args:
         cost: cost function to minimize.
         max_iter: maximum number of iterations to run. Defaults to 100.
-        stop_tol: optional early stopping tolerance; stops if iterate change drops below this value.
-        max_tol: optional final tolerance; raises RuntimeError if iterate change exceeds this value after max_iter iterations.
+        stop_tol: optional early stopping tolerance; stops if norm(x_new - x_old) drops below this value.
+        max_tol: optional final tolerance; RuntimeError is raised if norm(x_new - x_old) exceeds this value
+                 after max_iter iterations.
 
     Returns:
         Approximate minimizer or stationary point.
-        
-    Raises:
-        ValueError: if max_iter, stop_tol, or max_tol are invalid (see :meth:`Solver.run`).
-        RuntimeError: if max_tol is provided and final iterate change exceeds max_tol.
 
     """
     LOGGER.info("Finding the optimal solution to the problem ...")
@@ -48,16 +45,17 @@ def solve(cost: "Cost", max_iter: int = 100, stop_tol: float | None = None, max_
 
     # quadratic
     from decent_bench.costs import QuadraticCost  # noqa: PLC0415
+
     if isinstance(cost, QuadraticCost):
         x_optimal = Array(np.linalg.solve(cost.A, -cost.b))
     # smooth and convex/strongly convex
     elif np.isfinite(cost.m_smooth) and np.isfinite(cost.m_cvx):
         LOGGER.info(f"{stop_criteria}")
-        x_optimal = accelerated_gradient_descent(cost).run(max_iter=max_iter, stop_tol=stop_tol, max_tol=max_tol)
+        x_optimal = AcceleratedGradientDescent(cost).run(max_iter=max_iter, stop_tol=stop_tol, max_tol=max_tol)
     # non-smooth or non-convex
     else:
         LOGGER.info(f"{stop_criteria}")
-        x_optimal = gradient_descent(cost).run(max_iter=max_iter, stop_tol=stop_tol, max_tol=max_tol)
+        x_optimal = GradientDescent(cost).run(max_iter=max_iter, stop_tol=stop_tol, max_tol=max_tol)
 
     LOGGER.info("... done!")
 
@@ -67,7 +65,7 @@ def solve(cost: "Cost", max_iter: int = 100, stop_tol: float | None = None, max_
 class Solver(ABC):
     """
     Base class for centralized solvers.
-    
+
     Initializes iterate (x) and previous iterate (x_old), validates domain shape,
     and stores hyperparameters.
     Subclasses must implement the step method to define one iteration of their algorithm.
@@ -90,7 +88,7 @@ class Solver(ABC):
     def step(self, iteration: int) -> None:
         """
         Perform one iteration of the solver.
-        
+
         Subclasses must update self.x exactly once per step.
         Use the iteration counter for algorithms with iteration-dependent parameters (e.g., step schedules).
 
@@ -105,7 +103,7 @@ class Solver(ABC):
         max_iter: int = 100,
         stop_tol: float | None = None,
         max_tol: float | None = None,
-        show_progress: bool = True
+        show_progress: bool = True,
     ) -> Array:
         """
         Run the solver.
@@ -134,12 +132,10 @@ class Solver(ABC):
         """
         if max_iter < 1:
             raise ValueError("`max_iter` must be positive")
-        if stop_tol is not None:
-            if stop_tol <= 0:
-                raise ValueError("`stop_tol` must be positive or None")
-        if max_tol is not None:
-            if max_tol <= 0:
-                raise ValueError("`max_tol` must be positive or None")
+        if stop_tol is not None and stop_tol <= 0:
+            raise ValueError("`stop_tol` must be positive or None")
+        if max_tol is not None and max_tol <= 0:
+            raise ValueError("`max_tol` must be positive or None")
 
         delta = np.inf
         for k in track(
@@ -162,41 +158,50 @@ class Solver(ABC):
         return self.x
 
 
-class gradient_descent(Solver):
+class GradientDescent(Solver):
     r"""
     Gradient descent solver.
-    
+
     If step_size is not provided, defaults to:
     - Non-smooth or non-convex: :math:`1/\sqrt{k+1}`
     - Strongly convex: :math:`2/(L+mu)`
     - Convex: step_size = 1/m_smooth
     """
 
-    def __init__(self,
-                 cost: "Cost",
-                 step_size: float | Callable[[int], float] | None = None,
-                 x0: Array | None = None
-        ):
+    def __init__(self, cost: "Cost", step_size: float | Callable[[int], float] | None = None, x0: Array | None = None):
         if callable(step_size):
             step_size_k: Callable[[int], float] = step_size
         elif isinstance(step_size, float):
-            step_size_k = lambda _k: float(step_size)
+
+            def step_size_k(_: int) -> float:
+                return float(step_size)
+
         elif np.isnan(cost.m_smooth) or np.isinf(cost.m_smooth) or np.isnan(cost.m_cvx):  # non-smooth or non-convex
-            step_size_k = lambda _k: 1 / np.sqrt(_k + 1)
+
+            def step_size_k(k: int) -> float:
+                return float(1 / np.sqrt(k + 1))
+
         elif cost.m_cvx > 0:  # strongly convex
-            step_size_k = lambda _k: 2 / (cost.m_smooth + cost.m_cvx)
+
+            def step_size_k(_: int) -> float:
+                return 2 / (cost.m_smooth + cost.m_cvx)
+
         else:  # convex
-            step_size_k = lambda _k: 1 / cost.m_smooth
+
+            def step_size_k(_: int) -> float:
+                return 1 / cost.m_smooth
+
         super().__init__(cost, {"step_size": step_size_k}, x0)
 
     def step(self, iteration: int) -> None:
-        self.x = self.x - self.step_size(iteration) * self.cost.gradient(self.x)  # type: ignore[attr-defined]
+        """Perform one iteration of the solver."""
+        self.x -= self.step_size(iteration) * self.cost.gradient(self.x)  # type: ignore[attr-defined]
 
 
-class accelerated_gradient_descent(Solver):
+class AcceleratedGradientDescent(Solver):
     r"""
     Accelerated gradient descent (Nesterov momentum) solver.
-    
+
     If step_size is not provided, defaults to: :math:`1/L`.
 
     If momentum is not provided, defaults to:
@@ -204,48 +209,41 @@ class accelerated_gradient_descent(Solver):
     - Otherwise: :math:`k / (k+3)`
     """
 
-    def __init__(self,
-                 cost: "Cost",
-                 step_size: float | Callable[[int], float] | None = None,
-                 momentum: float | Callable[[int], float] | None = None,
-                 x0: Array | None = None
-        ):
-        if isinstance(step_size, float):
-            step_size = float(step_size)
-        else:
-            step_size = 1 / cost.m_smooth
+    def __init__(
+        self,
+        cost: "Cost",
+        step_size: float | Callable[[int], float] | None = None,
+        momentum: float | Callable[[int], float] | None = None,
+        x0: Array | None = None,
+    ):
+        step_size = float(step_size) if isinstance(step_size, float) else 1 / cost.m_smooth
 
         if callable(momentum):
             momentum_k: Callable[[int], float] = momentum
         elif isinstance(momentum, float):
-            momentum_k = lambda _k: float(momentum)
+
+            def momentum_k(_: int) -> float:
+                return float(momentum)
+
         elif cost.m_cvx > 0:  # strongly convex
-            momentum_k = lambda _k: (np.sqrt(cost.m_smooth) - np.sqrt(cost.m_cvx)) / (np.sqrt(cost.m_smooth) + np.sqrt(cost.m_cvx))
+
+            def momentum_k(_: int) -> float:
+                return float(
+                    (np.sqrt(cost.m_smooth) - np.sqrt(cost.m_cvx)) / (np.sqrt(cost.m_smooth) + np.sqrt(cost.m_cvx))
+                )
+
         else:
-            momentum_k = lambda _k: _k / (_k + 3)
+
+            def momentum_k(k: int) -> float:
+                return k / (k + 3)
 
         super().__init__(cost, {"step_size": step_size, "momentum": momentum_k}, x0)
         self.y = self.x
 
     def step(self, iteration: int) -> None:
+        """Perform one iteration of the solver."""
         self.x = self.y - self.step_size * self.cost.gradient(self.y)  # type: ignore[attr-defined]
         self.y = self.x + self.momentum(iteration) * (self.x - self.x_old)  # type: ignore[attr-defined]
-
-
-class proximal_point_algorithm(Solver):
-    """
-    Proximal point algorithm.
-    """
-
-    def __init__(self,
-                 cost: "Cost",
-                 rho: float = 1.0,
-                 x0: Array | None = None
-        ):
-        super().__init__(cost, {"rho": float(rho)}, x0)
-
-    def step(self, __: int) -> None:
-        self.x = self.cost.proximal(self.x, self.rho)  # type: ignore[attr-defined]
 
 
 def proximal_solver(cost: "Cost", y: Array, rho: float, max_iter: int = 100) -> Array:
@@ -262,6 +260,7 @@ def proximal_solver(cost: "Cost", y: Array, rho: float, max_iter: int = 100) -> 
         cost: cost function to compute the proximal of.
         y: point at which to evaluate the proximal.
         rho: penalty parameter.
+        max_iter: maximum number of iterations of the solver.
 
     Returns:
         Approximate proximal at `y`.
@@ -278,9 +277,9 @@ def proximal_solver(cost: "Cost", y: Array, rho: float, max_iter: int = 100) -> 
 
     from decent_bench.costs import QuadraticCost  # noqa: PLC0415
 
-    proximal_cost = QuadraticCost(A=iop.eye_like(y) / rho, b=-y / rho, c=float(iop.dot(y, y)) / (2 * rho)) + cost
+    proximal_cost = QuadraticCost(A=iop.eye_like(y) / rho, b=-y / rho) + cost
     if proximal_cost.m_smooth == np.inf or np.isnan(proximal_cost.m_smooth) or np.isnan(proximal_cost.m_cvx):
-        raise NotImplementedError(
-            "Proximal solver requires the cost to be differentiable, L-smooth, and convex."
-        )
-    return accelerated_gradient_descent(proximal_cost, x0=y).run(max_iter=100, stop_tol=1e-10, max_tol=None, show_progress=False)
+        raise NotImplementedError("Proximal solver requires the cost to be differentiable, L-smooth, and convex.")
+    return AcceleratedGradientDescent(proximal_cost, x0=y).run(
+        max_iter=max_iter, stop_tol=1e-10, max_tol=None, show_progress=False
+    )
