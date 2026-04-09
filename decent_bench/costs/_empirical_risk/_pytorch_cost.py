@@ -578,8 +578,8 @@ class PyTorchCost(EmpiricalRiskCost):
             raise RuntimeError("Batch data could not be retrieved. Please report this error.")
 
         self._last_batch_used = list(batch_idx)
-        self._last_batch_x = batch_x.to(self._pytorch_device, non_blocking=True)
-        self._last_batch_y = batch_y.to(self._pytorch_device, non_blocking=True)
+        self._last_batch_x = batch_x.to(self._pytorch_device)
+        self._last_batch_y = batch_y.to(self._pytorch_device)
 
         batches = []
         for i in range(0, batch_x.shape[0], self._max_batch_size):
