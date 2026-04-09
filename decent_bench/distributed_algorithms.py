@@ -368,9 +368,8 @@ class FedAvg(FedAlgorithm):
         local_x: "Array",
     ) -> "Array":
         for _ in range(self.num_local_epochs):
-            for _ in range(0, cost.n_samples, cost.batch_size):
-                grad = cost.gradient(local_x)
-                local_x -= self.step_size * grad
+            grad = cost.gradient(local_x)
+            local_x -= self.step_size * grad
         return local_x
 
 
