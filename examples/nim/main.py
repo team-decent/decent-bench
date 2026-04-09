@@ -16,9 +16,9 @@ if __name__ == "__main__":
     start_logger()
     iop.set_seed(0)
     nim_data = NIMDatasetHandler(
-        image_file="data/kth_floorplan.png",
+        image_file="data/kth_floorplan_sample.png",
         n_partitions=5,
-        samples_per_partition=2000,
+        samples_per_partition=1000,
         transform=torch.tensor,  # type: ignore[arg-type]
         label_transform=torch.tensor,  # type: ignore[arg-type]
         label_balance=2.0,

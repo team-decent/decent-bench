@@ -431,7 +431,7 @@ class CheckpointManager:  # noqa: PLR0904
             "alg_idx": alg_idx,
             "trial": trial,
             "iteration": iteration,
-            "checkpoint_path": str(checkpoint_path),
+            "checkpoint_path": str(checkpoint_path.name),
         }
         with complete_path.open("w") as f:
             json.dump(completed_metadata, f)
@@ -525,7 +525,8 @@ class CheckpointManager:  # noqa: PLR0904
 
         with complete_path.open(encoding="utf-8") as f:
             completed_metadata = json.load(f)
-        final_path = Path(completed_metadata["checkpoint_path"])
+        checkpoint_path = Path(completed_metadata["checkpoint_path"])
+        final_path = trial_dir / checkpoint_path.name
 
         checkpoint_data = cast("_CheckpointData", self._load_pickle(final_path))
 

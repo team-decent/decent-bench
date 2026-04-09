@@ -106,6 +106,7 @@ def _visualize_random_sampling(
     fig, ax = plt.subplots(figsize=figsize)
     img_array = np.array(image)
     ax.imshow(img_array, cmap="gray", origin="upper")
+    ax.axis("off")
 
     # Overlay occupied pixels in red for easier map interpretation.
     img_float = img_array.astype(np.float64) / 255.0

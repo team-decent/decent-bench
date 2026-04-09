@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from PIL import Image
 from src.dataset import NIMDatasetHandler
-from src.nim_helpers import FinalActivation, NimModel
+from src.nim_helpers import NimModel
 from torch import nn
 
 import decent_bench.algorithms.decentralized as dec_algorithms
@@ -93,7 +93,7 @@ def create_heatmap_plots(image_file: str | Path, result: benchmark.BenchmarkResu
 
 
 if __name__ == "__main__":
-    iterations = 15_000
+    iterations = 20_000
     state_snapshot_period = 500
     test_samples = 50_000
     leakage = 0.0
@@ -134,6 +134,7 @@ if __name__ == "__main__":
             (None, None),
             (True, None),
             (None, True),
+            (True, True),
         ]:
             for alg in [
                 "DGD",
@@ -152,7 +153,7 @@ if __name__ == "__main__":
 
                 cm = CheckpointManager(
                     checkpoint_dir=checkpoint_path,
-                    checkpoint_step=iterations // 2,
+                    checkpoint_step=None,
                     keep_n_checkpoints=1,
                     benchmark_metadata={
                         "dataset": "NIM",
@@ -204,27 +205,19 @@ if __name__ == "__main__":
                 if alg == "DGD":
                     algorithms = [
                         dec_algorithms.DGD(
-                            step_size=0.1,
+                            step_size=0.05,
                             aux_step_size=1.0,
                             iterations=iterations,
                             x0=x0,
-                            name="DGD (ss=0.1)",
-                        ),
-                        dec_algorithms.DGD(
-                            step_size=0.5,
-                            aux_step_size=1.0,
-                            iterations=iterations,
-                            name="DGD (ss=0.5)",
-                            x0=x0,
-                        ),
+                        )
                     ]
                 elif alg == "KGT":
                     algorithms = [
                         dec_algorithms.KGT(
                             iterations=iterations,
                             local_steps=10,
-                            step_size=0.05,
-                            aux_step_size=0.5,
+                            step_size=0.025,
+                            aux_step_size=0.025,
                             x0=x0,
                         )
                     ]
@@ -232,8 +225,8 @@ if __name__ == "__main__":
                     algorithms = [
                         dec_algorithms.ProxSkip(
                             iterations=iterations,
-                            step_size=0.1,
-                            aux_step_size=0.1,
+                            step_size=0.05,
+                            aux_step_size=0.05,
                             comm_probability=0.2,
                             chi=1.0,
                             x0=x0,
@@ -244,8 +237,8 @@ if __name__ == "__main__":
                         dec_algorithms.LED(
                             iterations=iterations,
                             local_steps=10,
-                            step_size=0.05,
-                            aux_step_size=0.05,
+                            step_size=0.025,
+                            aux_step_size=0.025,
                             x0=x0,
                         )
                     ]
@@ -254,8 +247,8 @@ if __name__ == "__main__":
                         dec_algorithms.LT_ADMM(
                             iterations=iterations,
                             local_steps=10,
-                            step_size=0.05,
-                            aux_step_size=0.05,
+                            step_size=0.025,
+                            aux_step_size=0.025,
                             penalty=1.0,
                             mask_z=False,
                             x0=x0,
@@ -266,8 +259,8 @@ if __name__ == "__main__":
                         LT_ADMM_EMA(
                             iterations=iterations,
                             local_steps=10,
-                            step_size=0.05,
-                            aux_step_size=0.05,
+                            step_size=0.025,
+                            aux_step_size=0.025,
                             penalty=1.0,
                             ema_factor=0.8,
                             send_ema_x=False,
@@ -295,6 +288,7 @@ if __name__ == "__main__":
                             show_speed=True,
                             show_trial=True,
                             checkpoint_manager=cm,
+                            # runtime_metrics=[runtime_library.RuntimeLoss(250)],
                         )
                 else:
                     result = cm.load_benchmark_result()
@@ -323,5 +317,7 @@ if __name__ == "__main__":
                 # Garbage collection to free up memory before the next benchmark
                 gc.collect()
                 _trim_process_memory()
+
+                print(f"Completed benchmark for {checkpoint_path}.")
 
     print("All benchmarks completed.")
