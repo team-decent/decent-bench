@@ -13,14 +13,12 @@ from decent_bench.utils.logger import LOGGER
 if TYPE_CHECKING:
     from decent_bench.costs import Cost
 
-logger.start_logger()
-
 
 def solve(cost: "Cost", max_iter: int = 100, stop_tol: float | None = None, max_tol: float | None = None) -> Array:
     """
     Minimize a cost function using a suitable solver.
 
-    Applies :func:~numpy.linalg.solve to quadratic costs, accelerated gradient descent to smooth and (strongly) convex
+    Applies :func:`~numpy.linalg.solve` to quadratic costs, accelerated gradient descent to smooth and (strongly) convex
     costs, (sub)gradient descent to any other cost.
 
     Args:
@@ -33,7 +31,12 @@ def solve(cost: "Cost", max_iter: int = 100, stop_tol: float | None = None, max_
     Returns:
         Approximate minimizer or stationary point.
 
+    Raises:
+        ValueError: when the cost has m_smooth = 0.
+
     """
+    if not LOGGER.handlers:
+        logger.start_logger()
     LOGGER.info("Finding the optimal solution to the problem ...")
 
     stop_criteria = f"Stopping after {max_iter} iterations"
@@ -48,8 +51,11 @@ def solve(cost: "Cost", max_iter: int = 100, stop_tol: float | None = None, max_
 
     if isinstance(cost, QuadraticCost):
         x_optimal = Array(np.linalg.solve(cost.A, -cost.b))
+    # exclude costs with m_smooth = 0
+    elif np.isfinite(cost.m_smooth) and np.isfinite(cost.m_cvx) and cost.m_smooth == 0:
+        raise ValueError("Costs with m_smooth = 0 are not supported.")
     # smooth and convex/strongly convex
-    elif np.isfinite(cost.m_smooth) and np.isfinite(cost.m_cvx):
+    elif np.isfinite(cost.m_smooth) and np.isfinite(cost.m_cvx) and cost.m_smooth > 0:
         LOGGER.info(f"{stop_criteria}")
         x_optimal = AcceleratedGradientDescent(cost).run(max_iter=max_iter, stop_tol=stop_tol, max_tol=max_tol)
     # non-smooth or non-convex
@@ -77,7 +83,7 @@ class Solver(ABC):
         if iop.shape(x0) != cost.shape:
             raise ValueError("x0 and cost function domain must have same shape")
         self.x = x0
-        self.x_old = self.x
+        self.x_old = iop.copy(self.x)
 
         self.cost = cost
         if hyperparams:
@@ -144,7 +150,7 @@ class Solver(ABC):
             disable=not show_progress,
             update_period=0.0,
         ):
-            self.x_old = self.x
+            self.x_old = iop.copy(self.x)
             self.step(k)
             delta = float(iop.norm(self.x - self.x_old))
             if stop_tol is not None and delta <= stop_tol:
@@ -212,7 +218,7 @@ class AcceleratedGradientDescent(Solver):
     def __init__(
         self,
         cost: "Cost",
-        step_size: float | Callable[[int], float] | None = None,
+        step_size: float | None = None,
         momentum: float | Callable[[int], float] | None = None,
         x0: Array | None = None,
     ):
@@ -238,7 +244,7 @@ class AcceleratedGradientDescent(Solver):
                 return k / (k + 3)
 
         super().__init__(cost, {"step_size": step_size, "momentum": momentum_k}, x0)
-        self.y = self.x
+        self.y = iop.copy(self.x)
 
     def step(self, iteration: int) -> None:
         """Perform one iteration of the solver."""

@@ -8,6 +8,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench import centralized_algorithms as ca
 from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCost, PyTorchCost, QuadraticCost
 from decent_bench.datasets import SyntheticClassificationDatasetHandler, SyntheticRegressionDatasetHandler
+from decent_bench.utils import logger
 from decent_bench.utils.array import Array
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import Dataset, EmpiricalRiskBatchSize, SupportedDevices, SupportedFrameworks
@@ -42,6 +43,8 @@ def create_classification_problem(
         ImportError: if PyTorchCost is selected but PyTorch is not installed
 
     """
+    if not LOGGER.handlers:
+        logger.start_logger()
     LOGGER.info("Creating cost functions ...")
     dataset = SyntheticClassificationDatasetHandler(
         n_targets=2,
@@ -130,6 +133,8 @@ def create_regression_problem(
         ImportError: if PyTorchCost is selected but PyTorch is not installed
 
     """
+    if not LOGGER.handlers:
+        logger.start_logger()
     LOGGER.info("Creating cost functions ...")
     dataset = SyntheticRegressionDatasetHandler(
         n_targets=1,
@@ -196,6 +201,8 @@ def create_quadratic_problem(
         n_agents: number of agents
 
     """
+    if not LOGGER.handlers:
+        logger.start_logger()
     LOGGER.info("Creating cost functions ...")
     A, b = [], []  # noqa: N806
     for _ in range(n_agents):
