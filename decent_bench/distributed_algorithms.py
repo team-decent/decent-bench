@@ -1,4 +1,3 @@
-import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -6,7 +5,6 @@ from typing import TYPE_CHECKING, Any, Final, cast, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
-from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
@@ -179,6 +177,10 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     def _cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
         return [network.server(), *network.clients()]
 
+    def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
+        """Send the current server model to the selected clients."""
+        network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x)
+
     def select_clients(
         self,
         clients: Sequence["Agent"],
@@ -281,10 +283,10 @@ class FedAvg(FedAlgorithm):
     round :math:`k`. In FedAvg, each selected client performs ``num_local_epochs`` local SGD epochs, then the server
     aggregates the final local models to form :math:`\mathbf{x}_{k+1}`. The aggregation uses client weights, defaulting
     to data-size weights when ``client_weights`` is not provided. Client selection (subsampling) defaults to uniform
-    sampling with fraction 1.0 (all active clients) and can be customized via ``selection_scheme``. For
-    :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
-    :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; for generic costs, local
-    updates use full-batch gradients.
+    sampling with fraction 1.0 (all active clients) and can be customized via ``selection_scheme``. Costs that
+    preserve the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use client-side mini-batches of size
+    :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; generic cost wrappers
+    fall back to full-gradient local updates.
     """
 
     # C=0.1; batch size= inf/10/50 (dataset sizes are bigger; normally 1/10 of the total dataset).
@@ -323,12 +325,9 @@ class FedAvg(FedAlgorithm):
         if not selected_clients:
             return
 
-        self._sync_server_to_clients(network, selected_clients)
+        self.server_broadcast(network, selected_clients)
         self._run_local_updates(network, selected_clients)
         self.aggregate(network, selected_clients)
-
-    def _sync_server_to_clients(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x)
 
     def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
         for client in selected_clients:
@@ -336,31 +335,16 @@ class FedAvg(FedAlgorithm):
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
     def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
-        local_x = iop.copy(client.messages[server]) if server in client.messages else iop.copy(client.x)
-        if isinstance(client.cost, EmpiricalRiskCost):
-            cost = client.cost
-            n_samples = cost.n_samples
-            return self._epoch_minibatch_update(cost, local_x, cost.batch_size, n_samples)
+        """
+        Run local gradient steps using the batching semantics of ``client.cost.gradient``.
 
+        Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so FedAvg
+        performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
+        """
+        local_x = iop.copy(client.messages[server]) if server in client.messages else iop.copy(client.x)
         for _ in range(self.num_local_epochs):
             grad = client.cost.gradient(local_x)
             local_x -= self.step_size * grad
-        return local_x
-
-    def _epoch_minibatch_update(
-        self,
-        cost: EmpiricalRiskCost,
-        local_x: "Array",
-        per_client_batch: int,
-        n_samples: int,
-    ) -> "Array":
-        for _ in range(self.num_local_epochs):
-            indices = list(range(n_samples))
-            random.shuffle(indices)
-            for start in range(0, n_samples, per_client_batch):
-                batch_indices = indices[start : start + per_client_batch]
-                grad = cost.gradient(local_x, indices=batch_indices)
-                local_x -= self.step_size * grad
         return local_x
 
 
@@ -1219,10 +1203,8 @@ class ATG(P2PAlgorithm):
                 network.send(i, j, s)
         for i in network.active_agents():
             for j, msg in i.messages.items():
-                i.aux_vars["z_y"][j] = (1 - self.alpha) * i.aux_vars["z_y"][j] \
-                                        + self.alpha * msg[0]  # fmt: skip
-                i.aux_vars["z_s"][j] = (1 - self.alpha) * i.aux_vars["z_s"][j] \
-                                        + self.alpha * msg[1]  # fmt: skip
+                i.aux_vars["z_y"][j] = (1 - self.alpha) * i.aux_vars["z_y"][j] + self.alpha * msg[0]
+                i.aux_vars["z_s"][j] = (1 - self.alpha) * i.aux_vars["z_s"][j] + self.alpha * msg[1]
 
 
 ADMMTracking = ATG  # alias

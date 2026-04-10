@@ -25,14 +25,19 @@ class SumCost(Cost):
     """
 
     def __init__(self, costs: list[Cost]):
-        if not all(costs[0].shape == cf.shape for cf in costs):
-            raise ValueError("All cost functions must have the same domain shape")
+        if len(costs) == 0:
+            raise ValueError("SumCost must contain at least one cost function.")
+
         self.costs: list[Cost] = []
         for cf in costs:
             if isinstance(cf, SumCost):
                 self.costs.extend(cf.costs)
             else:
                 self.costs.append(cf)
+
+        first = self.costs[0]
+        for cf in self.costs[1:]:
+            first._validate_cost_operation(cf)  # noqa: SLF001
 
     @property
     def shape(self) -> tuple[int, ...]:
