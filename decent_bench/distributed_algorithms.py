@@ -416,12 +416,9 @@ class FedProx(FedAlgorithm):
         if not selected_clients:
             return
 
-        self._sync_server_to_clients(network, selected_clients)
+        self.server_broadcast(network, selected_clients)
         self._run_local_updates(network, selected_clients)
         self.aggregate(network, selected_clients)
-
-    def _sync_server_to_clients(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x)
 
     def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
         for client in selected_clients:
@@ -435,7 +432,7 @@ class FedProx(FedAlgorithm):
         Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so FedProx
         performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
         """
-        reference_x = client.messages[server] if server in client.messages else client.x
+        reference_x = client.messages.get(server, client.x)
         local_x = iop.copy(reference_x)
         for _ in range(self.num_local_epochs):
             grad = client.cost.gradient(local_x) + self.mu * (local_x - reference_x)
