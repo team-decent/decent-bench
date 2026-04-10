@@ -5,7 +5,7 @@ import pytest
 
 from decent_bench.agents import Agent
 from decent_bench.costs import BaseRegularizerCost, Cost, EmpiricalRiskCost, ZeroCost
-from decent_bench.distributed_algorithms import FedAvg, FedProx
+from decent_bench.distributed_algorithms import FedAvg, FedProx, Scaffold
 from decent_bench.utils.types import (
     Dataset,
     EmpiricalRiskIndices,
@@ -184,14 +184,25 @@ def _run_federated_local_update(
         algorithm = FedAvg(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
     elif algorithm_name == "fedprox":
         algorithm = FedProx(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs, mu=mu)
+    elif algorithm_name == "scaffold":
+        algorithm = Scaffold(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
     else:
         raise ValueError(f"Unsupported federated algorithm: {algorithm_name}")
 
     client = Agent(0, cost)
     server = Agent(1, ZeroCost(cost.shape))
-    client.initialize(x=np.zeros(cost.shape, dtype=float))
+    aux_vars = None
+    if isinstance(algorithm, Scaffold):
+        aux_vars = {
+            algorithm._CONTROL_VARIATE_KEY: np.zeros(cost.shape, dtype=float),
+            algorithm._SERVER_CONTROL_VARIATE_KEY: np.zeros(cost.shape, dtype=float),
+        }
+    client.initialize(x=np.zeros(cost.shape, dtype=float), aux_vars=aux_vars)
     server.initialize(x=np.zeros(cost.shape, dtype=float))
-    return algorithm._compute_local_update(client, server)
+    local_update = algorithm._compute_local_update(client, server)
+    if isinstance(algorithm, Scaffold):
+        return local_update[0]
+    return local_update
 
 
 @pytest.mark.parametrize(
@@ -199,6 +210,7 @@ def _run_federated_local_update(
     [
         pytest.param("fedavg", -3.0, id="fedavg"),
         pytest.param("fedprox", -1.75, id="fedprox"),
+        pytest.param("scaffold", -3.0, id="scaffold"),
     ],
 )
 def test_empirical_costs_use_minibatch_local_updates(algorithm_name: str, expected: float) -> None:
@@ -217,6 +229,7 @@ def test_empirical_costs_use_minibatch_local_updates(algorithm_name: str, expect
     [
         pytest.param("fedavg", -3.0, id="fedavg"),
         pytest.param("fedprox", -1.75, id="fedprox"),
+        pytest.param("scaffold", -3.0, id="scaffold"),
     ],
 )
 def test_empirical_regularized_costs_keep_minibatch_local_updates(algorithm_name: str, expected: float) -> None:
@@ -241,6 +254,7 @@ def test_empirical_regularized_costs_keep_minibatch_local_updates(algorithm_name
     [
         pytest.param("fedavg", -6.0, id="fedavg"),
         pytest.param("fedprox", -3.5, id="fedprox"),
+        pytest.param("scaffold", -6.0, id="scaffold"),
     ],
 )
 def test_scaled_empirical_costs_keep_minibatch_local_updates(algorithm_name: str, expected: float) -> None:
@@ -262,6 +276,7 @@ def test_scaled_empirical_costs_keep_minibatch_local_updates(algorithm_name: str
     [
         pytest.param("fedavg", -3.0, id="fedavg"),
         pytest.param("fedprox", -1.75, id="fedprox"),
+        pytest.param("scaffold", -3.0, id="scaffold"),
     ],
 )
 def test_plain_costs_use_full_gradient_local_updates(algorithm_name: str, expected: float) -> None:
@@ -274,12 +289,13 @@ def test_plain_costs_use_full_gradient_local_updates(algorithm_name: str, expect
     assert all(kwargs == {} for kwargs in cost.gradient_kwargs)
 
 
-def test_sum_costs_over_non_empirical_terms_use_full_gradient_local_updates() -> None:
+@pytest.mark.parametrize("algorithm_name", ["fedavg", "scaffold"])
+def test_sum_costs_over_non_empirical_terms_use_full_gradient_local_updates(algorithm_name: str) -> None:
     cost_a = TrackingCost(gradient_value=1.0)
     cost_b = TrackingCost(gradient_value=2.0)
     objective = cost_a + cost_b
 
-    updated = _run_federated_local_update("fedavg", objective, num_local_epochs=2)
+    updated = _run_federated_local_update(algorithm_name, objective, num_local_epochs=2)
 
     np.testing.assert_allclose(updated, np.array([-6.0]))
     assert len(cost_a.gradient_kwargs) == 2
@@ -293,6 +309,7 @@ def test_sum_costs_over_non_empirical_terms_use_full_gradient_local_updates() ->
     [
         pytest.param("fedavg", -4.0, 2, id="fedavg"),
         pytest.param("fedprox", -3.5, 3, id="fedprox"),
+        pytest.param("scaffold", -4.0, 2, id="scaffold"),
     ],
 )
 def test_scaled_costs_over_non_empirical_terms_use_full_gradient_local_updates(
@@ -313,6 +330,7 @@ def test_scaled_costs_over_non_empirical_terms_use_full_gradient_local_updates(
     [
         pytest.param("fedavg", -2.0, 2, id="fedavg"),
         pytest.param("fedprox", -1.75, 3, id="fedprox"),
+        pytest.param("scaffold", -2.0, 2, id="scaffold"),
     ],
 )
 def test_regularizers_follow_the_non_batched_local_update_path(
@@ -327,10 +345,11 @@ def test_regularizers_follow_the_non_batched_local_update_path(
     assert all(kwargs == {} for kwargs in regularizer.gradient_kwargs)
 
 
-def test_zero_costs_do_not_need_special_local_update_handling() -> None:
+@pytest.mark.parametrize("algorithm_name", ["fedavg", "scaffold"])
+def test_zero_costs_do_not_need_special_local_update_handling(algorithm_name: str) -> None:
     cost = TrackingZeroCost()
 
-    updated = _run_federated_local_update("fedavg", cost, num_local_epochs=3)
+    updated = _run_federated_local_update(algorithm_name, cost, num_local_epochs=3)
 
     np.testing.assert_allclose(updated, np.array([0.0]))
     assert len(cost.gradient_kwargs) == 3

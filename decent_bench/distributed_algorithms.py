@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Final, cast, final
+from typing import TYPE_CHECKING, Any, ClassVar, Final, cast, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
@@ -438,6 +438,185 @@ class FedProx(FedAlgorithm):
             grad = client.cost.gradient(local_x) + self.mu * (local_x - reference_x)
             local_x -= self.step_size * grad
         return local_x
+
+
+@tags("federated")
+@dataclass(eq=False)
+class Scaffold(FedAlgorithm):
+    r"""
+    SCAFFOLD with client/server control variates for variance-reduced local training.
+
+    Selected clients perform local steps with the correction
+
+    .. math::
+        \mathbf{y}_{i}^{(t+1)} = \mathbf{y}_{i}^{(t)} - \eta_l
+        \left(\nabla f_i(\mathbf{y}_{i}^{(t)}) - \mathbf{c}_i + \mathbf{c}\right)
+
+    and update their control variates using the practical SCAFFOLD rule
+
+    .. math::
+        \mathbf{c}_i^+ = \mathbf{c}_i - \mathbf{c}
+        + \frac{1}{K \eta_l} (\mathbf{x} - \mathbf{y}_i^{(K)}).
+
+    The server then applies
+
+    .. math::
+        \mathbf{x} \leftarrow \mathbf{x} + \eta_g \Delta \mathbf{x}, \qquad
+        \mathbf{c} \leftarrow \mathbf{c} + \frac{|S_k|}{N} \Delta \mathbf{c},
+
+    where both aggregated deltas reuse the same client-weighting convention as the rest of the federated
+    algorithms in this module.
+    """
+
+    iterations: int = 100
+    step_size: float = 0.001
+    num_local_epochs: int = 1
+    server_step_size: float = 1.0
+    client_weights: ClientWeights | None = None
+    selection_scheme: ClientSelectionScheme | None = field(
+        default_factory=lambda: UniformClientSelection(client_fraction=1.0)
+    )
+    x0: InitialStates = None
+    name: str = "Scaffold"
+
+    _CONTROL_VARIATE_KEY: ClassVar[str] = "scaffold_control_variate"
+    _SERVER_CONTROL_VARIATE_KEY: ClassVar[str] = "scaffold_server_control_variate"
+    _CONTROL_VARIATE_DELTA_KEY: ClassVar[str] = "scaffold_control_variate_delta"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
+        if self.num_local_epochs <= 0:
+            raise ValueError("`num_local_epochs` must be positive")
+        if self.server_step_size <= 0:
+            raise ValueError("`server_step_size` must be positive")
+
+    def initialize(self, network: FedNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.initial_states(self.x0, network)
+        server = network.server()
+        server_x0 = self.x0[server]
+        server.initialize(
+            x=server_x0,
+            aux_vars={self._CONTROL_VARIATE_KEY: iop.zeros_like(server_x0)},
+        )
+        for client in network.clients():
+            client_x0 = self.x0[client]
+            zero_control = iop.zeros_like(client_x0)
+            client.initialize(
+                x=client_x0,
+                aux_vars={
+                    self._CONTROL_VARIATE_KEY: zero_control,
+                    self._SERVER_CONTROL_VARIATE_KEY: iop.zeros_like(client_x0),
+                },
+            )
+
+    def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
+        selected_clients = self._selected_clients_for_round(network, iteration)
+        if not selected_clients:
+            return
+
+        self.server_broadcast(network, selected_clients)
+        self._refresh_received_server_controls(network.server(), selected_clients)
+        self._run_local_updates(network, selected_clients)
+        self.aggregate(network, selected_clients)
+
+    def _refresh_received_server_controls(self, server: "Agent", selected_clients: Sequence["Agent"]) -> None:
+        """Cache the latest server control variate only for clients that received the current server model."""
+        server_control = server.aux_vars[self._CONTROL_VARIATE_KEY]
+        for client in selected_clients:
+            if server in client.messages:
+                client.aux_vars[self._SERVER_CONTROL_VARIATE_KEY] = iop.copy(server_control)
+
+    def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
+        for client in selected_clients:
+            client.x, client.aux_vars[self._CONTROL_VARIATE_DELTA_KEY] = self._compute_local_update(
+                client, network.server()
+            )
+            network.send(sender=client, receiver=network.server(), msg=client.x)
+
+    def _compute_local_update(self, client: "Agent", server: "Agent") -> tuple["Array", "Array"]:
+        """
+        Run local SCAFFOLD steps using the batching semantics of ``client.cost.gradient``.
+
+        Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so SCAFFOLD
+        performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
+        """
+        reference_x = iop.copy(client.messages.get(server, client.x))
+        local_x = iop.copy(reference_x)
+        client_control = client.aux_vars[self._CONTROL_VARIATE_KEY]
+        server_control = client.aux_vars[self._SERVER_CONTROL_VARIATE_KEY]
+
+        for _ in range(self.num_local_epochs):
+            grad = client.cost.gradient(local_x)
+            local_x -= self.step_size * (grad - client_control + server_control)
+
+        new_client_control = client_control - server_control + (
+            (reference_x - local_x) / (self.num_local_epochs * self.step_size)
+        )
+        control_variate_delta = new_client_control - client_control
+        client.aux_vars[self._CONTROL_VARIATE_KEY] = new_client_control
+        return local_x, control_variate_delta
+
+    def aggregate(
+        self,
+        network: FedNetwork,
+        selected_clients: Sequence["Agent"],
+        client_weights: ClientWeights | object | None = FedAlgorithm._DEFAULT_CLIENT_WEIGHTS,
+    ) -> None:
+        """
+        Aggregate received SCAFFOLD client deltas at the server.
+
+        Model and control-variate deltas both reuse the project's federated weighting convention. The standard
+        SCAFFOLD participation correction still uses the fraction of clients that contributed updates in the round.
+        """
+        received_clients, weights, total_weight = self._received_clients_and_weights(
+            network, selected_clients, client_weights
+        )
+        if not received_clients:
+            return
+
+        server = network.server()
+        server_x = iop.copy(server.x)
+        model_deltas = [server.messages[client] - server_x for client in received_clients]
+        weighted_model_deltas = [delta * weight for delta, weight in zip(model_deltas, weights, strict=True)]
+        average_model_delta = iop.sum(iop.stack(weighted_model_deltas, dim=0), dim=0) / total_weight
+        server.x = server_x + self.server_step_size * average_model_delta
+
+        control_deltas = [client.aux_vars[self._CONTROL_VARIATE_DELTA_KEY] for client in received_clients]
+        weighted_control_deltas = [delta * weight for delta, weight in zip(control_deltas, weights, strict=True)]
+        average_control_delta = iop.sum(iop.stack(weighted_control_deltas, dim=0), dim=0) / total_weight
+        participation_fraction = len(received_clients) / len(network.clients())
+        server.aux_vars[self._CONTROL_VARIATE_KEY] = (
+            server.aux_vars[self._CONTROL_VARIATE_KEY] + participation_fraction * average_control_delta
+        )
+
+    def _received_clients_and_weights(
+        self,
+        network: FedNetwork,
+        selected_clients: Sequence["Agent"],
+        client_weights: ClientWeights | object | None,
+    ) -> tuple[list["Agent"], list[float], float]:
+        """Collect the received clients and their aggregation weights for the current round."""
+        if client_weights is self._DEFAULT_CLIENT_WEIGHTS:
+            client_weights = self.client_weights
+
+        server = network.server()
+        received_clients = [client for client in selected_clients if client in server.messages]
+        if not received_clients:
+            return [], [], 0.0
+
+        weights = self._weights_for_clients(received_clients, cast("ClientWeights | None", client_weights))
+        total_weight = sum(weights)
+        if total_weight <= 0:
+            raise ValueError("Sum of client weights must be positive")
+        return received_clients, weights, total_weight
 
 
 @tags("peer-to-peer", "gradient-based")

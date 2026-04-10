@@ -11,6 +11,7 @@ from decent_bench.distributed_algorithms import (
     EXTRA,
     FedAvg,
     FedProx,
+    Scaffold,
     NIDS,
     AugDGM,
     SimpleGT,
@@ -23,6 +24,7 @@ from decent_bench.distributed_algorithms import (
     [
         (FedAvg, {"iterations": 10, "step_size": 0.1}),
         (FedProx, {"iterations": 10, "step_size": 0.1}),
+        (Scaffold, {"iterations": 10, "step_size": 0.1}),
         (DGD, {"iterations": 10, "step_size": 0.1}),
         (ATC, {"iterations": 10, "step_size": 0.1}),
         (SimpleGT, {"iterations": 10, "step_size": 0.1}),
