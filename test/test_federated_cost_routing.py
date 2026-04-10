@@ -1,10 +1,11 @@
 from typing import Any
 
 import numpy as np
+import pytest
 
 from decent_bench.agents import Agent
 from decent_bench.costs import BaseRegularizerCost, Cost, EmpiricalRiskCost, ZeroCost
-from decent_bench.distributed_algorithms import FedAvg
+from decent_bench.distributed_algorithms import FedAvg, FedProx
 from decent_bench.utils.types import (
     Dataset,
     EmpiricalRiskIndices,
@@ -171,8 +172,21 @@ class TrackingEmpiricalCost(EmpiricalRiskCost):
         return [self._dataset[i] for i in sampled_indices]
 
 
-def _run_fedavg_local_update(cost: Cost, *, step_size: float = 1.0, num_local_epochs: int = 1) -> np.ndarray:
-    algorithm = FedAvg(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
+def _run_federated_local_update(
+    algorithm_name: str,
+    cost: Cost,
+    *,
+    step_size: float = 1.0,
+    num_local_epochs: int = 1,
+    mu: float = 0.5,
+) -> np.ndarray:
+    if algorithm_name == "fedavg":
+        algorithm = FedAvg(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
+    elif algorithm_name == "fedprox":
+        algorithm = FedProx(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs, mu=mu)
+    else:
+        raise ValueError(f"Unsupported federated algorithm: {algorithm_name}")
+
     client = Agent(0, cost)
     server = Agent(1, ZeroCost(cost.shape))
     client.initialize(x=np.zeros(cost.shape, dtype=float))
@@ -180,25 +194,39 @@ def _run_fedavg_local_update(cost: Cost, *, step_size: float = 1.0, num_local_ep
     return algorithm._compute_local_update(client, server)
 
 
-def test_empirical_costs_use_minibatch_local_updates() -> None:
+@pytest.mark.parametrize(
+    ("algorithm_name", "expected"),
+    [
+        pytest.param("fedavg", -3.0, id="fedavg"),
+        pytest.param("fedprox", -1.75, id="fedprox"),
+    ],
+)
+def test_empirical_costs_use_minibatch_local_updates(algorithm_name: str, expected: float) -> None:
     cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
 
-    updated = _run_fedavg_local_update(cost, num_local_epochs=3)
+    updated = _run_federated_local_update(algorithm_name, cost, num_local_epochs=3)
 
-    np.testing.assert_allclose(updated, np.array([-3.0]))
+    np.testing.assert_allclose(updated, np.array([expected]))
     assert len(cost.gradient_indices) == 3
     assert all(len(indices) == 2 for indices in cost.gradient_indices)
     assert set().union(*(set(indices) for indices in cost.gradient_indices)) == set(range(cost.n_samples))
 
 
-def test_empirical_regularized_costs_keep_minibatch_local_updates() -> None:
+@pytest.mark.parametrize(
+    ("algorithm_name", "expected"),
+    [
+        pytest.param("fedavg", -3.0, id="fedavg"),
+        pytest.param("fedprox", -1.75, id="fedprox"),
+    ],
+)
+def test_empirical_regularized_costs_keep_minibatch_local_updates(algorithm_name: str, expected: float) -> None:
     empirical_cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
     regularizer = TrackingRegularizerCost()
     objective = empirical_cost + regularizer
 
-    updated = _run_fedavg_local_update(objective, num_local_epochs=3)
+    updated = _run_federated_local_update(algorithm_name, objective, num_local_epochs=3)
 
-    np.testing.assert_allclose(updated, np.array([-3.0]))
+    np.testing.assert_allclose(updated, np.array([expected]))
     assert len(empirical_cost.gradient_indices) == 3
     assert all(len(indices) == 2 for indices in empirical_cost.gradient_indices)
     assert set().union(*(set(indices) for indices in empirical_cost.gradient_indices)) == set(
@@ -208,13 +236,20 @@ def test_empirical_regularized_costs_keep_minibatch_local_updates() -> None:
     assert all(kwargs == {} for kwargs in regularizer.gradient_kwargs)
 
 
-def test_scaled_empirical_costs_keep_minibatch_local_updates() -> None:
+@pytest.mark.parametrize(
+    ("algorithm_name", "expected"),
+    [
+        pytest.param("fedavg", -6.0, id="fedavg"),
+        pytest.param("fedprox", -3.5, id="fedprox"),
+    ],
+)
+def test_scaled_empirical_costs_keep_minibatch_local_updates(algorithm_name: str, expected: float) -> None:
     empirical_cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
     objective = 2.0 * empirical_cost
 
-    updated = _run_fedavg_local_update(objective, num_local_epochs=3)
+    updated = _run_federated_local_update(algorithm_name, objective, num_local_epochs=3)
 
-    np.testing.assert_allclose(updated, np.array([-6.0]))
+    np.testing.assert_allclose(updated, np.array([expected]))
     assert len(empirical_cost.gradient_indices) == 3
     assert all(len(indices) == 2 for indices in empirical_cost.gradient_indices)
     assert set().union(*(set(indices) for indices in empirical_cost.gradient_indices)) == set(
@@ -222,12 +257,19 @@ def test_scaled_empirical_costs_keep_minibatch_local_updates() -> None:
     )
 
 
-def test_plain_costs_use_full_gradient_local_updates() -> None:
+@pytest.mark.parametrize(
+    ("algorithm_name", "expected"),
+    [
+        pytest.param("fedavg", -3.0, id="fedavg"),
+        pytest.param("fedprox", -1.75, id="fedprox"),
+    ],
+)
+def test_plain_costs_use_full_gradient_local_updates(algorithm_name: str, expected: float) -> None:
     cost = TrackingCost(gradient_value=1.0)
 
-    updated = _run_fedavg_local_update(cost, num_local_epochs=3)
+    updated = _run_federated_local_update(algorithm_name, cost, num_local_epochs=3)
 
-    np.testing.assert_allclose(updated, np.array([-3.0]))
+    np.testing.assert_allclose(updated, np.array([expected]))
     assert len(cost.gradient_kwargs) == 3
     assert all(kwargs == {} for kwargs in cost.gradient_kwargs)
 
@@ -237,7 +279,7 @@ def test_sum_costs_over_non_empirical_terms_use_full_gradient_local_updates() ->
     cost_b = TrackingCost(gradient_value=2.0)
     objective = cost_a + cost_b
 
-    updated = _run_fedavg_local_update(objective, num_local_epochs=2)
+    updated = _run_federated_local_update("fedavg", objective, num_local_epochs=2)
 
     np.testing.assert_allclose(updated, np.array([-6.0]))
     assert len(cost_a.gradient_kwargs) == 2
@@ -246,31 +288,49 @@ def test_sum_costs_over_non_empirical_terms_use_full_gradient_local_updates() ->
     assert all(kwargs == {} for kwargs in cost_b.gradient_kwargs)
 
 
-def test_scaled_costs_over_non_empirical_terms_use_full_gradient_local_updates() -> None:
+@pytest.mark.parametrize(
+    ("algorithm_name", "expected", "num_local_epochs"),
+    [
+        pytest.param("fedavg", -4.0, 2, id="fedavg"),
+        pytest.param("fedprox", -3.5, 3, id="fedprox"),
+    ],
+)
+def test_scaled_costs_over_non_empirical_terms_use_full_gradient_local_updates(
+    algorithm_name: str, expected: float, num_local_epochs: int
+) -> None:
     cost = TrackingCost(gradient_value=1.0)
     objective = 2.0 * cost
 
-    updated = _run_fedavg_local_update(objective, num_local_epochs=2)
+    updated = _run_federated_local_update(algorithm_name, objective, num_local_epochs=num_local_epochs)
 
-    np.testing.assert_allclose(updated, np.array([-4.0]))
-    assert len(cost.gradient_kwargs) == 2
+    np.testing.assert_allclose(updated, np.array([expected]))
+    assert len(cost.gradient_kwargs) == num_local_epochs
     assert all(kwargs == {} for kwargs in cost.gradient_kwargs)
 
 
-def test_regularizers_follow_the_non_batched_local_update_path() -> None:
+@pytest.mark.parametrize(
+    ("algorithm_name", "expected", "num_local_epochs"),
+    [
+        pytest.param("fedavg", -2.0, 2, id="fedavg"),
+        pytest.param("fedprox", -1.75, 3, id="fedprox"),
+    ],
+)
+def test_regularizers_follow_the_non_batched_local_update_path(
+    algorithm_name: str, expected: float, num_local_epochs: int
+) -> None:
     regularizer = TrackingRegularizerCost(gradient_value=1.0)
 
-    updated = _run_fedavg_local_update(regularizer, num_local_epochs=2)
+    updated = _run_federated_local_update(algorithm_name, regularizer, num_local_epochs=num_local_epochs)
 
-    np.testing.assert_allclose(updated, np.array([-2.0]))
-    assert len(regularizer.gradient_kwargs) == 2
+    np.testing.assert_allclose(updated, np.array([expected]))
+    assert len(regularizer.gradient_kwargs) == num_local_epochs
     assert all(kwargs == {} for kwargs in regularizer.gradient_kwargs)
 
 
 def test_zero_costs_do_not_need_special_local_update_handling() -> None:
     cost = TrackingZeroCost()
 
-    updated = _run_fedavg_local_update(cost, num_local_epochs=3)
+    updated = _run_federated_local_update("fedavg", cost, num_local_epochs=3)
 
     np.testing.assert_allclose(updated, np.array([0.0]))
     assert len(cost.gradient_kwargs) == 3
