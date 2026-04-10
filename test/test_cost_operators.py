@@ -3,6 +3,7 @@ import pytest
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs import Cost, L1RegularizerCost, L2RegularizerCost, QuadraticCost, SumCost
+from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
 def _simple_quadratic(A_scale: float, b_scale: float, c: float = 0.0) -> QuadraticCost:
@@ -12,20 +13,28 @@ def _simple_quadratic(A_scale: float, b_scale: float, c: float = 0.0) -> Quadrat
 
 
 class _SimpleCost(Cost):
-    def __init__(self, scale: float):
+    def __init__(
+        self,
+        scale: float,
+        *,
+        framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
+        device: SupportedDevices = SupportedDevices.CPU,
+    ):
         self.scale = scale
+        self._framework = framework
+        self._device = device
 
     @property
     def shape(self) -> tuple[int, ...]:
         return (2,)
 
     @property
-    def framework(self) -> str:
-        return "numpy"
+    def framework(self) -> SupportedFrameworks:
+        return self._framework
 
     @property
-    def device(self) -> str | None:
-        return "cpu"
+    def device(self) -> SupportedDevices:
+        return self._device
 
     @property
     def m_smooth(self) -> float:
@@ -182,3 +191,35 @@ def test_cost_scalar_ops_reject_invalid_inputs() -> None:
         _ = cost / 0.0
     with pytest.raises(TypeError):
         _ = 0.0 / cost
+
+
+def test_cost_addition_rejects_mismatched_frameworks() -> None:
+    cost_a = _SimpleCost(scale=1.0, framework=SupportedFrameworks.NUMPY)
+    cost_b = _SimpleCost(scale=2.0, framework=SupportedFrameworks.PYTORCH)
+
+    with pytest.raises(ValueError, match="Mismatching frameworks"):
+        _ = cost_a + cost_b
+
+
+def test_cost_addition_rejects_mismatched_devices() -> None:
+    cost_a = _SimpleCost(scale=1.0, device=SupportedDevices.CPU)
+    cost_b = _SimpleCost(scale=2.0, device=SupportedDevices.GPU)
+
+    with pytest.raises(ValueError, match="Mismatching devices"):
+        _ = cost_a + cost_b
+
+
+def test_sum_cost_rejects_mismatched_frameworks() -> None:
+    cost_a = _SimpleCost(scale=1.0, framework=SupportedFrameworks.NUMPY)
+    cost_b = _SimpleCost(scale=2.0, framework=SupportedFrameworks.PYTORCH)
+
+    with pytest.raises(ValueError, match="Mismatching frameworks"):
+        SumCost([cost_a, cost_b])
+
+
+def test_sum_cost_rejects_mismatched_devices() -> None:
+    cost_a = _SimpleCost(scale=1.0, device=SupportedDevices.CPU)
+    cost_b = _SimpleCost(scale=2.0, device=SupportedDevices.GPU)
+
+    with pytest.raises(ValueError, match="Mismatching devices"):
+        SumCost([cost_a, cost_b])
