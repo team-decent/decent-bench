@@ -108,6 +108,9 @@ Federated
             :tag: federated
             :module: decent_bench.distributed_algorithms
 
+FedProx extends FedAvg with a proximal coefficient ``mu``. Setting ``mu=0`` reduces
+FedProx to FedAvg.
+
 
 Available costs
 ---------------
