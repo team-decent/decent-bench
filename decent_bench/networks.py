@@ -72,6 +72,7 @@ class Network(ABC):  # noqa: B024
         agent_ids = [agent.id for agent in graph.nodes()]
         if len(agent_ids) != len(set(agent_ids)):
             raise ValueError("Agent IDs must be unique")
+        self._validate_agent_cost_compatibility(graph)
 
         self._graph = graph
         self._message_noise = self._initialize_message_schemes(message_noise, "noise", NoiseScheme, NoNoise)
@@ -83,6 +84,37 @@ class Network(ABC):  # noqa: B024
         self._active_connected_agents_cache: dict[Agent, list[Agent]] = {}
         self._buffer_messages = buffer_messages
         self._iteration = 0  # Current iteration, updated by the algorithm
+
+    @staticmethod
+    def _validate_agent_cost_compatibility(graph: AgentGraph) -> None:
+        """
+        Validate that all agents' costs share the same shape, framework, and device.
+
+        Raises:
+            ValueError: If agents in the graph have mismatching cost shape, framework, or device.
+
+        """
+        agents = list(graph.nodes())
+        if len(agents) <= 1:
+            return
+
+        first_cost = agents[0].cost
+        first_signature = (first_cost.shape, first_cost.framework, first_cost.device)
+        mismatches: list[str] = []
+        for agent in agents[1:]:
+            signature = (agent.cost.shape, agent.cost.framework, agent.cost.device)
+            if signature != first_signature:
+                mismatches.append(
+                    f"agent {agent.id}: shape={agent.cost.shape}, framework={agent.cost.framework}, "
+                    f"device={agent.cost.device}"
+                )
+
+        if mismatches:
+            raise ValueError(
+                "All agents in a network must have costs with the same shape, framework, and device. "
+                f"Expected shape={first_cost.shape}, framework={first_cost.framework}, "
+                f"device={first_cost.device}; mismatches: {'; '.join(mismatches)}"
+            )
 
     def _initialize_message_schemes(
         self,

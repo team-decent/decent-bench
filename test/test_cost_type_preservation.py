@@ -12,9 +12,18 @@ from decent_bench.costs import (
     L2RegularizerCost,
     LinearRegressionCost,
     LogisticRegressionCost,
+    PyTorchCost,
     QuadraticCost,
     SumCost,
 )
+from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
+
+try:
+    import torch
+
+    TORCH_AVAILABLE = True
+except ModuleNotFoundError:
+    TORCH_AVAILABLE = False
 
 
 def _simple_regularizers() -> tuple[L1RegularizerCost, L2RegularizerCost]:
@@ -47,6 +56,26 @@ def _simple_logistic_regression_cost() -> LogisticRegressionCost:
         (np.array([1.0, 1.0]), np.array([1.0])),
     ]
     return LogisticRegressionCost(dataset=dataset, batch_size="all")
+
+
+def _simple_pytorch_cost(batch_size: int = 2) -> PyTorchCost:
+    if not TORCH_AVAILABLE:
+        raise RuntimeError("PyTorch is not available.")
+
+    dataset = [
+        (torch.tensor([1.0, 0.0], dtype=torch.float32), torch.tensor([1.0], dtype=torch.float32)),
+        (torch.tensor([0.0, 1.0], dtype=torch.float32), torch.tensor([-1.0], dtype=torch.float32)),
+        (torch.tensor([1.0, 1.0], dtype=torch.float32), torch.tensor([0.5], dtype=torch.float32)),
+    ]
+    model = torch.nn.Linear(2, 1, bias=False)
+    loss_fn = torch.nn.MSELoss()
+    return PyTorchCost(
+        dataset=dataset,
+        model=model,
+        loss_fn=loss_fn,
+        batch_size=batch_size,
+        device=SupportedDevices.CPU,
+    )
 
 
 def _assert_cost_matches_expression(
@@ -685,3 +714,43 @@ def test_empirical_regularized_cost_proximal_is_explicitly_unsupported() -> None
 
     with pytest.raises(NotImplementedError, match="EmpiricalRegularizedCost does not implement a generic proximal"):
         (risk + reg_l2).proximal(x, rho=0.5)
+
+
+@pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available")
+def test_pytorch_cost_plus_builtin_l2_regularizer_preserves_empirical_behavior() -> None:
+    cost = _simple_pytorch_cost(batch_size=2)
+    reg = L2RegularizerCost(
+        shape=cost.shape,
+        framework=SupportedFrameworks.PYTORCH,
+        device=cost.device,
+    )
+    objective = cost + reg
+    x = torch.tensor([0.25, -0.75], dtype=torch.float32)
+
+    assert isinstance(objective, EmpiricalRegularizedCost)
+    assert isinstance(objective, EmpiricalRiskCost)
+    assert objective.framework == SupportedFrameworks.PYTORCH
+    assert objective.device == cost.device
+    assert objective.batch_size == cost.batch_size
+    assert objective.dataset is cost.dataset
+
+    objective_gradient = objective.gradient(x, indices="all")
+    expected_gradient = cost.gradient(x, indices="all") + reg.gradient(x)
+
+    assert isinstance(objective_gradient, torch.Tensor)
+    assert isinstance(objective.gradient(x, indices="batch"), torch.Tensor)
+    torch.testing.assert_close(objective_gradient, expected_gradient)
+
+    batched_per_sample_gradient = objective.gradient(x, indices="batch", reduction=None)
+    assert isinstance(batched_per_sample_gradient, torch.Tensor)
+    assert batched_per_sample_gradient.shape[0] == objective.batch_size
+    assert len(objective.batch_used) == objective.batch_size
+
+
+@pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available")
+def test_pytorch_cost_plus_numpy_regularizer_raises_framework_mismatch() -> None:
+    cost = _simple_pytorch_cost(batch_size=2)
+    reg = L2RegularizerCost(shape=cost.shape)
+
+    with pytest.raises(ValueError, match="Mismatching frameworks"):
+        _ = cost + reg
