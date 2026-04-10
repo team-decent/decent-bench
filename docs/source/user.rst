@@ -108,6 +108,9 @@ Federated
             :tag: federated
             :module: decent_bench.distributed_algorithms
 
+FedProx extends FedAvg with a proximal coefficient ``mu``. Setting ``mu=0`` reduces
+FedProx to FedAvg.
+
 
 Available costs
 ---------------
@@ -123,6 +126,30 @@ Classification
 .. tagged-list::
            :tag: classification
            :module: decent_bench.costs
+
+
+PyTorchCost regularization
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+When combining :class:`~decent_bench.costs.PyTorchCost` with one of the
+built-in regularizers, instantiate the regularizer with the same framework
+and device as the empirical cost:
+
+.. code-block:: python
+
+    from decent_bench.costs import L2RegularizerCost
+    from decent_bench.utils.types import SupportedFrameworks
+
+    reg = L2RegularizerCost(
+        shape=cost.shape,
+        framework=SupportedFrameworks.PYTORCH,
+        device=cost.device,
+    )
+    objective = cost + reg
+
+This preserves compatibility with the PyTorch empirical objective and keeps
+the resulting objective in the empirical, batch-compatible abstraction.
+It is convenient for composition, but it is not necessarily the most
+efficient option compared with native framework-specific regularization.
 
 
 Execution settings

@@ -84,8 +84,8 @@ def create_classification_problem(
             )
 
         # Mypy cannot infer that cost_cls is PyTorchCost here
-        costs = [
-            cost_cls(  # type: ignore[call-arg]
+        pytorch_costs: list[PyTorchCost] = [
+            PyTorchCost(
                 dataset=p,
                 model=model_gen(),
                 loss_fn=torch.nn.CrossEntropyLoss(),
@@ -96,12 +96,16 @@ def create_classification_problem(
             for p in dataset.get_partitions()
         ]
         LOGGER.info("... done!")
+        costs: Sequence[Cost] = pytorch_costs
         x_optimal = None
     elif cost_cls is LogisticRegressionCost:
-        costs = [cost_cls(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()]  # type: ignore[call-arg]
+        classification_costs: list[LogisticRegressionCost] = [
+            LogisticRegressionCost(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()
+        ]
         LOGGER.info("... done!")
-        sum_cost = reduce(add, costs)
+        sum_cost = reduce(add, classification_costs)
         x_optimal = ca.solve(sum_cost, max_iter=SOLVE_MAX_ITER, stop_tol=SOLVE_STOP_TOL, max_tol=SOLVE_MAX_TOL)
+        costs = classification_costs
     else:
         raise ValueError(f"Unsupported cost class: {cost_cls}")
 
@@ -172,17 +176,21 @@ def create_regression_problem(
                 output_size=1,
             )
 
-        costs = [
-            cost_cls(dataset=p, model=model_gen(), loss_fn=torch.nn.MSELoss(), batch_size=batch_size, device=device)  # type: ignore[call-arg]
+        pytorch_costs: list[PyTorchCost] = [
+            PyTorchCost(dataset=p, model=model_gen(), loss_fn=torch.nn.MSELoss(), batch_size=batch_size, device=device)
             for p in dataset.get_partitions()
         ]
         LOGGER.info("... done!")
+        costs: Sequence[Cost] = pytorch_costs
         x_optimal = None
     elif cost_cls is LinearRegressionCost:
-        costs = [cost_cls(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()]  # type: ignore[call-arg]
+        regression_costs: list[LinearRegressionCost] = [
+            LinearRegressionCost(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()
+        ]
         LOGGER.info("... done!")
-        sum_cost = reduce(add, costs)
+        sum_cost = reduce(add, regression_costs)
         x_optimal = ca.solve(sum_cost, max_iter=SOLVE_MAX_ITER, stop_tol=SOLVE_STOP_TOL, max_tol=SOLVE_MAX_TOL)
+        costs = regression_costs
     else:
         raise ValueError(f"Unsupported cost class: {cost_cls}")
 
