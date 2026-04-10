@@ -297,6 +297,13 @@ def _make_empirical_agent(batch_size="all") -> Agent:
     return Agent(0, LinearRegressionCost(dataset, batch_size=batch_size), None, state_snapshot_period=1)
 
 
+def _initialized_quadratic_agent() -> Agent:
+    """Return a quadratic agent initialized at zeros."""
+    agent = _make_quadratic_agent()
+    agent.initialize(x=np.zeros(2))
+    return agent
+
+
 # ---------------------------------------------------------------------------
 # Basic call counting
 # ---------------------------------------------------------------------------
@@ -304,8 +311,7 @@ def _make_empirical_agent(batch_size="all") -> Agent:
 
 class TestCallCounting:
     def test_function_call_increments_counter(self):
-        agent = _make_quadratic_agent()
-        agent.initialize(x=np.zeros(2))
+        agent = _initialized_quadratic_agent()
         assert agent._n_function_calls == 0
         agent.cost.function(agent.x)
         assert agent._n_function_calls == 1
@@ -313,29 +319,25 @@ class TestCallCounting:
         assert agent._n_function_calls == 2
 
     def test_gradient_call_increments_counter(self):
-        agent = _make_quadratic_agent()
-        agent.initialize(x=np.zeros(2))
+        agent = _initialized_quadratic_agent()
         agent.cost.gradient(agent.x)
         assert agent._n_gradient_calls == 1
         agent.cost.gradient(agent.x)
         assert agent._n_gradient_calls == 2
 
     def test_hessian_call_increments_counter(self):
-        agent = _make_quadratic_agent()
-        agent.initialize(x=np.zeros(2))
+        agent = _initialized_quadratic_agent()
         agent.cost.hessian(agent.x)
         assert agent._n_hessian_calls == 1
 
     def test_proximal_call_increments_counter(self):
-        agent = _make_quadratic_agent()
-        agent.initialize(x=np.zeros(2))
+        agent = _initialized_quadratic_agent()
         agent.cost.proximal(agent.x, 1.0)
         assert agent._n_proximal_calls == 1
 
     def test_independent_counters(self):
         """Each counter tracks only its own call type."""
-        agent = _make_quadratic_agent()
-        agent.initialize(x=np.zeros(2))
+        agent = _initialized_quadratic_agent()
         agent.cost.function(agent.x)
         agent.cost.gradient(agent.x)
         agent.cost.gradient(agent.x)
@@ -419,16 +421,14 @@ class TestCallCounting:
 
 class TestNoCount:
     def test_suppresses_function_counting(self):
-        agent = _make_quadratic_agent()
-        agent.initialize(x=np.zeros(2))
+        agent = _initialized_quadratic_agent()
         with Agent.no_count([agent]):
             agent.cost.function(agent.x)
             agent.cost.function(agent.x)
         assert agent._n_function_calls == 0
 
     def test_suppresses_all_call_types(self):
-        agent = _make_quadratic_agent()
-        agent.initialize(x=np.zeros(2))
+        agent = _initialized_quadratic_agent()
         with Agent.no_count([agent]):
             agent.cost.function(agent.x)
             agent.cost.gradient(agent.x)
@@ -440,8 +440,7 @@ class TestNoCount:
         assert agent._n_proximal_calls == 0
 
     def test_counting_resumes_after_context_exit(self):
-        agent = _make_quadratic_agent()
-        agent.initialize(x=np.zeros(2))
+        agent = _initialized_quadratic_agent()
         agent.cost.function(agent.x)  # counted
         with Agent.no_count([agent]):
             agent.cost.function(agent.x)  # not counted
@@ -450,8 +449,7 @@ class TestNoCount:
 
     def test_counting_resumes_after_exception(self):
         """Counter should re-enable even when an exception is raised inside the block."""
-        agent = _make_quadratic_agent()
-        agent.initialize(x=np.zeros(2))
+        agent = _initialized_quadratic_agent()
         with pytest.raises(RuntimeError):
             with Agent.no_count([agent]):
                 raise RuntimeError("boom")
@@ -460,8 +458,7 @@ class TestNoCount:
 
     def test_nested_no_count_blocks(self):
         """Counting should stay suppressed until the outermost block exits."""
-        agent = _make_quadratic_agent()
-        agent.initialize(x=np.zeros(2))
+        agent = _initialized_quadratic_agent()
         with Agent.no_count([agent]):
             agent.cost.function(agent.x)  # suppressed (depth=1)
             with Agent.no_count([agent]):
@@ -474,9 +471,7 @@ class TestNoCount:
 
     def test_multiple_agents(self):
         """no_count should suppress counting on all supplied agents."""
-        agents = [_make_quadratic_agent(), _make_quadratic_agent()]
-        for a in agents:
-            a.initialize(x=np.zeros(2))
+        agents = [_initialized_quadratic_agent(), _initialized_quadratic_agent()]
         with Agent.no_count(agents):
             for a in agents:
                 a.cost.function(a.x)
@@ -485,10 +480,8 @@ class TestNoCount:
 
     def test_only_listed_agents_are_suppressed(self):
         """Agents not passed to no_count should still be counted."""
-        a1 = _make_quadratic_agent()
-        a2 = _make_quadratic_agent()
-        a1.initialize(x=np.zeros(2))
-        a2.initialize(x=np.zeros(2))
+        a1 = _initialized_quadratic_agent()
+        a2 = _initialized_quadratic_agent()
         with Agent.no_count([a1]):
             a1.cost.function(a1.x)  # suppressed
             a2.cost.function(a2.x)  # NOT suppressed

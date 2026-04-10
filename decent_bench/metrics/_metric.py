@@ -82,6 +82,28 @@ class Metric(ABC):
         """
         return True
 
+    def is_available(
+        self,
+        problem: "BenchmarkProblem",  # noqa: ARG002
+    ) -> tuple[bool, str | None]:
+        """
+        Check whether this metric can be computed for the given problem.
+
+        Override in subclasses that have availability preconditions (e.g. requiring
+        ``problem.x_optimal`` or ``problem.test_data``). The default implementation
+        always returns available.
+
+        Args:
+            problem: the benchmark problem being evaluated
+
+        Returns:
+            A tuple ``(available, reason)``. When *available* is ``True``, *reason* is
+            ``None``. When *available* is ``False``, *reason* contains a human-readable
+            explanation.
+
+        """
+        return True, None
+
     @abstractmethod
     def get_data_from_trial(
         self,

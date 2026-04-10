@@ -4,10 +4,10 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy import linalg as la
 
 import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
+from decent_bench import costs
 from decent_bench.agents import AgentMetricsView
 from decent_bench.metrics._metric import Metric
 
@@ -29,10 +29,21 @@ class Regret(Metric):
 
     .. include:: snippets/global_cost_error.rst
 
+    Note:
+        Available only when ``problem.x_optimal`` is provided.
+
     """
 
-    table_description: str = "regret \n[<1e-9 = exact conv.]"
+    table_description: str = "regret"
     plot_description: str = "regret"
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "x_optimal", None) is None:
+            return False, "requires problem.x_optimal"
+        return True, None
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -40,7 +51,7 @@ class Regret(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        return (utils.regret(agents, problem, iteration),)
+        return (utils._regret(agents, problem, iteration),)  # noqa: SLF001
 
 
 class GradientNorm(Metric):
@@ -68,7 +79,7 @@ class GradientNorm(Metric):
         _: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        return (utils.gradient_norm(agents, iteration),)
+        return (utils._gradient_norm(agents, iteration),)  # noqa: SLF001
 
 
 class XError(Metric):
@@ -90,10 +101,21 @@ class XError(Metric):
     :math:`\mathbf{x}_j` is agent j's final x,
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
 
+    Note:
+        Available only when ``problem.x_optimal`` is provided.
+
     """
 
     table_description: str = "x error"
     plot_description: str = "x error"
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "x_optimal", None) is None:
+            return False, "requires problem.x_optimal"
+        return True, None
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -101,14 +123,7 @@ class XError(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        if getattr(problem, "x_optimal", None) is None:
-            return [float("nan") for _ in agents]
-
-        x_optimal_np = iop.to_numpy(problem.x_optimal)  # type: ignore[arg-type]
-
-        if iteration == -1:
-            return [float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[a.x_history.max()]))) for a in agents]
-        return [float(la.norm(x_optimal_np - iop.to_numpy(a.x_history[iteration]))) for a in agents]
+        return [utils._x_error(a, problem, iteration) for a in agents]  # noqa: SLF001
 
 
 class ConsensusError(Metric):
@@ -127,7 +142,7 @@ class ConsensusError(Metric):
         \{ \|\mathbf{x}_i - \bar{\mathbf{x}}\|, \|\mathbf{x}_j - \bar{\mathbf{x}}\|, ... \}
 
     where :math:`\mathbf{x}_i` is agent i's current state,
-    and :math:`\bar{\mathbf{x}}` is the average of all agents' states.
+    :math:`\bar{\mathbf{x}}` is the average of all agents' states, and :math:`\| \cdot \|` is the 2-norm.
 
     .. seealso::
         :class:`~decent_bench.metrics.runtime_library.RuntimeConsensusError` for the runtime version.
@@ -384,7 +399,7 @@ class Accuracy(Metric):
         Accuracy is calculated as the mean accuracy across agents, where each agent's accuracy is calculated using its
         recorded x at that iteration.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets, returns NaN otherwise.
+    Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
 
     Accuracy measures the proportion of correct predictions:
 
@@ -394,11 +409,31 @@ class Accuracy(Metric):
 
     where TP, TN, FP, and FN are true positives, true negatives, false positives, and false negatives, respectively.
 
+    Note:
+        Available only when:
+
+        - ``problem.test_data`` is provided,
+        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`,
+        - target labels are integer-valued.
+
     """
 
     table_description: str = "accuracy"
     plot_description: str = "accuracy"
     can_diverge: bool = False
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "test_data", None) is None:
+            return False, "requires problem.test_data"
+        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+            return False, "accuracy only applies if all agents have EmpiricalRiskCost"
+        _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type] # noqa: SLF001
+        if test_y.dtype.kind not in {"i", "u"}:
+            return False, f"accuracy only applies for integer targets, dtype {test_y.dtype} found"
+        return True, None
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -406,7 +441,7 @@ class Accuracy(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils.accuracy(agents, problem, iteration)
+        return utils._accuracy(agents, problem, iteration)  # noqa: SLF001
 
 
 class MSE(Metric):
@@ -422,7 +457,7 @@ class MSE(Metric):
         MSE is calculated as the mean MSE across agents, where each agent's MSE is calculated using its
         recorded x at that iteration.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost`, returns NaN otherwise.
+    Only available for :class:`~decent_bench.costs.EmpiricalRiskCost`.
 
     MSE measures the average squared difference between predictions and true values:
 
@@ -433,11 +468,25 @@ class MSE(Metric):
     where :math:`\hat{y}_i` are the predicted values, :math:`y_i` are the true values, and :math:`n` is
     the number of samples.
 
+    Note:
+        Available only when ``problem.test_data`` is provided and all agent costs are
+        :class:`~decent_bench.costs.EmpiricalRiskCost`.
+
     """
 
     table_description: str = "mse"
     plot_description: str = "mse"
     can_diverge: bool = False
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "test_data", None) is None:
+            return False, "requires problem.test_data"
+        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+            return False, "MSE only applies if all agents have EmpiricalRiskCost"
+        return True, None
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -445,7 +494,7 @@ class MSE(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils.mse(agents, problem, iteration=iteration)
+        return utils._mse(agents, problem, iteration)  # noqa: SLF001
 
 
 class Precision(Metric):
@@ -461,7 +510,7 @@ class Precision(Metric):
         Precision is calculated as the mean precision across agents, where each agent's precision is calculated using
         its recorded x at that iteration.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets, returns NaN otherwise.
+    Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
 
     Precision measures the proportion of positive predictions that are correct:
 
@@ -471,11 +520,31 @@ class Precision(Metric):
 
     where TP is the number of true positives and FP is the number of false positives.
 
+    Note:
+        Available only when:
+
+        - ``problem.test_data`` is provided,
+        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`,
+        - target labels are integer-valued.
+
     """
 
     table_description: str = "precision"
     plot_description: str = "precision"
     can_diverge: bool = False
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "test_data", None) is None:
+            return False, "requires problem.test_data"
+        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+            return False, "precision only applies if all agents have EmpiricalRiskCost"
+        _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type] # noqa: SLF001
+        if test_y.dtype.kind not in {"i", "u"}:
+            return False, f"precision only applies for integer targets, dtype {test_y.dtype} found"
+        return True, None
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -483,7 +552,7 @@ class Precision(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils.precision(agents, problem, iteration=iteration)
+        return utils._precision(agents, problem, iteration)  # noqa: SLF001
 
 
 class Recall(Metric):
@@ -499,7 +568,7 @@ class Recall(Metric):
         Recall is calculated as the mean recall across agents, where each agent's recall is calculated using its
         recorded x at that iteration.
 
-    Only applicable for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets, returns NaN otherwise.
+    Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
 
     Recall measures the proportion of actual positives that are correctly identified:
 
@@ -509,11 +578,31 @@ class Recall(Metric):
 
     where TP is the number of true positives and FN is the number of false negatives.
 
+    Note:
+        Available only when:
+
+        - ``problem.test_data`` is provided,
+        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`,
+        - target labels are integer-valued.
+
     """
 
     table_description: str = "recall"
     plot_description: str = "recall"
     can_diverge: bool = False
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "test_data", None) is None:
+            return False, "requires problem.test_data"
+        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+            return False, "recall only applies if all agents have EmpiricalRiskCost"
+        _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type]  # noqa: SLF001
+        if test_y.dtype.kind not in {"i", "u"}:
+            return False, f"recall only applies for integer targets, dtype {test_y.dtype} found"
+        return True, None
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -521,7 +610,7 @@ class Recall(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils.recall(agents, problem, iteration=iteration)
+        return utils._recall(agents, problem, iteration)  # noqa: SLF001
 
 
 DEFAULT_TABLE_METRICS: list[Metric] = [

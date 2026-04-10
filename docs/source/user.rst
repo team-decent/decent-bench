@@ -216,6 +216,45 @@ If you set ``plot_metrics`` to a list of lists of :class:`~decent_bench.metrics.
 allowing you to control which metrics are plotted together.
 
 
+Interpreting Metric Warnings
+----------------------------
+Warnings during metric computation and display are expected in some scenarios, especially when algorithms diverge or
+when metric prerequisites are not provided.
+
+Unavailable metrics
+~~~~~~~~~~~~~~~~~~~
+Some metrics require additional problem information.
+
+- ``regret`` and ``x error`` require ``problem.x_optimal``.
+- ``accuracy``, ``mse``, ``precision``, and ``recall`` require ``problem.test_data`` and
+    agents with :class:`~decent_bench.costs.EmpiricalRiskCost`.
+- ``accuracy``, ``precision``, and ``recall`` additionally require integer-valued targets.
+
+If these requirements are not met, the metric marks itself unavailable, a warning is given, and is omitted from the final
+metric lists returned by :func:`~decent_bench.benchmark.compute_metrics`.
+
+Plot truncation warnings
+~~~~~~~~~~~~~~~~~~~~~~~~
+Plot metric trajectories are truncated at the first non-finite datapoint (NaN/inf) or first datapoint above the
+internal plotting threshold used for log-scale stability.
+
+Typical messages include:
+
+- ``Truncating plot computation ... retained K point(s) from M/N trial(s).``
+- ``Skipping plot computation ... all trials diverged before the first plottable datapoint.``
+
+These warnings indicate that divergence was detected and handled gracefully for plotting.
+
+Why tables can show NaN while plots still appear
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Tables and plots summarize different parts of the trajectory:
+
+- Table metrics typically use the final iteration.
+- Plot metrics may retain and display an earlier finite prefix.
+
+So it is expected to see ``nan ± nan`` in a table for a metric while still seeing a corresponding curve in the plot.
+
+
 Benchmark problems
 ------------------
 
@@ -632,6 +671,8 @@ The new metrics will be saved to the checkpoint directory as described above.
 Loading :class:`~decent_bench.benchmark.MetricResult` for displaying metrics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Similarly, you can load previously computed metrics by setting ``metrics_result`` to ``None`` in :func:`~decent_bench.benchmark.display_metrics` and providing the same checkpoint manager.
+The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``available_algorithms``,
+``available_table_metrics``, and ``available_plot_metrics`` to discover valid filter values.
 
 .. code-block:: python
 
@@ -641,9 +682,20 @@ Similarly, you can load previously computed metrics by setting ``metrics_result`
     if __name__ == "__main__":
         checkpoint_manager = CheckpointManager(checkpoint_dir="benchmark_results/my_experiment")
 
+        metrics_result = checkpoint_manager.load_metrics_result()
+        if metrics_result is None:
+            raise ValueError("No computed metrics found in checkpoint directory")
+
+        print("Available algorithms:", metrics_result.available_algorithms)
+        print("Available table metrics:", metrics_result.available_table_metrics)
+        print("Available plot metrics:", metrics_result.available_plot_metrics)
+
         benchmark.display_metrics(
-            metrics_result=None, 
+            metrics_result=metrics_result,
             checkpoint_manager=checkpoint_manager,
+            algorithms=["DGD"],
+            table_metrics=["nr gradient calls"],
+            plot_metrics=["regret"],
             save_path=checkpoint_manager.get_results_path(),
         )
 
