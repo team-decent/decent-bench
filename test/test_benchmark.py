@@ -152,3 +152,16 @@ def test_fed(cost_cls: type[LogisticRegressionCost | PyTorchCost]) -> None:
                 assert len(agent._x_history) == 6, (
                     f"Expected 6 iterations for agent {agent.id}, got {len(agent._x_history)}"
                 )  # 5 iterations + initial state
+
+
+def test_benchmark_rejects_duplicate_algorithm_names() -> None:
+    iop.set_seed(123)
+    problem, algorithms = _build_p2p_problem_and_algorithms(1, cost_cls=LogisticRegressionCost)
+    algorithms[1].name = algorithms[0].name
+
+    with pytest.raises(ValueError, match="Algorithm names must be unique"):
+        benchmark(
+            algorithms=algorithms,
+            benchmark_problem=problem,
+            n_trials=1,
+        )

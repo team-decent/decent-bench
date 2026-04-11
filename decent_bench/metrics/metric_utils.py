@@ -7,13 +7,12 @@ from numpy import float64
 from numpy import linalg as la
 from numpy.typing import NDArray
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
+from rich.table import Column
 from sklearn import metrics as sk_metrics
 
 import decent_bench.utils.interoperability as iop
-from decent_bench import costs
 from decent_bench.agents import AgentMetricsView
 from decent_bench.utils.array import Array
-from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import Dataset
 
 if TYPE_CHECKING:
@@ -30,7 +29,10 @@ class MetricProgressBar(Progress):
 
     def __init__(self) -> None:
         super().__init__(
-            TextColumn("[progress.description]{task.description}"),
+            TextColumn(
+                "[progress.description]{task.description}",
+                table_column=Column(width=24, no_wrap=True),
+            ),
             BarColumn(),
             TaskProgressColumn(),
             TimeRemainingColumn(elapsed_when_finished=True),
@@ -73,17 +75,15 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
     return iop.mean(iop.stack(all_x_at_iter), dim=0)
 
 
-def regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
+def _regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
     r"""
     Calculate the global regret at *iteration* (or using the agents' final x if *iteration* is -1).
 
     Global regret is defined as:
 
     .. include:: snippets/global_cost_error.rst
-    """
-    if getattr(problem, "x_optimal", None) is None:
-        return float("nan")
 
+    """
     x_opt = problem.x_optimal
     mean_x = x_mean(tuple(agents), iteration)
     optimal_cost = sum(a.cost.function(x_opt) for a in agents)  # type: ignore[arg-type, misc]
@@ -91,7 +91,7 @@ def regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iter
     return actual_cost - optimal_cost
 
 
-def gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> float:
+def _gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> float:
     r"""
     Calculate the global gradient norm at *iteration* (or using the agents' final x if *iteration* is -1).
 
@@ -104,35 +104,24 @@ def gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> fl
     return float(la.norm(grad_avg)) ** 2
 
 
-@cache
-def x_error(agent: AgentMetricsView, problem: "BenchmarkProblem", up_to_iteration: int) -> NDArray[float64]:
+def _x_error(agent: AgentMetricsView, problem: "BenchmarkProblem", iteration: int = -1) -> float:
     r"""
-    Calculate the x error per iteration as defined below (until up_to_iteration iteration).
-
-    If *up_to_iteration* is -1, all iterations are taken into account. Otherwise,
-    only iterations up to and including *up_to_iteration* are taken into account, subsequent iterations are disregarded.
+    Calculate x error at *iteration* (or at the agent's final x if *iteration* is -1).
 
     .. math::
-        \{ \|\mathbf{x}_0 - \mathbf{x}^\star\|, \|\mathbf{x}_1 - \mathbf{x}^\star\|, ... \}
+        \|\mathbf{x}_k - \mathbf{x}^\star\|
 
     where :math:`\mathbf{x}_k` is the agent's local x at iteration k,
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
+
     """
-    if up_to_iteration == -1:
-        up_to_iteration = int(1e100)
-
-    if getattr(problem, "x_optimal", None) is None:
-        return np.array([np.nan for iteration, _ in sorted(agent.x_history.items()) if iteration <= up_to_iteration])
-
-    x_per_iteration = np.asarray([
-        iop.to_numpy(x) for iteration, x in sorted(agent.x_history.items()) if iteration <= up_to_iteration
-    ])
+    agent_iteration = agent.x_history.max() if iteration == -1 else iteration
+    x_at_iteration = iop.to_numpy(agent.x_history[agent_iteration])
     opt_x = iop.to_numpy(problem.x_optimal)  # type: ignore[arg-type]
-    errors: NDArray[float64] = la.norm(x_per_iteration - opt_x, axis=tuple(range(1, x_per_iteration.ndim)))
-    return errors
+    return float(la.norm(x_at_iteration - opt_x))
 
 
-def accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
+def _accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the accuracy per agent.
 
@@ -147,40 +136,16 @@ def accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", it
         list of accuracies per agent at *iteration*
 
     """
-    if getattr(problem, "test_data", None) is None:
-        LOGGER.warning(
-            "Test data is required to calculate accuracy but is not provided in the problem, returning NaN for accuracy"
-        )
-        return [np.nan for _ in agents]
-
-    if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
-        LOGGER.warning(
-            "Accuracy metric is only applicable for EmpiricalRiskCost, but at least one agent has a different cost, "
-            "returning NaN for accuracy"
-        )
-        return [np.nan for _ in agents]
-
-    _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
-
-    if test_y.dtype.kind not in {"i", "u"}:
-        LOGGER.warning(
-            "Accuracy calculation is only applicable for integer targets, but "
-            f"targets have values of dtype {test_y.dtype}, returning NaN for accuracy"
-        )
-        return [np.nan for _ in agents]
-
+    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
     ret: list[float] = []
     for agent in agents:
-        if isinstance(agent.cost, costs.EmpiricalRiskCost):
-            agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-            preds = predict_agent(agent, agent_iteration, problem)
-            ret.append(float(sk_metrics.accuracy_score(test_y, preds)))
-        else:
-            ret.append(np.nan)
+        agent_iteration = agent.x_history.max() if iteration == -1 else iteration
+        preds = _predict_agent(agent, agent_iteration, problem)
+        ret.append(float(sk_metrics.accuracy_score(test_y, preds)))
     return ret
 
 
-def mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
+def _mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the mean squared error (MSE) per agent.
 
@@ -195,32 +160,16 @@ def mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iterati
         list of MSE per agent
 
     """
-    if getattr(problem, "test_data", None) is None:
-        LOGGER.warning(
-            "Test data is required to calculate MSE but is not provided in the problem, returning NaN for MSE"
-        )
-        return [np.nan for _ in agents]
-
-    if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
-        LOGGER.warning(
-            "MSE metric is only applicable for EmpiricalRiskCost, but at least one agent has a different cost, "
-            "returning NaN for MSE"
-        )
-        return [np.nan for _ in agents]
-
     ret: list[float] = []
-    _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
+    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
     for agent in agents:
-        if isinstance(agent.cost, costs.EmpiricalRiskCost):
-            agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-            preds = predict_agent(agent, agent_iteration, problem)
-            ret.append(sk_metrics.mean_squared_error(test_y, preds))
-        else:
-            ret.append(np.nan)
+        agent_iteration = agent.x_history.max() if iteration == -1 else iteration
+        preds = _predict_agent(agent, agent_iteration, problem)
+        ret.append(sk_metrics.mean_squared_error(test_y, preds))
     return ret
 
 
-def precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
+def _precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the precision per agent.
 
@@ -236,41 +185,16 @@ def precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", i
         list of precision per agent at *iteration*
 
     """
-    if getattr(problem, "test_data", None) is None:
-        LOGGER.warning(
-            "Test data is required to calculate precision but is not provided "
-            "in the problem, returning NaN for precision"
-        )
-        return [np.nan for _ in agents]
-
-    if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
-        LOGGER.warning(
-            "Precision metric is only applicable for EmpiricalRiskCost, but at least one agent has a different cost, "
-            "returning NaN for precision"
-        )
-        return [np.nan for _ in agents]
-
-    _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
-
-    if test_y.dtype.kind not in {"i", "u"}:
-        LOGGER.warning(
-            "Precision calculation is only applicable for integer targets, but "
-            f"targets have values of dtype {test_y.dtype}, returning NaN for precision"
-        )
-        return [np.nan for _ in agents]
-
+    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
     ret: list[float] = []
     for agent in agents:
-        if isinstance(agent.cost, costs.EmpiricalRiskCost):
-            agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-            preds = predict_agent(agent, agent_iteration, problem)
-            ret.append(float(sk_metrics.precision_score(test_y, preds, average="micro")))
-        else:
-            ret.append(np.nan)
+        agent_iteration = agent.x_history.max() if iteration == -1 else iteration
+        preds = _predict_agent(agent, agent_iteration, problem)
+        ret.append(float(sk_metrics.precision_score(test_y, preds, average="micro")))
     return ret
 
 
-def recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
+def _recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the recall per agent.
 
@@ -286,40 +210,16 @@ def recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iter
         list of recall per agent at *iteration*
 
     """
-    if getattr(problem, "test_data", None) is None:
-        LOGGER.warning(
-            "Test data is required to calculate recall but is not provided in the problem, returning NaN for recall"
-        )
-        return [np.nan for _ in agents]
-
-    if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in agents):
-        LOGGER.warning(
-            "Recall metric is only applicable for EmpiricalRiskCost, but at least one agent has a different cost, "
-            "returning NaN for recall"
-        )
-        return [np.nan for _ in agents]
-
-    _, test_y = split_dataset(problem.test_data)  # type: ignore[arg-type]
-
-    if test_y.dtype.kind not in {"i", "u"}:
-        LOGGER.warning(
-            "Recall calculation is only applicable for integer targets, but "
-            f"targets have values of dtype {test_y.dtype}, returning NaN for recall"
-        )
-        return [np.nan for _ in agents]
-
+    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
     ret: list[float] = []
     for agent in agents:
-        if isinstance(agent.cost, costs.EmpiricalRiskCost):
-            agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-            preds = predict_agent(agent, agent_iteration, problem)
-            ret.append(float(sk_metrics.recall_score(test_y, preds, average="micro")))
-        else:
-            ret.append(np.nan)
+        agent_iteration = agent.x_history.max() if iteration == -1 else iteration
+        preds = _predict_agent(agent, agent_iteration, problem)
+        ret.append(float(sk_metrics.recall_score(test_y, preds, average="micro")))
     return ret
 
 
-def split_dataset(data: Dataset) -> tuple[tuple[Array, ...], NDArray[float64]]:
+def _split_dataset(data: Dataset) -> tuple[tuple[Array, ...], NDArray[float64]]:
     """
     Split dataset into features and labels.
 
@@ -337,34 +237,10 @@ def split_dataset(data: Dataset) -> tuple[tuple[Array, ...], NDArray[float64]]:
 
 
 @cache
-def predict_agent(agent: AgentMetricsView, iteration: int, problem: "BenchmarkProblem") -> NDArray[float64]:
-    """
-    Get the predictions of *agent* at *iteration* on *test_x*.
-
-    This function is cached since predictions can be expensive to compute and are used in multiple metrics.
-
-    Args:
-        agent: agent to get predictions from
-        iteration: iteration to get predictions at
-        problem: benchmark problem containing test data
-
-    Returns:
-        predictions of *agent* at *iteration* on *test_x*
-
-    Raises:
-        TypeError: if *agent* does not have an :class:`~decent_bench.costs.EmpiricalRiskCost` cost
-        ValueError: if *problem* does not have test data
-
-    """
-    if not isinstance(agent.cost, costs.EmpiricalRiskCost):
-        raise TypeError("Predictions can only be obtained for agents with EmpiricalRiskCost")
-
-    if getattr(problem, "test_data", None) is None:
-        raise ValueError("Test data is required to get predictions but is not provided in the problem")
-
-    test_x, _ = split_dataset(problem.test_data)  # type: ignore[arg-type]
-
-    return iop.to_numpy(agent.cost.predict(agent.x_history[iteration], list(test_x)))
+def _predict_agent(agent: AgentMetricsView, iteration: int, problem: "BenchmarkProblem") -> NDArray[float64]:
+    """Get the predictions of *agent* at *iteration*. Cached since predictions may be expensive."""
+    test_x, _ = _split_dataset(problem.test_data)  # type: ignore[arg-type]
+    return iop.to_numpy(agent.cost.predict(agent.x_history[iteration], list(test_x)))  # type: ignore[attr-defined]
 
 
 def all_sorted_iterations(agents: Sequence[AgentMetricsView]) -> list[int]:

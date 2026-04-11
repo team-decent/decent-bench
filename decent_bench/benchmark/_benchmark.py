@@ -35,6 +35,21 @@ if TYPE_CHECKING:
     from decent_bench.utils.progress_bar import ProgressBarHandle
 
 
+def _validate_unique_algorithm_names(algorithms: list[Algorithm[Network]]) -> None:
+    seen: set[str] = set()
+    duplicate_names: set[str] = set()
+    for alg in algorithms:
+        if alg.name in seen:
+            duplicate_names.add(alg.name)
+        else:
+            seen.add(alg.name)
+
+    duplicate_names_sorted = sorted(duplicate_names)
+    if duplicate_names_sorted:
+        duplicates = ", ".join(duplicate_names_sorted)
+        raise ValueError(f"Algorithm names must be unique, duplicates found: {duplicates}")
+
+
 def resume_benchmark(  # noqa: PLR0912
     checkpoint_manager: "CheckpointManager",
     increase_iterations: int = 0,
@@ -250,8 +265,10 @@ def benchmark(
 
     Raises:
         ValueError: If the checkpoint directory is not empty when initializing the CheckpointManager.
+        ValueError: If any two algorithms share the same name.
 
     """
+    _validate_unique_algorithm_names(algorithms)
     log_listener, manager, mp_context = _init_logging_and_multiprocessing(log_level, max_processes, benchmark_problem)
 
     if checkpoint_manager is not None:
