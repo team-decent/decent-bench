@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
@@ -6,7 +7,7 @@ from decent_bench.agents import Agent
 from decent_bench.costs import Cost, ZeroCost
 from decent_bench.distributed_algorithms import Scaffold
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import DropScheme, NoDrops
+from decent_bench.schemes import ClientSelectionScheme, DropScheme, NoDrops
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
@@ -53,6 +54,16 @@ class TrackingCost(Cost):
         return x
 
 
+class SizedTrackingCost(TrackingCost):
+    def __init__(self, gradient_value: float, n_samples: int):
+        super().__init__(gradient_value=gradient_value)
+        self._n_samples = n_samples
+
+    @property
+    def n_samples(self) -> int:
+        return self._n_samples
+
+
 class DropOnCalls(DropScheme):
     def __init__(self, dropped_calls: set[int]):
         self._dropped_calls = dropped_calls
@@ -61,6 +72,15 @@ class DropOnCalls(DropScheme):
     def should_drop(self) -> bool:
         self._call_count += 1
         return self._call_count in self._dropped_calls
+
+
+class ScheduledSelection(ClientSelectionScheme):
+    def __init__(self, selected_ids_by_round: dict[int, list[int]]):
+        self._selected_ids_by_round = selected_ids_by_round
+
+    def select(self, clients: Sequence[Agent], iteration: int) -> list[Agent]:
+        selected_ids = set(self._selected_ids_by_round.get(iteration, []))
+        return [client for client in clients if client.id in selected_ids]
 
 
 def _run_scaffold_local_update(
@@ -130,6 +150,102 @@ def test_scaffold_persists_control_variates_and_uses_weighted_server_aggregation
     np.testing.assert_allclose(clients[1].aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([3.0]))
 
 
+def test_scaffold_client_weight_resolution_supports_uniform_explicit_and_inferred_modes() -> None:
+    default_algorithm = Scaffold(iterations=1, step_size=1.0, num_local_epochs=1)
+    weighted_algorithm = Scaffold(
+        iterations=1,
+        step_size=1.0,
+        num_local_epochs=1,
+        client_weights={0: 3.0, 1: 1.0},
+    )
+    inferred_algorithm = Scaffold(iterations=1, step_size=1.0, num_local_epochs=1, client_weights=None)
+    aggregate_override_algorithm = Scaffold(iterations=1, step_size=1.0, num_local_epochs=1)
+    default_network = FedNetwork(clients=[Agent(0, SizedTrackingCost(1.0, 2)), Agent(1, SizedTrackingCost(3.0, 8))])
+    weighted_network = FedNetwork(clients=[Agent(0, SizedTrackingCost(1.0, 2)), Agent(1, SizedTrackingCost(3.0, 8))])
+    inferred_network = FedNetwork(clients=[Agent(0, SizedTrackingCost(1.0, 2)), Agent(1, SizedTrackingCost(3.0, 8))])
+    aggregate_override_network = FedNetwork(
+        clients=[Agent(0, SizedTrackingCost(1.0, 2)), Agent(1, SizedTrackingCost(3.0, 8))]
+    )
+
+    default_algorithm.initialize(default_network)
+    weighted_algorithm.initialize(weighted_network)
+    inferred_algorithm.initialize(inferred_network)
+    aggregate_override_algorithm.initialize(aggregate_override_network)
+    default_network._step(0)  # noqa: SLF001
+    weighted_network._step(0)  # noqa: SLF001
+    inferred_network._step(0)  # noqa: SLF001
+    default_algorithm.step(default_network, 0)
+    weighted_algorithm.step(weighted_network, 0)
+    inferred_algorithm.step(inferred_network, 0)
+
+    override_clients = aggregate_override_network.clients()
+    aggregate_override_network.send(
+        sender=override_clients[0], receiver=aggregate_override_network.server(), msg=np.array([-1.0])
+    )
+    aggregate_override_network.send(
+        sender=override_clients[1], receiver=aggregate_override_network.server(), msg=np.array([-3.0])
+    )
+    override_clients[0].aux_vars[aggregate_override_algorithm._CONTROL_VARIATE_DELTA_KEY] = np.array([1.0])
+    override_clients[1].aux_vars[aggregate_override_algorithm._CONTROL_VARIATE_DELTA_KEY] = np.array([3.0])
+    aggregate_override_algorithm.aggregate(aggregate_override_network, override_clients, client_weights=None)
+
+    np.testing.assert_allclose(default_network.server().x, np.array([-2.0]))
+    np.testing.assert_allclose(default_network.server().aux_vars[default_algorithm._CONTROL_VARIATE_KEY], np.array([2.0]))
+    np.testing.assert_allclose(weighted_network.server().x, np.array([-1.5]))
+    np.testing.assert_allclose(
+        weighted_network.server().aux_vars[weighted_algorithm._CONTROL_VARIATE_KEY],
+        np.array([1.5]),
+    )
+    np.testing.assert_allclose(inferred_network.server().x, np.array([-2.6]))
+    np.testing.assert_allclose(
+        inferred_network.server().aux_vars[inferred_algorithm._CONTROL_VARIATE_KEY],
+        np.array([2.6]),
+    )
+    np.testing.assert_allclose(aggregate_override_network.server().x, np.array([-2.6]))
+    np.testing.assert_allclose(
+        aggregate_override_network.server().aux_vars[aggregate_override_algorithm._CONTROL_VARIATE_KEY],
+        np.array([2.6]),
+    )
+
+
+def test_server_step_size_scales_only_the_server_model_update() -> None:
+    full_step_algorithm = Scaffold(
+        iterations=1,
+        step_size=1.0,
+        num_local_epochs=1,
+        server_step_size=1.0,
+        client_weights={0: 1.0, 1: 1.0},
+    )
+    damped_step_algorithm = Scaffold(
+        iterations=1,
+        step_size=1.0,
+        num_local_epochs=1,
+        server_step_size=0.25,
+        client_weights={0: 1.0, 1: 1.0},
+    )
+    full_step_network = FedNetwork(clients=[Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))])
+    damped_step_network = FedNetwork(clients=[Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))])
+
+    full_step_algorithm.initialize(full_step_network)
+    damped_step_algorithm.initialize(damped_step_network)
+    full_step_network._step(0)  # noqa: SLF001
+    damped_step_network._step(0)  # noqa: SLF001
+    full_step_algorithm.step(full_step_network, 0)
+    damped_step_algorithm.step(damped_step_network, 0)
+
+    np.testing.assert_allclose(full_step_network.server().x, np.array([-2.0]))
+    np.testing.assert_allclose(damped_step_network.server().x, np.array([-0.5]))
+    np.testing.assert_allclose(damped_step_network.server().x, 0.25 * full_step_network.server().x)
+    np.testing.assert_allclose(
+        full_step_network.server().aux_vars[full_step_algorithm._CONTROL_VARIATE_KEY],
+        np.array([2.0]),
+    )
+    np.testing.assert_allclose(
+        damped_step_network.server().aux_vars[damped_step_algorithm._CONTROL_VARIATE_KEY],
+        np.array([2.0]),
+    )
+
+
 def test_scaffold_aggregation_uses_only_received_updates_for_model_and_control_deltas() -> None:
     algorithm = Scaffold(iterations=1, step_size=1.0, num_local_epochs=1)
     clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(2.0))]
@@ -146,6 +262,62 @@ def test_scaffold_aggregation_uses_only_received_updates_for_model_and_control_d
 
     np.testing.assert_allclose(network.server().x, np.array([12.0]))
     np.testing.assert_allclose(network.server().aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([7.0]))
+
+
+def test_scaffold_partial_participation_persists_control_variates_across_rounds() -> None:
+    algorithm = Scaffold(
+        iterations=3,
+        step_size=1.0,
+        num_local_epochs=1,
+        server_step_size=1.0,
+        client_weights={0: 1.0, 1: 1.0, 2: 1.0},
+        selection_scheme=ScheduledSelection({0: [0, 1], 1: [1], 2: [2]}),
+    )
+    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(2.0)), Agent(2, TrackingCost(3.0))]
+    network = FedNetwork(clients=clients)
+    algorithm.initialize(network)
+
+    network._step(0)  # noqa: SLF001
+    algorithm.step(network, 0)
+
+    np.testing.assert_allclose(network.server().x, np.array([-1.5]))
+    np.testing.assert_allclose(network.server().aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([1.0]))
+    np.testing.assert_allclose(clients[0].x, np.array([-1.0]))
+    np.testing.assert_allclose(clients[1].x, np.array([-2.0]))
+    np.testing.assert_allclose(clients[2].x, np.array([0.0]))
+    np.testing.assert_allclose(clients[0].aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([1.0]))
+    np.testing.assert_allclose(clients[1].aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([2.0]))
+    np.testing.assert_allclose(clients[2].aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([0.0]))
+
+    network._step(1)  # noqa: SLF001
+    algorithm.step(network, 1)
+
+    np.testing.assert_allclose(network.server().x, np.array([-2.5]))
+    np.testing.assert_allclose(network.server().aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([1.0]))
+    np.testing.assert_allclose(clients[0].x, np.array([-1.0]))
+    np.testing.assert_allclose(clients[1].x, np.array([-2.5]))
+    np.testing.assert_allclose(clients[2].x, np.array([0.0]))
+    np.testing.assert_allclose(clients[0].aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([1.0]))
+    np.testing.assert_allclose(clients[1].aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([2.0]))
+    np.testing.assert_allclose(clients[2].aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([0.0]))
+    np.testing.assert_allclose(clients[0].aux_vars[algorithm._SERVER_CONTROL_VARIATE_KEY], np.array([0.0]))
+    np.testing.assert_allclose(clients[1].aux_vars[algorithm._SERVER_CONTROL_VARIATE_KEY], np.array([1.0]))
+    np.testing.assert_allclose(clients[2].aux_vars[algorithm._SERVER_CONTROL_VARIATE_KEY], np.array([0.0]))
+
+    network._step(2)  # noqa: SLF001
+    algorithm.step(network, 2)
+
+    np.testing.assert_allclose(network.server().x, np.array([-6.5]))
+    np.testing.assert_allclose(network.server().aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([2.0]))
+    np.testing.assert_allclose(clients[0].x, np.array([-1.0]))
+    np.testing.assert_allclose(clients[1].x, np.array([-2.5]))
+    np.testing.assert_allclose(clients[2].x, np.array([-6.5]))
+    np.testing.assert_allclose(clients[0].aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([1.0]))
+    np.testing.assert_allclose(clients[1].aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([2.0]))
+    np.testing.assert_allclose(clients[2].aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([3.0]))
+    np.testing.assert_allclose(clients[0].aux_vars[algorithm._SERVER_CONTROL_VARIATE_KEY], np.array([0.0]))
+    np.testing.assert_allclose(clients[1].aux_vars[algorithm._SERVER_CONTROL_VARIATE_KEY], np.array([1.0]))
+    np.testing.assert_allclose(clients[2].aux_vars[algorithm._SERVER_CONTROL_VARIATE_KEY], np.array([1.0]))
 
 
 def test_scaffold_keeps_cached_server_control_when_broadcast_is_dropped() -> None:

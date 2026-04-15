@@ -111,6 +111,38 @@ Federated
 FedProx extends FedAvg with a proximal coefficient ``mu``. Setting ``mu=0`` reduces
 FedProx to FedAvg.
 
+Client weights
+^^^^^^^^^^^^^^
+For federated algorithms, ``client_weights`` controls only how client updates are
+aggregated at the server. It does not change the optimization objective itself.
+If you want to optimize a weighted objective, scale the client costs in the
+problem definition instead of relying on aggregation weights.
+
+For :class:`~decent_bench.distributed_algorithms.FedAvg` and
+:class:`~decent_bench.distributed_algorithms.FedProx`, the resolution order is:
+
+1. If ``aggregate(..., client_weights=...)`` is given an explicit value, that
+   value is used for that aggregation call.
+2. Otherwise the algorithm uses ``self.client_weights`` from initialization.
+3. If the resolved value is ``None``, weights are inferred from client data size
+   via :func:`~decent_bench.utils.algorithm_helpers.infer_client_weight`.
+
+This means that leaving ``client_weights`` unspecified for FedAvg or FedProx
+defaults to data-size weighting.
+
+:class:`~decent_bench.distributed_algorithms.Scaffold` follows the same override
+order, but its default differs to match the standard SCAFFOLD algorithm:
+
+1. An explicit value passed to ``aggregate(..., client_weights=...)`` is used.
+2. Otherwise ``self.client_weights`` is used.
+3. If ``client_weights`` was omitted when constructing ``Scaffold``, uniform
+   client weights are used by default.
+4. If ``client_weights=None`` is passed explicitly, weights are inferred from
+   client data size.
+
+Custom weights can be passed either as a dictionary keyed by client id or as a
+sequence indexed by client id.
+
 
 Available costs
 ---------------
