@@ -178,7 +178,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     Otherwise ``self.client_weights`` is used. If the resolved value is ``None``, weights are inferred from client
     data size via :func:`decent_bench.utils.algorithm_helpers.infer_client_weight`.
     """
-    _CLIENT_WEIGHTS_SENTINEL: Final[object] = object()
+    CLIENT_WEIGHTS_UNSET: Final[object] = object()
 
     def _cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
         return [network.server(), *network.clients()]
@@ -242,7 +242,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         self,
         network: FedNetwork,
         selected_clients: Sequence["Agent"],
-        client_weights: ClientWeights | object | None = _CLIENT_WEIGHTS_SENTINEL,
+        client_weights: ClientWeights | object | None = CLIENT_WEIGHTS_UNSET,
     ) -> None:
         """
         Aggregate client updates at the server.
@@ -251,9 +251,6 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         provided, ``self.client_weights`` is used. If weights are ``None``, they are inferred from client data size.
 
         Override this method for custom aggregation strategies (e.g., robust aggregation).
-
-        Raises:
-            ValueError: if the sum of client weights is non-positive.
 
         """
         _, updates, weights, total_weight = self._received_client_updates_and_weights(
@@ -269,10 +266,16 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         self,
         network: FedNetwork,
         selected_clients: Sequence["Agent"],
-        client_weights: ClientWeights | object | None = _CLIENT_WEIGHTS_SENTINEL,
+        client_weights: ClientWeights | object | None = CLIENT_WEIGHTS_UNSET,
     ) -> tuple[list["Agent"], list["Array"], list[float], float]:
-        """Collect received client messages and their aggregation weights for the current round."""
-        if client_weights is self._CLIENT_WEIGHTS_SENTINEL:
+        """
+        Collect received client messages and their aggregation weights for the current round.
+
+        Raises:
+            ValueError: if the sum of client weights is non-positive.
+
+        """
+        if client_weights is self.CLIENT_WEIGHTS_UNSET:
             client_weights = self.client_weights
 
         server = network.server()
@@ -478,6 +481,7 @@ class FedProx(FedAlgorithm):
 class Scaffold(FedAlgorithm):
     r"""
     SCAFFOLD with client/server control variates for variance-reduced local training.
+
     When the server control variate :math:`\mathbf{c}` and all client control variates :math:`\mathbf{c}_i`
     are zero, the local updates reduce to :class:`FedAvg <decent_bench.distributed_algorithms.FedAvg>`.
 
@@ -508,7 +512,7 @@ class Scaffold(FedAlgorithm):
     step_size: float = 0.001
     num_local_epochs: int = 1
     server_step_size: float = 1.0
-    client_weights: ClientWeights | object | None = FedAlgorithm._CLIENT_WEIGHTS_SENTINEL
+    client_weights: ClientWeights | object | None = FedAlgorithm.CLIENT_WEIGHTS_UNSET
     """Server aggregation weights for SCAFFOLD.
 
     Explicit weights passed to :meth:`aggregate` override this field. If this field is omitted at initialization,
@@ -599,8 +603,8 @@ class Scaffold(FedAlgorithm):
             grad = client.cost.gradient(local_x)
             local_x -= self.step_size * (grad - client_control + server_control)
 
-        new_client_control = client_control - server_control + (
-            (reference_x - local_x) / (self.num_local_epochs * self.step_size)
+        new_client_control = (
+            client_control - server_control + ((reference_x - local_x) / (self.num_local_epochs * self.step_size))
         )
         control_variate_delta = new_client_control - client_control
         client.aux_vars[self._CONTROL_VARIATE_KEY] = new_client_control
@@ -610,7 +614,7 @@ class Scaffold(FedAlgorithm):
         self,
         network: FedNetwork,
         selected_clients: Sequence["Agent"],
-        client_weights: ClientWeights | object | None = FedAlgorithm._CLIENT_WEIGHTS_SENTINEL,
+        client_weights: ClientWeights | object | None = FedAlgorithm.CLIENT_WEIGHTS_UNSET,
     ) -> None:
         """
         Aggregate received SCAFFOLD client deltas at the server.
@@ -620,9 +624,9 @@ class Scaffold(FedAlgorithm):
         data-size weights. The standard SCAFFOLD participation correction still uses the fraction of clients that
         contributed updates in the round.
         """
-        if client_weights is self._CLIENT_WEIGHTS_SENTINEL:
+        if client_weights is self.CLIENT_WEIGHTS_UNSET:
             client_weights = self.client_weights
-            if client_weights is self._CLIENT_WEIGHTS_SENTINEL:
+            if client_weights is self.CLIENT_WEIGHTS_UNSET:
                 client_weights = {client.id: 1.0 for client in selected_clients}
 
         received_clients, updates, weights, total_weight = self._received_client_updates_and_weights(
@@ -640,9 +644,7 @@ class Scaffold(FedAlgorithm):
         control_deltas = [client.aux_vars[self._CONTROL_VARIATE_DELTA_KEY] for client in received_clients]
         average_control_delta = self._weighted_average(control_deltas, weights, total_weight)
         participation_fraction = len(received_clients) / len(network.clients())
-        server.aux_vars[self._CONTROL_VARIATE_KEY] = (
-            server.aux_vars[self._CONTROL_VARIATE_KEY] + participation_fraction * average_control_delta
-        )
+        server.aux_vars[self._CONTROL_VARIATE_KEY] += participation_fraction * average_control_delta
 
 
 @tags("peer-to-peer", "gradient-based")
