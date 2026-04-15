@@ -132,9 +132,9 @@ if __name__ == "__main__":
         test_data = train_dataset.get_test_set(label_balance=1.0, num_samples=test_samples)
         for drops, activity in [
             (None, None),
-            (True, None),
-            (None, True),
-            (True, True),
+            # (True, None),
+            # (None, True),
+            # (True, True),
         ]:
             for alg in [
                 "DGD",
@@ -205,7 +205,7 @@ if __name__ == "__main__":
                 if alg == "DGD":
                     algorithms = [
                         dec_algorithms.DGD(
-                            step_size=0.05,
+                            step_size=0.1,
                             aux_step_size=1.0,
                             iterations=iterations,
                             x0=x0,
@@ -217,7 +217,7 @@ if __name__ == "__main__":
                             iterations=iterations,
                             local_steps=10,
                             step_size=0.025,
-                            aux_step_size=0.025,
+                            aux_step_size=0.5,
                             x0=x0,
                         )
                     ]
@@ -288,7 +288,7 @@ if __name__ == "__main__":
                             show_speed=True,
                             show_trial=True,
                             checkpoint_manager=cm,
-                            # runtime_metrics=[runtime_library.RuntimeLoss(250)],
+                            runtime_metrics=[runtime_library.RuntimeLoss(250)],
                         )
                 else:
                     result = cm.load_benchmark_result()
