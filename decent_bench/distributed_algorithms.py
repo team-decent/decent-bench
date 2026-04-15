@@ -530,7 +530,7 @@ class Scaffold(FedAlgorithm):
     _CONTROL_VARIATE_DELTA_KEY: ClassVar[str] = "scaffold_control_variate_delta"
     _use_uniform_client_weights_default: bool = field(init=False, repr=False, default=False)
 
-    def __init__(
+    def __init__(  # noqa: PLR0917
         self,
         iterations: int = 100,
         step_size: float = 0.001,
@@ -551,7 +551,9 @@ class Scaffold(FedAlgorithm):
         self.x0 = x0
         self.name = name
         self._use_uniform_client_weights_default = client_weights is self.CLIENT_WEIGHTS_UNSET
-        self.client_weights = None if self._use_uniform_client_weights_default else cast("ClientWeights | None", client_weights)
+        self.client_weights = (
+            None if self._use_uniform_client_weights_default else cast("ClientWeights | None", client_weights)
+        )
         self.__post_init__()
 
     def __post_init__(self) -> None:
