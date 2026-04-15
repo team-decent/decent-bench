@@ -477,7 +477,7 @@ class FedProx(FedAlgorithm):
 
 
 @tags("federated")
-@dataclass(eq=False)
+@dataclass(eq=False, init=False)
 class Scaffold(FedAlgorithm):
     r"""
     SCAFFOLD with client/server control variates for variance-reduced local training.
@@ -512,7 +512,7 @@ class Scaffold(FedAlgorithm):
     step_size: float = 0.001
     num_local_epochs: int = 1
     server_step_size: float = 1.0
-    client_weights: ClientWeights | object | None = FedAlgorithm.CLIENT_WEIGHTS_UNSET
+    client_weights: ClientWeights | None = None
     """Server aggregation weights for SCAFFOLD.
 
     Explicit weights passed to :meth:`aggregate` override this field. If this field is omitted at initialization,
@@ -528,6 +528,31 @@ class Scaffold(FedAlgorithm):
     _CONTROL_VARIATE_KEY: ClassVar[str] = "scaffold_control_variate"
     _SERVER_CONTROL_VARIATE_KEY: ClassVar[str] = "scaffold_server_control_variate"
     _CONTROL_VARIATE_DELTA_KEY: ClassVar[str] = "scaffold_control_variate_delta"
+    _use_uniform_client_weights_default: bool = field(init=False, repr=False, default=False)
+
+    def __init__(
+        self,
+        iterations: int = 100,
+        step_size: float = 0.001,
+        num_local_epochs: int = 1,
+        server_step_size: float = 1.0,
+        client_weights: ClientWeights | object | None = FedAlgorithm.CLIENT_WEIGHTS_UNSET,
+        selection_scheme: ClientSelectionScheme | None = None,
+        x0: InitialStates = None,
+        name: str = "Scaffold",
+    ) -> None:
+        self.iterations = iterations
+        self.step_size = step_size
+        self.num_local_epochs = num_local_epochs
+        self.server_step_size = server_step_size
+        self.selection_scheme = (
+            UniformClientSelection(client_fraction=1.0) if selection_scheme is None else selection_scheme
+        )
+        self.x0 = x0
+        self.name = name
+        self._use_uniform_client_weights_default = client_weights is self.CLIENT_WEIGHTS_UNSET
+        self.client_weights = None if self._use_uniform_client_weights_default else cast("ClientWeights | None", client_weights)
+        self.__post_init__()
 
     def __post_init__(self) -> None:
         """
@@ -626,7 +651,7 @@ class Scaffold(FedAlgorithm):
         """
         if client_weights is self.CLIENT_WEIGHTS_UNSET:
             client_weights = self.client_weights
-            if client_weights is self.CLIENT_WEIGHTS_UNSET:
+            if self._use_uniform_client_weights_default:
                 client_weights = {client.id: 1.0 for client in selected_clients}
 
         received_clients, updates, weights, total_weight = self._received_client_updates_and_weights(
