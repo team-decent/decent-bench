@@ -158,8 +158,8 @@ class PyTorchCost(EmpiricalRiskCost):
         self._load_dataset = load_dataset
         self._compile_model = compile_model
         self._compile_kwargs = compile_kwargs if compile_kwargs is not None else {}
-        self._optimizer = None
-        self._scheduler = None
+        self._optimizer: torch.optim.Optimizer | None = None
+        self._scheduler: torch.optim.lr_scheduler.LRScheduler | None = None
 
         self._pytorch_device: str = iop.device_to_framework_device(device, framework=self.framework)
         self.model = self.model.to(self._pytorch_device)
@@ -458,7 +458,7 @@ class PyTorchCost(EmpiricalRiskCost):
 
         Raises:
             RuntimeError: If the optimizer is already initialized. This method is intended to be called only once
-            to set the optimizer for local training.
+                to set the optimizer for local training.
 
         """
         if self._optimizer is not None:

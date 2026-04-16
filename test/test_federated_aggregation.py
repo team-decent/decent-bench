@@ -3,8 +3,8 @@ from typing import Any
 import numpy as np
 
 from decent_bench.agents import Agent
+from decent_bench.algorithms.federated import FedAvg
 from decent_bench.costs import Cost
-from decent_bench.distributed_algorithms import FedAvg
 from decent_bench.networks import FedNetwork
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 

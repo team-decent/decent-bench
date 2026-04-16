@@ -9,10 +9,10 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.networks import FedNetwork, Network
 from decent_bench.utils.array import Array
-from decent_bench.utils.types import ArrayLike, InitialStates
+from decent_bench.utils.types import InitialStates
 
 
-def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
+def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":  # noqa: PLR0912
     """
     Build per-agent initial states, for use in :meth:`~decent_bench.algorithms.Algorithm.initialize`.
 
@@ -44,6 +44,11 @@ def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
         for a, v in x0.items():
             if not isinstance(a, Agent):
                 raise TypeError(f"``x0`` must have keys of type Agent, got {type(a)}")
+            if iop.shape(v) != a.cost.shape:
+                raise ValueError(
+                    f"Shape of initial state for agent {a} does not match cost shape: "
+                    f"expected {a.cost.shape}, got {iop.shape(x0)}"
+                )
             x0_by_id[a.id] = v
         x0s = {}
         for a in network.agents():
@@ -56,11 +61,16 @@ def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
                 x0s[server] = iop.mean(iop.stack([x0s[a] for a in network.clients()], dim=0), dim=0)
             else:
                 x0s[server] = x0_by_id[server.id]
-    else:
-        # TODO FIX THIS
-        iop.framework_device_of_array(x0)  # Raises an error if x0 is not supported
+    elif iop.is_supported_array_type(x0):
+        if any(iop.shape(x0) != a.cost.shape for a in network.graph):
+            a = next(a for a in network.graph if iop.shape(x0) != a.cost.shape)
+            raise ValueError(
+                f"Shape of initial state for agent {a} does not match cost shape: "
+                f"expected {a.cost.shape}, got {iop.shape(x0)}"
+            )
         x0s = dict.fromkeys(network.graph, x0)
-        # raise ValueError(f"Invalid x0: expected None, an Array instance, or a dict, got {type(x0)}")
+    else:
+        raise ValueError(f"Invalid x0: expected None, Array, or dict[Agent, Array], got {type(x0)}")
 
     # ignore keys that are not network agents and normalize to the target framework/device
     return {a: iop.to_array(x0s[a], framework=a.cost.framework, device=a.cost.device) for a in network.graph}
@@ -139,6 +149,7 @@ def pytorch_initialization(
     Args:
         network (Network): network instance containing the target agents.
             All agents must have a :class:`~decent_bench.costs.PyTorchCost`.
+        all_same (bool): if ``True``, use the first agent's initialized state for all agents.
 
     Returns:
         dict[Agent, Array] | Array: mapping from each network agent to its initial state,

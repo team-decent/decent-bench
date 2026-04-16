@@ -30,7 +30,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
 
     def cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
         return [network.server(), *network.clients()]
-    
+
     def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
         """Send the current server model to the selected clients."""
         network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x)

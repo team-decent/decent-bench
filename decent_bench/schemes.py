@@ -205,21 +205,18 @@ class TopK(CompressionScheme):
     """
 
     def __init__(self, k: float):
-        if int(k) == k:
+        if isinstance(k, int):
             if k < 1:
                 raise ValueError(f"If `k` is an integer, it must be at least 1, got {k}")
         elif k <= 0 or k > 1:
             raise ValueError(f"If `k` is a float, it must be in (0, 1], got {k}")
         self.k = k
-        self.is_integer_k = int(k) == k
+        self.is_integer_k = isinstance(self.k, int)
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
         msg_np = iop.to_numpy(msg)
         n_elements = msg_np.size
-        if self.is_integer_k:
-            k_count = min(int(self.k), n_elements)
-        else:
-            k_count = max(1, int(np.ceil(self.k * n_elements)))
+        k_count = min(int(self.k), n_elements) if self.is_integer_k else max(1, int(np.ceil(self.k * n_elements)))
 
         flat_msg = msg_np.reshape(-1)
         idx = np.argpartition(np.abs(flat_msg), -k_count)[-k_count:]
@@ -242,21 +239,18 @@ class RandK(CompressionScheme):
     """
 
     def __init__(self, k: float):
-        if int(k) == k:
+        if isinstance(k, int):
             if k < 1:
                 raise ValueError(f"`k` must be at least 1 if an integer, got {k}")
         elif k <= 0 or k > 1:
             raise ValueError(f"`k` must be in (0, 1], got {k}")
         self.k = k
-        self.is_integer_k = int(k) == k
+        self.is_integer_k = isinstance(self.k, int)
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
         msg_np = iop.to_numpy(msg)
         n_elements = msg_np.size
-        if self.is_integer_k:
-            k_count = min(int(self.k), n_elements)
-        else:
-            k_count = max(1, int(np.ceil(self.k * n_elements)))
+        k_count = min(int(self.k), n_elements) if self.is_integer_k else max(1, int(np.ceil(self.k * n_elements)))
 
         flat_msg = msg_np.reshape(-1)
         idx = iop.rng_numpy().choice(n_elements, size=k_count, replace=False)

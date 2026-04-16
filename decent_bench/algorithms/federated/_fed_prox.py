@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from decent_bench.agents import Agent
     from decent_bench.utils.array import Array
 
+
 @tags("federated")
 @dataclass(eq=False)
 class FedProx(FedAlgorithm):
@@ -37,7 +38,7 @@ class FedProx(FedAlgorithm):
     where :math:`\mathbf{w}^t` is the server model broadcast at the start of round :math:`k`, held fixed
     throughout each selected client's local epochs, :math:`\mu \geq 0` is the proximal coefficient,
     :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients. Setting ``mu=0.0``
-    recovers :class:`FedAvg <decent_bench.distributed_algorithms.FedAvg>` exactly. Aggregation uses client weights,
+    recovers :class:`FedAvg <decent_bench.algorithms.federated.FedAvg>` exactly. Aggregation uses client weights,
     defaulting to data-size weights when ``client_weights`` is not provided, and client selection defaults to uniform
     sampling with fraction 1.0. For
     :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
@@ -71,13 +72,13 @@ class FedProx(FedAlgorithm):
         if self.mu < 0:
             raise ValueError("`mu` must be non-negative")
 
-    def initialize(self, network: FedNetwork) -> None:  # noqa: D102
+    def initialize(self, network: FedNetwork) -> None:
         self.x0 = initial_states(self.x0, network)
         network.server().initialize(x=self.x0[network.server()])
         for client in network.clients():
             client.initialize(x=self.x0[client])
 
-    def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
+    def step(self, network: FedNetwork, iteration: int) -> None:
         selected_clients = self._selected_clients_for_round(network, iteration)
         if not selected_clients:
             return

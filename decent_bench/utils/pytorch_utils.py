@@ -148,9 +148,12 @@ def visualize_scheduler(scheduler: torch.optim.lr_scheduler.LRScheduler, num_ite
         num_iterations (int): The number of iterations to visualize the learning rate for.
 
     """
-    lrs = []
+    lrs: list[float] = []
     for _ in range(num_iterations):
-        lrs.append(scheduler.get_last_lr()[0])  # Assuming a single parameter group
+        value = scheduler.get_last_lr()[0]
+        if isinstance(value, torch.Tensor):
+            value = float(value.item())
+        lrs.append(value)  # Assuming a single parameter group
         scheduler.step()
 
     plt.plot(lrs)

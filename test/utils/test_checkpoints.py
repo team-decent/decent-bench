@@ -311,7 +311,9 @@ def test_load_benchmark_result_skips_incomplete_algorithms(  # noqa: D103
 
 
 def test_save_and_load_metrics_result(tmp_path: Path) -> None:  # noqa: D103
-    manager = CheckpointManager(tmp_path / "ckpt")
+    ckpt_path = tmp_path / "ckpt"
+    ckpt_path.mkdir(parents=True, exist_ok=True)
+    manager = CheckpointManager(ckpt_path)
     metrics_result = MetricResult(
         agent_metrics=None,
         table_metrics=None,
@@ -319,14 +321,14 @@ def test_save_and_load_metrics_result(tmp_path: Path) -> None:  # noqa: D103
         table_results=None,
         plot_results=None,
     )
-
     manager.save_metrics_result(metrics_result)
     loaded = manager.load_metrics_result()
 
     assert loaded == metrics_result
-    assert (tmp_path / "ckpt" / "metric_computation.pkl.zst").exists()
-    with (tmp_path / "ckpt" / "metric_computation.pkl.zst").open("rb") as f:
+    assert (ckpt_path / "metric_computation.pkl.zst").exists()
+    with (ckpt_path / "metric_computation.pkl.zst").open("rb") as f:
         assert f.read(4) == ZSTD_MAGIC
+    assert (ckpt_path / "metric_computation_complete.json").exists()
 
 
 def test_create_backup_and_clear(tmp_path: Path) -> None:  # noqa: D103
@@ -741,11 +743,7 @@ def test_resume_from_non_completed_checkpoint(
                 raise FileNotFoundError(f"Expected complete marker not found at {complete_marker}")
             for i in [3, 4]:  # Remove checkpoints for iterations 3 and 4
                 checkpoint_path = (
-                    tmp_path
-                    / "ckpt"
-                    / f"algorithm_{alg}"
-                    / f"trial_{trial}"
-                    / f"checkpoint_{i:07d}.pkl.zst"
+                    tmp_path / "ckpt" / f"algorithm_{alg}" / f"trial_{trial}" / f"checkpoint_{i:07d}.pkl.zst"
                 )
                 if checkpoint_path.exists():
                     checkpoint_path.unlink()

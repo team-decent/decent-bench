@@ -24,9 +24,8 @@ from decent_bench.schemes import (
     UniformClientSelection,
     UniformDropRate,
 )
-from decent_bench.utils.array import Array
 from decent_bench.utils import interoperability as iop
-
+from decent_bench.utils.array import Array
 
 ## AgentActivationScheme
 
@@ -120,6 +119,8 @@ def test_client_selection(
         (Quantization(n_significant_digits=5), Array(np.array([1.2345, -2.3456]))),
         (TopK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
         (RandK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
+        (TopK(k=3), Array(np.array([3.0, -4.0, 1.0]))),
+        (RandK(k=3), Array(np.array([3.0, -4.0, 1.0]))),
     ],
 )
 def test_no_compression(
@@ -142,6 +143,7 @@ def test_no_compression(
             float(np.linalg.norm(np.array([0.0045, -0.0044]))),
         ),
         (TopK(k=2 / 3), Array(np.array([3.0, -4.0, 1.0])), 1.0),
+        (TopK(k=2), Array(np.array([3.0, -4.0, 1.0])), 1.0),
     ],
 )
 def test_compression(
@@ -156,8 +158,15 @@ def test_compression(
 
 
 # test RandK
-def test_randk_compression() -> None:
-    scheme = RandK(k=2 / 3)
+@pytest.mark.parametrize(
+    "k",
+    [
+        2 / 3,
+        2,
+    ],
+)
+def test_randk_compression(k) -> None:
+    scheme = RandK(k=k)
     observed_norms = set()
 
     for _ in range(200):
@@ -178,16 +187,16 @@ def test_randk_compression() -> None:
     ],
 )
 def test_k_compression(scheme: CompressionScheme) -> None:
-    msg_size = 20
-
     for n_kept in range(1, 15 + 1):
-        s = scheme(k=n_kept / msg_size)
-        compressed_msg = s.compress(Array(np.ones(msg_size)))
-
+        s = scheme(k=n_kept / (n_kept + 5))
+        compressed_msg = s.compress(Array(np.ones(n_kept + 5)))
+        assert np.count_nonzero(compressed_msg) == n_kept
+        s = scheme(k=n_kept)
+        compressed_msg = s.compress(Array(np.ones(n_kept + 5)))
         assert np.count_nonzero(compressed_msg) == n_kept
 
 
-# test RandK and TopK keep at least one element for very small k
+# test RandK and TopK with mismatched k and message size
 @pytest.mark.parametrize(
     "scheme",
     [
@@ -196,13 +205,13 @@ def test_k_compression(scheme: CompressionScheme) -> None:
     ],
 )
 def test_k_compression_mismatched(scheme: CompressionScheme) -> None:
-    s = scheme(k=0.01)
-    compressed_msg = s.compress(Array(np.ones(3)))
+    for k in range(5, 15+1):
+        s = scheme(k=k)
+        compressed_msg = s.compress(Array(np.ones(k-2)))
+        assert np.count_nonzero(compressed_msg) == k-2
 
-    assert np.count_nonzero(compressed_msg) == 1
 
-
-# test RandK and TopK keep all elements for k == 1
+# test RandK and TopK with mismatched k and message size
 @pytest.mark.parametrize(
     "scheme",
     [
@@ -213,8 +222,13 @@ def test_k_compression_mismatched(scheme: CompressionScheme) -> None:
 def test_k_compression_mismatched_k_msg_size(scheme: CompressionScheme) -> None:
     s = scheme(k=1.0)
     compressed_msg = s.compress(Array(np.ones(8)))
-
     assert np.count_nonzero(compressed_msg) == 8
+
+    for k in range(5, 15+1):
+        s = scheme(k=k)
+        compressed_msg = s.compress(Array(np.ones(k-2)))
+
+        assert np.count_nonzero(compressed_msg) == k-2
 
 
 # test RandK and TopK to check message shape is preserved
@@ -229,7 +243,11 @@ def test_k_compression_preserved_shape(scheme: CompressionScheme) -> None:
     message = Array(np.ones((10, 15)))
     s = scheme(k=0.1)
     compressed_msg = s.compress(message)
+    assert iop.to_numpy(message).shape == iop.to_numpy(compressed_msg).shape
 
+    message = Array(np.ones((10, 15)))
+    s = scheme(k=5)
+    compressed_msg = s.compress(message)
     assert iop.to_numpy(message).shape == iop.to_numpy(compressed_msg).shape
 
 

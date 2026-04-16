@@ -135,7 +135,7 @@ def display_plots(
         return
 
     # Save and show figures
-    _save_and_show_figures(all_figures, two_columns, plot_path=plot_path, plot_format=plot_format, show_plots=show_plots)
+    _save_and_show_figures(all_figures, plot_path=plot_path, plot_format=plot_format, show_plots=show_plots)
 
 
 def compute_plots(  # noqa: PLR0914
@@ -238,7 +238,7 @@ def compute_plots(  # noqa: PLR0914
     return results
 
 
-def _create_and_plot_figures(
+def _create_and_plot_figures(  # noqa: PLR0912
     metric_groups: list[list[Metric]],
     plot_results: Mapping[
         Algorithm[Network],

@@ -63,13 +63,13 @@ class FedAvg(FedAlgorithm):
         if self.num_local_epochs <= 0:
             raise ValueError("`num_local_epochs` must be positive")
 
-    def initialize(self, network: FedNetwork) -> None:  # noqa: D102
+    def initialize(self, network: FedNetwork) -> None:
         self.x0 = initial_states(self.x0, network)
         network.server().initialize(x=self.x0[network.server()])
         for client in network.clients():
             client.initialize(x=self.x0[client])
 
-    def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
+    def step(self, network: FedNetwork, iteration: int) -> None:
         selected_clients = self._selected_clients_for_round(network, iteration)
         if not selected_clients:
             return

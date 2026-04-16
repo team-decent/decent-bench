@@ -1,5 +1,4 @@
 import logging
-from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -17,7 +16,7 @@ from decent_bench.utils._metric_helpers import _flatten_plot_metrics
 from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:
-    from decent_bench.distributed_algorithms import Algorithm
+    from decent_bench.algorithms import Algorithm
     from decent_bench.networks import Network
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
@@ -57,8 +56,8 @@ def display_metrics(  # noqa: PLR0912
             If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
             metrics will be grouped and plotted in their own figure with subplots.
         algorithms: algorithms to display. If provided, only these algorithms are included in tables and plots.
-            Entries can be :class:`~decent_bench.distributed_algorithms.Algorithm` objects or strings
-            (matching :attr:`~decent_bench.distributed_algorithms.Algorithm.name`).
+            Entries can be :class:`~decent_bench.algorithms.Algorithm` objects or strings
+            (matching :attr:`~decent_bench.algorithms.Algorithm.name`).
             Defaults to ``None`` which displays all algorithms in the metrics_result.
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         plot_grid: whether to show grid lines on the plots
@@ -129,9 +128,13 @@ def display_metrics(  # noqa: PLR0912
             raise ValueError("No metrics result found in checkpoint manager to display")
 
     # filter `metrics_result` based on `plot_metrics`, `table_metrics`, and `algorithms` (if provided)
-    # TODO: UPDATE THIS FOR THE NEW ALGORITHM FILTERING
-    prev_table_metrics = metrics_result.table_metrics
-    prev_plot_metrics = metrics_result.plot_metrics
+    prev_values = {
+        "agent_metrics": metrics_result.agent_metrics,
+        "table_results": metrics_result.table_results,
+        "plot_results": metrics_result.plot_results,
+        "table_metrics": metrics_result.table_metrics,
+        "plot_metrics": metrics_result.plot_metrics,
+    }
 
     if table_metrics is not None:
         metrics_result.table_metrics = _get_new_table_metrics(metrics_result, table_metrics)
@@ -167,7 +170,7 @@ def display_metrics(  # noqa: PLR0912
         display_tables(metrics_result, table_fmt=table_fmt, scale_compute=scale_compute, table_path=save_path)
     else:
         LOGGER.warning("No table metrics to display, skipping tables")
-    
+
     if metrics_result.plot_metrics:
         display_plots(
             metrics_result,
@@ -183,8 +186,9 @@ def display_metrics(  # noqa: PLR0912
     else:
         LOGGER.warning("No plot metrics to display, skipping plots")
 
-    metrics_result.table_metrics = prev_table_metrics
-    metrics_result.plot_metrics = prev_plot_metrics
+    for attribute, prev_value in prev_values.items():
+        setattr(metrics_result, attribute, prev_value)
+
 
 def _filter_algorithms(
     metrics_result: MetricResult,
@@ -209,6 +213,7 @@ def _filter_algorithms(
             )
 
     return metrics_result
+
 
 def _get_new_table_metrics(
     metrics_result: MetricResult,

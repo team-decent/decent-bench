@@ -652,8 +652,8 @@ class CheckpointManager:  # noqa: PLR0904
             skip_agent_metrics: If True, do not attempt to load agent metrics from the benchmark
                 result if they are not present in the checkpoint. This can save time if agent metrics
                 are not needed for the intended analysis, which can be useful for automatic analysis.
-                Agent metrics are needed for :class:`ComputationalCost` and may be used if
-                :class:`EmpiricalRiskCost` is used.
+                Agent metrics are needed for :class:`~decent_bench.metrics.ComputationalCost` and may be used if
+                :class:`~decent_bench.costs.EmpiricalRiskCost` is used.
 
         Returns:
             MetricsResult object containing the computed metrics.
@@ -667,7 +667,7 @@ class CheckpointManager:  # noqa: PLR0904
                 benchmark_result = self.load_benchmark_result()
                 resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
                 for alg, networks in benchmark_result.states.items():
-                    algorithms = metrics_result.table_results or metrics_result.plot_results or []
+                    algorithms = list(metrics_result.table_results or metrics_result.plot_results or [])
                     original_alg = next((a for a in algorithms if a.name == alg.name), None)
                     if original_alg is None:
                         LOGGER.warning(

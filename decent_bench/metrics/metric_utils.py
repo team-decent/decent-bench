@@ -44,8 +44,8 @@ class MetricProgressBar(Progress):
 def _clear_caches() -> None:
     """Clear module-level functools caches used by metric utilities."""
     x_mean.cache_clear()
-    x_error.cache_clear()
-    predict_agent.cache_clear()
+    _x_error.cache_clear()
+    _predict_agent.cache_clear()
 
 
 def single(values: Sequence[float]) -> float:
@@ -109,6 +109,7 @@ def _gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> f
     return float(la.norm(grad_avg)) ** 2
 
 
+@cache
 def _x_error(agent: AgentMetricsView, problem: "BenchmarkProblem", iteration: int = -1) -> float:
     r"""
     Calculate x error at *iteration* (or at the agent's final x if *iteration* is -1).
@@ -147,7 +148,8 @@ def _accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", i
         preds = _predict_agent(agent, iteration, problem)
         if np.any(~np.isfinite(preds)):
             LOGGER.warning(
-                "Predictions contain NaN or Inf values, which are not valid for Accuracy calculation, returning NaN for Accuracy"
+                "Predictions contain NaN or Inf values, which are not valid for Accuracy calculation, "
+                "returning NaN for Accuracy"
             )
             return [np.nan for _ in agents]
         ret.append(float(sk_metrics.accuracy_score(test_y, preds)))
@@ -204,7 +206,8 @@ def _precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", 
         preds = _predict_agent(agent, iteration, problem)
         if np.any(~np.isfinite(preds)):
             LOGGER.warning(
-                "Predictions contain NaN or Inf values, which are not valid for Precision calculation, returning NaN for Precision"
+                "Predictions contain NaN or Inf values, which are not valid for Precision calculation, "
+                "returning NaN for Precision"
             )
             return [np.nan for _ in agents]
         ret.append(float(sk_metrics.precision_score(test_y, preds, average="micro")))
@@ -233,7 +236,8 @@ def _recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", ite
         preds = _predict_agent(agent, iteration, problem)
         if np.any(~np.isfinite(preds)):
             LOGGER.warning(
-                "Predictions contain NaN or Inf values, which are not valid for Recall calculation, returning NaN for Recall"
+                "Predictions contain NaN or Inf values, which are not valid for Recall calculation,"
+                " returning NaN for Recall"
             )
             return [np.nan for _ in agents]
         ret.append(float(sk_metrics.recall_score(test_y, preds, average="micro")))

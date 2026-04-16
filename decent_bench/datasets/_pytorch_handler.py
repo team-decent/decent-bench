@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from functools import cached_property
 import random
 from collections import defaultdict
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, cast
 
 import decent_bench.utils.interoperability as iop
@@ -112,7 +112,7 @@ class PyTorchDatasetHandler(DatasetHandler):
 
         Can be used for evaluation on the full dataset or creation of test datasets.
         """
-        return cast("Dataset", list(TorchConcatDataset(self.get_partitions())))  # type: ignore[arg-type]
+        return cast("Dataset", list(TorchConcatDataset(self.get_partitions())))  # type: ignore[arg-type, call-overload]
 
     def get_partitions(self) -> list[Dataset]:
         """
@@ -170,7 +170,7 @@ class PyTorchDatasetHandler(DatasetHandler):
         """
         # Group indices by class in a single pass
         class_to_indices: dict[int, list[int]] = defaultdict(list)
-        for idx, (_, label) in enumerate(self.torch_dataset):
+        for idx, (_, label) in enumerate(cast("list[tuple[torch.Tensor, int | torch.Tensor]]", self.torch_dataset)):
             label_key = int(label.item()) if isinstance(label, torch.Tensor) else int(label)
             if label_key in class_to_indices or len(class_to_indices) < (
                 self.n_partitions * self.targets_per_partition
