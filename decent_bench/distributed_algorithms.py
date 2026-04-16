@@ -172,12 +172,11 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     selection_scheme: ClientSelectionScheme | None = None
     _DEFAULT_SELECTION_SCHEME: Final[object] = object()
     client_weights: ClientWeights | None = None
-    """Server aggregation weights.
-
-    If ``aggregate(..., client_weights=...)`` is given an explicit value, that value is used for that call.
-    Otherwise ``self.client_weights`` is used. If the resolved value is ``None``, weights are inferred from client
-    data size via :func:`decent_bench.utils.algorithm_helpers.infer_client_weight`.
-    """
+    #: Server aggregation weights.
+    #:
+    #: If ``aggregate(..., client_weights=...)`` is given an explicit value, that value is used for that call.
+    #: Otherwise ``self.client_weights`` is used. If the resolved value is ``None``, weights are inferred from client
+    #: data size via :func:`decent_bench.utils.algorithm_helpers.infer_client_weight`.
     CLIENT_WEIGHTS_UNSET: Final[object] = object()
 
     def _cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
@@ -306,7 +305,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
 @dataclass(eq=False)
 class FedAvg(FedAlgorithm):
     r"""
-    Federated Averaging (FedAvg) with local SGD epochs.
+    Federated Averaging (FedAvg) with local SGD epochs :footcite:p:`Alg_FedAvg`.
 
     .. math::
         \mathbf{x}_{i, k}^{(t+1)} = \mathbf{x}_{i, k}^{(t)} - \eta \nabla f_i(\mathbf{x}_{i, k}^{(t)})
@@ -323,6 +322,8 @@ class FedAvg(FedAlgorithm):
     preserve the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use client-side mini-batches of size
     :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; generic cost wrappers
     fall back to full-gradient local updates.
+
+    .. footbibliography::
     """
 
     # C=0.1; batch size= inf/10/50 (dataset sizes are bigger; normally 1/10 of the total dataset).
@@ -388,7 +389,7 @@ class FedAvg(FedAlgorithm):
 @dataclass(eq=False)
 class FedProx(FedAlgorithm):
     r"""
-    Federated Proximal (FedProx) with local SGD epochs.
+    Federated Proximal (FedProx) with local SGD epochs :footcite:p:`Alg_FedProx`.
 
     Each client solves a proximalized local subproblem around the round's server model:
 
@@ -413,6 +414,8 @@ class FedProx(FedAlgorithm):
     :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
     :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; for generic costs,
     local updates use full-batch gradients.
+
+    .. footbibliography::
     """
 
     iterations: int = 100
@@ -477,10 +480,10 @@ class FedProx(FedAlgorithm):
 
 
 @tags("federated")
-@dataclass(eq=False, init=False)
+@dataclass(eq=False)
 class Scaffold(FedAlgorithm):
     r"""
-    SCAFFOLD with client/server control variates for variance-reduced local training.
+    SCAFFOLD with client/server control variates for variance-reduced local training :footcite:p:`Alg_SCAFFOLD`.
 
     When the server control variate :math:`\mathbf{c}` and all client control variates :math:`\mathbf{c}_i`
     are zero, the local updates reduce to :class:`FedAvg <decent_bench.distributed_algorithms.FedAvg>`.
@@ -505,7 +508,9 @@ class Scaffold(FedAlgorithm):
         \mathbf{c} \leftarrow \mathbf{c} + \frac{|S_k|}{N} \Delta \mathbf{c},
 
     where both aggregated deltas use the same resolved client weights within SCAFFOLD. By default, those weights are
-    uniform across the selected clients; explicit overrides can still use custom or inferred data-size weights.
+    uniform across the selected clients; explicit overrides can still use custom weights.
+
+    .. footbibliography::
     """
 
     iterations: int = 100
@@ -513,12 +518,10 @@ class Scaffold(FedAlgorithm):
     num_local_epochs: int = 1
     server_step_size: float = 1.0
     client_weights: ClientWeights | None = None
-    """Server aggregation weights for SCAFFOLD.
-
-    Explicit weights passed to :meth:`aggregate` override this field. If this field is omitted at initialization,
-    SCAFFOLD defaults to uniform client weights. If this field is explicitly set to ``None``, data-size weights are
-    inferred instead.
-    """
+    #: Server aggregation weights for SCAFFOLD.
+    #:
+    #: Explicit weights passed to :meth:`aggregate` override this field. Otherwise ``self.client_weights`` is used. If
+    #: the resolved value is ``None``, SCAFFOLD defaults to uniform client weights.
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -528,33 +531,6 @@ class Scaffold(FedAlgorithm):
     _CONTROL_VARIATE_KEY: ClassVar[str] = "scaffold_control_variate"
     _SERVER_CONTROL_VARIATE_KEY: ClassVar[str] = "scaffold_server_control_variate"
     _CONTROL_VARIATE_DELTA_KEY: ClassVar[str] = "scaffold_control_variate_delta"
-    _use_uniform_client_weights_default: bool = field(init=False, repr=False, default=False)
-
-    def __init__(  # noqa: PLR0917
-        self,
-        iterations: int = 100,
-        step_size: float = 0.001,
-        num_local_epochs: int = 1,
-        server_step_size: float = 1.0,
-        client_weights: ClientWeights | object | None = FedAlgorithm.CLIENT_WEIGHTS_UNSET,
-        selection_scheme: ClientSelectionScheme | None = None,
-        x0: InitialStates = None,
-        name: str = "Scaffold",
-    ) -> None:
-        self.iterations = iterations
-        self.step_size = step_size
-        self.num_local_epochs = num_local_epochs
-        self.server_step_size = server_step_size
-        self.selection_scheme = (
-            UniformClientSelection(client_fraction=1.0) if selection_scheme is None else selection_scheme
-        )
-        self.x0 = x0
-        self.name = name
-        self._use_uniform_client_weights_default = client_weights is self.CLIENT_WEIGHTS_UNSET
-        self.client_weights = (
-            None if self._use_uniform_client_weights_default else cast("ClientWeights | None", client_weights)
-        )
-        self.__post_init__()
 
     def __post_init__(self) -> None:
         """
@@ -646,15 +622,14 @@ class Scaffold(FedAlgorithm):
         """
         Aggregate received SCAFFOLD client deltas at the server.
 
-        If ``client_weights`` is omitted, ``self.client_weights`` is used. When both are omitted, SCAFFOLD defaults to
-        uniform client weights to match the standard algorithm. Passing ``None`` explicitly still uses inferred
-        data-size weights. The standard SCAFFOLD participation correction still uses the fraction of clients that
-        contributed updates in the round.
+        If ``client_weights`` is omitted, ``self.client_weights`` is used. If the resolved value is ``None``,
+        SCAFFOLD defaults to uniform client weights to match the standard algorithm. The standard SCAFFOLD
+        participation correction still uses the fraction of clients that contributed updates in the round.
         """
         if client_weights is self.CLIENT_WEIGHTS_UNSET:
             client_weights = self.client_weights
-            if self._use_uniform_client_weights_default:
-                client_weights = {client.id: 1.0 for client in selected_clients}
+        if client_weights is None:
+            client_weights = {client.id: 1.0 for client in selected_clients}
 
         received_clients, updates, weights, total_weight = self._received_client_updates_and_weights(
             network, selected_clients, client_weights

@@ -54,16 +54,6 @@ class TrackingCost(Cost):
         return x
 
 
-class SizedTrackingCost(TrackingCost):
-    def __init__(self, gradient_value: float, n_samples: int):
-        super().__init__(gradient_value=gradient_value)
-        self._n_samples = n_samples
-
-    @property
-    def n_samples(self) -> int:
-        return self._n_samples
-
-
 class DropOnCalls(DropScheme):
     def __init__(self, dropped_calls: set[int]):
         self._dropped_calls = dropped_calls
@@ -150,7 +140,7 @@ def test_scaffold_persists_control_variates_and_uses_weighted_server_aggregation
     np.testing.assert_allclose(clients[1].aux_vars[algorithm._CONTROL_VARIATE_KEY], np.array([3.0]))
 
 
-def test_scaffold_client_weight_resolution_supports_uniform_explicit_and_inferred_modes() -> None:
+def test_scaffold_client_weight_resolution_supports_uniform_and_explicit_modes() -> None:
     default_algorithm = Scaffold(iterations=1, step_size=1.0, num_local_epochs=1)
     weighted_algorithm = Scaffold(
         iterations=1,
@@ -158,25 +148,18 @@ def test_scaffold_client_weight_resolution_supports_uniform_explicit_and_inferre
         num_local_epochs=1,
         client_weights={0: 3.0, 1: 1.0},
     )
-    inferred_algorithm = Scaffold(iterations=1, step_size=1.0, num_local_epochs=1, client_weights=None)
     aggregate_override_algorithm = Scaffold(iterations=1, step_size=1.0, num_local_epochs=1)
-    default_network = FedNetwork(clients=[Agent(0, SizedTrackingCost(1.0, 2)), Agent(1, SizedTrackingCost(3.0, 8))])
-    weighted_network = FedNetwork(clients=[Agent(0, SizedTrackingCost(1.0, 2)), Agent(1, SizedTrackingCost(3.0, 8))])
-    inferred_network = FedNetwork(clients=[Agent(0, SizedTrackingCost(1.0, 2)), Agent(1, SizedTrackingCost(3.0, 8))])
-    aggregate_override_network = FedNetwork(
-        clients=[Agent(0, SizedTrackingCost(1.0, 2)), Agent(1, SizedTrackingCost(3.0, 8))]
-    )
+    default_network = FedNetwork(clients=[Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))])
+    weighted_network = FedNetwork(clients=[Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))])
+    aggregate_override_network = FedNetwork(clients=[Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))])
 
     default_algorithm.initialize(default_network)
     weighted_algorithm.initialize(weighted_network)
-    inferred_algorithm.initialize(inferred_network)
     aggregate_override_algorithm.initialize(aggregate_override_network)
     default_network._step(0)  # noqa: SLF001
     weighted_network._step(0)  # noqa: SLF001
-    inferred_network._step(0)  # noqa: SLF001
     default_algorithm.step(default_network, 0)
     weighted_algorithm.step(weighted_network, 0)
-    inferred_algorithm.step(inferred_network, 0)
 
     override_clients = aggregate_override_network.clients()
     aggregate_override_network.send(
@@ -187,24 +170,21 @@ def test_scaffold_client_weight_resolution_supports_uniform_explicit_and_inferre
     )
     override_clients[0].aux_vars[aggregate_override_algorithm._CONTROL_VARIATE_DELTA_KEY] = np.array([1.0])
     override_clients[1].aux_vars[aggregate_override_algorithm._CONTROL_VARIATE_DELTA_KEY] = np.array([3.0])
-    aggregate_override_algorithm.aggregate(aggregate_override_network, override_clients, client_weights=None)
+    aggregate_override_algorithm.aggregate(aggregate_override_network, override_clients)
 
     np.testing.assert_allclose(default_network.server().x, np.array([-2.0]))
-    np.testing.assert_allclose(default_network.server().aux_vars[default_algorithm._CONTROL_VARIATE_KEY], np.array([2.0]))
+    np.testing.assert_allclose(
+        default_network.server().aux_vars[default_algorithm._CONTROL_VARIATE_KEY], np.array([2.0])
+    )
     np.testing.assert_allclose(weighted_network.server().x, np.array([-1.5]))
     np.testing.assert_allclose(
         weighted_network.server().aux_vars[weighted_algorithm._CONTROL_VARIATE_KEY],
         np.array([1.5]),
     )
-    np.testing.assert_allclose(inferred_network.server().x, np.array([-2.6]))
-    np.testing.assert_allclose(
-        inferred_network.server().aux_vars[inferred_algorithm._CONTROL_VARIATE_KEY],
-        np.array([2.6]),
-    )
-    np.testing.assert_allclose(aggregate_override_network.server().x, np.array([-2.6]))
+    np.testing.assert_allclose(aggregate_override_network.server().x, np.array([-2.0]))
     np.testing.assert_allclose(
         aggregate_override_network.server().aux_vars[aggregate_override_algorithm._CONTROL_VARIATE_KEY],
-        np.array([2.6]),
+        np.array([2.0]),
     )
 
 

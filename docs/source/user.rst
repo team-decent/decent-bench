@@ -135,10 +135,8 @@ order, but its default differs to match the standard SCAFFOLD algorithm:
 
 1. An explicit value passed to ``aggregate(..., client_weights=...)`` is used.
 2. Otherwise ``self.client_weights`` is used.
-3. If ``client_weights`` was omitted when constructing ``Scaffold``, uniform
-   client weights are used by default.
-4. If ``client_weights=None`` is passed explicitly, weights are inferred from
-   client data size.
+3. If the resolved value is ``None``, uniform client weights are used by
+   default.
 
 Custom weights can be passed either as a dictionary keyed by client id or as a
 sequence indexed by client id.
