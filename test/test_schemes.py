@@ -310,4 +310,4 @@ def test_topk_compression_on_multi_dimensional_message() -> None:
     scheme = TopK(k=0.5)
     compressed_message = scheme.compress(message)
 
-    assert np.testing.assert_array_equal(compressed_message, Array(np.array([[1.0, 0.5], [0.0, 0.0]])))
+    np.testing.assert_array_equal(compressed_message, Array(np.array([[1.0, 0.5], [0.0, 0.0]])))

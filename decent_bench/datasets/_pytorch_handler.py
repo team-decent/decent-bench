@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from functools import cached_property
 import random
 from collections import defaultdict
-from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, cast
 
 import decent_bench.utils.interoperability as iop
@@ -90,7 +90,7 @@ class PyTorchDatasetHandler(DatasetHandler):
             # Set the new number of used targets
             self._n_targets = self.n_partitions * self.targets_per_partition
 
-    @property
+    @cached_property
     def n_samples(self) -> int:
         return len(self.get_datapoints())
 
@@ -111,12 +111,6 @@ class PyTorchDatasetHandler(DatasetHandler):
         Return all datapoints in the dataset.
 
         Can be used for evaluation on the full dataset or creation of test datasets.
-
-        Warning:
-            This method will load the entire dataset into memory. If :prop:`samples_per_partition` *
-            :prop:`n_partitions` is large then this might lead to out-of-memory issues if the underlying
-            PyTorch dataset contains large tensors.
-
         """
         return cast("Dataset", list(TorchConcatDataset(self.get_partitions())))  # type: ignore[arg-type]
 
