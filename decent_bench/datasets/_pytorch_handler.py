@@ -15,6 +15,8 @@ if TYPE_CHECKING:
     import torch
 
 try:
+    import torch
+    from torch.utils.data import ConcatDataset as TorchConcatDataset
     from torch.utils.data import Subset as TorchSubset
     from torch.utils.data import random_split as torch_random_split
 
@@ -90,7 +92,7 @@ class PyTorchDatasetHandler(DatasetHandler):
 
     @property
     def n_samples(self) -> int:
-        return len(self.torch_dataset)  # type: ignore[arg-type]
+        return len(self.get_datapoints())
 
     @property
     def n_partitions(self) -> int:
@@ -105,7 +107,18 @@ class PyTorchDatasetHandler(DatasetHandler):
         return self._n_targets
 
     def get_datapoints(self) -> Dataset:
-        return cast("Dataset", self.torch_dataset)
+        """
+        Return all datapoints in the dataset.
+
+        Can be used for evaluation on the full dataset or creation of test datasets.
+
+        Warning:
+            This method will load the entire dataset into memory. If :prop:`samples_per_partition` *
+            :prop:`n_partitions` is large then this might lead to out-of-memory issues if the underlying
+            PyTorch dataset contains large tensors.
+
+        """
+        return cast("Dataset", list(TorchConcatDataset(self.get_partitions())))  # type: ignore[arg-type]
 
     def get_partitions(self) -> list[Dataset]:
         """
@@ -134,17 +147,18 @@ class PyTorchDatasetHandler(DatasetHandler):
         return self._partitions
 
     def _random_split(self) -> list[Dataset]:
+        torch_dataset_len = len(self.torch_dataset)  # type: ignore[arg-type]
         if self.samples_per_partition is None:
             parts = [1 / self.n_partitions] * self.n_partitions
-        elif self.samples_per_partition * self.n_partitions <= self.n_samples:
+        elif self.samples_per_partition * self.n_partitions <= torch_dataset_len:
             parts = [self.samples_per_partition] * self.n_partitions
             # Add the remaining samples to the last partition and remove it
             # to ensure the sum is equal to the total number of samples for random_split
-            parts.append(self.n_samples - sum(parts))
+            parts.append(torch_dataset_len - sum(parts))
         else:
             raise ValueError(
                 f"samples_per_partition ({self.samples_per_partition}) * n_partitions ({self.n_partitions}) "
-                f"must be <= n_datapoints ({self.n_samples})"
+                f"must be <= datapoints in the torch dataset ({torch_dataset_len})"
             )
 
         partitions = cast(
@@ -162,14 +176,16 @@ class PyTorchDatasetHandler(DatasetHandler):
         """
         # Group indices by class in a single pass
         class_to_indices: dict[int, list[int]] = defaultdict(list)
-        for idx, sample in enumerate(cast("Iterable[Any]", self.torch_dataset)):
-            _, label = cast("tuple[Any, int]", sample)
-            if label in class_to_indices or len(class_to_indices) < (self.n_partitions * self.targets_per_partition):
-                class_to_indices[label].append(idx)
+        for idx, (_, label) in enumerate(self.torch_dataset):
+            label_key = int(label.item()) if isinstance(label, torch.Tensor) else int(label)
+            if label_key in class_to_indices or len(class_to_indices) < (
+                self.n_partitions * self.targets_per_partition
+            ):
+                class_to_indices[label_key].append(idx)
 
         # Create partitions from class-grouped indices
         idx_partitions = []
-        min_n_datapoints = int("inf")
+        min_n_datapoints = int(1e10)
         class_idxs = sorted(class_to_indices.keys())
         # Group classes for each partition
         class_idxs_groups = [

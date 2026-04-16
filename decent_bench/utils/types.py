@@ -39,7 +39,7 @@ Type variable for algorithms operating on a :class:`~decent_bench.networks.Netwo
 type InitialStates = Union["Array", "dict[Agent, Array]", None]  # noqa: TC008, UP007
 """
 Type alias for what can be passed to
-:func:`~decent_bench.utils.algorithm_helpers.initial_states`.
+:func:`~decent_bench.algorithms.utils.initial_states`.
 """
 
 ArrayKey: TypeAlias = SupportsIndex | slice | tuple[SupportsIndex | slice, ...]  # noqa: UP040
@@ -113,3 +113,4 @@ class SupportedDevices(Enum):
 
     CPU = "cpu"
     GPU = "gpu"
+    MPS = "mps"

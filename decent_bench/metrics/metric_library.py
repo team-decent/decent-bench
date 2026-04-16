@@ -9,6 +9,7 @@ import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
 from decent_bench import costs
 from decent_bench.agents import AgentMetricsView
+from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.metrics._metric import Metric
 
 if TYPE_CHECKING:
@@ -160,9 +161,6 @@ class ConsensusError(Metric):
     ) -> list[float]:
 
         x_mean = utils.x_mean(tuple(agents), iteration)
-
-        if iteration == -1:
-            return [float(iop.norm(x_mean - a.x_history[a.x_history.max()])) for a in agents]
         return [float(iop.norm(x_mean - a.x_history[iteration])) for a in agents]
 
 
@@ -613,11 +611,45 @@ class Recall(Metric):
         return utils._recall(agents, problem, iteration)  # noqa: SLF001
 
 
+class Loss(Metric):
+    r"""
+    Loss of the agents' predictions.
+
+    Table:
+        Loss of the agents' final x.
+
+    Plot:
+        Loss (y-axis) per iteration (x-axis).
+
+        Loss is calculated as the mean loss across agents, where each agent's loss is calculated using its
+        recorded x at that iteration.
+
+    """
+
+    table_description: str = "loss"
+    plot_description: str = "loss"
+    can_diverge: bool = False
+
+    def get_data_from_trial(  # noqa: D102
+        self,
+        agents: Sequence[AgentMetricsView],
+        _: "BenchmarkProblem",
+        iteration: int,
+    ) -> list[float]:
+        return [
+            a.cost.function(a.x_history[iteration], indices="all")
+            if isinstance(a.cost, EmpiricalRiskCost)
+            else a.cost.function(a.x_history[iteration])
+            for a in agents
+        ]
+
+
 DEFAULT_TABLE_METRICS: list[Metric] = [
     Regret([utils.single]),
     GradientNorm([utils.single]),
     XError([min, np.average, max]),
     ConsensusError([min, np.average, max]),
+    Loss([min, np.average, max]),
     XUpdates([np.average, sum]),
     FunctionCalls([np.average, sum]),
     GradientCalls([np.average, sum]),
@@ -632,6 +664,7 @@ DEFAULT_TABLE_METRICS: list[Metric] = [
 - :class:`GradientNorm` - :func:`~.metric_utils.single`
 - :class:`XError` - :func:`min`, :func:`~numpy.average`, :func:`max`
 - :class:`ConsensusError` - :func:`min`, :func:`~numpy.average`, :func:`max`
+- :class:`Loss` - :func:`min`, :func:`~numpy.average`, :func:`max`
 - :class:`XUpdates` - :func:`~numpy.average`, :func:`sum`
 - :class:`FunctionCalls` - :func:`~numpy.average`, :func:`sum`
 - :class:`GradientCalls` - :func:`~numpy.average`, :func:`sum`
@@ -673,11 +706,13 @@ DEFAULT_PLOT_METRICS: list[Metric] = [
     Regret([], x_log=False, y_log=True),
     GradientNorm([], x_log=False, y_log=True),
     ConsensusError([], x_log=False, y_log=True),
+    Loss([], x_log=False, y_log=False),
 ]
 """
 - :class:`Regret` (semi-log)
 - :class:`GradientNorm` (semi-log)
 - :class:`ConsensusError` (semi-log)
+- :class:`Loss` (linear)
 
 :meta hide-value:
 """

@@ -147,6 +147,18 @@ class Cost(ABC):  # noqa: PLR0904
         :meth:`~decent_bench.centralized_algorithms.proximal_solver`.
         """
 
+    def cleanup(self) -> None:
+        """
+        Release transient runtime caches owned by this cost instance.
+
+        Override this method in cost implementations to clear any auxiliary variables or caches that are not needed
+        after the cost has been used. This can help free up memory after its no longer needed. Make sure to not clear
+        any variables needed for future evaluations of the cost, gradient, hessian, or proximal methods. Make sure
+        that the cost instance remains fully functional after cleanup, as algorithms may be resumed for further
+        iterations after calling this method.
+        """
+        return
+
     def __add__(self, other: Cost) -> Cost:
         """
         Add another cost function to create a new one.

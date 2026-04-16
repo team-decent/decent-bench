@@ -239,7 +239,7 @@ def test_initialize_message_schemes_dict_used_in_send() -> None:
     net._message_noise = {agent: NoNoise() for agent in agents}
 
     msg = iop.zeros(shape=agents[0].cost.shape, framework=agents[0].cost.framework, device=agents[0].cost.device)
-    net._send_one(agents[0], agents[1], msg)
+    net.send(agents[0], agents[1], msg)
 
     # verify agent 0's compression scheme was called
     mock_schemes[agents[0]].compress.assert_called_once()

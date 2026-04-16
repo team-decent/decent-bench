@@ -3,6 +3,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from rich.status import Status
+
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.metrics import (
     ComputationalCost,
@@ -36,6 +38,7 @@ def display_metrics(  # noqa: PLR0912
     compare_iterations_and_computational_cost: bool = False,
     save_path: str | Path | None = None,
     plot_format: Literal["png", "pdf", "svg"] = "png",
+    show_plots: bool = True,
     log_level: int = logging.INFO,
 ) -> None:
     """
@@ -80,6 +83,8 @@ def display_metrics(  # noqa: PLR0912
             the provided ``save_path`` will be used. If neither a checkpoint manager or a save path is provided,
             the tables and plots are not saved to disk.
         plot_format: format to save plots in, defaults to ``png``. Can be ``png``, ``pdf``, or ``svg``.
+        show_plots: whether to show the plots after creating them, defaults to ``True``. Can be useful to set to
+            ``False`` when running in a non-interactive environment or when only saving the plots without displaying.
         log_level: minimum level to log, e.g. :data:`logging.INFO`
 
     Raises:
@@ -115,7 +120,8 @@ def display_metrics(  # noqa: PLR0912
                 "to load the metrics result from."
             )
         try:
-            metrics_result = checkpoint_manager.load_metrics_result()
+            with Status("Loading metrics result from checkpoint manager..."):
+                metrics_result = checkpoint_manager.load_metrics_result()
         except FileNotFoundError as e:
             raise FileNotFoundError(f"Metrics result file not found in checkpoint manager: {e}") from e
 
@@ -123,26 +129,28 @@ def display_metrics(  # noqa: PLR0912
             raise ValueError("No metrics result found in checkpoint manager to display")
 
     # filter `metrics_result` based on `plot_metrics`, `table_metrics`, and `algorithms` (if provided)
-    new_metrics_result = deepcopy(metrics_result)
+    # TODO: UPDATE THIS FOR THE NEW ALGORITHM FILTERING
+    prev_table_metrics = metrics_result.table_metrics
+    prev_plot_metrics = metrics_result.plot_metrics
 
     if table_metrics is not None:
-        new_metrics_result.table_metrics = _get_new_table_metrics(new_metrics_result, table_metrics)
+        metrics_result.table_metrics = _get_new_table_metrics(metrics_result, table_metrics)
 
     if plot_metrics is not None:
-        new_metrics_result.plot_metrics = _get_new_plot_metrics(new_metrics_result, plot_metrics)
+        metrics_result.plot_metrics = _get_new_plot_metrics(metrics_result, plot_metrics)
 
     if algorithms is not None:
-        new_metrics_result = _filter_algorithms(new_metrics_result, algorithms)
+        metrics_result = _filter_algorithms(metrics_result, algorithms)
 
     # check that filtering didn't empty out the displayable results
-    if algorithms is not None and not new_metrics_result.available_algorithms:
+    if algorithms is not None and not metrics_result.available_algorithms:
         raise ValueError(
             f"No algorithms remain after filtering. Requested algorithms not found in metrics result. "
             f"Available algorithms: {', '.join(metrics_result.available_algorithms)}"
         )
 
-    if (table_metrics is not None and not new_metrics_result.available_table_metrics) and (
-        plot_metrics is not None and not new_metrics_result.available_plot_metrics
+    if (table_metrics is not None and not metrics_result.available_table_metrics) and (
+        plot_metrics is not None and not metrics_result.available_plot_metrics
     ):
         raise ValueError(
             f"No table or plot metrics remain after filtering. "
@@ -155,14 +163,14 @@ def display_metrics(  # noqa: PLR0912
     elif save_path is None and checkpoint_manager is not None:
         save_path = checkpoint_manager.get_results_path()
 
-    if new_metrics_result.table_metrics:
-        display_tables(new_metrics_result, table_fmt=table_fmt, scale_compute=scale_compute, table_path=save_path)
+    if metrics_result.table_metrics:
+        display_tables(metrics_result, table_fmt=table_fmt, scale_compute=scale_compute, table_path=save_path)
     else:
         LOGGER.warning("No table metrics to display, skipping tables")
-
-    if new_metrics_result.plot_metrics:
+    
+    if metrics_result.plot_metrics:
         display_plots(
-            new_metrics_result,
+            metrics_result,
             computational_cost=computational_cost,
             scale_x_axis=scale_x_axis,
             compare_iterations_and_computational_cost=compare_iterations_and_computational_cost,
@@ -170,10 +178,13 @@ def display_metrics(  # noqa: PLR0912
             plot_grid=plot_grid,
             plot_format=plot_format,
             plot_path=save_path,
+            show_plots=show_plots,
         )
     else:
         LOGGER.warning("No plot metrics to display, skipping plots")
 
+    metrics_result.table_metrics = prev_table_metrics
+    metrics_result.plot_metrics = prev_plot_metrics
 
 def _filter_algorithms(
     metrics_result: MetricResult,
@@ -198,7 +209,6 @@ def _filter_algorithms(
             )
 
     return metrics_result
-
 
 def _get_new_table_metrics(
     metrics_result: MetricResult,

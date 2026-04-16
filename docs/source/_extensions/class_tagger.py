@@ -15,7 +15,7 @@ Configuration (conf.py)
 Add the modules to scan::
 
     tagged_list_modules = [
-        "decent_bench.distributed_algorithms",
+        "decent_bench.algorithms.decentralized",
         "decent_bench.costs",
     ]
 """
@@ -66,14 +66,12 @@ def _discover_tagged_classes(module_names: list[str]) -> list[dict[str, Any]]:
             if not tags:
                 continue
 
-            results.append(
-                {
-                    "name": obj.__name__,
-                    "qualname": f"{obj.__module__}.{obj.__qualname__}",
-                    "module": obj.__module__,
-                    "tags": tags,
-                }
-            )
+            results.append({
+                "name": obj.__name__,
+                "qualname": f"{obj.__module__}.{obj.__qualname__}",
+                "module": obj.__module__,
+                "tags": tags,
+            })
 
     return results
 
@@ -182,9 +180,7 @@ def _resolve_tagged_nodes(app: Sphinx, doctree: nodes.document, docname: str) ->
         module_filter: str = node["module"]
 
         matching = [
-            c for c in _CLASS_CACHE
-            if tag in c["tags"]
-            and (not module_filter or c["module"].startswith(module_filter))
+            c for c in _CLASS_CACHE if tag in c["tags"] and (not module_filter or c["module"].startswith(module_filter))
         ]
 
         if not matching:

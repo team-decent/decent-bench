@@ -6,13 +6,15 @@ import pytest
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
+from decent_bench.algorithms import Algorithm
+from decent_bench.algorithms.decentralized import ADMM, ATC, DGD
+from decent_bench.algorithms.federated import FedAvg
 from decent_bench.benchmark import (
     BenchmarkProblem,
     benchmark,
     create_classification_problem,
 )
 from decent_bench.costs import LogisticRegressionCost, PyTorchCost
-from decent_bench.distributed_algorithms import ADMM, ATC, DGD, Algorithm, FedAvg
 from decent_bench.networks import FedNetwork, P2PNetwork
 from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
 
