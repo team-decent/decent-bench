@@ -1,14 +1,14 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Final, cast, final
+from typing import TYPE_CHECKING, Any, ClassVar, Final, cast, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
-from decent_bench.utils.types import InitialStates
+from decent_bench.utils.types import AgentWeightMap, InitialStates
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -189,6 +189,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
             return list(active_clients)
         return self.selection_scheme.select(active_clients, iteration)
 
+
 @tags("federated")
 @dataclass(eq=False)
 class FedAvg(FedAlgorithm):
@@ -219,8 +220,8 @@ class FedAvg(FedAlgorithm):
     iterations: int = 100
     step_size: float = 0.001
     num_local_epochs: int = 1
-    client_weights: dict["Agent", float] | None = None
-    _CLIENT_WEIGHTS_UNSET: Final[object] = object()
+    client_weights: AgentWeightMap | None = None
+    _CLIENT_WEIGHTS_UNSET: ClassVar[object] = object()
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -270,7 +271,7 @@ class FedAvg(FedAlgorithm):
     def _weights_for_clients(
         cls,
         clients: Sequence["Agent"],
-        client_weights: dict["Agent", float] | None,
+        client_weights: AgentWeightMap | None,
     ) -> list[float]:
         if client_weights is None:
             weights = [alg_helpers.infer_client_weight(client) for client in clients]
@@ -288,7 +289,7 @@ class FedAvg(FedAlgorithm):
         self,
         network: FedNetwork,
         selected_clients: Sequence["Agent"],
-        client_weights: dict["Agent", float] | object | None = _CLIENT_WEIGHTS_UNSET,
+        client_weights: AgentWeightMap | object | None = _CLIENT_WEIGHTS_UNSET,
     ) -> tuple[list["Agent"], list["Array"], list[float], float]:
         """
         Collect received client messages and their aggregation weights for the current round.
@@ -305,7 +306,7 @@ class FedAvg(FedAlgorithm):
         if not received_clients:
             return [], [], [], 0.0
         updates = [server.messages[client] for client in received_clients]
-        weights = self._weights_for_clients(received_clients, cast('dict["Agent", float] | None', client_weights))
+        weights = self._weights_for_clients(received_clients, cast("AgentWeightMap | None", client_weights))
         total_weight = sum(weights)
         if total_weight <= 0:
             raise ValueError("Sum of client weights must be positive")
@@ -315,7 +316,7 @@ class FedAvg(FedAlgorithm):
         self,
         network: FedNetwork,
         selected_clients: Sequence["Agent"],
-        client_weights: dict["Agent", float] | object | None = _CLIENT_WEIGHTS_UNSET,
+        client_weights: AgentWeightMap | object | None = _CLIENT_WEIGHTS_UNSET,
     ) -> None:
         """
         Aggregate client updates at the server.
@@ -383,8 +384,8 @@ class FedProx(FedAlgorithm):
     step_size: float = 0.001
     num_local_epochs: int = 1
     mu: float = 0.01
-    client_weights: dict["Agent", float] | None = None
-    _CLIENT_WEIGHTS_UNSET: Final[object] = object()
+    client_weights: AgentWeightMap | None = None
+    _CLIENT_WEIGHTS_UNSET: ClassVar[object] = object()
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -436,7 +437,7 @@ class FedProx(FedAlgorithm):
     def _weights_for_clients(
         cls,
         clients: Sequence["Agent"],
-        client_weights: dict["Agent", float] | None,
+        client_weights: AgentWeightMap | None,
     ) -> list[float]:
         if client_weights is None:
             weights = [alg_helpers.infer_client_weight(client) for client in clients]
@@ -454,7 +455,7 @@ class FedProx(FedAlgorithm):
         self,
         network: FedNetwork,
         selected_clients: Sequence["Agent"],
-        client_weights: dict["Agent", float] | object | None = _CLIENT_WEIGHTS_UNSET,
+        client_weights: AgentWeightMap | object | None = _CLIENT_WEIGHTS_UNSET,
     ) -> tuple[list["Agent"], list["Array"], list[float], float]:
         """
         Collect received client messages and their aggregation weights for the current round.
@@ -471,7 +472,7 @@ class FedProx(FedAlgorithm):
         if not received_clients:
             return [], [], [], 0.0
         updates = [server.messages[client] for client in received_clients]
-        weights = self._weights_for_clients(received_clients, cast('dict["Agent", float] | None', client_weights))
+        weights = self._weights_for_clients(received_clients, cast("AgentWeightMap | None", client_weights))
         total_weight = sum(weights)
         if total_weight <= 0:
             raise ValueError("Sum of client weights must be positive")
@@ -481,7 +482,7 @@ class FedProx(FedAlgorithm):
         self,
         network: FedNetwork,
         selected_clients: Sequence["Agent"],
-        client_weights: dict["Agent", float] | object | None = _CLIENT_WEIGHTS_UNSET,
+        client_weights: AgentWeightMap | object | None = _CLIENT_WEIGHTS_UNSET,
     ) -> None:
         """
         Aggregate client updates at the server.
@@ -656,6 +657,7 @@ class Scaffold(FedAlgorithm):
         network: FedNetwork,
         selected_clients: Sequence["Agent"],
     ) -> None:
+        """Aggregate received SCAFFOLD client deltas using uniform averaging."""
         server = network.server()
         received_clients = [client for client in selected_clients if client in server.messages]
         if not received_clients:

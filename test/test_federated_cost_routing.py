@@ -194,8 +194,8 @@ def _run_federated_local_update(
     aux_vars = None
     if isinstance(algorithm, Scaffold):
         aux_vars = {
-            algorithm._CONTROL_VARIATE_KEY: np.zeros(cost.shape, dtype=float),
-            algorithm._SERVER_CONTROL_VARIATE_KEY: np.zeros(cost.shape, dtype=float),
+            "c_i": np.zeros(cost.shape, dtype=float),
+            "c": np.zeros(cost.shape, dtype=float),
         }
     client.initialize(x=np.zeros(cost.shape, dtype=float), aux_vars=aux_vars)
     server.initialize(x=np.zeros(cost.shape, dtype=float))

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, SupportsIndex, TypeAlias, TypeVar, Union
 
@@ -40,6 +39,11 @@ type InitialStates = Union["Array", "dict[Agent, Array]", None]  # noqa: TC008, 
 """
 Type alias for what can be passed to
 :func:`~decent_bench.utils.algorithm_helpers.initial_states`.
+"""
+
+type AgentWeightMap = dict["Agent", float]  # noqa: TC008
+"""
+Type alias for per-client aggregation weights keyed by :class:`~decent_bench.agents.Agent`.
 """
 
 ArrayKey: TypeAlias = SupportsIndex | slice | tuple[SupportsIndex | slice, ...]  # noqa: UP040
