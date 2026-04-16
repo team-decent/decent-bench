@@ -89,6 +89,7 @@ class Solver(ABC):
         if hyperparams:
             for k, v in hyperparams.items():
                 setattr(self, k, v)
+            self.hyperparams = hyperparams
 
     @abstractmethod
     def step(self, iteration: int) -> None:
@@ -109,6 +110,7 @@ class Solver(ABC):
         max_iter: int = 100,
         stop_tol: float | None = None,
         max_tol: float | None = None,
+        check_frequency: float = 0.01,
         show_progress: bool = True,
     ) -> Array:
         """
@@ -123,6 +125,9 @@ class Solver(ABC):
                       Must be positive if provided.
             max_tol: optional final tolerance; raises RuntimeError if ``norm(x_new - x_old) > max_tol`` after
                       max_iter iterations. Must be positive if provided.
+            check_frequency: float in (0, 1] defining how often the early stopping condition should be checked.
+                      A smaller value means that the stopping condition is checked more often.
+                      This applies only if ``stop_tol`` is not None.
             show_progress: whether to display a progress bar during iteration. Defaults to True.
 
         Returns:
@@ -142,6 +147,9 @@ class Solver(ABC):
             raise ValueError("`stop_tol` must be positive or None")
         if max_tol is not None and max_tol <= 0:
             raise ValueError("`max_tol` must be positive or None")
+        if check_frequency <= 0 or check_frequency > 1:
+            raise ValueError("`check_frequency` must be a float in (0, 1]")
+        check_every = max(1, int(check_frequency * max_iter))
 
         delta = np.inf
         for k in track(
@@ -152,9 +160,10 @@ class Solver(ABC):
         ):
             self.x_old = iop.copy(self.x)
             self.step(k)
-            delta = float(iop.norm(self.x - self.x_old))
-            if stop_tol is not None and delta <= stop_tol:
-                break
+            if stop_tol is not None and k % check_every == 0:
+                delta = float(iop.norm(self.x - self.x_old))
+                if delta <= stop_tol:
+                    break
 
         if max_tol is not None and delta > max_tol:
             raise RuntimeError(
@@ -178,24 +187,13 @@ class GradientDescent(Solver):
         if callable(step_size):
             step_size_k: Callable[[int], float] = step_size
         elif isinstance(step_size, float):
-
-            def step_size_k(_: int) -> float:
-                return float(step_size)
-
+            step_size_k = lambda _: float(step_size)  # noqa: E731
         elif np.isnan(cost.m_smooth) or np.isinf(cost.m_smooth) or np.isnan(cost.m_cvx):  # non-smooth or non-convex
-
-            def step_size_k(k: int) -> float:
-                return float(1 / np.sqrt(k + 1))
-
+            step_size_k = lambda k: float(1 / np.sqrt(k + 1))  # noqa: E731
         elif cost.m_cvx > 0:  # strongly convex
-
-            def step_size_k(_: int) -> float:
-                return 2 / (cost.m_smooth + cost.m_cvx)
-
+            step_size_k = lambda _: 2 / (cost.m_smooth + cost.m_cvx)  # noqa: E731
         else:  # convex
-
-            def step_size_k(_: int) -> float:
-                return 1 / cost.m_smooth
+            step_size_k = lambda _: 1 / cost.m_smooth  # noqa: E731
 
         super().__init__(cost, {"step_size": step_size_k}, x0)
 
@@ -227,21 +225,13 @@ class AcceleratedGradientDescent(Solver):
         if callable(momentum):
             momentum_k: Callable[[int], float] = momentum
         elif isinstance(momentum, float):
-
-            def momentum_k(_: int) -> float:
-                return float(momentum)
-
+            momentum_k = lambda _: float(momentum)  # noqa: E731
         elif cost.m_cvx > 0:  # strongly convex
-
-            def momentum_k(_: int) -> float:
-                return float(
-                    (np.sqrt(cost.m_smooth) - np.sqrt(cost.m_cvx)) / (np.sqrt(cost.m_smooth) + np.sqrt(cost.m_cvx))
-                )
-
+            momentum_k = lambda _: float(  # noqa: E731
+                (np.sqrt(cost.m_smooth) - np.sqrt(cost.m_cvx)) / (np.sqrt(cost.m_smooth) + np.sqrt(cost.m_cvx))
+            )
         else:
-
-            def momentum_k(k: int) -> float:
-                return k / (k + 3)
+            momentum_k = lambda k: k / (k + 3)  # noqa: E731
 
         super().__init__(cost, {"step_size": step_size, "momentum": momentum_k}, x0)
         self.y = iop.copy(self.x)
