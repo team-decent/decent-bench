@@ -65,7 +65,7 @@ def test_aggregation_uses_only_received_client_updates() -> None:
 
     network.send(sender=clients[0], receiver=network.server(), msg=np.array([3.0]))
 
-    algorithm.aggregate(network, clients, client_weights={0: 1.0, 1: 10.0})
+    algorithm.aggregate(network, clients, client_weights={clients[0]: 1.0, clients[1]: 10.0})
 
     np.testing.assert_allclose(network.server().x, np.array([3.0]))
 

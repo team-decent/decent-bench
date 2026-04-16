@@ -130,16 +130,12 @@ For :class:`~decent_bench.distributed_algorithms.FedAvg` and
 This means that leaving ``client_weights`` unspecified for FedAvg or FedProx
 defaults to data-size weighting.
 
-:class:`~decent_bench.distributed_algorithms.Scaffold` follows the same override
-order, but its default differs to match the standard SCAFFOLD algorithm:
+:class:`~decent_bench.distributed_algorithms.Scaffold` matches the standard
+SCAFFOLD algorithm and always uses uniform averaging over the selected clients.
+It does not expose configurable ``client_weights``.
 
-1. An explicit value passed to ``aggregate(..., client_weights=...)`` is used.
-2. Otherwise ``self.client_weights`` is used.
-3. If the resolved value is ``None``, uniform client weights are used by
-   default.
-
-Custom weights can be passed either as a dictionary keyed by client id or as a
-sequence indexed by client id.
+For algorithms that expose ``client_weights``, custom weights can be passed as
+a dictionary keyed by client.
 
 
 Available costs

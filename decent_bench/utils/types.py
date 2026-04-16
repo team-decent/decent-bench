@@ -55,12 +55,6 @@ Can be a list of integers, the string "all" for full dataset, the string "batch"
 or an integer specifying a single datapoint.
 """
 
-type ClientWeights = dict[int, float] | Sequence[float]
-"""
-Type alias for client weighting configuration.
-Use a dict keyed by client id, or a sequence indexed by client id.
-"""
-
 type EmpiricalRiskReduction = Literal["mean"] | None
 """
 Type alias for specifying reduction methods in empirical risk computations.
