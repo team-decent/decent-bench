@@ -73,23 +73,23 @@ class AugDGM(P2PAlgorithm):
         #     step 2: update state and compute new local gradient
         for i in network.active_agents():
             neighborhood_avg = self.W[i, i] * i.aux_vars["s"]
-            if len(i.messages) > 0:
-                s = iop.stack([self.W[i, j] * s_j for j, s_j in i.messages.items()])
-                neighborhood_avg += iop.sum(s, dim=0)
+            for j, s_j in i.messages.items():
+                neighborhood_avg += self.W[i, j] * s_j
             i.x = neighborhood_avg
             i.aux_vars["g_new"] = i.cost.gradient(i.x)
 
         # 2nd communication round
         #     step 1: transmit local gradient tracker
         for i in network.active_agents():
-            network.broadcast(i, i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
+            msg = i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"]
+            i.aux_vars["msg"] = msg
+            network.broadcast(i, msg)
 
         #     step 2: update y (global gradient estimator)
         for i in network.active_agents():
-            neighborhood_avg = self.W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
-            if len(i.messages) > 0:
-                s = iop.stack([self.W[i, j] * q_j for j, q_j in i.messages.items()])
-                neighborhood_avg += iop.sum(s, dim=0)
+            neighborhood_avg = self.W[i, i] * i.aux_vars["msg"]
+            for j, q_j in i.messages.items():
+                neighborhood_avg += self.W[i, j] * q_j
             i.aux_vars["y"] = neighborhood_avg
             i.aux_vars["g"] = i.aux_vars["g_new"]
 

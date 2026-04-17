@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import P2PNetwork
 from decent_bench.utils._tags import tags
@@ -62,9 +61,8 @@ class SimpleGT(P2PAlgorithm):
             i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
 
             neighborhood_avg = self.W[i, i] * i.x
-            if len(i.messages) > 0:
-                s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
-                neighborhood_avg += iop.sum(s, dim=0)
+            for j, x_j in i.messages.items():
+                neighborhood_avg += self.W[i, j] * x_j
 
             i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
             i.aux_vars["y"] = i.aux_vars["y_new"]

@@ -47,7 +47,7 @@ def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
             if iop.shape(v) != a.cost.shape:
                 raise ValueError(
                     f"Shape of initial state for agent {a} does not match cost shape: "
-                    f"expected {a.cost.shape}, got {iop.shape(x0)}"
+                    f"expected {a.cost.shape}, got {iop.shape(v)}"
                 )
             x0_by_id[a.id] = v
         x0s = {}
