@@ -1,17 +1,19 @@
 from typing import Any
 
 import numpy as np
+import pytest
 
 from decent_bench.agents import Agent
 from decent_bench.costs import Cost
-from decent_bench.distributed_algorithms import FedAvg
+from decent_bench.distributed_algorithms import FedAvg, FedProx
 from decent_bench.networks import FedNetwork
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
 class TrackingCost(Cost):
-    def __init__(self, gradient_value: float = 1.0):
+    def __init__(self, gradient_value: float = 1.0, *, n_samples: int | None = None):
         self._gradient = np.array([gradient_value], dtype=float)
+        self.n_samples = n_samples
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -59,19 +61,109 @@ def _make_fed_network(*costs: Cost) -> tuple[FedNetwork, list[Agent]]:
     return network, clients
 
 
-def test_aggregation_uses_only_received_client_updates() -> None:
-    algorithm = FedAvg(iterations=1, step_size=1.0)
+@pytest.mark.parametrize(
+    ("algorithm_cls", "kwargs"),
+    [
+        pytest.param(FedAvg, {"iterations": 1, "step_size": 1.0}, id="fedavg"),
+        pytest.param(FedProx, {"iterations": 1, "step_size": 1.0}, id="fedprox"),
+    ],
+)
+def test_aggregation_uses_only_received_client_updates(
+    algorithm_cls: type[FedAvg] | type[FedProx], kwargs: dict[str, float | int]
+) -> None:
+    algorithm = algorithm_cls(**kwargs)
     network, clients = _make_fed_network(TrackingCost(1.0), TrackingCost(2.0))
 
     network.send(sender=clients[0], receiver=network.server(), msg=np.array([3.0]))
 
-    algorithm.aggregate(network, clients, client_weights={clients[0]: 1.0, clients[1]: 10.0})
+    algorithm.aggregate(network, clients)
 
     np.testing.assert_allclose(network.server().x, np.array([3.0]))
 
 
-def test_aggregation_keeps_server_state_when_no_updates_are_received() -> None:
-    algorithm = FedAvg(iterations=1, step_size=1.0)
+@pytest.mark.parametrize(
+    ("algorithm_cls", "kwargs"),
+    [
+        pytest.param(FedAvg, {"iterations": 1, "step_size": 1.0}, id="fedavg"),
+        pytest.param(FedProx, {"iterations": 1, "step_size": 1.0}, id="fedprox"),
+    ],
+)
+def test_default_aggregation_is_uniform(
+    algorithm_cls: type[FedAvg] | type[FedProx], kwargs: dict[str, float | int]
+) -> None:
+    algorithm = algorithm_cls(**kwargs)
+    network, clients = _make_fed_network(
+        TrackingCost(gradient_value=1.0, n_samples=1),
+        TrackingCost(gradient_value=3.0, n_samples=3),
+    )
+
+    network.send(sender=clients[0], receiver=network.server(), msg=np.array([-1.0]))
+    network.send(sender=clients[1], receiver=network.server(), msg=np.array([-3.0]))
+
+    algorithm.aggregate(network, clients)
+
+    np.testing.assert_allclose(network.server().x, np.array([-2.0]))
+
+
+@pytest.mark.parametrize(
+    ("algorithm_cls", "kwargs"),
+    [
+        pytest.param(FedAvg, {"iterations": 1, "step_size": 1.0, "data_weighted": False}, id="fedavg"),
+        pytest.param(FedProx, {"iterations": 1, "step_size": 1.0, "data_weighted": False}, id="fedprox"),
+    ],
+)
+def test_explicit_false_aggregation_is_uniform(
+    algorithm_cls: type[FedAvg] | type[FedProx], kwargs: dict[str, float | int | bool]
+) -> None:
+    algorithm = algorithm_cls(**kwargs)
+    network, clients = _make_fed_network(
+        TrackingCost(gradient_value=1.0, n_samples=1),
+        TrackingCost(gradient_value=3.0, n_samples=3),
+    )
+
+    network.send(sender=clients[0], receiver=network.server(), msg=np.array([-1.0]))
+    network.send(sender=clients[1], receiver=network.server(), msg=np.array([-3.0]))
+
+    algorithm.aggregate(network, clients)
+
+    np.testing.assert_allclose(network.server().x, np.array([-2.0]))
+
+
+@pytest.mark.parametrize(
+    ("algorithm_cls", "kwargs"),
+    [
+        pytest.param(FedAvg, {"iterations": 1, "step_size": 1.0, "data_weighted": True}, id="fedavg"),
+        pytest.param(FedProx, {"iterations": 1, "step_size": 1.0, "data_weighted": True}, id="fedprox"),
+    ],
+)
+def test_data_weighted_aggregation_uses_inferred_client_data_sizes(
+    algorithm_cls: type[FedAvg] | type[FedProx], kwargs: dict[str, float | int | bool]
+) -> None:
+    algorithm = algorithm_cls(**kwargs)
+    network, clients = _make_fed_network(
+        TrackingCost(gradient_value=1.0, n_samples=1),
+        TrackingCost(gradient_value=3.0, n_samples=3),
+    )
+
+    network.send(sender=clients[0], receiver=network.server(), msg=np.array([-1.0]))
+    network.send(sender=clients[1], receiver=network.server(), msg=np.array([-3.0]))
+
+    algorithm.aggregate(network, clients)
+
+    np.testing.assert_allclose(network.server().x, np.array([-2.5]))
+
+
+@pytest.mark.parametrize(
+    ("algorithm_cls", "kwargs"),
+    [
+        pytest.param(FedAvg, {"iterations": 1, "step_size": 1.0}, id="fedavg"),
+        pytest.param(FedProx, {"iterations": 1, "step_size": 1.0}, id="fedprox"),
+    ],
+)
+def test_aggregation_keeps_server_state_when_no_updates_are_received(
+    algorithm_cls: type[FedAvg] | type[FedProx], kwargs: dict[str, float | int]
+) -> None:
+    algorithm = algorithm_cls(**kwargs)
     network, clients = _make_fed_network(TrackingCost(1.0), TrackingCost(2.0))
     network.server().x = np.array([7.0])
 

@@ -41,11 +41,6 @@ Type alias for what can be passed to
 :func:`~decent_bench.utils.algorithm_helpers.initial_states`.
 """
 
-type AgentWeightMap = dict["Agent", float]  # noqa: TC008
-"""
-Type alias for per-client aggregation weights keyed by :class:`~decent_bench.agents.Agent`.
-"""
-
 ArrayKey: TypeAlias = SupportsIndex | slice | tuple[SupportsIndex | slice, ...]  # noqa: UP040
 """
 Type alias for valid keys used to index into supported array types.

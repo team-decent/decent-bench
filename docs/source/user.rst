@@ -111,31 +111,24 @@ Federated
 FedProx extends FedAvg with a proximal coefficient ``mu``. Setting ``mu=0`` reduces
 FedProx to FedAvg.
 
-Client weights
-^^^^^^^^^^^^^^
-For federated algorithms, ``client_weights`` controls only how client updates are
-aggregated at the server. It does not change the optimization objective itself.
-If you want to optimize a weighted objective, scale the client costs in the
-problem definition instead of relying on aggregation weights.
+Federated aggregation
+^^^^^^^^^^^^^^^^^^^^^
+For the built-in federated algorithms, aggregation affects only how client
+updates are combined at the server. It does not change the optimization
+objective itself. If you want to optimize a weighted objective, scale the
+client costs in the problem definition instead of relying on aggregation.
 
-For :class:`~decent_bench.distributed_algorithms.FedAvg` and
-:class:`~decent_bench.distributed_algorithms.FedProx`, the resolution order is:
+:class:`~decent_bench.distributed_algorithms.FedAvg` and
+:class:`~decent_bench.distributed_algorithms.FedProx` support two aggregation
+modes:
 
-1. If ``aggregate(..., client_weights=...)`` is given an explicit value, that
-   value is used for that aggregation call.
-2. Otherwise the algorithm uses ``self.client_weights`` from initialization.
-3. If the resolved value is ``None``, weights are inferred from client data size
-   via :func:`~decent_bench.utils.algorithm_helpers.infer_client_weight`.
-
-This means that leaving ``client_weights`` unspecified for FedAvg or FedProx
-defaults to data-size weighting.
+1. Uniform averaging, which is the default.
+2. Data-size-weighted averaging by setting ``data_weighted=True``. In this mode,
+   weights are inferred from client data size via
+   :func:`~decent_bench.utils.algorithm_helpers.infer_client_weight`.
 
 :class:`~decent_bench.distributed_algorithms.Scaffold` matches the standard
 SCAFFOLD algorithm and always uses uniform averaging over the selected clients.
-It does not expose configurable ``client_weights``.
-
-For algorithms that expose ``client_weights``, custom weights can be passed as
-a dictionary keyed by client.
 
 
 Available costs
@@ -784,9 +777,9 @@ You can also inspect :attr:`~decent_bench.networks.Network.graph` to use Network
 In :class:`~decent_bench.networks.FedNetwork`, :meth:`~decent_bench.networks.Network.agents` and :meth:`~decent_bench.networks.Network.active_agents` refer to clients (the server is available via :attr:`~decent_bench.networks.FedNetwork.server`/ :attr:`~decent_bench.networks.FedNetwork.coordinator`).
 Federated networks enforce an always-available server: a custom server passed to :class:`~decent_bench.networks.FedNetwork` must use :class:`~decent_bench.schemes.AlwaysActive`, otherwise network construction raises ``ValueError``.
 The agents/clients lists are cached for efficiency, so the network graph should be treated as immutable after construction.
-Client weights (``client_weights``) are used only during aggregation and do not change the objective being optimized.
-If you want to optimize a weighted objective :math:`\min \sum_i w_i f_i(x)`, scale each local cost by ``w_i`` when
-defining the problem.
+Federated aggregation choices such as ``data_weighted`` affect only how client updates are combined at the server and
+do not change the objective being optimized. If you want to optimize a weighted objective :math:`\min \sum_i w_i f_i(x)`,
+scale each local cost by ``w_i`` when defining the problem.
 
 .. code-block:: python
 

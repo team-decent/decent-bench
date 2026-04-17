@@ -183,5 +183,5 @@ def infer_client_weight(client: "Agent") -> float:
         if n_samples is not None:
             return float(n_samples)
     raise ValueError(
-        "Cannot infer client data size. Provide client_weights to the algorithm or add a size attribute to the cost."
+        "Cannot infer client data size. Add a size attribute to the cost or use uniform aggregation instead."
     )

@@ -1,14 +1,14 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, ClassVar, Final, cast, final
+from typing import TYPE_CHECKING, Any, final
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
-from decent_bench.utils.types import AgentWeightMap, InitialStates
+from decent_bench.utils.types import InitialStates
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -162,7 +162,6 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     """Federated algorithm - clients collaborate via a central server."""
 
     selection_scheme: ClientSelectionScheme | None = None
-    _DEFAULT_SELECTION_SCHEME: Final[object] = object()
 
     def _cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
         return [network.server(), *network.clients()]
@@ -175,6 +174,12 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     def _client_reference_x(client: "Agent", server: "Agent") -> "Array":
         """Return the latest server model seen by the client, or fall back to the client's current model."""
         return iop.copy(client.messages.get(server, client.x))
+
+    @staticmethod
+    def _weighted_average(values: Sequence["Array"], weights: Sequence[float], total_weight: float) -> "Array":
+        """Compute a weighted average of same-shaped arrays."""
+        weighted_values = [value * weight for value, weight in zip(values, weights, strict=True)]
+        return iop.sum(iop.stack(weighted_values, dim=0), dim=0) / total_weight
 
     def _selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
         """
@@ -202,15 +207,22 @@ class FedAvg(FedAlgorithm):
     .. math::
         \mathbf{x}_{k+1} = \frac{1}{|S_k|} \sum_{i \in S_k} \mathbf{x}_{i, k}^{(E)}
 
+    If ``data_weighted=True``, the server instead aggregates with client data sizes :math:`n_i`:
+
+    .. math::
+        \mathbf{x}_{k+1} = \sum_{i \in S_k}
+        \frac{n_i}{\sum_{j \in S_k} n_j} \mathbf{x}_{i, k}^{(E)}
+
     where :math:`t` indexes the local training epochs on each client and :math:`E` is the number of local epochs per
     round (``num_local_epochs``), :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients at
-    round :math:`k`. In FedAvg, each selected client performs ``num_local_epochs`` local SGD epochs, then the server
-    aggregates the final local models to form :math:`\mathbf{x}_{k+1}`. The aggregation uses client weights, defaulting
-    to data-size weights when ``client_weights`` is not provided. Client selection (subsampling) defaults to uniform
-    sampling with fraction 1.0 (all active clients) and can be customized via ``selection_scheme``. Costs that
-    preserve the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use client-side mini-batches of size
-    :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; generic cost wrappers
-    fall back to full-gradient local updates.
+    round :math:`k`, and :math:`n_i` is the data size of client :math:`i`. In FedAvg, each selected client performs
+    ``num_local_epochs`` local SGD epochs, then the server aggregates the final local models to form
+    :math:`\mathbf{x}_{k+1}`. Aggregation is uniform by default and can be switched to data-size weighting via
+    ``data_weighted=True``. Client selection (subsampling) defaults to uniform sampling with fraction 1.0 (all active
+    clients) and can be customized via ``selection_scheme``. Costs that preserve the
+    :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use client-side mini-batches of size
+    :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; generic cost wrappers fall
+    back to full-gradient local updates.
 
     .. footbibliography::
     """
@@ -220,8 +232,7 @@ class FedAvg(FedAlgorithm):
     iterations: int = 100
     step_size: float = 0.001
     num_local_epochs: int = 1
-    client_weights: AgentWeightMap | None = None
-    _CLIENT_WEIGHTS_UNSET: ClassVar[object] = object()
+    data_weighted: bool = False
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -261,78 +272,6 @@ class FedAvg(FedAlgorithm):
             client.x = self._compute_local_update(client, network.server())
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
-    @staticmethod
-    def _weighted_average(values: Sequence["Array"], weights: Sequence[float], total_weight: float) -> "Array":
-        """Compute a weighted average of same-shaped arrays."""
-        weighted_values = [value * weight for value, weight in zip(values, weights, strict=True)]
-        return iop.sum(iop.stack(weighted_values, dim=0), dim=0) / total_weight
-
-    @classmethod
-    def _weights_for_clients(
-        cls,
-        clients: Sequence["Agent"],
-        client_weights: AgentWeightMap | None,
-    ) -> list[float]:
-        if client_weights is None:
-            weights = [alg_helpers.infer_client_weight(client) for client in clients]
-        else:
-            weights = []
-            for client in clients:
-                if client not in client_weights:
-                    raise ValueError(f"Missing weight for client {client}")
-                weights.append(float(client_weights[client]))
-        if any(weight < 0 for weight in weights):
-            raise ValueError("Client weights must be non-negative")
-        return weights
-
-    def _received_client_updates_and_weights(
-        self,
-        network: FedNetwork,
-        selected_clients: Sequence["Agent"],
-        client_weights: AgentWeightMap | object | None = _CLIENT_WEIGHTS_UNSET,
-    ) -> tuple[list["Agent"], list["Array"], list[float], float]:
-        """
-        Collect received client messages and their aggregation weights for the current round.
-
-        Raises:
-            ValueError: if the sum of client weights is non-positive.
-
-        """
-        if client_weights is self._CLIENT_WEIGHTS_UNSET:
-            client_weights = self.client_weights
-
-        server = network.server()
-        received_clients = [client for client in selected_clients if client in server.messages]
-        if not received_clients:
-            return [], [], [], 0.0
-        updates = [server.messages[client] for client in received_clients]
-        weights = self._weights_for_clients(received_clients, cast("AgentWeightMap | None", client_weights))
-        total_weight = sum(weights)
-        if total_weight <= 0:
-            raise ValueError("Sum of client weights must be positive")
-        return received_clients, updates, weights, total_weight
-
-    def aggregate(
-        self,
-        network: FedNetwork,
-        selected_clients: Sequence["Agent"],
-        client_weights: AgentWeightMap | object | None = _CLIENT_WEIGHTS_UNSET,
-    ) -> None:
-        """
-        Aggregate client updates at the server.
-
-        By default, this performs a weighted average of the received client models. If ``client_weights`` is not
-        provided, ``self.client_weights`` is used. If weights are ``None``, they are inferred from client data size.
-        """
-        _, updates, weights, total_weight = self._received_client_updates_and_weights(
-            network,
-            selected_clients,
-            client_weights,
-        )
-        if not updates:
-            return
-        network.server().x = self._weighted_average(updates, weights, total_weight)
-
     def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
         """
         Run local gradient steps using the batching semantics of ``client.cost.gradient``.
@@ -345,6 +284,34 @@ class FedAvg(FedAlgorithm):
             grad = client.cost.gradient(local_x)
             local_x -= self.step_size * grad
         return local_x
+
+    def aggregate(
+        self,
+        network: FedNetwork,
+        selected_clients: Sequence["Agent"],
+    ) -> None:
+        """
+        Aggregate client updates at the server.
+
+        By default, this uses uniform averaging over the received client models. If ``data_weighted=True``, weights are
+        inferred from client data size instead.
+
+        Raises:
+            ValueError: if the inferred client weights have non-positive total weight.
+
+        """
+        received_clients = [client for client in selected_clients if client in network.server().messages]
+        if not received_clients:
+            return
+        updates = [network.server().messages[client] for client in received_clients]
+        if self.data_weighted:
+            weights = [alg_helpers.infer_client_weight(client) for client in received_clients]
+        else:
+            weights = [1.0] * len(received_clients)
+        total_weight = sum(weights)
+        if total_weight <= 0:
+            raise ValueError("Sum of client weights must be positive")
+        network.server().x = self._weighted_average(updates, weights, total_weight)
 
 
 @tags("federated")
@@ -367,12 +334,18 @@ class FedProx(FedAlgorithm):
     .. math::
         \mathbf{x}_{k+1} = \frac{1}{|S_k|} \sum_{i \in S_k} \mathbf{x}_{i, k}^{(E)}
 
+    If ``data_weighted=True``, the server instead aggregates with client data sizes :math:`n_i`:
+
+    .. math::
+        \mathbf{x}_{k+1} = \sum_{i \in S_k}
+        \frac{n_i}{\sum_{j \in S_k} n_j} \mathbf{x}_{i, k}^{(E)}
+
     where :math:`\mathbf{w}^t` is the server model broadcast at the start of round :math:`k`, held fixed
     throughout each selected client's local epochs, :math:`\mu \geq 0` is the proximal coefficient,
     :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients. Setting ``mu=0.0``
-    recovers :class:`FedAvg <decent_bench.distributed_algorithms.FedAvg>` exactly. Aggregation uses client weights,
-    defaulting to data-size weights when ``client_weights`` is not provided, and client selection defaults to uniform
-    sampling with fraction 1.0. For
+    recovers :class:`FedAvg <decent_bench.distributed_algorithms.FedAvg>` exactly, and :math:`n_i` is the data size
+    of client :math:`i`. Aggregation is uniform by default and can be switched to data-size weighting via
+    ``data_weighted=True``. Client selection defaults to uniform sampling with fraction 1.0. For
     :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
     :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; for generic costs,
     local updates use full-batch gradients.
@@ -384,8 +357,7 @@ class FedProx(FedAlgorithm):
     step_size: float = 0.001
     num_local_epochs: int = 1
     mu: float = 0.01
-    client_weights: AgentWeightMap | None = None
-    _CLIENT_WEIGHTS_UNSET: ClassVar[object] = object()
+    data_weighted: bool = False
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -427,78 +399,6 @@ class FedProx(FedAlgorithm):
             client.x = self._compute_local_update(client, network.server())
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
-    @staticmethod
-    def _weighted_average(values: Sequence["Array"], weights: Sequence[float], total_weight: float) -> "Array":
-        """Compute a weighted average of same-shaped arrays."""
-        weighted_values = [value * weight for value, weight in zip(values, weights, strict=True)]
-        return iop.sum(iop.stack(weighted_values, dim=0), dim=0) / total_weight
-
-    @classmethod
-    def _weights_for_clients(
-        cls,
-        clients: Sequence["Agent"],
-        client_weights: AgentWeightMap | None,
-    ) -> list[float]:
-        if client_weights is None:
-            weights = [alg_helpers.infer_client_weight(client) for client in clients]
-        else:
-            weights = []
-            for client in clients:
-                if client not in client_weights:
-                    raise ValueError(f"Missing weight for client {client}")
-                weights.append(float(client_weights[client]))
-        if any(weight < 0 for weight in weights):
-            raise ValueError("Client weights must be non-negative")
-        return weights
-
-    def _received_client_updates_and_weights(
-        self,
-        network: FedNetwork,
-        selected_clients: Sequence["Agent"],
-        client_weights: AgentWeightMap | object | None = _CLIENT_WEIGHTS_UNSET,
-    ) -> tuple[list["Agent"], list["Array"], list[float], float]:
-        """
-        Collect received client messages and their aggregation weights for the current round.
-
-        Raises:
-            ValueError: if the sum of client weights is non-positive.
-
-        """
-        if client_weights is self._CLIENT_WEIGHTS_UNSET:
-            client_weights = self.client_weights
-
-        server = network.server()
-        received_clients = [client for client in selected_clients if client in server.messages]
-        if not received_clients:
-            return [], [], [], 0.0
-        updates = [server.messages[client] for client in received_clients]
-        weights = self._weights_for_clients(received_clients, cast("AgentWeightMap | None", client_weights))
-        total_weight = sum(weights)
-        if total_weight <= 0:
-            raise ValueError("Sum of client weights must be positive")
-        return received_clients, updates, weights, total_weight
-
-    def aggregate(
-        self,
-        network: FedNetwork,
-        selected_clients: Sequence["Agent"],
-        client_weights: AgentWeightMap | object | None = _CLIENT_WEIGHTS_UNSET,
-    ) -> None:
-        """
-        Aggregate client updates at the server.
-
-        By default, this performs a weighted average of the received client models. If ``client_weights`` is not
-        provided, ``self.client_weights`` is used. If weights are ``None``, they are inferred from client data size.
-        """
-        _, updates, weights, total_weight = self._received_client_updates_and_weights(
-            network,
-            selected_clients,
-            client_weights,
-        )
-        if not updates:
-            return
-        network.server().x = self._weighted_average(updates, weights, total_weight)
-
     def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
         """
         Run local proximal gradient steps using the batching semantics of ``client.cost.gradient``.
@@ -512,6 +412,34 @@ class FedProx(FedAlgorithm):
             grad = client.cost.gradient(local_x) + self.mu * (local_x - reference_x)
             local_x -= self.step_size * grad
         return local_x
+
+    def aggregate(
+        self,
+        network: FedNetwork,
+        selected_clients: Sequence["Agent"],
+    ) -> None:
+        """
+        Aggregate client updates at the server.
+
+        By default, this uses uniform averaging over the received client models. If ``data_weighted=True``, weights are
+        inferred from client data size instead.
+
+        Raises:
+            ValueError: if the inferred client weights have non-positive total weight.
+
+        """
+        received_clients = [client for client in selected_clients if client in network.server().messages]
+        if not received_clients:
+            return
+        updates = [network.server().messages[client] for client in received_clients]
+        if self.data_weighted:
+            weights = [alg_helpers.infer_client_weight(client) for client in received_clients]
+        else:
+            weights = [1.0] * len(received_clients)
+        total_weight = sum(weights)
+        if total_weight <= 0:
+            raise ValueError("Sum of client weights must be positive")
+        network.server().x = self._weighted_average(updates, weights, total_weight)
 
 
 @tags("federated")
@@ -608,15 +536,12 @@ class Scaffold(FedAlgorithm):
             return
 
         self.server_broadcast(network, selected_clients)
-        self._refresh_received_server_controls(network.server(), selected_clients)
+        server_control = network.server().aux_vars["c"]
+        for client in selected_clients:
+            if network.server() in client.messages:
+                client.aux_vars["c"] = iop.copy(server_control)
         self._run_local_updates(network, selected_clients)
         self.aggregate(network, selected_clients)
-
-    def _refresh_received_server_controls(self, server: "Agent", selected_clients: Sequence["Agent"]) -> None:
-        server_control = server.aux_vars["c"]
-        for client in selected_clients:
-            if server in client.messages:
-                client.aux_vars["c"] = iop.copy(server_control)
 
     def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
         for client in selected_clients:
@@ -645,12 +570,6 @@ class Scaffold(FedAlgorithm):
         control_variate_delta = new_client_control - client_control
         client.aux_vars["c_i"] = new_client_control
         return local_x, control_variate_delta
-
-    @staticmethod
-    def _weighted_average(values: Sequence["Array"], weights: Sequence[float], total_weight: float) -> "Array":
-        """Compute a weighted average of same-shaped arrays."""
-        weighted_values = [value * weight for value, weight in zip(values, weights, strict=True)]
-        return iop.sum(iop.stack(weighted_values, dim=0), dim=0) / total_weight
 
     def aggregate(
         self,
