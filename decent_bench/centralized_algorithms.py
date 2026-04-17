@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, final
+from typing import TYPE_CHECKING, final
 
 import numpy as np
 from rich.progress import track
@@ -24,8 +24,8 @@ def solve(cost: "Cost", max_iter: int = 100, stop_tol: float | None = None, max_
     Args:
         cost: cost function to minimize.
         max_iter: maximum number of iterations to run. Defaults to 100.
-        stop_tol: optional early stopping tolerance; stops if norm(x_new - x_old) drops below this value.
-        max_tol: optional final tolerance; RuntimeError is raised if norm(x_new - x_old) exceeds this value
+        stop_tol: optional early stopping tolerance; stops if ``||x_new - x_old||^2`` drops below this value.
+        max_tol: optional final tolerance; RuntimeError is raised if ``||x_new - x_old||^2`` exceeds this value
                  after max_iter iterations.
 
     Returns:
@@ -41,10 +41,10 @@ def solve(cost: "Cost", max_iter: int = 100, stop_tol: float | None = None, max_
 
     stop_criteria = f"Stopping after {max_iter} iterations"
     if stop_tol is not None:
-        stop_criteria += f" or when norm(x_new - x_old) <= {stop_tol}"
+        stop_criteria += f" or when ||x_new - x_old||^2 <= {stop_tol}"
     stop_criteria += "."
     if max_tol is not None:
-        stop_criteria += f" Will raise if norm(x_new - x_old) > {max_tol} at the end."
+        stop_criteria += f" Will raise if ||x_new - x_old||^2 > {max_tol} at the end."
 
     # quadratic
     from decent_bench.costs import QuadraticCost  # noqa: PLC0415
@@ -77,7 +77,7 @@ class Solver(ABC):
     Subclasses must implement the step method to define one iteration of their algorithm.
     """
 
-    def __init__(self, cost: "Cost", hyperparams: dict[str, Any] | None = None, x0: Array | None = None):
+    def __init__(self, cost: "Cost", x0: Array | None = None):
         if x0 is None:
             x0 = iop.zeros(shape=cost.shape, framework=cost.framework, device=cost.device)
         if iop.shape(x0) != cost.shape:
@@ -86,10 +86,6 @@ class Solver(ABC):
         self.x_old = iop.copy(self.x)
 
         self.cost = cost
-        if hyperparams:
-            for k, v in hyperparams.items():
-                setattr(self, k, v)
-            self.hyperparams = hyperparams
 
     @abstractmethod
     def step(self, iteration: int) -> None:
@@ -116,14 +112,14 @@ class Solver(ABC):
         """
         Run the solver.
 
-        Executes :meth:`step` for up to max_iter iterations. Stops early if the norm of the iterate change
+        Executes :meth:`step` for up to max_iter iterations. Stops early if the squared norm of the iterate change
         drops below stop_tol. After completion, verifies that the final iterate change is at most max_tol.
 
         Args:
             max_iter: maximum number of iterations; must be positive. Defaults to 100.
-            stop_tol: optional early stopping tolerance; stops if ``norm(x_new - x_old) <= stop_tol``.
+            stop_tol: optional early stopping tolerance; stops if ``||x_new - x_old||^2 <= stop_tol``.
                       Must be positive if provided.
-            max_tol: optional final tolerance; raises RuntimeError if ``norm(x_new - x_old) > max_tol`` after
+            max_tol: optional final tolerance; raises RuntimeError if ``||x_new - x_old||^2 > max_tol`` after
                       max_iter iterations. Must be positive if provided.
             check_frequency: float in (0, 1] defining how often the early stopping condition should be checked.
                       A smaller value means that the stopping condition is checked more often.
@@ -151,7 +147,6 @@ class Solver(ABC):
             raise ValueError("`check_frequency` must be a float in (0, 1]")
         check_every = max(1, int(check_frequency * max_iter))
 
-        delta = np.inf
         for k in track(
             range(max_iter),
             description="Solving...",
@@ -161,14 +156,19 @@ class Solver(ABC):
             self.x_old = iop.copy(self.x)
             self.step(k)
             if stop_tol is not None and k % check_every == 0:
-                delta = float(iop.norm(self.x - self.x_old))
+                d = self.x - self.x_old
+                delta = float(iop.transpose(d) @ d)
                 if delta <= stop_tol:
                     break
 
-        if max_tol is not None and delta > max_tol:
-            raise RuntimeError(
-                f"Solver failed to converge within {max_iter} iterations: delta {delta} > max delta {max_tol}."
-            )
+        if max_tol is not None:
+            if stop_tol is None or k % check_every != 0:
+                d = self.x - self.x_old
+                delta = float(iop.transpose(d) @ d)
+            if delta > max_tol:
+                raise RuntimeError(
+                    f"Solver failed to converge within {max_iter} iterations: delta {delta} > max delta {max_tol}."
+                )
 
         return self.x
 
@@ -195,11 +195,12 @@ class GradientDescent(Solver):
         else:  # convex
             step_size_k = lambda _: 1 / cost.m_smooth  # noqa: E731
 
-        super().__init__(cost, {"step_size": step_size_k}, x0)
+        super().__init__(cost, x0)
+        self.step_size = step_size_k
 
     def step(self, iteration: int) -> None:
         """Perform one iteration of the solver."""
-        self.x -= self.step_size(iteration) * self.cost.gradient(self.x)  # type: ignore[attr-defined]
+        self.x -= self.step_size(iteration) * self.cost.gradient(self.x)
 
 
 class AcceleratedGradientDescent(Solver):
@@ -233,13 +234,15 @@ class AcceleratedGradientDescent(Solver):
         else:
             momentum_k = lambda k: k / (k + 3)  # noqa: E731
 
-        super().__init__(cost, {"step_size": step_size, "momentum": momentum_k}, x0)
+        super().__init__(cost, x0)
+        self.step_size = step_size
+        self.momentum = momentum_k
         self.y = iop.copy(self.x)
 
     def step(self, iteration: int) -> None:
         """Perform one iteration of the solver."""
-        self.x = self.y - self.step_size * self.cost.gradient(self.y)  # type: ignore[attr-defined]
-        self.y = self.x + self.momentum(iteration) * (self.x - self.x_old)  # type: ignore[attr-defined]
+        self.x = self.y - self.step_size * self.cost.gradient(self.y)
+        self.y = self.x + self.momentum(iteration) * (self.x - self.x_old)
 
 
 def proximal_solver(cost: "Cost", y: Array, rho: float, max_iter: int = 100) -> Array:

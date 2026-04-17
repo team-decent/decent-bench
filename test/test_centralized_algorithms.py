@@ -164,9 +164,9 @@ def test_solver_run_honors_stop_tol() -> None:
 
     out = solver.run(max_iter=50, stop_tol=0.2, show_progress=False)
 
-    expected = 1.0 + 0.25 + (1.0 / 9.0)
+    expected = 1.0 + 0.25
     np.testing.assert_allclose(np.asarray(out), np.asarray([expected], dtype=float))
-    assert solver.steps == 3
+    assert solver.steps == 2
 
 
 def test_solver_run_raises_when_max_tol_not_met() -> None:
