@@ -108,54 +108,6 @@ def test_default_aggregation_is_uniform(
 @pytest.mark.parametrize(
     ("algorithm_cls", "kwargs"),
     [
-        pytest.param(FedAvg, {"iterations": 1, "step_size": 1.0, "data_weighted": False}, id="fedavg"),
-        pytest.param(FedProx, {"iterations": 1, "step_size": 1.0, "data_weighted": False}, id="fedprox"),
-    ],
-)
-def test_explicit_false_aggregation_is_uniform(
-    algorithm_cls: type[FedAvg] | type[FedProx], kwargs: dict[str, float | int | bool]
-) -> None:
-    algorithm = algorithm_cls(**kwargs)
-    network, clients = _make_fed_network(
-        TrackingCost(gradient_value=1.0, n_samples=1),
-        TrackingCost(gradient_value=3.0, n_samples=3),
-    )
-
-    network.send(sender=clients[0], receiver=network.server(), msg=np.array([-1.0]))
-    network.send(sender=clients[1], receiver=network.server(), msg=np.array([-3.0]))
-
-    algorithm.aggregate(network, clients)
-
-    np.testing.assert_allclose(network.server().x, np.array([-2.0]))
-
-
-@pytest.mark.parametrize(
-    ("algorithm_cls", "kwargs"),
-    [
-        pytest.param(FedAvg, {"iterations": 1, "step_size": 1.0, "data_weighted": True}, id="fedavg"),
-        pytest.param(FedProx, {"iterations": 1, "step_size": 1.0, "data_weighted": True}, id="fedprox"),
-    ],
-)
-def test_data_weighted_aggregation_uses_inferred_client_data_sizes(
-    algorithm_cls: type[FedAvg] | type[FedProx], kwargs: dict[str, float | int | bool]
-) -> None:
-    algorithm = algorithm_cls(**kwargs)
-    network, clients = _make_fed_network(
-        TrackingCost(gradient_value=1.0, n_samples=1),
-        TrackingCost(gradient_value=3.0, n_samples=3),
-    )
-
-    network.send(sender=clients[0], receiver=network.server(), msg=np.array([-1.0]))
-    network.send(sender=clients[1], receiver=network.server(), msg=np.array([-3.0]))
-
-    algorithm.aggregate(network, clients)
-
-    np.testing.assert_allclose(network.server().x, np.array([-2.5]))
-
-
-@pytest.mark.parametrize(
-    ("algorithm_cls", "kwargs"),
-    [
         pytest.param(FedAvg, {"iterations": 1, "step_size": 1.0}, id="fedavg"),
         pytest.param(FedProx, {"iterations": 1, "step_size": 1.0}, id="fedprox"),
     ],

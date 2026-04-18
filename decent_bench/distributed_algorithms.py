@@ -207,19 +207,12 @@ class FedAvg(FedAlgorithm):
     .. math::
         \mathbf{x}_{k+1} = \frac{1}{|S_k|} \sum_{i \in S_k} \mathbf{x}_{i, k}^{(E)}
 
-    If ``data_weighted=True``, the server instead aggregates with client data sizes :math:`n_i`:
-
-    .. math::
-        \mathbf{x}_{k+1} = \sum_{i \in S_k}
-        \frac{n_i}{\sum_{j \in S_k} n_j} \mathbf{x}_{i, k}^{(E)}
-
     where :math:`t` indexes the local training epochs on each client and :math:`E` is the number of local epochs per
     round (``num_local_epochs``), :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients at
-    round :math:`k`, and :math:`n_i` is the data size of client :math:`i`. In FedAvg, each selected client performs
-    ``num_local_epochs`` local SGD epochs, then the server aggregates the final local models to form
-    :math:`\mathbf{x}_{k+1}`. Aggregation is uniform by default and can be switched to data-size weighting via
-    ``data_weighted=True``. Client selection (subsampling) defaults to uniform sampling with fraction 1.0 (all active
-    clients) and can be customized via ``selection_scheme``. Costs that preserve the
+    round :math:`k`. In FedAvg, each selected client performs ``num_local_epochs`` local SGD epochs, then the server
+    aggregates the final local models to form :math:`\mathbf{x}_{k+1}` using uniform averaging over the participating
+    clients. Client selection (subsampling) defaults to uniform sampling with fraction 1.0 (all active clients) and can
+    be customized via ``selection_scheme``. Costs that preserve the
     :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use client-side mini-batches of size
     :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; generic cost wrappers fall
     back to full-gradient local updates.
@@ -232,7 +225,6 @@ class FedAvg(FedAlgorithm):
     iterations: int = 100
     step_size: float = 0.001
     num_local_epochs: int = 1
-    data_weighted: bool = False
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -290,27 +282,13 @@ class FedAvg(FedAlgorithm):
         network: FedNetwork,
         selected_clients: Sequence["Agent"],
     ) -> None:
-        """
-        Aggregate client updates at the server.
-
-        By default, this uses uniform averaging over the received client models. If ``data_weighted=True``, weights are
-        inferred from client data size instead.
-
-        Raises:
-            ValueError: if the inferred client weights have non-positive total weight.
-
-        """
+        """Aggregate client updates at the server."""
         received_clients = [client for client in selected_clients if client in network.server().messages]
         if not received_clients:
             return
         updates = [network.server().messages[client] for client in received_clients]
-        if self.data_weighted:
-            weights = [alg_helpers.infer_client_weight(client) for client in received_clients]
-        else:
-            weights = [1.0] * len(received_clients)
-        total_weight = sum(weights)
-        if total_weight <= 0:
-            raise ValueError("Sum of client weights must be positive")
+        weights = [1.0] * len(received_clients)
+        total_weight = float(len(received_clients))
         network.server().x = self._weighted_average(updates, weights, total_weight)
 
 
@@ -334,18 +312,11 @@ class FedProx(FedAlgorithm):
     .. math::
         \mathbf{x}_{k+1} = \frac{1}{|S_k|} \sum_{i \in S_k} \mathbf{x}_{i, k}^{(E)}
 
-    If ``data_weighted=True``, the server instead aggregates with client data sizes :math:`n_i`:
-
-    .. math::
-        \mathbf{x}_{k+1} = \sum_{i \in S_k}
-        \frac{n_i}{\sum_{j \in S_k} n_j} \mathbf{x}_{i, k}^{(E)}
-
     where :math:`\mathbf{w}^t` is the server model broadcast at the start of round :math:`k`, held fixed
     throughout each selected client's local epochs, :math:`\mu \geq 0` is the proximal coefficient,
     :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients. Setting ``mu=0.0``
-    recovers :class:`FedAvg <decent_bench.distributed_algorithms.FedAvg>` exactly, and :math:`n_i` is the data size
-    of client :math:`i`. Aggregation is uniform by default and can be switched to data-size weighting via
-    ``data_weighted=True``. Client selection defaults to uniform sampling with fraction 1.0. For
+    recovers :class:`FedAvg <decent_bench.distributed_algorithms.FedAvg>` exactly. Aggregation uses uniform averaging
+    over the participating clients. Client selection defaults to uniform sampling with fraction 1.0. For
     :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
     :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; for generic costs,
     local updates use full-batch gradients.
@@ -357,7 +328,6 @@ class FedProx(FedAlgorithm):
     step_size: float = 0.001
     num_local_epochs: int = 1
     mu: float = 0.01
-    data_weighted: bool = False
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -418,27 +388,13 @@ class FedProx(FedAlgorithm):
         network: FedNetwork,
         selected_clients: Sequence["Agent"],
     ) -> None:
-        """
-        Aggregate client updates at the server.
-
-        By default, this uses uniform averaging over the received client models. If ``data_weighted=True``, weights are
-        inferred from client data size instead.
-
-        Raises:
-            ValueError: if the inferred client weights have non-positive total weight.
-
-        """
+        """Aggregate client updates at the server."""
         received_clients = [client for client in selected_clients if client in network.server().messages]
         if not received_clients:
             return
         updates = [network.server().messages[client] for client in received_clients]
-        if self.data_weighted:
-            weights = [alg_helpers.infer_client_weight(client) for client in received_clients]
-        else:
-            weights = [1.0] * len(received_clients)
-        total_weight = sum(weights)
-        if total_weight <= 0:
-            raise ValueError("Sum of client weights must be positive")
+        weights = [1.0] * len(received_clients)
+        total_weight = float(len(received_clients))
         network.server().x = self._weighted_average(updates, weights, total_weight)
 
 
