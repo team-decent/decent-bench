@@ -26,13 +26,12 @@ class LT_ADMM_TORCH(LT_ADMM):  # noqa: D101, N801
     sched_cls: type[torch.optim.lr_scheduler.LRScheduler] | None = None  # PyTorch scheduler class for local training
     sched_kwargs: dict[str, Any] | None = None  # Keyword arguments for PyTorch scheduler
     name: str = "LT-ADMM-TORCH"
-    mask_z: bool = True
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
         super().initialize(network)
         for i in network.agents():
             if not isinstance(i.cost, PyTorchCost):
-                raise TypeError(f"LT-ADMM-EMA requires PyTorchCost, but agent {i} has cost of type {type(i.cost)}")
+                raise TypeError(f"LT-ADMM-TORCH requires PyTorchCost, but agent {i} has cost of type {type(i.cost)}")
 
             # Initialize PyTorch optimizer for local training if use_torch_optim is True
             if self.opt_cls is not None:
@@ -49,21 +48,14 @@ class LT_ADMM_TORCH(LT_ADMM):  # noqa: D101, N801
 
     def _local_training(self, agent: Agent, network: P2PNetwork, step_size: float, aux_step_size: float) -> None:
         if not isinstance(agent.cost, PyTorchCost):
-            raise TypeError(f"LT-ADMM-EMA requires PyTorchCost, but agent {agent} has cost of type {type(agent.cost)}")
-
-        neighbors = network.active_neighbors(agent)
+            raise TypeError(
+                f"LT-ADMM-TORCH requires PyTorchCost, but agent {agent} has cost of type {type(agent.cost)}"
+            )
 
         agent.aux_vars["phi"] = iop.copy(agent.x)
-
-        if self.mask_z:
-            mask = [agent.aux_vars["neighbor_to_idx"][j] for j in neighbors]
-            z_sum = iop.sum(agent.aux_vars["z_i"][mask], dim=0)
-            multiplier = self.penalty * len(neighbors)
-            correction = aux_step_size * (multiplier * agent.x - z_sum)
-        else:
-            z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
-            multiplier = self.penalty * len(network.neighbors(agent))
-            correction = aux_step_size * (multiplier * agent.x - z_sum)
+        z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
+        multiplier = self.penalty * len(network.neighbors(agent))
+        correction = aux_step_size * (multiplier * agent.x - z_sum)
 
         for _ in range(self.local_steps):
             if self.opt_cls is not None:

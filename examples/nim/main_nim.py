@@ -1,4 +1,3 @@
-import ctypes
 import gc
 from pathlib import Path
 
@@ -7,6 +6,7 @@ import networkx as nx
 import numpy as np
 import torch
 from PIL import Image
+from src.algorithms.lt_admm_ema import LT_ADMM_EMA
 from src.dataset import NIMDatasetHandler
 from src.nim_helpers import NimModel
 from torch import nn
@@ -24,16 +24,6 @@ from decent_bench.networks import Network, P2PNetwork
 from decent_bench.schemes import UniformActivationRate, UniformDropRate
 from decent_bench.utils.checkpoint_manager import CheckpointManager
 from decent_bench.utils.types import SupportedDevices
-from examples.nim.src.algorithms.lt_admm_ema import LT_ADMM_EMA
-
-
-def _trim_process_memory() -> None:
-    """Best-effort return of freed heap pages back to the OS on glibc systems."""
-    try:
-        libc = ctypes.CDLL("libc.so.6")
-        libc.malloc_trim(0)
-    except OSError:
-        return
 
 
 def model_generator() -> torch.nn.Module:
@@ -45,7 +35,7 @@ def model_generator() -> torch.nn.Module:
     )
 
 
-def create_heatmap_plots(image_file: str | Path, result: benchmark.BenchmarkResult, save_path: Path) -> None:
+def create_heatmap_plots(image_file: str | Path, result: benchmark.BenchmarkResult, save_path: Path) -> None:  # noqa: D103
     def heatmap_plot(
         network: Network,
         width: int,
@@ -93,13 +83,16 @@ def create_heatmap_plots(image_file: str | Path, result: benchmark.BenchmarkResu
 
 
 if __name__ == "__main__":
+    folder = Path("results/nim")
     iterations = 20_000
+    samples_per_partition = None  # Set to a ~25'000 if you are running out of memory
     state_snapshot_period = 500
     test_samples = 50_000
     leakage = 0.0
     label_balance = 2.0
     image_file = "data/kth_floorplan_sample.png"
     batch_size = 512
+    local_steps = [5, 10]
     device = SupportedDevices.GPU
 
     table_metrics = [
@@ -119,11 +112,12 @@ if __name__ == "__main__":
         [ml.Loss([], x_log=False, y_log=False)],
     ]
 
-    # for n_agents, n_neighbors in [(5, 4), (5, 2)]:
-    for n_agents, n_neighbors in [(5, 4)]:
+    for n_agents, n_neighbors in [(5, 4), (5, 2)]:
+        iop.set_seed(47)
         train_dataset = NIMDatasetHandler(
             image_file=image_file,
             n_partitions=n_agents,
+            samples_per_partition=samples_per_partition,
             transform=torch.tensor,  # type: ignore[arg-type]
             label_transform=lambda x: torch.tensor(x, dtype=torch.float32).unsqueeze(0),  # type: ignore[arg-type]
             label_balance=label_balance,
@@ -132,9 +126,9 @@ if __name__ == "__main__":
         test_data = train_dataset.get_test_set(label_balance=1.0, num_samples=test_samples)
         for drops, activity in [
             (None, None),
-            # (True, None),
-            # (None, True),
-            # (True, True),
+            (True, None),
+            (None, True),
+            (True, True),
         ]:
             for alg in [
                 "DGD",
@@ -144,10 +138,8 @@ if __name__ == "__main__":
                 "LT-ADMM",
                 "LT-ADMM-EMA",
             ]:
-                iop.set_seed(47)
                 resume_benchmark = False
-                folder = "results/nim"
-                checkpoint_path = Path(f"{folder}/{n_agents}_{n_neighbors}/test_{drops}_{activity}/{alg}")
+                checkpoint_path = folder / f"{n_agents}_{n_neighbors}" / f"test_{drops}_{activity}" / alg
                 if checkpoint_path.exists():
                     resume_benchmark = True
 
@@ -174,6 +166,7 @@ if __name__ == "__main__":
                         dataset=p,
                         model=model_generator(),
                         loss_fn=nn.BCEWithLogitsLoss(),
+                        # If you want to use a threshold-based activation instead of sigmoid, uncomment this line
                         # final_activation=FinalActivation(threshold=0.5),
                         final_activation=nn.Sigmoid(),
                         batch_size=batch_size,
@@ -215,11 +208,13 @@ if __name__ == "__main__":
                     algorithms = [
                         dec_algorithms.KGT(
                             iterations=iterations,
-                            local_steps=10,
+                            local_steps=ls,
                             step_size=0.025,
                             aux_step_size=0.5,
                             x0=x0,
+                            name=f"KGT (ls={ls})",
                         )
+                        for ls in local_steps
                     ]
                 elif alg == "ProxSkip":
                     algorithms = [
@@ -227,47 +222,53 @@ if __name__ == "__main__":
                             iterations=iterations,
                             step_size=0.05,
                             aux_step_size=0.05,
-                            comm_probability=0.2,
+                            comm_probability=1 / ls,
                             chi=1.0,
                             x0=x0,
+                            name=f"ProxSkip (comm_prob=1/{ls})",
                         )
+                        for ls in local_steps
                     ]
                 elif alg == "LED":
                     algorithms = [
                         dec_algorithms.LED(
                             iterations=iterations,
-                            local_steps=10,
+                            local_steps=ls,
                             step_size=0.025,
                             aux_step_size=0.025,
                             x0=x0,
+                            name=f"LED (ls={ls})",
                         )
+                        for ls in local_steps
                     ]
                 elif alg == "LT-ADMM":
                     algorithms = [
                         dec_algorithms.LT_ADMM(
                             iterations=iterations,
-                            local_steps=10,
+                            local_steps=ls,
                             step_size=0.025,
                             aux_step_size=0.025,
                             penalty=1.0,
-                            mask_z=False,
                             x0=x0,
+                            name=f"LT-ADMM (ls={ls})",
                         )
+                        for ls in local_steps
                     ]
                 elif alg == "LT-ADMM-EMA":
                     algorithms = [
                         LT_ADMM_EMA(
                             iterations=iterations,
-                            local_steps=10,
+                            local_steps=ls,
                             step_size=0.025,
                             aux_step_size=0.025,
                             penalty=1.0,
                             ema_factor=0.8,
                             send_ema_x=False,
                             use_z_ema=False,
-                            mask_z=False,
                             x0=x0,
+                            name=f"LT-ADMM-EMA (ls={ls})",
                         )
+                        for ls in local_steps
                     ]
 
                 algorithms = sorted(algorithms, key=lambda alg: alg.name)
@@ -284,7 +285,7 @@ if __name__ == "__main__":
                         result = benchmark.benchmark(
                             algorithms=algorithms,
                             benchmark_problem=problem,
-                            n_trials=3 if alg == "ProxSkip" or any((drops, activity)) else 1,
+                            n_trials=5 if alg == "ProxSkip" or any((drops, activity)) else 1,
                             show_speed=True,
                             show_trial=True,
                             checkpoint_manager=cm,
@@ -312,12 +313,6 @@ if __name__ == "__main__":
                     save_path=cm.get_results_path(),
                 )
 
-                metric_result.agent_metrics = None
                 del result, metric_result, costs, agents, network, problem, algorithms
                 # Garbage collection to free up memory before the next benchmark
                 gc.collect()
-                _trim_process_memory()
-
-                print(f"Completed benchmark for {checkpoint_path}.")
-
-    print("All benchmarks completed.")

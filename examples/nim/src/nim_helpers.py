@@ -39,4 +39,5 @@ class FinalActivation(nn.Module):  # noqa: D101
         self.threshold = threshold
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # noqa: D102
-        return (self.sigmoid(x) > self.threshold).long()
+        ret: torch.Tensor = (self.sigmoid(x) > self.threshold).long()
+        return ret

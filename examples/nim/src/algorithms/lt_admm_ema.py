@@ -35,7 +35,7 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
         penalty: Penalty parameter (rho)
         alpha: Relaxation parameter (alpha)
         ema_factor: Exponential moving average factor, ema_factor * old + (1 - ema_factor) * new
-        set_x_to_ema: Whether to set final x to EMA values in finalize()
+        ema_factor_z: Exponential moving average factor for z updates
         use_z_ema: Whether to use EMA for z_ij,k updates in auxiliary update
         send_ema_x: Whether to send EMA of x in communication phase instead of current x
         opt_cls: PyTorch optimizer class to use for local training. If provided, it will be used for local training
@@ -54,7 +54,7 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
     penalty: float = 1.0  # Penalty parameter (rho)
     alpha: float = 0.5  # Relaxation parameter (alpha)
     ema_factor: float = 0.9  # Exponential moving average factor, ema_factor * old + (1 - ema_factor) * new
-    set_x_to_ema: bool = True  # Whether to set final x to EMA values
+    ema_factor_z: float = 0.9  # Exponential moving average factor for z updates
     use_z_ema: bool = True  # Whether to use EMA for z_ij,k updates
     send_ema_x: bool = False  # Whether to send EMA of x in communication phase instead of current x
     opt_cls: type[torch.optim.Optimizer] | None = None  # PyTorch optimizer class to use for local training
@@ -63,7 +63,6 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
     sched_kwargs: dict[str, Any] | None = None  # Keyword arguments for PyTorch scheduler
     x0: InitialStates = None  # Initial parameters (optional)
     name: str = "LT-ADMM-EMA"
-    mask_z: bool = True
 
     def __post_init__(self) -> None:
         """
@@ -165,19 +164,10 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
         if not isinstance(agent.cost, PyTorchCost):
             raise TypeError(f"LT-ADMM-EMA requires PyTorchCost, but agent {agent} has cost of type {type(agent.cost)}")
 
-        neighbors = network.active_neighbors(agent)
-
         agent.aux_vars["phi"] = iop.copy(agent.aux_vars["x_train"])
-
-        if self.mask_z:
-            mask = [agent.aux_vars["neighbor_to_idx"][j] for j in neighbors]
-            z_sum = iop.sum(agent.aux_vars["z_i"][mask], dim=0)
-            multiplier = self.penalty * len(neighbors)
-            correction = aux_step_size * (multiplier * agent.aux_vars["x_train"] - z_sum)
-        else:
-            z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
-            multiplier = self.penalty * len(network.neighbors(agent))
-            correction = aux_step_size * (multiplier * agent.aux_vars["x_train"] - z_sum)
+        z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
+        multiplier = self.penalty * len(network.neighbors(agent))
+        correction = aux_step_size * (multiplier * agent.aux_vars["x_train"] - z_sum)
 
         if self.opt_cls is not None:
             # Use PyTorch optimizer for local training
@@ -199,7 +189,7 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
             self.ema_factor * agent.aux_vars["phi_ema"] + (1 - self.ema_factor) * agent.aux_vars["phi"]
         )
         agent.aux_vars["x_train"] = agent.aux_vars["phi"]
-        agent.x = agent.aux_vars["phi_ema"] if self.set_x_to_ema else agent.aux_vars["phi"]
+        agent.x = agent.aux_vars["phi_ema"]
 
     def _communication(self, agent: Agent, network: P2PNetwork) -> None:
         """
@@ -223,9 +213,8 @@ class LT_ADMM_EMA(P2PAlgorithm):  # noqa: N801
         for j, msg in agent.messages.items():
             j_idx = agent.aux_vars["neighbor_to_idx"][j]
             new_z = (1 - self.alpha) * agent.aux_vars["z_i"][j_idx] - self.alpha * msg
-            z_update = (
-                (self.ema_factor * agent.aux_vars["z_i"][j_idx] + (1 - self.ema_factor) * new_z)
+            agent.aux_vars["z_i"][j_idx] = (
+                (self.ema_factor_z * agent.aux_vars["z_i"][j_idx] + (1 - self.ema_factor_z) * new_z)
                 if self.use_z_ema
                 else new_z
             )
-            agent.aux_vars["z_i"][j_idx] = z_update

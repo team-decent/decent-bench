@@ -82,7 +82,7 @@ def visualize_nim_dataset(
     )
 
 
-def _visualize_random_sampling(
+def _visualize_random_sampling(  # noqa: PLR0914
     nim_data: NIMDatasetHandler,
     figsize: tuple[int, int] = (12, 10),
     save_path: str | None = None,
@@ -194,7 +194,7 @@ def _visualize_random_sampling(
 
     ax.legend(handles=handles, bbox_to_anchor=(1.05, 1), loc="upper left")
 
-    # ax.set_title(f"NIMData Partitions Visualization\n{nim_data.image_file}")
+    ax.set_title(f"NIMData Partitions Visualization\n{nim_data.image_file}")
     plt.tight_layout()
 
     if save_path:
@@ -203,7 +203,7 @@ def _visualize_random_sampling(
     return fig
 
 
-def _visualize_lidar_sampling(  # noqa: PLR0914, PLR0915
+def _visualize_lidar_sampling(  # noqa: PLR0912, PLR0914, PLR0915
     nim_data: NIMDatasetHandler,
     *,
     path_index: int | list[int] | None = None,
@@ -289,7 +289,7 @@ def _visualize_lidar_sampling(  # noqa: PLR0914, PLR0915
             interpolation="nearest",
         )
         label = f"Paths {indices}" if len(indices) > 1 else f"Path {indices[0]}"
-        # ax.set_title(f"LiDAR Scan Animation – {label}\n{nim_data.image_file}")
+        ax.set_title(f"LiDAR Scan Animation - {label}\n{nim_data.image_file}")
         ax.axis("off")
 
         # Per-agent data and artists
@@ -447,7 +447,7 @@ def _visualize_lidar_sampling(  # noqa: PLR0914, PLR0915
         handles.append(Line2D([0], [0], color=color, linewidth=2, label=f"Path {pi}"))
 
     ax.legend(handles=handles, bbox_to_anchor=(1.05, 1), loc="upper left")
-    # ax.set_title(f"NIMData LiDAR Paths\n{nim_data.image_file}")
+    ax.set_title(f"NIMData LiDAR Paths\n{nim_data.image_file}")
     plt.tight_layout()
 
     if save_path:

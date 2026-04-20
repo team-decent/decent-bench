@@ -1,4 +1,3 @@
-import ctypes
 import gc
 from pathlib import Path
 
@@ -25,17 +24,8 @@ from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 from examples.nim.src.algorithms.lt_admm_ema import LT_ADMM_EMA
 from examples.nim.src.algorithms.lt_admm_torch_optimizer import LT_ADMM_TORCH
 
-
-def _trim_process_memory() -> None:
-    """Best-effort return of freed heap pages back to the OS on glibc systems."""
-    try:
-        libc = ctypes.CDLL("libc.so.6")
-        libc.malloc_trim(0)
-    except OSError:
-        return
-
-
 if __name__ == "__main__":
+    folder = Path("results/mnist")
     iterations = 1000
     state_snapshot_period = 50
     samples_per_partition = 1000
@@ -73,15 +63,47 @@ if __name__ == "__main__":
             output_size=10,
         )
 
-    for heterogeneity in [True]:
-        # for n_agents, n_neighbors in [(5, 4), (5, 2), (10, 9), (10, 4), (10, 2)]:
-        for n_agents, n_neighbors in [(10, 4)]:
+    for heterogeneity in [True, False]:
+        for n_agents, n_neighbors in [(5, 4), (5, 2), (10, 9), (10, 4), (10, 2)]:
+            iop.set_seed(47)
+            mnist_train = MNIST(
+                root="data",
+                train=True,
+                download=True,
+                transform=transform,
+                target_transform=torch.tensor,
+            )
+            mnist_test = MNIST(
+                root="data",
+                train=False,
+                download=True,
+                transform=transform,
+                target_transform=torch.tensor,
+            )
+            targets_per_partition = 2 if n_agents == 5 else 1
+            train_dataset = PyTorchDatasetHandler(
+                torch_dataset=mnist_train,
+                n_features=28 * 28,
+                n_targets=10,
+                n_partitions=n_agents,
+                samples_per_partition=samples_per_partition,
+                heterogeneity=heterogeneity,
+                targets_per_partition=targets_per_partition,
+            )
+            test_dataset = PyTorchDatasetHandler(
+                torch_dataset=mnist_test,
+                n_features=28 * 28,
+                n_targets=10,
+                n_partitions=n_agents,
+                heterogeneity=heterogeneity,
+                targets_per_partition=targets_per_partition,
+            )
             for drops, activity, compression, noise in [
-                # (True, True, True, True),
-                # (True, None, None, None),
-                # (None, True, None, None),
+                (True, True, True, True),
+                (True, None, None, None),
+                (None, True, None, None),
                 (None, None, True, None),
-                # (None, None, None, True),
+                (None, None, None, True),
                 (None, None, None, None),
             ]:
                 for alg in [
@@ -95,44 +117,14 @@ if __name__ == "__main__":
                     "LT-ADMM-EMA",
                     "LT-ADMM-EMA-TORCH",
                 ]:
-                    iop.set_seed(47)
-                    mnist_train = MNIST(
-                        root="data",
-                        train=True,
-                        download=True,
-                        transform=transform,
-                        target_transform=torch.tensor,
-                    )
-                    mnist_test = MNIST(
-                        root="data",
-                        train=False,
-                        download=True,
-                        transform=transform,
-                        target_transform=torch.tensor,
-                    )
-                    targets_per_partition = 2 if n_agents == 5 else 1
-                    train_dataset = PyTorchDatasetHandler(
-                        torch_dataset=mnist_train,
-                        n_features=28 * 28,
-                        n_targets=10,
-                        n_partitions=n_agents,
-                        samples_per_partition=samples_per_partition,
-                        heterogeneity=heterogeneity,
-                        targets_per_partition=targets_per_partition,
-                    )
-                    test_dataset = PyTorchDatasetHandler(
-                        torch_dataset=mnist_test,
-                        n_features=28 * 28,
-                        n_targets=10,
-                        n_partitions=n_agents,
-                        heterogeneity=heterogeneity,
-                        targets_per_partition=targets_per_partition,
-                    )
-
                     resume_benchmark = False
-                    folder = "results/heterogeneous" if heterogeneity else "results/random"
-                    checkpoint_path = Path(
-                        f"{folder}/{n_agents}_{n_neighbors}/test_{drops}_{activity}_{compression}_{noise}/{alg}"
+                    sub_folder = "heterogeneous" if heterogeneity else "random"
+                    checkpoint_path = (
+                        folder
+                        / sub_folder
+                        / f"{n_agents}_{n_neighbors}"
+                        / f"test_{drops}_{activity}_{compression}_{noise}"
+                        / alg
                     )
                     if checkpoint_path.exists():
                         resume_benchmark = True
@@ -328,7 +320,7 @@ if __name__ == "__main__":
                             result = benchmark.benchmark(
                                 algorithms=algorithms,
                                 benchmark_problem=problem,
-                                n_trials=3 if alg == "ProxSkip" or any((drops, activity, noise)) else 1,
+                                n_trials=5 if alg == "ProxSkip" or any((drops, activity, noise)) else 1,
                                 show_speed=True,
                                 show_trial=True,
                                 checkpoint_manager=cm,
@@ -349,10 +341,6 @@ if __name__ == "__main__":
                         show_plots=False,
                     )
 
-                    metric_result.agent_metrics = None
                     del result, metric_result, costs, agents, network, problem, algorithms
                     # Garbage collection to free up memory before the next benchmark
                     gc.collect()
-                    _trim_process_memory()
-
-    print("All benchmarks completed.")
