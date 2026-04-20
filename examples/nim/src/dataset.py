@@ -252,7 +252,7 @@ class NIMDatasetHandler(DatasetHandler):
 
         return spatial_partitions
 
-    def _balance_partitions(
+    def _balance_partitions(  # noqa: PLR0912
         self,
         partitions: list[list[tuple[tuple[int, int], int]]],
         label_balance: float | None = None,

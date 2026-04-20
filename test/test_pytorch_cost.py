@@ -1,4 +1,6 @@
 import copy
+import pickle  # noqa: S403
+from typing import Any
 
 import pytest
 
@@ -6,6 +8,18 @@ from decent_bench.costs import PyTorchCost
 from decent_bench.utils.types import SupportedDevices
 
 torch = pytest.importorskip("torch")
+CUDA = torch.cuda.is_available()
+MPS = torch.backends.mps.is_available()
+
+
+backends = pytest.mark.parametrize(
+    "device",
+    [
+        pytest.param(SupportedDevices.CPU, id="cpu"),
+        pytest.param(SupportedDevices.GPU, id="cuda", marks=pytest.mark.skipif(not CUDA, reason="CUDA not available")),
+        pytest.param(SupportedDevices.MPS, id="mps", marks=pytest.mark.skipif(not MPS, reason="MPS not available")),
+    ],
+)
 
 
 class _TinyMLP(torch.nn.Module):
@@ -37,6 +51,8 @@ def _make_cost(
     input_size: int = 4,
     hidden_size: int = 10,
     output_size: int = 3,
+    device: SupportedDevices = SupportedDevices.CPU,
+    cost_kwargs: dict[str, Any] | None = None,
 ) -> PyTorchCost:
     torch.manual_seed(7)
     model = _TinyMLP(input_size=input_size, hidden_size=hidden_size, output_size=output_size)
@@ -46,13 +62,15 @@ def _make_cost(
         loss_fn=torch.nn.CrossEntropyLoss(),
         batch_size=batch_size,
         max_batch_size=max_batch_size,
-        device=SupportedDevices.CPU,
+        device=device,
+        **(cost_kwargs or {}),
     )
 
 
-def test_per_sample_gradients_match_individual_gradients() -> None:
+@backends
+def test_per_sample_gradients_match_individual_gradients(device: SupportedDevices) -> None:
     dataset = _make_dataset()
-    cost = _make_cost(dataset, max_batch_size=3, batch_size=10)
+    cost = _make_cost(dataset, max_batch_size=3, batch_size=10, device=device)
 
     indices = [5, 1, 7, 2, 0, 3, 4, 6]
     x = cost._get_model_parameters().detach().clone()  # noqa: SLF001
@@ -66,9 +84,10 @@ def test_per_sample_gradients_match_individual_gradients() -> None:
     assert torch.allclose(per_sample, expected, rtol=5e-5, atol=1e-6)
 
 
-def test_mean_gradient_matches_mean_of_per_sample_gradients() -> None:
+@backends
+def test_mean_gradient_matches_mean_of_per_sample_gradients(device: SupportedDevices) -> None:
     dataset = _make_dataset()
-    cost = _make_cost(dataset, max_batch_size=4, batch_size=9)
+    cost = _make_cost(dataset, max_batch_size=4, batch_size=9, device=device)
 
     indices = list(range(13))
     x = cost._get_model_parameters().detach().clone()  # noqa: SLF001
@@ -80,10 +99,11 @@ def test_mean_gradient_matches_mean_of_per_sample_gradients() -> None:
     assert torch.allclose(grad_mean, grad_per_sample.mean(dim=0), rtol=5e-5, atol=1e-6)
 
 
-def test_max_batch_size_does_not_change_function_or_gradients() -> None:
+@backends
+def test_max_batch_size_does_not_change_function_or_gradients(device: SupportedDevices) -> None:
     dataset = _make_dataset(n_samples=23)
-    base_cost = _make_cost(dataset, max_batch_size=23, batch_size=11)
-    chunked_cost = _make_cost(dataset, max_batch_size=4, batch_size=11)
+    base_cost = _make_cost(dataset, max_batch_size=23, batch_size=11, device=device)
+    chunked_cost = _make_cost(dataset, max_batch_size=4, batch_size=11, device=device)
 
     x = base_cost._get_model_parameters().detach().clone()  # noqa: SLF001
     indices = [0, 4, 2, 10, 9, 3, 8, 7, 6, 1, 5, 11, 12, 13, 14]
@@ -101,10 +121,11 @@ def test_max_batch_size_does_not_change_function_or_gradients() -> None:
     assert torch.allclose(g_ind_base, g_ind_chunked, rtol=5e-5, atol=1e-6)
 
 
-def test_max_batch_size_does_not_change_predict_outputs() -> None:
+@backends
+def test_max_batch_size_does_not_change_predict_outputs(device: SupportedDevices) -> None:
     dataset = _make_dataset(n_samples=15)
-    cost_a = _make_cost(dataset, max_batch_size=15, batch_size=8)
-    cost_b = _make_cost(dataset, max_batch_size=2, batch_size=8)
+    cost_a = _make_cost(dataset, max_batch_size=15, batch_size=8, device=device)
+    cost_b = _make_cost(dataset, max_batch_size=2, batch_size=8, device=device)
 
     x = cost_a._get_model_parameters().detach().clone()  # noqa: SLF001
     data = [sample[0] for sample in dataset]
@@ -117,7 +138,8 @@ def test_max_batch_size_does_not_change_predict_outputs() -> None:
         assert pa == pytest.approx(pb, rel=1e-6, abs=1e-7)
 
 
-def test_chunked_and_unchunked_costs_match_with_identical_model_snapshot() -> None:
+@backends
+def test_chunked_and_unchunked_costs_match_with_identical_model_snapshot(device: SupportedDevices) -> None:
     dataset = _make_dataset(n_samples=21)
 
     torch.manual_seed(21)
@@ -130,7 +152,7 @@ def test_chunked_and_unchunked_costs_match_with_identical_model_snapshot() -> No
         loss_fn=torch.nn.CrossEntropyLoss(),
         batch_size=10,
         max_batch_size=21,
-        device=SupportedDevices.CPU,
+        device=device,
     )
     cost_chunked = PyTorchCost(
         dataset=dataset,
@@ -138,7 +160,7 @@ def test_chunked_and_unchunked_costs_match_with_identical_model_snapshot() -> No
         loss_fn=torch.nn.CrossEntropyLoss(),
         batch_size=10,
         max_batch_size=3,
-        device=SupportedDevices.CPU,
+        device=device,
     )
 
     x = cost_full._get_model_parameters().detach().clone()  # noqa: SLF001
@@ -150,3 +172,37 @@ def test_chunked_and_unchunked_costs_match_with_identical_model_snapshot() -> No
         rtol=5e-5,
         atol=1e-6,
     )
+
+
+@backends
+@pytest.mark.parametrize(
+    "cost_kwargs",
+    [
+        None,
+        {"use_dataloader": True},
+        {"use_dataloader": True, "dataloader_kwargs": {"num_workers": 2, "pin_memory": True}},
+        {"load_dataset": False},
+        {"compile_model": True},
+    ],
+)
+@pytest.mark.filterwarnings(
+    "ignore:os.fork\\(\\) was called.*:RuntimeWarning",
+    r"ignore:.*torch\.jit\.script_method.*:DeprecationWarning",
+)  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
+def test_picklable(device: SupportedDevices, cost_kwargs: dict[str, Any] | None) -> None:
+    dataset = _make_dataset(n_samples=5)
+    cost = _make_cost(dataset, max_batch_size=2, batch_size=2, cost_kwargs=cost_kwargs, device=device)
+
+    x = cost._get_model_parameters().detach().clone()  # noqa: SLF001
+
+    cost.gradient(x)
+    pickled_cost = pickle.dumps(cost)
+    unpickled_cost: PyTorchCost = pickle.loads(pickled_cost)  # noqa: S301
+
+    if "use_dataloader" not in (cost_kwargs or {}):
+        assert torch.allclose(
+            cost.gradient(x),
+            unpickled_cost.gradient(x),
+            rtol=5e-5,
+            atol=1e-6,
+        )

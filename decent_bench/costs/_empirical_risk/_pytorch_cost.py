@@ -62,7 +62,6 @@ class PyTorchCost(EmpiricalRiskCost):
     _NON_PICKLABLE_STATE_KEYS = (
         "_ft_compute_grad",
         "_ft_compute_sample_grad",
-        # "_dataloader_iter", # TODO: Check if this is pickleable
         "_last_batch_x",
         "_last_batch_y",
         "_params_list",
@@ -70,6 +69,7 @@ class PyTorchCost(EmpiricalRiskCost):
         "param_sizes",
         "total_params",
         "param_names",
+        "_dataloader_iter",
     )
 
     def __init__(
@@ -112,7 +112,8 @@ class PyTorchCost(EmpiricalRiskCost):
             device (SupportedDevices): Device to run computations on. Make sure to test CPU vs GPU performance for your
                 specific model and dataset, as it can vary.
             use_dataloader (bool): Whether to use DataLoader for batching.
-                Can be beneficial for large datasets to avoid loading all data into memory.
+                Can be beneficial for large datasets which can't fit into memory or when using an accelerator.
+                Dataloaders cannot be pickled so resumption of iterrupted runs will start with a new random batch order.
             dataloader_kwargs (dict | None): Additional arguments for the DataLoader.
             load_dataset (bool): If True, loads the entire dataset into memory to optimize data access.
                 This may lead to major speedups if the dataset is lazily loaded (e.g., loading data from disk), but it
@@ -177,11 +178,15 @@ class PyTorchCost(EmpiricalRiskCost):
 
     def __getstate__(self) -> dict[str, Any]:
         """Return a checkpoint-safe state for pickling."""
-        state = self.__dict__.copy()
-        for key in self._NON_PICKLABLE_STATE_KEYS:
-            state.pop(key, None)
-        state["model"] = self.model.to("cpu")
-        state["loss_fn"] = self.loss_fn.to("cpu")
+        try:
+            state = self.__dict__.copy()
+            for key in self._NON_PICKLABLE_STATE_KEYS:
+                state.pop(key, None)
+            state["model"] = self.model.to("cpu")
+            state["loss_fn"] = self.loss_fn.to("cpu")
+        finally:
+            self.model = self.model.to(self._pytorch_device)
+            self.loss_fn = self.loss_fn.to(self._pytorch_device)
         return state
 
     def __setstate__(self, state: dict[str, Any]) -> None:
@@ -190,14 +195,9 @@ class PyTorchCost(EmpiricalRiskCost):
             setattr(self, key, value)
         self.model = self.model.to(self._pytorch_device)
         self.loss_fn = self.loss_fn.to(self._pytorch_device)
+        if self._dataloader is not None:
+            self._dataloader_iter = iter(self._dataloader)
         self._init_param_caches()
-        # TODO: Delete this, only here for backwards compatibility with older checkpoints.
-        if "_max_batch_size" not in state:
-            self._max_batch_size = self.batch_size
-
-        # for key, value in state.items():
-        #     setattr(self, key, value)
-        # self._dataloader = None
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -531,27 +531,27 @@ class PyTorchCost(EmpiricalRiskCost):
         """Not used in PyTorchCost, implemented in _get_batch_data."""
         raise NotImplementedError("_sample_batch_indices is not used in PyTorchCost, implemented in _get_batch_data.")
 
-    def _init_dataloader(self) -> tuple[torch.utils.data.DataLoader[Any], Iterator[torch.utils.data.DataLoader[Any]]]:
-        def _collate_xy_idx(
-            batch: list[tuple[torch.Tensor, torch.Tensor, int]],
-        ) -> tuple[torch.Tensor, torch.Tensor, list[int]]:
-            xs, ys, idx = zip(*batch, strict=True)
-            return torch.stack(xs), torch.stack(ys), list(idx)
+    def _collate_xy_idx(
+        self,
+        batch: list[tuple[torch.Tensor, torch.Tensor, int]],
+    ) -> tuple[torch.Tensor, torch.Tensor, list[int]]:
+        xs, ys, idx = zip(*batch, strict=True)
+        return torch.stack(xs), torch.stack(ys), list(idx)
 
+    def _init_dataloader(self) -> torch.utils.data.DataLoader[Any]:
         self._dataloader_kwargs.setdefault("shuffle", True)
-        dataloader = torch.utils.data.DataLoader(
+        return torch.utils.data.DataLoader(
             cast("torch.utils.data.Dataset[Any]", self._dataset),
             batch_size=self.batch_size,
             generator=iop.rng_torch(SupportedDevices.CPU),  # DataLoader shuffling must be done on CPU
-            collate_fn=_collate_xy_idx,
+            collate_fn=self._collate_xy_idx,
             **self._dataloader_kwargs,
         )
-        dataloader_iter = iter(dataloader)
-        return dataloader, dataloader_iter
 
     def _handle_dataloader(self) -> tuple[torch.Tensor, torch.Tensor, list[int]]:
         if self._dataloader is None:
-            self._dataloader, self._dataloader_iter = self._init_dataloader()
+            self._dataloader = self._init_dataloader()
+            self._dataloader_iter = iter(self._dataloader)
 
         try:
             batch_x, batch_y, batch_idx = next(self._dataloader_iter)
@@ -673,22 +673,3 @@ class PyTorchCost(EmpiricalRiskCost):
 
     def __add__(self, other: Cost) -> Cost:
         return super().__add__(other)
-
-    def cleanup(self) -> None:
-        """Release transient buffers that are only useful while actively training."""
-        self._dataloader = None
-        if hasattr(self, "_dataloader_iter"):
-            del self._dataloader_iter
-
-        if hasattr(self, "_last_batch_x"):
-            del self._last_batch_x
-        if hasattr(self, "_last_batch_y"):
-            del self._last_batch_y
-
-        if self._pytorch_device.startswith("cuda"):
-            torch.cuda.empty_cache()
-
-        if hasattr(self, "_ft_compute_grad"):
-            del self._ft_compute_grad
-        if hasattr(self, "_ft_compute_sample_grad"):
-            del self._ft_compute_sample_grad
