@@ -469,6 +469,28 @@ class CheckpointManager:  # noqa: PLR0904
         trial_dir = self._get_trial_dir(alg_idx, trial)
         return (trial_dir / "complete.json").exists()
 
+    def is_benchmark_started(self) -> bool:
+        """
+        Check if the benchmark has been started by looking for any existing checkpoints.
+
+        Returns:
+            True if any trial has at least one checkpoint saved, False otherwise.
+
+        """
+        metadata = self.load_metadata()
+        if metadata is None or "n_trials" not in metadata or "algorithms" not in metadata:
+            return False
+
+        n_trials = metadata["n_trials"]
+        algorithms = metadata["algorithms"]
+        for alg in algorithms:
+            alg_idx = alg["index"]
+            for trial in range(n_trials):
+                trial_dir = self._get_trial_dir(alg_idx, trial)
+                if any(trial_dir.glob("checkpoint_*.pkl*")):
+                    return True
+        return False
+
     def is_benchmark_completed(self) -> bool:
         """
         Check if all trials for all algorithms have been completed.

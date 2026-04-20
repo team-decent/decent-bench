@@ -138,11 +138,7 @@ if __name__ == "__main__":
                 "LT-ADMM",
                 "LT-ADMM-EMA",
             ]:
-                resume_benchmark = False
                 checkpoint_path = folder / f"{n_agents}_{n_neighbors}" / f"test_{drops}_{activity}" / alg
-                if checkpoint_path.exists():
-                    resume_benchmark = True
-
                 cm = CheckpointManager(
                     checkpoint_dir=checkpoint_path,
                     checkpoint_step=None,
@@ -274,12 +270,13 @@ if __name__ == "__main__":
                 algorithms = sorted(algorithms, key=lambda alg: alg.name)
 
                 if not is_benchmark_completed:
-                    if resume_benchmark:
+                    if cm.is_benchmark_started():
                         result = benchmark.resume_benchmark(
                             checkpoint_manager=cm,
                             create_backup=False,
                             show_speed=True,
                             show_trial=True,
+                            runtime_metrics=[runtime_library.RuntimeLoss(250)],
                         )
                     else:
                         result = benchmark.benchmark(
