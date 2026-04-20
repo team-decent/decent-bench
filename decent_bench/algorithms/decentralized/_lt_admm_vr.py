@@ -85,18 +85,11 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
         if not isinstance(agent.cost, EmpiricalRiskCost):
             raise TypeError("LT-ADMM-VR is only compatible with EmpiricalRiskCost.")
 
-        neighbors = network.active_neighbors(agent)
-
         agent.aux_vars["phi"] = iop.copy(agent.x)
-        if self.mask_z:
-            mask = [agent.aux_vars["neighbor_to_idx"][j] for j in neighbors]
-            z_sum = iop.sum(agent.aux_vars["z_i"][mask], dim=0)
-            multiplier = self.penalty * len(neighbors)
-            correction = aux_step_size * (multiplier * agent.x - z_sum)
-        else:
-            z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
-            multiplier = self.penalty * len(network.neighbors(agent))
-            correction = aux_step_size * (multiplier * agent.x - z_sum)
+        z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
+        # Always use the number of neighbors for the penalty term to ensure proper scaling
+        multiplier = self.penalty * len(network.neighbors(agent))
+        correction = aux_step_size * (multiplier * agent.x - z_sum)
 
         if not self.v2:
             r_grads = agent.cost.gradient(agent.x, indices="all", reduction=None)

@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 
 import decent_bench.utils.interoperability as iop
+from decent_bench.agents import Agent
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import P2PNetwork
 from decent_bench.utils._tags import tags
+from decent_bench.utils.array import Array
 from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
@@ -67,9 +69,9 @@ class DLM(P2PAlgorithm):
 
             # compute and store \sum_j (\mathbf{x}_{i,0} - \mathbf{x}_{j,0})
             for i in network.active_agents():
-                if len(i.messages) > 0:
-                    s = iop.stack([i.x - x_j for x_j in i.messages.values()])
-                    i.aux_vars["s"] = iop.sum(s, dim=0)
+                s = self._sum_messages(i)
+                if s is not None:
+                    i.aux_vars["s"] = len(i.messages) * i.x - s
         else:
             # step 1: update primal variable
             for i in network.active_agents():
@@ -83,13 +85,22 @@ class DLM(P2PAlgorithm):
 
             # compute and store \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
             for i in network.active_agents():
-                if len(i.messages) > 0:
-                    s = iop.stack([i.x - x_j for x_j in i.messages.values()])
-                    i.aux_vars["s"] = iop.sum(s, dim=0)
+                s = self._sum_messages(i)
+                if s is not None:
+                    i.aux_vars["s"] = len(i.messages) * i.x - s
 
             # step 3: update dual variable
             for i in network.active_agents():
                 i.aux_vars["y"] += self.penalty * i.aux_vars["s"]
+
+    def _sum_messages(self, i: "Agent") -> "Array | None":
+        s = None
+        for val in i.messages.values():
+            if s is None:
+                s = val
+            else:
+                s += val
+        return s
 
 
 DecentralizedLinearizedADMM = DLM  # alias

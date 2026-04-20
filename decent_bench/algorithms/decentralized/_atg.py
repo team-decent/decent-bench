@@ -113,10 +113,8 @@ class ATG(P2PAlgorithm):
         for i in network.active_agents():
             for j, msg in i.messages.items():
                 idx = i.aux_vars["neighbor_to_idx"][j]
-                i.aux_vars["z_y"][idx] = (1 - self.alpha) * i.aux_vars["z_y"][idx] \
-                                        + self.alpha * msg[0]  # fmt: skip
-                i.aux_vars["z_s"][idx] = (1 - self.alpha) * i.aux_vars["z_s"][idx] \
-                                        + self.alpha * msg[1]  # fmt: skip
+                i.aux_vars["z_y"][idx] = (1 - self.alpha) * i.aux_vars["z_y"][idx] + self.alpha * msg[0]
+                i.aux_vars["z_s"][idx] = (1 - self.alpha) * i.aux_vars["z_s"][idx] + self.alpha * msg[1]
 
 
 ADMMTracking = ATG  # alias

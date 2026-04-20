@@ -2,7 +2,6 @@ import random
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.costs import EmpiricalRiskCost
@@ -100,11 +99,12 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
 
         for i in network.active_agents():
             x_minus_eta_y = i.x - step_size * i.aux_vars["y"]
+            i.aux_vars["x_minus_eta_y"] = x_minus_eta_y
             network.broadcast(i, x_minus_eta_y)
 
         # Step 1: Update local estimate of the solution (line 3)
         for i in network.active_agents():
-            self._consensus_update(i, step_size)
+            self._consensus_update(i)
 
         # Step 2: Probabilistic snapshot update (line 4)
         # Select l_i^{k+1} ~ Bernoulli(P)
@@ -120,25 +120,23 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
         # We broadcast y_i + v_i - v_old to reduce communication
         for i in network.active_agents():
             y_plus_delta_v = i.aux_vars["y"] + i.aux_vars["v"] - i.aux_vars["v_old"]
+            i.aux_vars["y_plus_delta_v"] = y_plus_delta_v
             network.broadcast(i, y_plus_delta_v)
 
         # Step 4: Update gradient tracker (line 7)
         for i in network.active_agents():
             self._update_gradient_tracker(i)
 
-    def _consensus_update(self, agent: Agent, step_size: float) -> None:
+    def _consensus_update(self, agent: Agent) -> None:
         """
         Update local estimate via consensus.
 
         Algorithm 1, line 3.
 
         """
-        weighted_sum = self.W[agent, agent] * (agent.x - step_size * agent.aux_vars["y"])
-        if len(agent.messages) > 0:
-            weighted_sum += iop.sum(
-                iop.stack([self.W[agent, j] * x_minus_eta_y for j, x_minus_eta_y in agent.messages.items()]),
-                dim=0,
-            )
+        weighted_sum = self.W[agent, agent] * agent.aux_vars["x_minus_eta_y"]
+        for j, x_minus_eta_y in agent.messages.items():
+            weighted_sum += self.W[agent, j] * x_minus_eta_y
         agent.x = weighted_sum
 
     def _snapshot_update(self, agent: Agent) -> None:
@@ -197,10 +195,7 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
             We receive y_r + v_r - v_r_old directly to reduce communication.
 
         """
-        weighted_sum = self.W[agent, agent] * (agent.aux_vars["y"] + agent.aux_vars["v"] - agent.aux_vars["v_old"])
-        if len(agent.messages) > 0:
-            weighted_sum += iop.sum(
-                iop.stack([self.W[agent, j] * y_plus_delta_v for j, y_plus_delta_v in agent.messages.items()]),
-                dim=0,
-            )
+        weighted_sum = self.W[agent, agent] * agent.aux_vars["y_plus_delta_v"]
+        for j, y_plus_delta_v in agent.messages.items():
+            weighted_sum += self.W[agent, j] * y_plus_delta_v
         agent.aux_vars["y"] = weighted_sum

@@ -293,7 +293,7 @@ class Network(ABC):  # noqa: B024
             receiver = [receiver]
 
         currently_active_connected_agents = self._allowed_receivers(sender)
-        msg = self._message_compression[sender].compress(msg)
+        msg = self._message_compression[sender].compress(iop.copy(msg))
         for r in receiver:
             if r not in currently_active_connected_agents:
                 raise ValueError(

@@ -432,7 +432,7 @@ class PyTorchCost(EmpiricalRiskCost):
             NotImplementedError: Always raised to indicate proximal computation is not implemented.
 
         """
-        raise NotImplementedError("Proximal operator is not implemented for NeuralNetworkCostFunction.")
+        raise NotImplementedError("Proximal operator is not implemented for PyTorchCost.")
 
     def init_local_training(
         self,

@@ -159,11 +159,8 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
 
         """
         weighted_sum = self.W[agent, agent] * agent.aux_vars["y"]
-        if len(agent.messages) > 0:
-            weighted_sum += iop.sum(
-                iop.stack([self.W[agent, j] * y for j, y in agent.messages.items()]),
-                dim=0,
-            )
+        for j, y in agent.messages.items():
+            weighted_sum += self.W[agent, j] * y
         agent.aux_vars["y"] = weighted_sum + agent.aux_vars["v"] - agent.aux_vars["v_prev"]
 
     def _state_update(self, agent: Agent, step_size: float) -> None:
@@ -175,11 +172,8 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
         """
         agent.aux_vars["x_prev"] = agent.x
         weighted_sum = self.W[agent, agent] * agent.x
-        if len(agent.messages) > 0:
-            weighted_sum += iop.sum(
-                iop.stack([self.W[agent, j] * x for j, x in agent.messages.items()]),
-                dim=0,
-            )
+        for j, x in agent.messages.items():
+            weighted_sum += self.W[agent, j] * x
         agent.x = weighted_sum - step_size * agent.aux_vars["y"]
 
     def _inner_loop(self, network: P2PNetwork, step_size: float) -> None:

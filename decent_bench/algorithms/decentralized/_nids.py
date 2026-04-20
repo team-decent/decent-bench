@@ -81,8 +81,7 @@ class NIDS(P2PAlgorithm):
                 network.broadcast(i, i.aux_vars["y"])
             for i in network.active_agents():
                 neighborhood_avg = self.W_tilde[i, i] * i.aux_vars["y"]
-                if len(i.messages) > 0:
-                    s = iop.stack([self.W_tilde[i, j] * y_j for j, y_j in i.messages.items()])
-                    neighborhood_avg += iop.sum(s, dim=0)
+                for j, y_j in i.messages.items():
+                    neighborhood_avg += self.W_tilde[i, j] * y_j
                 i.aux_vars["x_old"] = i.x  # store x_k
                 i.x = neighborhood_avg  # update x_{k+1}

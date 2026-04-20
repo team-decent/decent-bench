@@ -120,11 +120,8 @@ class LED(P2PAlgorithm):
         Algorithm 1, line 2:
         """
         weighted_sum = self.W[agent, agent] * agent.aux_vars["phi"]
-        if len(agent.messages) > 0:
-            weighted_sum += iop.sum(
-                iop.stack([self.W[agent, j] * phi_j for j, phi_j in agent.messages.items()]),
-                dim=0,
-            )
+        for j, phi_j in agent.messages.items():
+            weighted_sum += self.W[agent, j] * phi_j
         agent.x = weighted_sum
 
     def _local_dual_update(self, agent: Agent) -> None:

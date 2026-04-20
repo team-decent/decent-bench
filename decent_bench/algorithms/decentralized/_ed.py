@@ -60,15 +60,15 @@ class ED(P2PAlgorithm):
 
     def step(self, network: P2PNetwork, _: int) -> None:
         for i in network.active_agents():
-            network.broadcast(i, i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
+            msg = i.x + i.aux_vars["y_new"] - i.aux_vars["y"]
+            i.aux_vars["msg"] = msg
+            network.broadcast(i, msg)
 
         for i in network.active_agents():
-            s = (
-                iop.sum(iop.stack([self.W[i, j] * msg for j, msg in i.messages.items()]), dim=0)
-                if len(i.messages) > 0
-                else 0
-            )
-            i.x = s + self.W[i, i] * (i.x + i.aux_vars["y_new"] - i.aux_vars["y"])
+            s = self.W[i, i] * i.aux_vars["msg"]
+            for j, msg in i.messages.items():
+                s += self.W[i, j] * msg
+            i.x = s
             i.aux_vars["y"] = i.aux_vars["y_new"]
             i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
 

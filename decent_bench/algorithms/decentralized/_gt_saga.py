@@ -76,10 +76,7 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
                 "g_old": g_minus1,  # Previous gradient estimator g_i^{-1} = 0
                 "g": g_minus1,
             }
-            i.initialize(
-                x=self.x0[i],
-                aux_vars=aux_vars,
-            )
+            i.initialize(x=self.x0[i], aux_vars=aux_vars)
 
     def step(self, network: P2PNetwork, iteration: int) -> None:
         step_size = self.step_size(iteration) if callable(self.step_size) else self.step_size
@@ -93,6 +90,7 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
         for i in network.active_agents():
             # Broadcast y_i + g_i - g_i^{-1}
             y_plus_delta_g = i.aux_vars["y"] + i.aux_vars["g"] - i.aux_vars["g_old"]
+            i.aux_vars["y_plus_delta_g"] = y_plus_delta_g
             network.broadcast(i, y_plus_delta_g)
 
         for i in network.active_agents():
@@ -103,6 +101,7 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
         for i in network.active_agents():
             # Broadcast x_i - alpha*y_i to reduce communication
             x_minus_alpha_y = i.x - step_size * i.aux_vars["y"]
+            i.aux_vars["x_minus_alpha_y"] = x_minus_alpha_y
             network.broadcast(i, x_minus_alpha_y)
 
         for i in network.active_agents():
@@ -142,22 +141,16 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
 
     def _update_gradient_tracker(self, agent: Agent) -> None:
         """Update local gradient tracker."""
-        weighted_sum = self.W[agent, agent] * (agent.aux_vars["y"] + agent.aux_vars["g"] - agent.aux_vars["g_old"])
-        if len(agent.messages) > 0:
-            weighted_sum += iop.sum(
-                iop.stack([self.W[agent, j] * y_plus_delta_g for j, y_plus_delta_g in agent.messages.items()]),
-                dim=0,
-            )
+        weighted_sum = self.W[agent, agent] * agent.aux_vars["y_plus_delta_g"]
+        for j, y_plus_delta_g in agent.messages.items():
+            weighted_sum += self.W[agent, j] * y_plus_delta_g
         agent.aux_vars["y"] = weighted_sum
 
     def _consensus_update(self, agent: Agent) -> None:
         """Update local estimate via consensus."""
-        weighted_sum = self.W[agent, agent] * (agent.x - self.step_size * agent.aux_vars["y"])
-        if len(agent.messages) > 0:
-            weighted_sum += iop.sum(
-                iop.stack([self.W[agent, j] * x_minus_alpha_y for j, x_minus_alpha_y in agent.messages.items()]),
-                dim=0,
-            )
+        weighted_sum = self.W[agent, agent] * agent.aux_vars["x_minus_alpha_y"]
+        for j, x_minus_alpha_y in agent.messages.items():
+            weighted_sum += self.W[agent, j] * x_minus_alpha_y
         agent.x = weighted_sum
 
     def _update_gradient_table(self, agent: Agent) -> None:

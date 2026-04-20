@@ -101,19 +101,18 @@ class ProxSkip(P2PAlgorithm):
             self._compute_prediction(i, step_size)
 
         # Step 2: Flip coins to determine communication (line 2)
-        # Generate Bernoulli random variables theta_i for each agent
-        # theta_i ~ Bernoulli(p), with P(theta_i = 1) = p
-        theta_i = random.random() < self.comm_probability
+        # theta_k ~ Bernoulli(p), with P(theta_k = 1) = p
+        theta_k = random.random() < self.comm_probability
 
         # Step 3: Communication and updates (lines 6-11)
-        if theta_i:  # theta_i = 1 (communicate with probability p)
+        if theta_k:  # theta_k = 1 (communicate with probability p)
             for i in network.active_agents():
                 # Line 7: Broadcast z_i^t for weighted averaging
                 network.broadcast(i, i.aux_vars["z"])
 
         # Update based on communication decision
         for i in network.active_agents():
-            if theta_i:  # Line 7-8: communicate and update
+            if theta_k:  # Line 7-8: communicate and update
                 self._communication_update(i, aux_step_size)
             else:  # Line 10: skip communication
                 self._no_communication_update(i)
@@ -140,11 +139,8 @@ class ProxSkip(P2PAlgorithm):
         # In practice, we only communicate with neighbors, so:
         # x_i^{t+1} = sum_{j in N_i} W_a[i,j] z_j^t
         weighted_sum = self.W_a[agent, agent] * agent.aux_vars["z"]
-        if len(agent.messages) > 0:
-            weighted_sum += iop.sum(
-                iop.stack([self.W_a[agent, j] * z_j for j, z_j in agent.messages.items()]),
-                dim=0,
-            )
+        for j, z_j in agent.messages.items():
+            weighted_sum += self.W_a[agent, j] * z_j
         # Update primal: x_i^{t+1} = weighted average
         agent.x = weighted_sum
 

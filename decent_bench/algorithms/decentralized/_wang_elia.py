@@ -63,14 +63,15 @@ class WangElia(P2PAlgorithm):
     def step(self, network: P2PNetwork, _: int) -> None:
         # 1st communication round
         for i in network.active_agents():
-            network.broadcast(i, i.x + i.aux_vars["z"])
+            msg = i.x + i.aux_vars["z"]
+            i.aux_vars["msg"] = msg
+            network.broadcast(i, msg)
 
         # do consensus and local gradient step
         for i in network.active_agents():
-            neighborhood_avg = self.K[i, i] * (i.x + i.aux_vars["z"])
-            if len(i.messages) > 0:
-                s = iop.stack([self.K[i, j] * m_j for j, m_j in i.messages.items()])
-                neighborhood_avg += iop.sum(s, dim=0)
+            neighborhood_avg = self.K[i, i] * i.aux_vars["msg"]
+            for j, msg_j in i.messages.items():
+                neighborhood_avg += self.K[i, j] * msg_j
 
             i.aux_vars["x_old"] = i.x
             i.x = i.x - neighborhood_avg - self.step_size * i.cost.gradient(i.x)
@@ -82,7 +83,6 @@ class WangElia(P2PAlgorithm):
         # update auxiliary variable
         for i in network.active_agents():
             neighborhood_avg = self.K[i, i] * i.aux_vars["x_old"]
-            if len(i.messages) > 0:
-                s = iop.stack([self.K[i, j] * m_j for j, m_j in i.messages.items()])
-                neighborhood_avg += iop.sum(s, dim=0)
+            for j, x_old_j in i.messages.items():
+                neighborhood_avg += self.K[i, j] * x_old_j
             i.aux_vars["z"] += neighborhood_avg
