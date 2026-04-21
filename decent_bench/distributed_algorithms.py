@@ -423,6 +423,327 @@ class FedProx(FedAlgorithm):
         return local_x
 
 
+@dataclass(eq=False)
+class FedOpt(FedAlgorithm, ABC):
+    r"""
+    Shared FedOpt template with client local SGD and server adaptive optimization :footcite:p:`Alg_FedOpt`.
+
+    Each selected client starts from the broadcast global model :math:`\mathbf{x}_t` and performs
+    ``num_local_epochs`` local SGD steps with client step size ``step_size``:
+
+    .. math::
+        \mathbf{x}_{i, t}^{(k+1)} = \mathbf{x}_{i, t}^{(k)} - \eta_l
+        \nabla f_i(\mathbf{x}_{i, t}^{(k)}).
+
+    After :math:`K` local steps, client :math:`i` forms the model delta
+
+    .. math::
+        \delta_i^t = \mathbf{x}_{i, t}^{(K)} - \mathbf{x}_t
+
+    and uploads :math:`\delta_i^t` to the server. The server averages these client deltas uniformly:
+
+    .. math::
+        \Delta_t = \frac{1}{|S_t|} \sum_{i \in S_t} \delta_i^t.
+
+    FedAdagrad, FedYogi, and FedAdam share this client-side update and differ only in how they update the
+    server-side second-moment state.
+
+    .. footbibliography::
+    """
+
+    iterations: int = 100
+    step_size: float = 0.001
+    num_local_epochs: int = 1
+    server_step_size: float = 0.001
+    beta_1: float = 0.9
+    tau: float = 1e-6
+    selection_scheme: ClientSelectionScheme | None = field(
+        default_factory=lambda: UniformClientSelection(client_fraction=1.0)
+    )
+    x0: InitialStates = None
+    name: str = "FedOpt"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
+        if self.num_local_epochs <= 0:
+            raise ValueError("`num_local_epochs` must be positive")
+        if self.server_step_size <= 0:
+            raise ValueError("`server_step_size` must be positive")
+        if not (0 <= self.beta_1 < 1):
+            raise ValueError("`beta_1` must satisfy 0 <= beta_1 < 1")
+        if not (0 < self.tau <= 1):
+            raise ValueError("`tau` must satisfy 0 < tau <= 1")
+
+    def initialize(self, network: FedNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.initial_states(self.x0, network)
+        server = network.server()
+        server_x0 = self.x0[server]
+        server.initialize(
+            x=server_x0,
+            aux_vars={"m": iop.zeros_like(server_x0), "v": iop.zeros_like(server_x0)},
+        )
+        for client in network.clients():
+            client.initialize(x=self.x0[client])
+
+    def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
+        selected_clients = self._selected_clients_for_round(network, iteration)
+        if not selected_clients:
+            return
+
+        self.server_broadcast(network, selected_clients)
+        participating_clients = self._clients_with_server_broadcast(network, selected_clients)
+        if not participating_clients:
+            return
+        self._clear_buffered_server_messages(network, participating_clients)
+        self._run_local_updates(network, participating_clients)
+        self.aggregate(network, participating_clients)
+
+    def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
+        server = network.server()
+        for client in participating_clients:
+            reference_x = self._get_server_broadcast(client, server)
+            client.x = self._compute_local_update(client, server)
+            network.send(sender=client, receiver=server, msg=client.x - reference_x)
+
+    def _compute_local_update(self, client: "Agent", server: "Agent") -> "Array":
+        """
+        Run local SGD steps using the batching semantics of ``client.cost.gradient``.
+
+        Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so FedOpt
+        variants perform mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
+        """
+        local_x = self._get_server_broadcast(client, server)
+        for _ in range(self.num_local_epochs):
+            grad = client.cost.gradient(local_x)
+            local_x -= self.step_size * grad
+        return local_x
+
+    def aggregate(
+        self,
+        network: FedNetwork,
+        participating_clients: Sequence["Agent"],
+    ) -> None:
+        """
+        Aggregate client model deltas uniformly, then apply the server adaptive optimizer.
+
+        This method assumes clients upload final local model deltas. When used with
+        :class:`~decent_bench.networks.Network` ``buffer_messages=True``, the caller must already have removed stale
+        buffered client-to-server messages for the participating clients, so only current-round uploads are used.
+        """
+        server = network.server()
+        received_clients = [client for client in participating_clients if client in server.messages]
+        if not received_clients:
+            return
+
+        server_x = iop.copy(server.x)
+        model_deltas = [server.messages[client] for client in received_clients]
+        weights = [1.0] * len(received_clients)
+        total_weight = float(len(received_clients))
+        average_delta = self._weighted_average(model_deltas, weights, total_weight)
+
+        server.aux_vars["m"] = self.beta_1 * server.aux_vars["m"] + (1 - self.beta_1) * average_delta
+        server.aux_vars["v"] = self._update_second_moment(server.aux_vars["v"], average_delta)
+        server.x = server_x + (
+            self.server_step_size * server.aux_vars["m"] / (iop.sqrt(server.aux_vars["v"]) + self.tau)
+        )
+
+    @abstractmethod
+    def _update_second_moment(self, second_moment: "Array", average_delta: "Array") -> "Array":
+        """Return the updated server second-moment state for the current round."""
+
+
+@tags("federated")
+@dataclass(eq=False)
+class FedAdagrad(FedOpt):
+    r"""
+    FedAdagrad uses local SGD on clients and an Adagrad-style adaptive server update :footcite:p:`Alg_FedOpt`.
+
+    Each selected client starts from the broadcast global model :math:`\mathbf{x}_t` and performs
+    ``num_local_epochs`` local SGD steps with client step size ``step_size``.
+
+    .. math::
+        \mathbf{x}_{i, t}^{(k+1)} = \mathbf{x}_{i, t}^{(k)} - \eta_l
+        \nabla f_i(\mathbf{x}_{i, t}^{(k)}).
+
+    The final client model defines the uploaded delta
+
+    .. math::
+        \delta_i^t = \mathbf{x}_{i, t}^{(K)} - \mathbf{x}_t.
+
+    The server aggregates client model deltas uniformly over the participating clients:
+
+    .. math::
+        \Delta_t = \frac{1}{|S_t|} \sum_{i \in S_t} \delta_i^t.
+
+    FedAdagrad then updates its moment buffers and global model as
+
+    .. math::
+        \mathbf{m}_t = \beta_1 \mathbf{m}_{t-1} + (1 - \beta_1) \Delta_t
+
+    .. math::
+        \mathbf{v}_t = \mathbf{v}_{t-1} + \Delta_t^2
+
+    .. math::
+        \mathbf{x}_{t+1} = \mathbf{x}_t + \eta
+        \frac{\mathbf{m}_t}{\sqrt{\mathbf{v}_t} + \tau}.
+
+    Here :math:`\eta_l` is the client learning rate (``step_size``), :math:`K` is the number of local SGD steps
+    (``num_local_epochs``), :math:`\eta` is the server learning rate (``server_step_size``), :math:`\beta_1` is the
+    first-moment coefficient, :math:`\tau` is the numerical stability term, and :math:`S_t` is the set of clients
+    whose uploads are actually received in round :math:`t`. Aggregation is always uniform across the received clients.
+    Costs that preserve the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use mini-batch local updates;
+    generic costs use their usual full-gradient updates.
+
+    .. footbibliography::
+    """
+
+    name: str = "FedAdagrad"
+
+    def _update_second_moment(self, second_moment: "Array", average_delta: "Array") -> "Array":
+        return second_moment + (average_delta * average_delta)
+
+
+@tags("federated")
+@dataclass(eq=False)
+class FedYogi(FedOpt):
+    r"""
+    FedYogi uses local SGD on clients and a Yogi-style adaptive server update :footcite:p:`Alg_FedOpt`.
+
+    Each selected client starts from the broadcast global model :math:`\mathbf{x}_t` and performs
+    ``num_local_epochs`` local SGD steps with client step size ``step_size``.
+
+    .. math::
+        \mathbf{x}_{i, t}^{(k+1)} = \mathbf{x}_{i, t}^{(k)} - \eta_l
+        \nabla f_i(\mathbf{x}_{i, t}^{(k)}).
+
+    The final client model defines the uploaded delta
+
+    .. math::
+        \delta_i^t = \mathbf{x}_{i, t}^{(K)} - \mathbf{x}_t.
+
+    The server aggregates client model deltas uniformly over the participating clients:
+
+    .. math::
+        \Delta_t = \frac{1}{|S_t|} \sum_{i \in S_t} \delta_i^t.
+
+    FedYogi then updates its moment buffers and global model as
+
+    .. math::
+        \mathbf{m}_t = \beta_1 \mathbf{m}_{t-1} + (1 - \beta_1) \Delta_t
+
+    .. math::
+        \mathbf{v}_t = \mathbf{v}_{t-1} - (1 - \beta_2) \Delta_t^2
+        \operatorname{sign}(\mathbf{v}_{t-1} - \Delta_t^2)
+
+    .. math::
+        \mathbf{x}_{t+1} = \mathbf{x}_t + \eta
+        \frac{\mathbf{m}_t}{\sqrt{\mathbf{v}_t} + \tau}.
+
+    Here :math:`\eta_l` is the client learning rate (``step_size``), :math:`K` is the number of local SGD steps
+    (``num_local_epochs``), :math:`\eta` is the server learning rate (``server_step_size``), :math:`\beta_1` and
+    :math:`\beta_2` are the first- and second-moment coefficients, :math:`\tau` is the numerical stability term, and
+    :math:`S_t` is the set of clients whose uploads are actually received in round :math:`t`. Aggregation is always
+    uniform across the received clients. Costs that preserve the
+    :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use mini-batch local updates; generic costs use their
+    usual full-gradient updates.
+
+    .. footbibliography::
+    """
+
+    beta_2: float = 0.99
+    name: str = "FedYogi"
+
+    def __post_init__(self) -> None:
+        """
+        Validate the Yogi-specific hyperparameters.
+
+        Raises:
+            ValueError: if ``beta_2`` is outside ``[0, 1)``.
+
+        """
+        super().__post_init__()
+        if not (0 <= self.beta_2 < 1):
+            raise ValueError("`beta_2` must satisfy 0 <= beta_2 < 1")
+
+    def _update_second_moment(self, second_moment: "Array", average_delta: "Array") -> "Array":
+        delta_squared = average_delta * average_delta
+        return second_moment - ((1 - self.beta_2) * delta_squared * iop.sign(second_moment - delta_squared))
+
+
+@tags("federated")
+@dataclass(eq=False)
+class FedAdam(FedOpt):
+    r"""
+    FedAdam uses local SGD on clients and an Adam-style adaptive server update :footcite:p:`Alg_FedOpt`.
+
+    Each selected client starts from the broadcast global model :math:`\mathbf{x}_t` and performs
+    ``num_local_epochs`` local SGD steps with client step size ``step_size``.
+
+    .. math::
+        \mathbf{x}_{i, t}^{(k+1)} = \mathbf{x}_{i, t}^{(k)} - \eta_l
+        \nabla f_i(\mathbf{x}_{i, t}^{(k)}).
+
+    The final client model defines the uploaded delta
+
+    .. math::
+        \delta_i^t = \mathbf{x}_{i, t}^{(K)} - \mathbf{x}_t.
+
+    The server aggregates client model deltas uniformly over the participating clients:
+
+    .. math::
+        \Delta_t = \frac{1}{|S_t|} \sum_{i \in S_t} \delta_i^t.
+
+    FedAdam then updates its moment buffers and global model as
+
+    .. math::
+        \mathbf{m}_t = \beta_1 \mathbf{m}_{t-1} + (1 - \beta_1) \Delta_t
+
+    .. math::
+        \mathbf{v}_t = \beta_2 \mathbf{v}_{t-1} + (1 - \beta_2) \Delta_t^2
+
+    .. math::
+        \mathbf{x}_{t+1} = \mathbf{x}_t + \eta
+        \frac{\mathbf{m}_t}{\sqrt{\mathbf{v}_t} + \tau}.
+
+    Here :math:`\eta_l` is the client learning rate (``step_size``), :math:`K` is the number of local SGD steps
+    (``num_local_epochs``), :math:`\eta` is the server learning rate (``server_step_size``), :math:`\beta_1` and
+    :math:`\beta_2` are the first- and second-moment coefficients, :math:`\tau` is the numerical stability term, and
+    :math:`S_t` is the set of clients whose uploads are actually received in round :math:`t`. Aggregation is always
+    uniform across the received clients. Costs that preserve the
+    :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use mini-batch local updates; generic costs use their
+    usual full-gradient updates.
+
+    .. footbibliography::
+    """
+
+    beta_2: float = 0.99
+    name: str = "FedAdam"
+
+    def __post_init__(self) -> None:
+        """
+        Validate the Adam-specific hyperparameters.
+
+        Raises:
+            ValueError: if ``beta_2`` is outside ``[0, 1)``.
+
+        """
+        super().__post_init__()
+        if not (0 <= self.beta_2 < 1):
+            raise ValueError("`beta_2` must satisfy 0 <= beta_2 < 1")
+
+    def _update_second_moment(self, second_moment: "Array", average_delta: "Array") -> "Array":
+        delta_squared = average_delta * average_delta
+        return (self.beta_2 * second_moment) + ((1 - self.beta_2) * delta_squared)
+
+
 @tags("federated")
 @dataclass(eq=False)
 class Scaffold(FedAlgorithm):
