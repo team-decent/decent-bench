@@ -170,10 +170,33 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         """Send the current server model to the selected clients."""
         network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x)
 
+    def _clients_with_server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> list["Agent"]:
+        """Return the selected clients that actually received the current server broadcast."""
+        return [client for client in selected_clients if network.server() in client.messages]
+
+    def _clear_buffered_server_messages(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
+        """
+        Remove stale client-to-server messages for the current participants.
+
+        This ensures the server aggregates only updates actually received from those clients in the current round.
+        The clean-up is needed when :class:`~decent_bench.networks.Network` uses ``buffer_messages=True``, since old
+        client uploads would otherwise remain stored at the server and could be mistaken for fresh round updates.
+        """
+        for client in participating_clients:
+            network.server()._received_messages.pop(client, None)  # noqa: SLF001
+
     @staticmethod
-    def _client_reference_x(client: "Agent", server: "Agent") -> "Array":
-        """Return the latest server model seen by the client, or fall back to the client's current model."""
-        return iop.copy(client.messages.get(server, client.x))
+    def _get_server_broadcast(client: "Agent", server: "Agent") -> "Array":
+        """
+        Return the current server broadcast received by the client.
+
+        Raises:
+            ValueError: if the client did not receive the current server broadcast.
+
+        """
+        if server not in client.messages:
+            raise ValueError("Client did not receive the current server broadcast")
+        return iop.copy(client.messages[server])
 
     @staticmethod
     def _weighted_average(values: Sequence["Array"], weights: Sequence[float], total_weight: float) -> "Array":
@@ -193,6 +216,28 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         if self.selection_scheme is None:
             return list(active_clients)
         return self.selection_scheme.select(active_clients, iteration)
+
+    def aggregate(
+        self,
+        network: FedNetwork,
+        participating_clients: Sequence["Agent"],
+    ) -> None:
+        """
+        Aggregate client model uploads at the server using uniform averaging.
+
+        This default federated aggregation assumes clients upload final local model states.
+
+        When used with :class:`~decent_bench.networks.Network` ``buffer_messages=True``, this method assumes the
+        caller has already removed stale buffered client-to-server messages for the participating clients, so only
+        current-round updates are aggregated.
+        """
+        received_clients = [client for client in participating_clients if client in network.server().messages]
+        if not received_clients:
+            return
+        updates = [network.server().messages[client] for client in received_clients]
+        weights = [1.0] * len(received_clients)
+        total_weight = float(len(received_clients))
+        network.server().x = self._weighted_average(updates, weights, total_weight)
 
 
 @tags("federated")
@@ -256,11 +301,15 @@ class FedAvg(FedAlgorithm):
             return
 
         self.server_broadcast(network, selected_clients)
-        self._run_local_updates(network, selected_clients)
-        self.aggregate(network, selected_clients)
+        participating_clients = self._clients_with_server_broadcast(network, selected_clients)
+        if not participating_clients:
+            return
+        self._clear_buffered_server_messages(network, participating_clients)
+        self._run_local_updates(network, participating_clients)
+        self.aggregate(network, participating_clients)
 
-    def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        for client in selected_clients:
+    def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
+        for client in participating_clients:
             client.x = self._compute_local_update(client, network.server())
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
@@ -271,25 +320,11 @@ class FedAvg(FedAlgorithm):
         Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so FedAvg
         performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
         """
-        local_x = self._client_reference_x(client, server)
+        local_x = self._get_server_broadcast(client, server)
         for _ in range(self.num_local_epochs):
             grad = client.cost.gradient(local_x)
             local_x -= self.step_size * grad
         return local_x
-
-    def aggregate(
-        self,
-        network: FedNetwork,
-        selected_clients: Sequence["Agent"],
-    ) -> None:
-        """Aggregate client updates at the server."""
-        received_clients = [client for client in selected_clients if client in network.server().messages]
-        if not received_clients:
-            return
-        updates = [network.server().messages[client] for client in received_clients]
-        weights = [1.0] * len(received_clients)
-        total_weight = float(len(received_clients))
-        network.server().x = self._weighted_average(updates, weights, total_weight)
 
 
 @tags("federated")
@@ -361,11 +396,15 @@ class FedProx(FedAlgorithm):
             return
 
         self.server_broadcast(network, selected_clients)
-        self._run_local_updates(network, selected_clients)
-        self.aggregate(network, selected_clients)
+        participating_clients = self._clients_with_server_broadcast(network, selected_clients)
+        if not participating_clients:
+            return
+        self._clear_buffered_server_messages(network, participating_clients)
+        self._run_local_updates(network, participating_clients)
+        self.aggregate(network, participating_clients)
 
-    def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        for client in selected_clients:
+    def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
+        for client in participating_clients:
             client.x = self._compute_local_update(client, network.server())
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
@@ -376,26 +415,12 @@ class FedProx(FedAlgorithm):
         Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so FedProx
         performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
         """
-        reference_x = self._client_reference_x(client, server)
+        reference_x = self._get_server_broadcast(client, server)
         local_x = iop.copy(reference_x)
         for _ in range(self.num_local_epochs):
             grad = client.cost.gradient(local_x) + self.mu * (local_x - reference_x)
             local_x -= self.step_size * grad
         return local_x
-
-    def aggregate(
-        self,
-        network: FedNetwork,
-        selected_clients: Sequence["Agent"],
-    ) -> None:
-        """Aggregate client updates at the server."""
-        received_clients = [client for client in selected_clients if client in network.server().messages]
-        if not received_clients:
-            return
-        updates = [network.server().messages[client] for client in received_clients]
-        weights = [1.0] * len(received_clients)
-        total_weight = float(len(received_clients))
-        network.server().x = self._weighted_average(updates, weights, total_weight)
 
 
 @tags("federated")
@@ -477,13 +502,9 @@ class Scaffold(FedAlgorithm):
         )
         for client in network.clients():
             client_x0 = self.x0[client]
-            zero_control = iop.zeros_like(client_x0)
             client.initialize(
                 x=client_x0,
-                aux_vars={
-                    "c_i": zero_control,
-                    "c": iop.zeros_like(client_x0),
-                },
+                aux_vars={"c_i": iop.zeros_like(client_x0)},
             )
 
     def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
@@ -492,29 +513,36 @@ class Scaffold(FedAlgorithm):
             return
 
         self.server_broadcast(network, selected_clients)
-        server_control = network.server().aux_vars["c"]
-        for client in selected_clients:
-            if network.server() in client.messages:
-                client.aux_vars["c"] = iop.copy(server_control)
-        self._run_local_updates(network, selected_clients)
-        self.aggregate(network, selected_clients)
+        participating_clients = self._clients_with_server_broadcast(network, selected_clients)
+        if not participating_clients:
+            return
+        self._clear_buffered_server_messages(network, participating_clients)
+        self._run_local_updates(network, participating_clients)
+        self.aggregate(network, participating_clients)
 
-    def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        for client in selected_clients:
-            client.x, client.aux_vars["delta_c"] = self._compute_local_update(client, network.server())
-            network.send(sender=client, receiver=network.server(), msg=client.x)
+    def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
+        """Send the current server model and server control variate to the selected clients."""
+        payload = iop.stack([network.server().x, network.server().aux_vars["c"]], dim=0)
+        network.send(sender=network.server(), receiver=selected_clients, msg=payload)
 
-    def _compute_local_update(self, client: "Agent", server: "Agent") -> tuple["Array", "Array"]:
+    def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
+        for client in participating_clients:
+            client.x, model_delta, client.aux_vars["delta_c"] = self._compute_local_update(client, network.server())
+            payload = iop.stack([model_delta, client.aux_vars["delta_c"]], dim=0)
+            network.send(sender=client, receiver=network.server(), msg=payload)
+
+    def _compute_local_update(self, client: "Agent", server: "Agent") -> tuple["Array", "Array", "Array"]:
         """
         Run local SCAFFOLD steps using the batching semantics of ``client.cost.gradient``.
 
         Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so SCAFFOLD
         performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
         """
-        reference_x = self._client_reference_x(client, server)
+        server_broadcast = self._get_server_broadcast(client, server)
+        reference_x = iop.copy(server_broadcast[0])
         local_x = iop.copy(reference_x)
         client_control = client.aux_vars["c_i"]
-        server_control = client.aux_vars["c"]
+        server_control = iop.copy(server_broadcast[1])
 
         for _ in range(self.num_local_epochs):
             grad = client.cost.gradient(local_x)
@@ -523,30 +551,36 @@ class Scaffold(FedAlgorithm):
         new_client_control = (
             client_control - server_control + ((reference_x - local_x) / (self.num_local_epochs * self.step_size))
         )
+        model_delta = local_x - reference_x
         control_variate_delta = new_client_control - client_control
         client.aux_vars["c_i"] = new_client_control
-        return local_x, control_variate_delta
+        return local_x, model_delta, control_variate_delta
 
     def aggregate(
         self,
         network: FedNetwork,
-        selected_clients: Sequence["Agent"],
+        participating_clients: Sequence["Agent"],
     ) -> None:
-        """Aggregate received SCAFFOLD client deltas using uniform averaging."""
+        """
+        Aggregate received SCAFFOLD client deltas using uniform averaging.
+
+        When used with :class:`~decent_bench.networks.Network` ``buffer_messages=True``, this method assumes the
+        caller has already removed stale buffered client-to-server messages for the participating clients, so only
+        current-round updates are aggregated.
+        """
         server = network.server()
-        received_clients = [client for client in selected_clients if client in server.messages]
+        received_clients = [client for client in participating_clients if client in server.messages]
         if not received_clients:
             return
 
-        updates = [server.messages[client] for client in received_clients]
+        model_deltas = [server.messages[client][0] for client in received_clients]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))
-        server_x = iop.copy(server.x)
-        model_deltas = [update - server_x for update in updates]
         average_model_delta = self._weighted_average(model_deltas, weights, total_weight)
+        server_x = iop.copy(server.x)
         server.x = server_x + self.server_step_size * average_model_delta
 
-        control_deltas = [client.aux_vars["delta_c"] for client in received_clients]
+        control_deltas = [server.messages[client][1] for client in received_clients]
         average_control_delta = self._weighted_average(control_deltas, weights, total_weight)
         participation_fraction = len(received_clients) / len(network.clients())
         server.aux_vars["c"] += participation_fraction * average_control_delta

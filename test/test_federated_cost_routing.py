@@ -193,12 +193,15 @@ def _run_federated_local_update(
     server = Agent(1, ZeroCost(cost.shape))
     aux_vars = None
     if isinstance(algorithm, Scaffold):
-        aux_vars = {
-            "c_i": np.zeros(cost.shape, dtype=float),
-            "c": np.zeros(cost.shape, dtype=float),
-        }
+        aux_vars = {"c_i": np.zeros(cost.shape, dtype=float)}
     client.initialize(x=np.zeros(cost.shape, dtype=float), aux_vars=aux_vars)
     server.initialize(x=np.zeros(cost.shape, dtype=float))
+    if isinstance(algorithm, Scaffold):
+        client._received_messages[server] = np.stack(  # noqa: SLF001
+            [np.zeros(cost.shape, dtype=float), np.zeros(cost.shape, dtype=float)]
+        )
+    else:
+        client._received_messages[server] = np.zeros(cost.shape, dtype=float)  # noqa: SLF001
     local_update = algorithm._compute_local_update(client, server)
     if isinstance(algorithm, Scaffold):
         return local_update[0]
