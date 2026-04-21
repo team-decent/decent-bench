@@ -242,6 +242,59 @@ def test_fedopt_aggregation_is_uniform(algorithm_cls: type, kwargs: dict[str, fl
 
 
 @pytest.mark.parametrize(
+    ("algorithm_cls", "kwargs", "expected_v"),
+    [
+        pytest.param(
+            FedAdagrad,
+            {"iterations": 1, "step_size": 1.0, "server_step_size": 1.0, "beta_1": 0.0, "tau": 1.0},
+            4.0,
+            id="fedadagrad",
+        ),
+        pytest.param(
+            FedYogi,
+            {
+                "iterations": 1,
+                "step_size": 1.0,
+                "server_step_size": 1.0,
+                "beta_1": 0.0,
+                "beta_2": 0.25,
+                "tau": 1.0,
+            },
+            3.0,
+            id="fedyogi",
+        ),
+        pytest.param(
+            FedAdam,
+            {
+                "iterations": 1,
+                "step_size": 1.0,
+                "server_step_size": 1.0,
+                "beta_1": 0.0,
+                "beta_2": 0.25,
+                "tau": 1.0,
+            },
+            3.0,
+            id="fedadam",
+        ),
+    ],
+)
+def test_fedopt_aggregation_uses_only_received_client_deltas(
+    algorithm_cls: type, kwargs: dict[str, float | int], expected_v: float
+) -> None:
+    algorithm = algorithm_cls(**kwargs)
+    network, clients = _make_fed_network(TrackingCost(1.0), TrackingCost(2.0))
+    algorithm.initialize(network)
+
+    network.server().x = np.array([7.0])
+    network.send(sender=clients[0], receiver=network.server(), msg=np.array([2.0]))
+
+    algorithm.aggregate(network, clients)
+
+    np.testing.assert_allclose(network.server().aux_vars["m"], np.array([2.0]))
+    np.testing.assert_allclose(network.server().aux_vars["v"], np.array([expected_v]))
+
+
+@pytest.mark.parametrize(
     ("algorithm_cls", "kwargs"),
     [
         pytest.param(
@@ -481,55 +534,6 @@ def test_fedopt_buffered_stale_client_messages_are_not_aggregated(
     algorithm.step(network, 1)
 
     np.testing.assert_allclose(network.server().x, np.array([expected_x]))
-
-
-@pytest.mark.parametrize(
-    ("algorithm_cls", "kwargs"),
-    [
-        pytest.param(
-            FedAdagrad,
-            {"iterations": 1, "step_size": 1.0, "server_step_size": 1.0, "beta_1": 0.0, "tau": 1.0},
-            id="fedadagrad",
-        ),
-        pytest.param(
-            FedYogi,
-            {
-                "iterations": 1,
-                "step_size": 1.0,
-                "server_step_size": 1.0,
-                "beta_1": 0.0,
-                "beta_2": 0.25,
-                "tau": 1.0,
-            },
-            id="fedyogi",
-        ),
-        pytest.param(
-            FedAdam,
-            {
-                "iterations": 1,
-                "step_size": 1.0,
-                "server_step_size": 1.0,
-                "beta_1": 0.0,
-                "beta_2": 0.25,
-                "tau": 1.0,
-            },
-            id="fedadam",
-        ),
-    ],
-)
-def test_fedopt_step_runs_one_round_end_to_end(algorithm_cls: type, kwargs: dict[str, float | int]) -> None:
-    algorithm = algorithm_cls(**kwargs)
-    network, clients = _make_fed_network(TrackingCost(1.0), TrackingCost(2.0))
-    algorithm.initialize(network)
-
-    network._step(0)  # noqa: SLF001
-    algorithm.step(network, 0)
-
-    assert network.server().aux_vars is not None
-    assert set(network.server().aux_vars) == {"m", "v"}
-    assert clients[0].x.shape == (1,)
-    assert clients[1].x.shape == (1,)
-    assert not np.allclose(network.server().x, np.zeros(1))
 
 
 @pytest.mark.parametrize(
