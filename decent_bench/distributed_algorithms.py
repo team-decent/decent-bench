@@ -479,8 +479,8 @@ class FedOpt(FedAlgorithm, ABC):
             raise ValueError("`server_step_size` must be positive")
         if not (0 <= self.beta_1 < 1):
             raise ValueError("`beta_1` must satisfy 0 <= beta_1 < 1")
-        if not (0 < self.tau <= 1):
-            raise ValueError("`tau` must satisfy 0 < tau <= 1")
+        if self.tau <= 0:
+            raise ValueError("`tau` must be positive")
 
     def initialize(self, network: FedNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.initial_states(self.x0, network)
