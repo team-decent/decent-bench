@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, SupportsIndex, TypeAlias, TypeVar, Union
 
@@ -53,12 +52,6 @@ type EmpiricalRiskIndices = list[int] | Literal["all", "batch"] | int
 Type alias for specifying indices in empirical risk computations.
 Can be a list of integers, the string "all" for full dataset, the string "batch" for a mini-batch,
 or an integer specifying a single datapoint.
-"""
-
-type ClientWeights = dict[int, float] | Sequence[float]
-"""
-Type alias for client weighting configuration.
-Use a dict keyed by client id, or a sequence indexed by client id.
 """
 
 type EmpiricalRiskReduction = Literal["mean"] | None

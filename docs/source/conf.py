@@ -40,7 +40,6 @@ autodoc_default_options = {}
 autodoc_member_order = "bysource"
 autodoc_preserve_defaults = True
 autodoc_type_aliases = {
-    "ClientWeights": "decent_bench.utils.types.ClientWeights",
     "Network": "decent_bench.networks.Network",
     "NetworkT": "decent_bench.utils.types.NetworkT",
 }
