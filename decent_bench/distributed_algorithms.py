@@ -445,8 +445,25 @@ class FedOpt(FedAlgorithm, ABC):
     .. math::
         \Delta_t = \frac{1}{|S_t|} \sum_{i \in S_t} \delta_i^t.
 
-    FedAdagrad, FedYogi, and FedAdam share this client-side update and differ only in how they update the
-    server-side second-moment state.
+    The server then applies the shared FedOpt first-moment and model updates
+
+    .. math::
+        \mathbf{m}_t = \beta_1 \mathbf{m}_{t-1} + (1 - \beta_1) \Delta_t
+
+    .. math::
+        \mathbf{v}_t = \Phi(\mathbf{v}_{t-1}, \Delta_t)
+
+    .. math::
+        \mathbf{x}_{t+1} = \mathbf{x}_t + \eta
+        \frac{\mathbf{m}_t}{\sqrt{\mathbf{v}_t} + \tau}.
+
+    Here :math:`\eta_l` is the client learning rate (``step_size``), :math:`K` is the number of local SGD steps
+    (``num_local_epochs``), :math:`\eta` is the server learning rate (``server_step_size``), :math:`\beta_1` is the
+    first-moment coefficient, :math:`\tau` is the numerical stability term, and :math:`S_t` is the set of clients
+    whose uploads are actually received in round :math:`t`. The second-moment update :math:`\Phi` is
+    variant-specific and is defined by subclasses. Aggregation is always uniform across the received clients.
+    Costs that preserve the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use mini-batch local updates;
+    generic costs use their usual full-gradient updates.
 
     .. footbibliography::
     """
