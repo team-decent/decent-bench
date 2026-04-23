@@ -111,6 +111,13 @@ Federated
 FedProx extends FedAvg with a proximal coefficient ``mu``. Setting ``mu=0`` reduces
 FedProx to FedAvg.
 
+:class:`~decent_bench.distributed_algorithms.FedAdagrad`,
+:class:`~decent_bench.distributed_algorithms.FedYogi`, and
+:class:`~decent_bench.distributed_algorithms.FedAdam` form the built-in FedOpt
+family. They keep the same client-side local SGD structure as FedAvg, but each
+client uploads its model delta to the server and the server applies an adaptive
+optimizer update instead of plain averaging to the next global iterate.
+
 Federated aggregation
 ^^^^^^^^^^^^^^^^^^^^^
 For the built-in federated algorithms, aggregation affects only how client
@@ -121,6 +128,12 @@ client costs in the problem definition instead of relying on aggregation.
 :class:`~decent_bench.distributed_algorithms.FedAvg` and
 :class:`~decent_bench.distributed_algorithms.FedProx` use uniform averaging
 over the selected clients.
+
+:class:`~decent_bench.distributed_algorithms.FedAdagrad`,
+:class:`~decent_bench.distributed_algorithms.FedYogi`, and
+:class:`~decent_bench.distributed_algorithms.FedAdam` also average client
+model deltas uniformly over the selected clients before applying their
+server-side adaptive optimizer.
 
 :class:`~decent_bench.distributed_algorithms.Scaffold` matches the standard
 SCAFFOLD algorithm and always uses uniform averaging over the selected clients.

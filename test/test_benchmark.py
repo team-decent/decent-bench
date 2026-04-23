@@ -12,7 +12,7 @@ from decent_bench.benchmark import (
     create_classification_problem,
 )
 from decent_bench.costs import LogisticRegressionCost, PyTorchCost
-from decent_bench.distributed_algorithms import ADMM, ATC, DGD, Algorithm, FedAvg
+from decent_bench.distributed_algorithms import ADMM, ATC, DGD, Algorithm, FedAdagrad, FedAdam, FedAvg, FedYogi
 from decent_bench.networks import FedNetwork, P2PNetwork
 from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
 
@@ -80,6 +80,9 @@ def _build_fed_problem_and_algorithms(
     problem = BenchmarkProblem(network=network, x_optimal=x_optimal, test_data=test_data)
     algorithms: list[Algorithm[Any]] = [
         FedAvg(iterations=iterations, step_size=0.01),
+        FedAdagrad(iterations=iterations, step_size=0.01, server_step_size=0.01),
+        FedYogi(iterations=iterations, step_size=0.01, server_step_size=0.01),
+        FedAdam(iterations=iterations, step_size=0.01, server_step_size=0.01),
     ]
     return problem, algorithms
 
