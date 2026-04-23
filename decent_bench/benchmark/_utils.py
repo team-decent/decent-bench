@@ -104,6 +104,8 @@ def create_classification_problem(
         ]
         LOGGER.info("... done!")
         sum_cost = reduce(add, classification_costs)
+        if sum_cost.batch_size < sum_cost.n_samples:
+            sum_cost._batch_size = sum_cost.n_samples  # noqa: SLF001
         x_optimal = ca.solve(sum_cost, max_iter=SOLVE_MAX_ITER, stop_tol=SOLVE_STOP_TOL, max_tol=SOLVE_MAX_TOL)
         costs = classification_costs
     else:
@@ -189,6 +191,8 @@ def create_regression_problem(
         ]
         LOGGER.info("... done!")
         sum_cost = reduce(add, regression_costs)
+        if sum_cost.batch_size < sum_cost.n_samples:
+            sum_cost._batch_size = sum_cost.n_samples  # noqa: SLF001
         x_optimal = ca.solve(sum_cost, max_iter=SOLVE_MAX_ITER, stop_tol=SOLVE_STOP_TOL, max_tol=SOLVE_MAX_TOL)
         costs = regression_costs
     else:
