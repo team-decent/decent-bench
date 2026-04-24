@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast, final
 
@@ -7,13 +7,13 @@ import numpy as np
 
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
+from decent_bench.agents import Agent
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
 from decent_bench.utils.types import InitialStates, LocalSteps
 
 if TYPE_CHECKING:
-    from decent_bench.agents import Agent
     from decent_bench.utils.array import Array
 
 
@@ -767,51 +767,76 @@ class FedAdam(FedOpt):
 @dataclass(eq=False)
 class FedNova(FedAlgorithm):
     r"""
-    FedNova with cumulative SGD uploads and normalized server aggregation :footcite:p:`Alg_FedNova`.
-
-    This variant supports heterogeneous local step counts across clients.
+    FedNova with optional local momentum, proximal correction, and server momentum :footcite:p:`Alg_FedNova`.
 
     Each selected client starts from the broadcast global model :math:`\mathbf{x}_t = \mathbf{x}^{(t,0)}` and performs
-    :math:`\tau_i` local SGD steps with client step size ``step_size``:
+    :math:`\tau_i` local steps with client step size ``step_size``. At local step :math:`k`, client :math:`i`
+    computes the gradient
 
     .. math::
-        \mathbf{x}_{i, t}^{(k+1)} = \mathbf{x}_{i, t}^{(k)} - \eta_l
-        \nabla f_i(\mathbf{x}_{i, t}^{(k)}), \qquad k = 0, \dots, \tau_i - 1.
+        \mathbf{g}_{i, t}^{(k)} = \nabla F_i(\mathbf{x}_{i, t}^{(k)}) + \mu
+        \left(\mathbf{x}_{i, t}^{(k)} - \mathbf{x}_t\right),
 
-    In the no-momentum case implemented here, the FedNova normalization coefficient is
-
-    .. math::
-        a_i = \tau_i,
-
-    During local training, client :math:`i` accumulates the local SGD updates
+    where the proximal term is present only when ``use_prox=True``. If local momentum is enabled,
+    the momentum buffer and local direction update as
 
     .. math::
-        \mathbf{c}_i^t = \sum_{k=0}^{\tau_i - 1} \eta_l \nabla f_i(\mathbf{x}_{i, t}^{(k)}),
+        \mathbf{v}_{i, t}^{(k+1)} = \beta \mathbf{v}_{i, t}^{(k)} + \mathbf{g}_{i, t}^{(k)},
+        \qquad
+        \mathbf{d}_{i, t}^{(k)} = \mathbf{v}_{i, t}^{(k+1)},
 
-    so that in the no-momentum case
+    otherwise :math:`\mathbf{d}_{i, t}^{(k)} = \mathbf{g}_{i, t}^{(k)}`. The local model update is
 
     .. math::
-        \mathbf{c}_i^t = \mathbf{x}_t - \mathbf{x}_{i, t}^{(\tau_i)}.
+        \mathbf{x}_{i, t}^{(k+1)} = \mathbf{x}_{i, t}^{(k)} - \eta_l \mathbf{d}_{i, t}^{(k)}.
 
-    Client :math:`i` uploads :math:`(\mathbf{c}_i^t, a_i, p_i)`, where the data-proportional client weight is
+    Client :math:`i` accumulates the communicated update
+
+    .. math::
+        \mathbf{c}_i^t = \sum_{k=0}^{\tau_i - 1} \eta_l \mathbf{d}_{i, t}^{(k)},
+
+    and maintains the FedNova scalar recurrences
+
+    .. math::
+        s_i^{(k+1)} = \beta s_i^{(k)} + 1
+
+    when ``use_momentum=True`` and :math:`s_i^{(k+1)} = 1` otherwise, together with
+
+    .. math::
+        a_i^{(k+1)} = (1 - \eta_l \mu) a_i^{(k)} + s_i^{(k+1)}
+
+    when ``use_prox=True`` and :math:`a_i^{(k+1)} = a_i^{(k)} + s_i^{(k+1)}` otherwise.
+    After :math:`\tau_i` local steps, client :math:`i` uploads :math:`(\mathbf{c}_i^t, a_i, p_i)`, where the
+    data-proportional client weight is
 
     .. math::
         p_i = \frac{n_i}{\sum_{j \in S_t} n_j}.
 
-    The server then forms
+    The server forms the weighted effective local-step coefficient
 
     .. math::
         \tau_{\mathrm{eff}, t} = \bar{a}_t = \sum_{i \in S_t} p_i a_i,
 
-    and the normalized aggregate
+    and the normalized FedNova aggregate
 
     .. math::
         \mathbf{G}_t = \sum_{i \in S_t} p_i \frac{\tau_{\mathrm{eff}, t}}{a_i} \mathbf{c}_i^t.
 
-    The FedNova global update is then
+    Without server momentum, the server update is
 
     .. math::
         \mathbf{x}_{t+1} = \mathbf{x}_t - \mathbf{G}_t.
+
+    With ``use_server_momentum=True``, the server momentum buffer and model update become
+
+    .. math::
+        \mathbf{m}_{t+1} = \gamma \mathbf{m}_t + \mathbf{G}_t,
+        \qquad
+        \mathbf{x}_{t+1} = \mathbf{x}_t - \mathbf{m}_{t+1}.
+
+    When ``use_momentum=False``, ``use_prox=False``, and ``use_server_momentum=False``, this reduces to the plain
+    local-SGD FedNova variant. In that plain setting, FedNova reduces to FedAvg if and only if all participating
+    clients use the same number of local steps, so :math:`\tau_i = \tau_j` for all :math:`i, j \in S_t`.
 
     Here :math:`\tau_i` is the number of local SGD steps used by client :math:`i`, which can be homogeneous
     (single int ``local_steps``) or heterogeneous via a mapping keyed by client agent. In this implementation,
@@ -824,6 +849,12 @@ class FedNova(FedAlgorithm):
     iterations: int = 100
     step_size: float = 0.001
     local_steps: LocalSteps = 1
+    use_momentum: bool = False
+    use_prox: bool = False
+    use_server_momentum: bool = False
+    beta: float = 0.9
+    mu: float = 0.01
+    gamma: float = 0.9
     _local_steps_by_client: dict["Agent", int] = field(init=False, repr=False, default_factory=dict)
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
@@ -841,6 +872,12 @@ class FedNova(FedAlgorithm):
         """
         if self.step_size <= 0:
             raise ValueError("`step_size` must be positive")
+        if not (0 <= self.beta < 1):
+            raise ValueError("`beta` must satisfy 0 <= beta < 1")
+        if self.mu < 0:
+            raise ValueError("`mu` must be non-negative")
+        if not (0 <= self.gamma < 1):
+            raise ValueError("`gamma` must satisfy 0 <= gamma < 1")
         self.local_steps = self._normalize_local_steps_spec()
 
     @staticmethod
@@ -858,14 +895,24 @@ class FedNova(FedAlgorithm):
     def _normalize_local_steps_spec(self) -> LocalSteps:
         if isinstance(self.local_steps, int):
             return self._coerce_local_step(self.local_steps)
-        if isinstance(self.local_steps, Mapping):
-            return {client: self._coerce_local_step(step) for client, step in self.local_steps.items()}
+        if isinstance(self.local_steps, dict):
+            if not self.local_steps:
+                raise ValueError("`local_steps` mapping must be non-empty")
+
+            normalized_local_steps: dict[Agent, int] = {}
+            for client, step in self.local_steps.items():
+                if not isinstance(client, Agent):
+                    raise TypeError("`local_steps` mapping keys must be Agent instances")
+                normalized_local_steps[client] = self._coerce_local_step(step)
+            return normalized_local_steps
         raise TypeError("`local_steps` must be an int or a mapping from Agent to integer-like values")
 
     def _resolve_local_steps(self, network: FedNetwork) -> dict["Agent", int]:
         clients = network.clients()
         if isinstance(self.local_steps, int):
             return dict.fromkeys(clients, self.local_steps)
+        if not isinstance(self.local_steps, dict):
+            raise TypeError("`local_steps` must be an int or a mapping from Agent to integer-like values")
         expected_clients = set(clients)
         actual_clients = set(self.local_steps)
         if actual_clients != expected_clients:
@@ -879,14 +926,12 @@ class FedNova(FedAlgorithm):
             raise ValueError("`local_steps` mapping must match the network clients exactly; " + "; ".join(error_parts))
         return {client: self.local_steps[client] for client in clients}
 
-    def _client_local_steps(self, client: "Agent") -> int:
-        if not hasattr(self, "_local_steps_by_client") or client not in self._local_steps_by_client:
-            raise RuntimeError("FedNova local steps have not been initialized for this client")
-        return self._local_steps_by_client[client]
-
     def initialize(self, network: FedNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.initial_states(self.x0, network)
-        network.server().initialize(x=self.x0[network.server()])
+        server = network.server()
+        server_x0 = self.x0[server]
+        aux_vars = {"m": iop.zeros_like(server_x0)} if self.use_server_momentum else None
+        server.initialize(x=server_x0, aux_vars=aux_vars)
         for client in network.clients():
             client.initialize(x=self.x0[client])
         self._local_steps_by_client = self._resolve_local_steps(network)
@@ -925,19 +970,42 @@ class FedNova(FedAlgorithm):
 
         Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so FedNova
         performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
+
+        Raises:
+            RuntimeError: if local steps have not been initialized for ``client``.
+
         """
         reference_x = self._get_server_broadcast(client, server)
         local_x = iop.copy(reference_x)
         cumulative_gradient = iop.zeros_like(reference_x)
-        tau_i = self._client_local_steps(client)
+        local_momentum = iop.zeros_like(reference_x)
+        if client not in self._local_steps_by_client:
+            raise RuntimeError("FedNova local steps have not been initialized for this client")
+        tau_i = self._local_steps_by_client[client]
         a_i = 0.0
+        momentum_scalar = 0.0
 
         for _ in range(tau_i):
             grad = client.cost.gradient(local_x)
-            local_step_update = self.step_size * grad
-            cumulative_gradient += local_step_update
+            if self.use_prox:
+                grad += self.mu * (local_x - reference_x)
+
+            if self.use_momentum:
+                local_momentum = (self.beta * local_momentum) + grad
+                direction = local_momentum
+            else:
+                direction = grad
+
+            local_step_update = self.step_size * direction
             local_x -= local_step_update
-            a_i += 1.0
+            cumulative_gradient += local_step_update
+
+            momentum_scalar = (self.beta * momentum_scalar) + 1.0 if self.use_momentum else 1.0
+
+            if self.use_prox:
+                a_i = ((1 - (self.step_size * self.mu)) * a_i) + momentum_scalar
+            else:
+                a_i += momentum_scalar
 
         return local_x, cumulative_gradient, a_i
 
@@ -991,9 +1059,6 @@ class FedNova(FedAlgorithm):
         a_values = [upload[1] for upload in decoded_uploads]
         client_weights = [upload[2] for upload in decoded_uploads]
 
-        total_weight = float(sum(client_weights))
-        if total_weight <= 0:
-            raise ValueError("FedNova client weights must sum to a positive value")
         if any(a_i <= 0 for a_i in a_values):
             raise ValueError("FedNova coefficients `a_i` must be positive")
 
@@ -1005,7 +1070,11 @@ class FedNova(FedAlgorithm):
             )
         ]
         global_update = iop.sum(iop.stack(weighted_terms, dim=0), dim=0)
-        server.x = server_x - global_update
+        if self.use_server_momentum:
+            server.aux_vars["m"] = (self.gamma * server.aux_vars["m"]) + global_update
+            server.x = server_x - server.aux_vars["m"]
+        else:
+            server.x = server_x - global_update
 
 
 @tags("federated")
