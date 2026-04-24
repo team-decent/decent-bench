@@ -10,7 +10,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
-from decent_bench.utils.types import InitialStates
+from decent_bench.utils.types import InitialStates, LocalSteps
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -823,7 +823,7 @@ class FedNova(FedAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    local_steps: int | Mapping["Agent", int] = 1
+    local_steps: LocalSteps = 1
     _local_steps_by_client: dict["Agent", int] = field(init=False, repr=False, default_factory=dict)
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
@@ -855,7 +855,7 @@ class FedNova(FedAlgorithm):
             raise ValueError("`local_steps` must be positive")
         return local_step
 
-    def _normalize_local_steps_spec(self) -> int | dict["Agent", int]:
+    def _normalize_local_steps_spec(self) -> LocalSteps:
         if isinstance(self.local_steps, int):
             return self._coerce_local_step(self.local_steps)
         if isinstance(self.local_steps, Mapping):
@@ -876,9 +876,7 @@ class FedNova(FedAlgorithm):
                 error_parts.append(f"missing clients: {missing_clients}")
             if extra_clients:
                 error_parts.append(f"unexpected clients: {extra_clients}")
-            raise ValueError(
-                "`local_steps` mapping must match the network clients exactly; " + "; ".join(error_parts)
-            )
+            raise ValueError("`local_steps` mapping must match the network clients exactly; " + "; ".join(error_parts))
         return {client: self.local_steps[client] for client in clients}
 
     def _client_local_steps(self, client: "Agent") -> int:
@@ -999,10 +997,7 @@ class FedNova(FedAlgorithm):
         if any(a_i <= 0 for a_i in a_values):
             raise ValueError("FedNova coefficients `a_i` must be positive")
 
-        tau_eff = sum(
-            client_weight * a_i
-            for client_weight, a_i in zip(client_weights, a_values, strict=True)
-        )
+        tau_eff = sum(client_weight * a_i for client_weight, a_i in zip(client_weights, a_values, strict=True))
         weighted_terms = [
             client_weight * (tau_eff / a_i) * cumulative_gradient
             for cumulative_gradient, a_i, client_weight in zip(
