@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, Literal, SupportsIndex, TypeAlias, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Literal, SupportsIndex, TypeAlias, TypeVar, Union
 
 if TYPE_CHECKING:
     import jax
@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from decent_bench.agents import Agent
     from decent_bench.networks import Network
     from decent_bench.utils.array import Array
+else:
+    Agent = Any
 
 ArrayLike: TypeAlias = Union["numpy.ndarray", "torch.Tensor", "tf.Tensor", "jax.Array"]  # noqa: UP040
 """
@@ -39,6 +41,14 @@ type InitialStates = Union["Array", "dict[Agent, Array]", None]  # noqa: TC008, 
 """
 Type alias for what can be passed to
 :func:`~decent_bench.utils.algorithm_helpers.initial_states`.
+"""
+
+type LocalSteps = int | dict[Agent, int]
+"""
+Type alias for specifying local step counts in federated algorithms.
+
+Can be a single positive integer shared by all clients, or a dictionary
+mapping each client agent to its own positive local step count.
 """
 
 ArrayKey: TypeAlias = SupportsIndex | slice | tuple[SupportsIndex | slice, ...]  # noqa: UP040

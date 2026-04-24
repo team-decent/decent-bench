@@ -118,6 +118,14 @@ family. They keep the same client-side local SGD structure as FedAvg, but each
 client uploads its model delta to the server and the server applies an adaptive
 optimizer update instead of plain averaging to the next global iterate.
 
+:class:`~decent_bench.distributed_algorithms.FedNova` supports the plain
+Local-SGD FedNova update together with optional local momentum, proximal local
+updates, and server momentum. Clients accumulate their communicated local
+updates together with the FedNova normalization coefficient before the server
+applies the aggregated update. The ``local_steps`` argument can be either a
+single integer for homogeneous local work or a per-client mapping for
+heterogeneous local step counts.
+
 Federated aggregation
 ^^^^^^^^^^^^^^^^^^^^^
 For the built-in federated algorithms, aggregation affects only how client
@@ -134,6 +142,16 @@ over the selected clients.
 :class:`~decent_bench.distributed_algorithms.FedAdam` also average client
 model deltas uniformly over the selected clients before applying their
 server-side adaptive optimizer.
+
+:class:`~decent_bench.distributed_algorithms.FedNova` uses data-proportional
+client weights over the received uploads in the round, and it does not average
+final client models directly when local step counts differ. Instead, it
+aggregates the client cumulative SGD updates using the FedNova rescaling factor
+and applies the resulting descent step at the server. With the default flags,
+this is the plain no-momentum FedNova variant. Enabling ``use_momentum``,
+``use_prox``, or ``use_server_momentum`` extends the local and server updates
+to the corresponding FedNova variants controlled by ``beta``, ``mu``, and
+``gamma``.
 
 :class:`~decent_bench.distributed_algorithms.Scaffold` matches the standard
 SCAFFOLD algorithm and always uses uniform averaging over the selected clients.
