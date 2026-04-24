@@ -314,7 +314,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         self._batch_size = self.n_samples  # Use full dataset for proximal
         approx = ca.proximal_solver(self, x, rho)
         self._batch_size = prev_batch_size  # Restore previous batch size
-        return approx / self.n_samples
+        return approx
 
     def _get_batch_data(self, indices: EmpiricalRiskIndices = "batch") -> tuple[NDArray[float64], NDArray[float64]]:
         """Get data for a batch. Returns A and b for the batch."""
