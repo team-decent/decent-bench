@@ -118,6 +118,10 @@ family. They keep the same client-side local SGD structure as FedAvg, but each
 client uploads its model delta to the server and the server applies an adaptive
 optimizer update instead of plain averaging to the next global iterate.
 
+:class:`~decent_bench.distributed_algorithms.FedNova` keeps the same local SGD
+pattern but accumulates each client's local SGD updates together with its local
+normalizer before the server applies the aggregated update.
+
 Federated aggregation
 ^^^^^^^^^^^^^^^^^^^^^
 For the built-in federated algorithms, aggregation affects only how client
@@ -134,6 +138,12 @@ over the selected clients.
 :class:`~decent_bench.distributed_algorithms.FedAdam` also average client
 model deltas uniformly over the selected clients before applying their
 server-side adaptive optimizer.
+
+:class:`~decent_bench.distributed_algorithms.FedNova` uses data-proportional
+client weights over the received uploads in the round, and it does not average
+final client models directly when local step counts differ. Instead, it
+aggregates the client cumulative SGD updates using the FedNova rescaling factor
+and applies the resulting descent step at the server.
 
 :class:`~decent_bench.distributed_algorithms.Scaffold` matches the standard
 SCAFFOLD algorithm and always uses uniform averaging over the selected clients.
