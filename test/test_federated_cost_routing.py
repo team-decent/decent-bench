@@ -191,7 +191,7 @@ def _run_federated_local_update(
     elif algorithm_name == "fedprox":
         algorithm = FedProx(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs, mu=mu)
     elif algorithm_name == "fednova":
-        algorithm = FedNova(iterations=1, step_size=step_size, local_steps=num_local_epochs)
+        algorithm = FedNova(iterations=1, step_size=step_size, num_local_steps=num_local_epochs)
     elif algorithm_name == "scaffold":
         algorithm = Scaffold(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
     else:
@@ -205,7 +205,7 @@ def _run_federated_local_update(
     client.initialize(x=np.zeros(cost.shape, dtype=float), aux_vars=aux_vars)
     server.initialize(x=np.zeros(cost.shape, dtype=float))
     if isinstance(algorithm, FedNova):
-        algorithm._local_steps_by_client = {client: num_local_epochs}  # noqa: SLF001
+        algorithm._num_local_steps_by_client = {client: num_local_epochs}  # noqa: SLF001
     if isinstance(algorithm, Scaffold):
         client._received_messages[server] = np.stack(  # noqa: SLF001
             [np.zeros(cost.shape, dtype=float), np.zeros(cost.shape, dtype=float)]

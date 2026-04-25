@@ -790,7 +790,7 @@ class FedNova(FedAlgorithm):
     .. math::
         \mathbf{x}_{i, t}^{(k+1)} = \mathbf{x}_{i, t}^{(k)} - \eta_l \mathbf{d}_{i, t}^{(k)}.
 
-    Client :math:`i` accumulates the communicated update
+    Client :math:`i` accumulates the local update
 
     .. math::
         \mathbf{c}_i^t = \sum_{k=0}^{\tau_i - 1} \eta_l \mathbf{d}_{i, t}^{(k)},
@@ -800,14 +800,15 @@ class FedNova(FedAlgorithm):
     .. math::
         s_i^{(k+1)} = \beta s_i^{(k)} + 1
 
-    when ``use_momentum=True`` and :math:`s_i^{(k+1)} = 1` otherwise, together with
+    when ``use_momentum=True``, and :math:`s_i^{(k+1)} = 1` otherwise, together with
 
     .. math::
         a_i^{(k+1)} = (1 - \eta_l \mu) a_i^{(k)} + s_i^{(k+1)}
 
     when ``use_prox=True`` and :math:`a_i^{(k+1)} = a_i^{(k)} + s_i^{(k+1)}` otherwise.
-    After :math:`\tau_i` local steps, client :math:`i` uploads :math:`(\mathbf{c}_i^t, a_i, p_i)`, where the
-    data-proportional client weight is
+    After :math:`\tau_i` local steps, client :math:`i` uploads :math:`(\mathbf{c}_i^t, a_i, n_i)`, where
+    :math:`n_i` is the number of samples stored on client :math:`i`, and the server forms the
+    data-proportional client weight
 
     .. math::
         p_i = \frac{n_i}{\sum_{j \in S_t} n_j}.
@@ -839,7 +840,7 @@ class FedNova(FedAlgorithm):
     clients use the same number of local steps, so :math:`\tau_i = \tau_j` for all :math:`i, j \in S_t`.
 
     Here :math:`\tau_i` is the number of local SGD steps used by client :math:`i`, which can be homogeneous
-    (single int ``local_steps``) or heterogeneous via a mapping keyed by client agent. In this implementation,
+    (single int ``num_local_steps``) or heterogeneous via a mapping keyed by client agent. In this implementation,
     :math:`n_i` is inferred from each participating client's local cost via
     :func:`~decent_bench.utils.algorithm_helpers.infer_client_weight`.
 
@@ -848,14 +849,14 @@ class FedNova(FedAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    local_steps: LocalSteps = 1
+    num_local_steps: LocalSteps = 1
     use_momentum: bool = False
-    use_prox: bool = False
-    use_server_momentum: bool = False
     beta: float = 0.9
+    use_prox: bool = False
     mu: float = 0.01
+    use_server_momentum: bool = False
     gamma: float = 0.9
-    _local_steps_by_client: dict["Agent", int] = field(init=False, repr=False, default_factory=dict)
+    _num_local_steps_by_client: dict["Agent", int] = field(init=False, repr=False, default_factory=dict)
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -878,53 +879,55 @@ class FedNova(FedAlgorithm):
             raise ValueError("`mu` must be non-negative")
         if not (0 <= self.gamma < 1):
             raise ValueError("`gamma` must satisfy 0 <= gamma < 1")
-        self.local_steps = self._normalize_local_steps_spec()
+        self.num_local_steps = self._normalize_num_local_steps_spec()
 
     @staticmethod
     def _coerce_local_step(step: object) -> int:
         try:
             local_step = int(cast("Any", step))
         except (TypeError, ValueError) as exc:
-            raise TypeError("`local_steps` must be an int or a mapping from Agent to integer-like values") from exc
+            raise TypeError("`num_local_steps` must be an int or a mapping from Agent to integer-like values") from exc
         if local_step != step:
-            raise ValueError("`local_steps` must contain integer values")
+            raise ValueError("`num_local_steps` must contain integer values")
         if local_step <= 0:
-            raise ValueError("`local_steps` must be positive")
+            raise ValueError("`num_local_steps` must be positive")
         return local_step
 
-    def _normalize_local_steps_spec(self) -> LocalSteps:
-        if isinstance(self.local_steps, int):
-            return self._coerce_local_step(self.local_steps)
-        if isinstance(self.local_steps, dict):
-            if not self.local_steps:
-                raise ValueError("`local_steps` mapping must be non-empty")
+    def _normalize_num_local_steps_spec(self) -> LocalSteps:
+        if isinstance(self.num_local_steps, int):
+            return self._coerce_local_step(self.num_local_steps)
+        if isinstance(self.num_local_steps, dict):
+            if not self.num_local_steps:
+                raise ValueError("`num_local_steps` mapping must be non-empty")
 
             normalized_local_steps: dict[Agent, int] = {}
-            for client, step in self.local_steps.items():
+            for client, step in self.num_local_steps.items():
                 if not isinstance(client, Agent):
-                    raise TypeError("`local_steps` mapping keys must be Agent instances")
+                    raise TypeError("`num_local_steps` mapping keys must be Agent instances")
                 normalized_local_steps[client] = self._coerce_local_step(step)
             return normalized_local_steps
-        raise TypeError("`local_steps` must be an int or a mapping from Agent to integer-like values")
+        raise TypeError("`num_local_steps` must be an int or a mapping from Agent to integer-like values")
 
-    def _resolve_local_steps(self, network: FedNetwork) -> dict["Agent", int]:
+    def _resolve_num_local_steps(self, network: FedNetwork) -> dict["Agent", int]:
         clients = network.clients()
-        if isinstance(self.local_steps, int):
-            return dict.fromkeys(clients, self.local_steps)
-        if not isinstance(self.local_steps, dict):
-            raise TypeError("`local_steps` must be an int or a mapping from Agent to integer-like values")
+        if isinstance(self.num_local_steps, int):
+            return dict.fromkeys(clients, self.num_local_steps)
+        if not isinstance(self.num_local_steps, dict):
+            raise TypeError("`num_local_steps` must be an int or a mapping from Agent to integer-like values")
         expected_clients = set(clients)
-        actual_clients = set(self.local_steps)
+        actual_clients = set(self.num_local_steps)
         if actual_clients != expected_clients:
-            missing_clients = [client for client in clients if client not in self.local_steps]
-            extra_clients = [client for client in self.local_steps if client not in expected_clients]
+            missing_clients = [client for client in clients if client not in self.num_local_steps]
+            extra_clients = [client for client in self.num_local_steps if client not in expected_clients]
             error_parts = []
             if missing_clients:
                 error_parts.append(f"missing clients: {missing_clients}")
             if extra_clients:
                 error_parts.append(f"unexpected clients: {extra_clients}")
-            raise ValueError("`local_steps` mapping must match the network clients exactly; " + "; ".join(error_parts))
-        return {client: self.local_steps[client] for client in clients}
+            raise ValueError(
+                "`num_local_steps` mapping must match the network clients exactly; " + "; ".join(error_parts)
+            )
+        return {client: self.num_local_steps[client] for client in clients}
 
     def initialize(self, network: FedNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.initial_states(self.x0, network)
@@ -934,7 +937,7 @@ class FedNova(FedAlgorithm):
         server.initialize(x=server_x0, aux_vars=aux_vars)
         for client in network.clients():
             client.initialize(x=self.x0[client])
-        self._local_steps_by_client = self._resolve_local_steps(network)
+        self._num_local_steps_by_client = self._resolve_num_local_steps(network)
 
     def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
         selected_clients = self._selected_clients_for_round(network, iteration)
@@ -951,17 +954,12 @@ class FedNova(FedAlgorithm):
 
     def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
         server = network.server()
-        raw_weights = [alg_helpers.infer_client_weight(client) for client in participating_clients]
-        total_weight = float(sum(raw_weights))
-        if total_weight <= 0:
-            raise ValueError("FedNova client weights must sum to a positive value")
-        client_weights = {
-            client: weight / total_weight for client, weight in zip(participating_clients, raw_weights, strict=True)
-        }
-
         for client in participating_clients:
             client.x, cumulative_gradient, a_i = self._compute_local_update(client, server)
-            payload = self._pack_local_update_payload(cumulative_gradient, a_i, client_weights[client])
+            n_i = alg_helpers.infer_client_weight(client)
+            if n_i <= 0:
+                raise ValueError("FedNova client sample counts must be positive")
+            payload = self._prepare_upload(cumulative_gradient, a_i, n_i)
             network.send(sender=client, receiver=server, msg=payload)
 
     def _compute_local_update(self, client: "Agent", server: "Agent") -> tuple["Array", "Array", float]:
@@ -972,16 +970,16 @@ class FedNova(FedAlgorithm):
         performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
 
         Raises:
-            RuntimeError: if local steps have not been initialized for ``client``.
+            RuntimeError: if the number of local steps has not been initialized for ``client``.
 
         """
         reference_x = self._get_server_broadcast(client, server)
         local_x = iop.copy(reference_x)
         cumulative_gradient = iop.zeros_like(reference_x)
         local_momentum = iop.zeros_like(reference_x)
-        if client not in self._local_steps_by_client:
-            raise RuntimeError("FedNova local steps have not been initialized for this client")
-        tau_i = self._local_steps_by_client[client]
+        if client not in self._num_local_steps_by_client:
+            raise RuntimeError("FedNova num_local_steps has not been initialized for this client")
+        tau_i = self._num_local_steps_by_client[client]
         a_i = 0.0
         momentum_scalar = 0.0
 
@@ -1010,23 +1008,23 @@ class FedNova(FedAlgorithm):
         return local_x, cumulative_gradient, a_i
 
     @staticmethod
-    def _pack_local_update_payload(cumulative_gradient: "Array", a_i: float, client_weight: float) -> "Array":
+    def _prepare_upload(cumulative_gradient: "Array", a_i: float, n_i: float) -> "Array":
         flat_gradient = iop.reshape(cumulative_gradient, (-1,))
         flat_gradient_np = iop.to_numpy(flat_gradient)
         payload_values = np.concatenate([
             flat_gradient_np,
-            np.array([a_i, client_weight], dtype=flat_gradient_np.dtype),
+            np.array([a_i, n_i], dtype=flat_gradient_np.dtype),
         ])
         return iop.to_array_like(payload_values, flat_gradient)
 
     @staticmethod
-    def _unpack_local_update_payload(
+    def _decode_upload(
         payload: "Array", reference_shape: tuple[int, ...]
     ) -> tuple["Array", float, float]:
         cumulative_gradient = iop.reshape(payload[:-2], reference_shape)
         a_i = iop.astype(payload[-2], float)
-        client_weight = iop.astype(payload[-1], float)
-        return cumulative_gradient, a_i, client_weight
+        n_i = iop.astype(payload[-1], float)
+        return cumulative_gradient, a_i, n_i
 
     def aggregate(
         self,
@@ -1036,13 +1034,13 @@ class FedNova(FedAlgorithm):
         """
         Aggregate FedNova client uploads following the Local-SGD FedNova pseudocode.
 
-        This method assumes clients upload a packed payload containing ``(cum_grad_i, a_i, p_i)``. When used with
+        This method assumes clients upload a packed payload containing ``(cum_grad_i, a_i, n_i)``. When used with
         :class:`~decent_bench.networks.Network` ``buffer_messages=True``, the caller must already have removed stale
         buffered client-to-server messages for the participating clients, so only current-round uploads are used.
 
         Raises:
-            ValueError: if the received client weights do not sum to a positive value, or if any received
-                FedNova coefficient ``a_i`` is non-positive.
+            ValueError: if the received sample counts do not sum to a positive value, if any received sample count is
+                non-positive, or if any received FedNova coefficient ``a_i`` is non-positive.
 
         """
         server = network.server()
@@ -1052,15 +1050,15 @@ class FedNova(FedAlgorithm):
 
         server_x = iop.copy(server.x)
         decoded_uploads = [
-            self._unpack_local_update_payload(server.messages[client], iop.shape(server_x))
+            self._decode_upload(server.messages[client], iop.shape(server_x))
             for client in received_clients
         ]
         cumulative_gradients = [upload[0] for upload in decoded_uploads]
         a_values = [upload[1] for upload in decoded_uploads]
-        client_weights = [upload[2] for upload in decoded_uploads]
+        sample_counts = [upload[2] for upload in decoded_uploads]
 
-        if any(a_i <= 0 for a_i in a_values):
-            raise ValueError("FedNova coefficients `a_i` must be positive")
+        total_samples = float(sum(sample_counts))
+        client_weights = [n_i / total_samples for n_i in sample_counts]
 
         tau_eff = sum(client_weight * a_i for client_weight, a_i in zip(client_weights, a_values, strict=True))
         weighted_terms = [
