@@ -1,7 +1,7 @@
 """
 Utilities for algorithm initialization and general helpers.
 
-This includes functions such as :func:`~decent_bench.utils.algorithm_helpers.infer_client_weight`,
+This includes functions such as :func:`~decent_bench.algorithms.utils.infer_client_weight`,
 which infers client data size from common cost attributes.
 """
 

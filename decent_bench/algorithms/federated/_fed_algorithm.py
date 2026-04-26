@@ -16,7 +16,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
 
     selection_scheme: ClientSelectionScheme | None = None
 
-    def _cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
+    def cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
         return [network.server(), *network.clients()]
 
     def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:

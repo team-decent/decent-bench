@@ -100,20 +100,20 @@ Peer-to-peer
 ~~~~~~~~~~~~
 .. tagged-list::
             :tag: peer-to-peer
-            :module: decent_bench.distributed_algorithms
+            :module: decent_bench.algorithms.p2p
 
 Federated
 ~~~~~~~~~
 .. tagged-list::
             :tag: federated
-            :module: decent_bench.distributed_algorithms
+            :module: decent_bench.algorithms.federated
 
 FedProx extends FedAvg with a proximal coefficient ``mu``. Setting ``mu=0`` reduces
 FedProx to FedAvg.
 
-:class:`~decent_bench.distributed_algorithms.FedAdagrad`,
-:class:`~decent_bench.distributed_algorithms.FedYogi`, and
-:class:`~decent_bench.distributed_algorithms.FedAdam` form the built-in FedOpt
+:class:`~decent_bench.algorithms.federated.FedAdagrad`,
+:class:`~decent_bench.algorithms.federated.FedYogi`, and
+:class:`~decent_bench.algorithms.federated.FedAdam` form the built-in FedOpt
 family. They keep the same client-side local SGD structure as FedAvg, but each
 client uploads its model delta to the server and the server applies an adaptive
 optimizer update instead of plain averaging to the next global iterate.
@@ -125,17 +125,17 @@ updates are combined at the server. It does not change the optimization
 objective itself. If you want to optimize a weighted objective, scale the
 client costs in the problem definition instead of relying on aggregation.
 
-:class:`~decent_bench.distributed_algorithms.FedAvg` and
-:class:`~decent_bench.distributed_algorithms.FedProx` use uniform averaging
+:class:`~decent_bench.algorithms.federated.FedAvg` and
+:class:`~decent_bench.algorithms.federated.FedProx` use uniform averaging
 over the selected clients.
 
-:class:`~decent_bench.distributed_algorithms.FedAdagrad`,
-:class:`~decent_bench.distributed_algorithms.FedYogi`, and
-:class:`~decent_bench.distributed_algorithms.FedAdam` also average client
+:class:`~decent_bench.algorithms.federated.FedAdagrad`,
+:class:`~decent_bench.algorithms.federated.FedYogi`, and
+:class:`~decent_bench.algorithms.federated.FedAdam` also average client
 model deltas uniformly over the selected clients before applying their
 server-side adaptive optimizer.
 
-:class:`~decent_bench.distributed_algorithms.Scaffold` matches the standard
+:class:`~decent_bench.algorithms.federated.Scaffold` matches the standard
 SCAFFOLD algorithm and always uses uniform averaging over the selected clients.
 
 

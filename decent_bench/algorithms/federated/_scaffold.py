@@ -3,12 +3,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.algorithms.federated import FedAlgorithm
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
 from decent_bench.utils.types import InitialStates
+
+from ._fed_algorithm import FedAlgorithm
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -22,7 +23,7 @@ class Scaffold(FedAlgorithm):
     SCAFFOLD with client/server control variates for variance-reduced local training :footcite:p:`Alg_SCAFFOLD`.
 
     When the server control variate :math:`\mathbf{c}` and all client control variates :math:`\mathbf{c}_i`
-    are zero, the local updates reduce to :class:`FedAvg <decent_bench.distributed_algorithms.FedAvg>`.
+    are zero, the local updates reduce to :class:`FedAvg <decent_bench.algorithms.federated.FedAvg>`.
 
     Here, :math:`\eta_l` is the local client step size, :math:`\eta_g` is the global server step size,
     :math:`S` is the set of selected clients, and :math:`|S|` its size.

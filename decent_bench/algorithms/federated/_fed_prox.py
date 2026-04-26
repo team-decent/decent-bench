@@ -3,12 +3,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.algorithms.federated import FedAlgorithm
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
 from decent_bench.utils.types import InitialStates
+
+from ._fed_algorithm import FedAlgorithm
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -38,7 +39,7 @@ class FedProx(FedAlgorithm):
     where :math:`\mathbf{w}^t` is the server model broadcast at the start of round :math:`k`, held fixed
     throughout each selected client's local epochs, :math:`\mu \geq 0` is the proximal coefficient,
     :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients. Setting ``mu=0.0``
-    recovers :class:`FedAvg <decent_bench.distributed_algorithms.FedAvg>` exactly. Aggregation uses uniform averaging
+    recovers :class:`FedAvg <decent_bench.algorithms.federated.FedAvg>` exactly. Aggregation uses uniform averaging
     over the participating clients. Client selection defaults to uniform sampling with fraction 1.0. For
     :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
     :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; for generic costs,

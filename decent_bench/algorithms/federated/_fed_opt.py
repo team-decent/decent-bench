@@ -4,11 +4,12 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.algorithms.federated import FedAlgorithm
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils.types import InitialStates
+
+from ._fed_algorithm import FedAlgorithm
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
