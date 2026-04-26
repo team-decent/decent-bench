@@ -161,8 +161,43 @@ def test_fednova_copies_local_step_mapping_on_initialize() -> None:
     algorithm.initialize(network)
     local_steps[clients[0]] = 7
 
-    assert algorithm._num_local_steps_by_client[clients[0]] == 1  # noqa: SLF001
-    assert algorithm._num_local_steps_by_client[clients[1]] == 3  # noqa: SLF001
+    assert isinstance(algorithm.num_local_steps, dict)
+    assert algorithm.num_local_steps[clients[0]] == 1
+    assert algorithm.num_local_steps[clients[1]] == 3
+
+
+def test_fednova_normalizes_scalar_local_steps_to_client_mapping_on_initialize() -> None:
+    network = _make_fed_network(1.0, 3.0)
+    clients = network.clients()
+    algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps=2)
+
+    algorithm.initialize(network)
+
+    assert algorithm.num_local_steps == {clients[0]: 2, clients[1]: 2}
+
+
+def test_fednova_caches_client_weights_on_initialize(monkeypatch: pytest.MonkeyPatch) -> None:
+    network = _make_fed_network((1.0, 1), (3.0, 3))
+    algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps=1)
+    infer_client_weight_calls = 0
+
+    def _tracking_infer_client_weight(client: Agent) -> float:
+        nonlocal infer_client_weight_calls
+        infer_client_weight_calls += 1
+        return float(client.cost.n_samples)  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(
+        "decent_bench.distributed_algorithms.alg_helpers.infer_client_weight",
+        _tracking_infer_client_weight,
+    )
+
+    algorithm.initialize(network)
+    assert infer_client_weight_calls == len(network.clients())
+
+    network._step(0)  # noqa: SLF001
+    algorithm.step(network, 0)
+
+    assert infer_client_weight_calls == len(network.clients())
 
 
 @pytest.mark.parametrize(
@@ -278,15 +313,19 @@ def test_fednova_uploads_cumulative_gradient_normalizer_and_sample_count() -> No
     algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
 
-    client_0_payload = algorithm._decode_upload(network.server().messages[clients[0]], (1,))  # noqa: SLF001
-    client_1_payload = algorithm._decode_upload(network.server().messages[clients[1]], (1,))  # noqa: SLF001
+    client_0_payload = network.server().messages[clients[0]]
+    client_1_payload = network.server().messages[clients[1]]
 
-    np.testing.assert_allclose(client_0_payload[0], np.array([4.0]))
-    np.testing.assert_allclose(client_1_payload[0], np.array([4.0]))
-    assert client_0_payload[1] == 2.0
-    assert client_1_payload[1] == 1.0
-    assert client_0_payload[2] == 1.0
-    assert client_1_payload[2] == 3.0
+    assert isinstance(client_0_payload, dict)
+    assert isinstance(client_1_payload, dict)
+    assert set(client_0_payload) == {"cum_grad_i", "a_i", "n_i"}
+    assert set(client_1_payload) == {"cum_grad_i", "a_i", "n_i"}
+    np.testing.assert_allclose(client_0_payload["cum_grad_i"], np.array([4.0]))
+    np.testing.assert_allclose(client_1_payload["cum_grad_i"], np.array([4.0]))
+    np.testing.assert_allclose(client_0_payload["a_i"], np.array([2.0]))
+    np.testing.assert_allclose(client_1_payload["a_i"], np.array([1.0]))
+    np.testing.assert_allclose(client_0_payload["n_i"], np.array([1.0]))
+    np.testing.assert_allclose(client_1_payload["n_i"], np.array([3.0]))
 
 
 def test_fednova_differs_from_fedavg_when_local_steps_are_heterogeneous() -> None:
@@ -351,20 +390,18 @@ def test_fednova_rejects_invalid_scalar_num_local_steps(num_local_steps: int) ->
 
 
 @pytest.mark.parametrize("num_local_steps", [{}, {"not-an-agent": 1}, {1: 1}])
-def test_fednova_rejects_invalid_num_local_step_mapping_keys(num_local_steps: object) -> None:
-    expected_message = (
-        "`num_local_steps` mapping must be non-empty"
-        if num_local_steps == {}
-        else "`num_local_steps` mapping keys must be Agent instances"
-    )
-    with pytest.raises((TypeError, ValueError), match=expected_message):
-        FedNova(iterations=1, step_size=1.0, num_local_steps=num_local_steps)
+def test_fednova_rejects_local_step_mappings_missing_network_clients(num_local_steps: object) -> None:
+    network = _make_fed_network(1.0, 3.0)
+    algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps=num_local_steps)
+
+    with pytest.raises(ValueError, match="`num_local_steps` mapping must provide a value for every network client"):
+        algorithm.initialize(network)
 
 
-@pytest.mark.parametrize("step_value", [0, -1, 1.5])
+@pytest.mark.parametrize("step_value", [0, -1])
 def test_fednova_rejects_invalid_local_step_mapping_values(step_value: float) -> None:
     client = Agent(0, TrackingCost())
-    with pytest.raises(ValueError, match="`num_local_steps` must"):
+    with pytest.raises(ValueError, match="`num_local_steps` must be positive"):
         FedNova(iterations=1, step_size=1.0, num_local_steps={client: step_value})
 
 
@@ -392,7 +429,7 @@ def test_fednova_rejects_local_step_mappings_that_do_not_match_network_clients()
         num_local_steps={network.clients()[0]: 1, other_network.clients()[0]: 3},
     )
 
-    with pytest.raises(ValueError, match="`num_local_steps` mapping must match the network clients exactly"):
+    with pytest.raises(ValueError, match="`num_local_steps` mapping must provide a value for every network client"):
         algorithm.initialize(network)
 
 
@@ -405,7 +442,7 @@ def test_fednova_rejects_local_step_mappings_missing_clients() -> None:
         algorithm.initialize(network)
 
 
-def test_fednova_rejects_local_step_mappings_with_unknown_clients() -> None:
+def test_fednova_ignores_local_step_mappings_for_unknown_clients() -> None:
     network = _make_fed_network(1.0, 3.0)
     other_network = _make_fed_network(2.0)
     clients = network.clients()
@@ -415,5 +452,6 @@ def test_fednova_rejects_local_step_mappings_with_unknown_clients() -> None:
         num_local_steps={clients[0]: 1, clients[1]: 3, other_network.clients()[0]: 2},
     )
 
-    with pytest.raises(ValueError, match="unexpected clients"):
-        algorithm.initialize(network)
+    algorithm.initialize(network)
+
+    assert algorithm.num_local_steps == {clients[0]: 1, clients[1]: 3}

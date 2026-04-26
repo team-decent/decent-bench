@@ -21,6 +21,7 @@ from decent_bench.schemes import (
     NoNoise,
 )
 from decent_bench.utils.array import Array
+from decent_bench.utils.types import NetworkMessage
 
 if TYPE_CHECKING:
     AnyGraph = nx.Graph[Any]
@@ -236,7 +237,7 @@ class Network(ABC):  # noqa: B024
             self._active_connected_agents_cache[agent] = [a for a in self.connected_agents(agent) if a in active_agents]
         return self._active_connected_agents_cache[agent]
 
-    def _send_one(self, sender: Agent, receiver: Agent, msg: Array) -> None:
+    def _send_one(self, sender: Agent, receiver: Agent, msg: NetworkMessage) -> None:
         """
         Send message to an agent.
 
@@ -244,6 +245,8 @@ class Network(ABC):  # noqa: B024
         :class:`~decent_bench.schemes.CompressionScheme`,
         :class:`~decent_bench.schemes.NoiseScheme`,
         and :class:`~decent_bench.schemes.DropScheme`.
+        Grouped upload packets are handled as one logical message; compression and noise are applied to each array
+        field inside the packet before the whole packet is stored for the receiver.
 
         The message will be immediately available to the receiver if it is active in the current iteration.
         """
@@ -251,8 +254,13 @@ class Network(ABC):  # noqa: B024
         if self._message_drop[sender].should_drop():
             sender._n_sent_messages_dropped += 1  # noqa: SLF001
             return
-        msg = self._message_compression[sender].compress(msg)
-        msg = self._message_noise[sender].make_noise(msg)
+        if isinstance(msg, dict):
+            msg = {
+                key: self._message_noise[sender].make_noise(self._message_compression[sender].compress(value))
+                for key, value in msg.items()
+            }
+        else:
+            msg = self._message_noise[sender].make_noise(self._message_compression[sender].compress(msg))
         receiver._n_received_messages += 1  # noqa: SLF001
         receiver._received_messages[sender] = msg  # noqa: SLF001
 
@@ -264,7 +272,7 @@ class Network(ABC):  # noqa: B024
         self,
         sender: Agent,
         receiver: Agent | Sequence[Agent] | None = None,
-        msg: Array | None = None,
+        msg: NetworkMessage | None = None,
     ) -> None:
         """
         Send message to one or more agents.
@@ -272,7 +280,7 @@ class Network(ABC):  # noqa: B024
         Args:
             sender: sender agent
             receiver: receiver agent, sequence of receiver agents, or ``None`` to broadcast to connected agents.
-            msg: message to send
+            msg: message to send; can be a single array or a grouped upload packet whose values are arrays
 
         Raises:
             ValueError: if ``msg`` is not provided, if agents are not part of the network, or if sender/receiver are not
@@ -595,7 +603,7 @@ class FedNetwork(Network):
         self,
         sender: Agent,
         receiver: Agent | Sequence[Agent] | None = None,
-        msg: Array | None = None,
+        msg: NetworkMessage | None = None,
     ) -> None:
         """
         Send message(s) in a federated learning network.

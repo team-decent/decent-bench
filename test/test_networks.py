@@ -351,3 +351,63 @@ def test_send_applies_drop_compression_and_noise_schemes() -> None:
 
     net.send(sender=dropped_sender, receiver=receiver, msg=msg)
     assert dropped_sender not in receiver.messages
+
+
+def test_send_applies_drop_compression_and_noise_to_grouped_packets() -> None:
+    sender = Agent(0, L2RegularizerCost((2,)))
+    receiver = Agent(1, L2RegularizerCost((2,)))
+    compression = MagicMock(spec=CompressionScheme)
+    compression.compress = MagicMock(side_effect=lambda msg: msg * 2)
+    noise = MagicMock(spec=NoiseScheme)
+    noise.make_noise = MagicMock(side_effect=lambda msg: msg + 3)
+    drop = MagicMock(spec=DropScheme)
+    drop.should_drop = MagicMock(return_value=False)
+    net = P2PNetwork(
+        graph=nx.Graph([(sender, receiver)]),
+        message_compression={sender: compression, receiver: NoCompression()},
+        message_noise={sender: noise, receiver: NoNoise()},
+        message_drop={sender: drop, receiver: NoDrops()},
+    )
+    packet = {
+        "cum_grad_i": iop.to_array([1.0, 2.0], framework=sender.cost.framework, device=sender.cost.device),
+        "a_i": iop.to_array([2.0], framework=sender.cost.framework, device=sender.cost.device),
+        "n_i": iop.to_array([3.0], framework=sender.cost.framework, device=sender.cost.device),
+    }
+
+    net.send(sender=sender, receiver=receiver, msg=packet)
+
+    received = receiver.messages[sender]
+    assert isinstance(received, dict)
+    assert set(received) == {"cum_grad_i", "a_i", "n_i"}
+    np.testing.assert_allclose(iop.to_numpy(received["cum_grad_i"]), np.array([5.0, 7.0]))
+    np.testing.assert_allclose(iop.to_numpy(received["a_i"]), np.array([7.0]))
+    np.testing.assert_allclose(iop.to_numpy(received["n_i"]), np.array([9.0]))
+    drop.should_drop.assert_called_once()
+    assert compression.compress.call_count == 3
+    assert noise.make_noise.call_count == 3
+
+
+def test_send_grouped_packet_overwrites_previous_message_from_same_sender() -> None:
+    sender = Agent(0, L2RegularizerCost((2,)))
+    receiver = Agent(1, L2RegularizerCost((2,)))
+    net = P2PNetwork(graph=nx.Graph([(sender, receiver)]))
+    first_packet = {
+        "cum_grad_i": iop.to_array([1.0, 2.0], framework=sender.cost.framework, device=sender.cost.device),
+        "a_i": iop.to_array([2.0], framework=sender.cost.framework, device=sender.cost.device),
+        "n_i": iop.to_array([3.0], framework=sender.cost.framework, device=sender.cost.device),
+    }
+    second_packet = {
+        "cum_grad_i": iop.to_array([4.0, 5.0], framework=sender.cost.framework, device=sender.cost.device),
+        "a_i": iop.to_array([6.0], framework=sender.cost.framework, device=sender.cost.device),
+        "n_i": iop.to_array([7.0], framework=sender.cost.framework, device=sender.cost.device),
+    }
+
+    net.send(sender=sender, receiver=receiver, msg=first_packet)
+    net.send(sender=sender, receiver=receiver, msg=second_packet)
+
+    received = receiver.messages[sender]
+    assert isinstance(received, dict)
+    assert set(received) == {"cum_grad_i", "a_i", "n_i"}
+    np.testing.assert_allclose(iop.to_numpy(received["cum_grad_i"]), np.array([4.0, 5.0]))
+    np.testing.assert_allclose(iop.to_numpy(received["a_i"]), np.array([6.0]))
+    np.testing.assert_allclose(iop.to_numpy(received["n_i"]), np.array([7.0]))

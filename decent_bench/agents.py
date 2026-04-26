@@ -11,6 +11,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.costs import Cost, EmpiricalRiskCost
 from decent_bench.schemes import AgentActivationScheme, AlwaysActive
 from decent_bench.utils.array import Array
+from decent_bench.utils.types import NetworkMessage
 
 
 class Agent:
@@ -48,7 +49,7 @@ class Agent:
         self._current_x: Array | None = None
         self._x_history: AgentHistory = AgentHistory()
         self._auxiliary_variables: dict[str, Any] = {}
-        self._received_messages: dict[Agent, Array] = {}
+        self._received_messages: dict[Agent, NetworkMessage] = {}
         self._n_x_updates = 0
         self._n_sent_messages = 0
         self._n_received_messages = 0
@@ -105,8 +106,8 @@ class Agent:
         return self._state_snapshot_period
 
     @property
-    def messages(self) -> Mapping[Agent, Array]:
-        """Messages received by neighbors."""
+    def messages(self) -> Mapping[Agent, NetworkMessage]:
+        """Messages received from neighbors, stored one per sender."""
         return MappingProxyType(self._received_messages)
 
     @property
