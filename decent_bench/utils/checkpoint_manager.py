@@ -17,7 +17,10 @@ from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, MetricResu
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 
-_ZSTD_MAGIC = zstd.MAGIC_NUMBER.to_bytes(4, "little")
+# NOTE: On some platforms (notably Windows), the Python binding can expose the 32-bit
+# Zstandard magic number as a signed int, which makes it negative.
+# `int.to_bytes(..., signed=False)` then raises: OverflowError: can't convert negative int to unsigned
+_ZSTD_MAGIC = (int(zstd.MAGIC_NUMBER) & 0xFFFFFFFF).to_bytes(4, "little")
 _CHECKPOINT_NAME_RE = re.compile(r"^checkpoint_(\d+)\.pkl(?:\.zst)?$")
 
 

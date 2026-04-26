@@ -90,7 +90,6 @@ class Algorithm[NetworkT: Network](ABC):
         for agent in self.cleanup_agents(network):
             if agent.aux_vars is not None:
                 agent.aux_vars.clear()
-            agent.cost.cleanup()
 
     @final
     def _snapshot_agents(self, network: NetworkT, iteration: int) -> None:

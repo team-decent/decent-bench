@@ -28,7 +28,7 @@ from decent_bench.benchmark import (
 from decent_bench.costs import LogisticRegressionCost, PyTorchCost
 from decent_bench.networks import Network, P2PNetwork
 from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
-from decent_bench.utils.checkpoint_manager import CheckpointManager
+from decent_bench.utils.checkpoint_manager import _ZSTD_MAGIC, CheckpointManager  # noqa: PLC2701
 
 try:
     import torch
@@ -44,7 +44,6 @@ logging.getLogger("jax").setLevel(logging.WARNING)
 
 IS_LINUX = sys.platform.startswith("linux")
 LINUX_ONLY_MP_GT1 = pytest.mark.skipif(not IS_LINUX, reason="max_processes > 1 is Linux-only")
-ZSTD_MAGIC = zstd.MAGIC_NUMBER.to_bytes(4, "little")
 
 
 def _skip_if_max_processes_exceeds_cpu_count(max_processes: int) -> None:
@@ -174,7 +173,7 @@ def test_save_and_load_checkpoint_roundtrip(tmp_path: Path) -> None:  # noqa: D1
 
     assert checkpoint_path.exists()
     with checkpoint_path.open("rb") as f:
-        assert f.read(4) == ZSTD_MAGIC
+        assert f.read(4) == _ZSTD_MAGIC
 
     progress_path = tmp_path / "ckpt" / "algorithm_0" / "trial_0" / "progress.json"
     with progress_path.open(encoding="utf-8") as f:
@@ -327,7 +326,7 @@ def test_save_and_load_metrics_result(tmp_path: Path) -> None:  # noqa: D103
     assert loaded == metrics_result
     assert (ckpt_path / "metric_computation.pkl.zst").exists()
     with (ckpt_path / "metric_computation.pkl.zst").open("rb") as f:
-        assert f.read(4) == ZSTD_MAGIC
+        assert f.read(4) == _ZSTD_MAGIC
     assert (ckpt_path / "metric_computation_complete.json").exists()
 
 
