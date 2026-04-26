@@ -1,5 +1,4 @@
 import random
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import decent_bench.utils.interoperability as iop
@@ -20,8 +19,8 @@ class ProxSkip(P2PAlgorithm):
 
     Args:
         iterations: Total number of iterations (T)
-        step_size: Step size alpha > 0 for primal updates, can be a constant or a function of iteration
-        aux_step_size: Step size beta > 0 for dual updates, can be a constant or a function of iteration
+        step_size: Step size alpha > 0 for primal updates
+        aux_step_size: Step size beta > 0 for dual updates
         comm_probability: Communication probability 0 < p <= 1 for skipping communication
         chi: chi >= 1, averaging weight parameter for weighted averaging during communication
         x0: Initial parameters (optional)
@@ -32,8 +31,8 @@ class ProxSkip(P2PAlgorithm):
     """
 
     iterations: int = 100  # Total number of iterations (T)
-    step_size: float | Callable[[int], float] = 0.01  # Step size alpha > 0 for primal updates
-    aux_step_size: float | Callable[[int], float] = 0.01  # Step size beta > 0 for dual updates
+    step_size: float = 0.01  # Step size alpha > 0 for primal updates
+    aux_step_size: float = 0.01  # Step size beta > 0 for dual updates
     comm_probability: float = 0.7  # Communication probability 0 < p <= 1
     chi: float = 1.0  # chi >= 1, averaging weight parameter
     x0: InitialStates = None  # Initial parameters (optional)
@@ -50,16 +49,8 @@ class ProxSkip(P2PAlgorithm):
         """
         if isinstance(self.step_size, float) and self.step_size <= 0:
             raise ValueError("step_size must be positive")
-        if callable(self.step_size):
-            test_step_size = [self.step_size(k) for k in range(self.iterations)]
-            if any(s <= 0 for s in test_step_size):
-                raise ValueError("step_size function must return positive values for all iterations")
         if isinstance(self.aux_step_size, float) and self.aux_step_size <= 0:
             raise ValueError("aux_step_size must be positive")
-        if callable(self.aux_step_size):
-            test_aux_step_size = [self.aux_step_size(k) for k in range(self.iterations)]
-            if any(s <= 0 for s in test_aux_step_size):
-                raise ValueError("aux_step_size function must return positive values for all iterations")
         if not 0 < self.comm_probability <= 1:
             raise ValueError("comm_probability must be in (0, 1]")
         if self.chi < 1:
@@ -91,14 +82,11 @@ class ProxSkip(P2PAlgorithm):
             }
             i.initialize(x=x0[i], aux_vars=aux_vars)
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:
+    def step(self, network: P2PNetwork, _: int) -> None:
         # Main algorithm loop (line 3)
-        step_size = self.step_size(iteration) if callable(self.step_size) else self.step_size
-        aux_step_size = self.aux_step_size(iteration) if callable(self.aux_step_size) else self.aux_step_size
-
         # Step 1: Sample stochastic gradient and compute prediction (lines 4-5)
         for i in network.active_agents():
-            self._compute_prediction(i, step_size)
+            self._compute_prediction(i)
 
         # Step 2: Flip coins to determine communication (line 2)
         # theta_k ~ Bernoulli(p), with P(theta_k = 1) = p
@@ -113,11 +101,11 @@ class ProxSkip(P2PAlgorithm):
         # Update based on communication decision
         for i in network.active_agents():
             if theta_k:  # Line 7-8: communicate and update
-                self._communication_update(i, aux_step_size)
+                self._communication_update(i)
             else:  # Line 10: skip communication
                 self._no_communication_update(i)
 
-    def _compute_prediction(self, agent: Agent, step_size: float) -> None:
+    def _compute_prediction(self, agent: Agent) -> None:
         """
         Sample gradient and update prediction variable.
 
@@ -127,9 +115,9 @@ class ProxSkip(P2PAlgorithm):
         gradient = agent.cost.gradient(agent.x)
 
         # Update prediction: z_i^t = x_i^t - alpha * g_i^t - y_i^t
-        agent.aux_vars["z"] = agent.x - step_size * gradient - agent.aux_vars["y"]
+        agent.aux_vars["z"] = agent.x - self.step_size * gradient - agent.aux_vars["y"]
 
-    def _communication_update(self, agent: Agent, aux_step_size: float) -> None:
+    def _communication_update(self, agent: Agent) -> None:
         """
         Communication and update when θ_i = 1.
 
@@ -145,7 +133,7 @@ class ProxSkip(P2PAlgorithm):
         agent.x = weighted_sum
 
         # Update dual: y_i^{t+1} = y_i^t + beta * (z_i^t - x_i^{t+1})
-        agent.aux_vars["y"] += aux_step_size * (agent.aux_vars["z"] - agent.x)
+        agent.aux_vars["y"] += self.aux_step_size * (agent.aux_vars["z"] - agent.x)
 
     def _no_communication_update(self, agent: Agent) -> None:
         """

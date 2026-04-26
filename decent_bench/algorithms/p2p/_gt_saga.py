@@ -1,5 +1,5 @@
-from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
@@ -12,9 +12,9 @@ from decent_bench.utils.types import InitialStates
 from ._p2p_algorithm import P2PAlgorithm
 
 
-@tags("peer-to-peer", "gradient-based")
+@tags("peer-to-peer", "gradient-tracking")
 @dataclass(eq=False)
-class GT_SAGA(P2PAlgorithm):  # noqa: N801
+class GTSAGA(P2PAlgorithm):
     """
     Gradient Tracking with SAGA variance reduction :footcite:p:`Alg_GT_SAGA_2020` :footcite:p:`Alg_GT_SAGA_2022`.
 
@@ -24,7 +24,7 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
 
     Args:
         iterations: Total number of iterations
-        step_size: Step size for local updates, can be a constant or a function of iteration
+        step_size: Step size for local updates
         x0: Initial parameters (optional)
         name: Algorithm name (default "GT-SAGA")
 
@@ -33,7 +33,7 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
     """
 
     iterations: int = 100
-    step_size: float | Callable[[int], float] = 0.01
+    step_size: float = 0.01
     x0: InitialStates = None  # Initial parameters (optional)
     name: str = "GT-SAGA"
 
@@ -48,10 +48,6 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
         """
         if isinstance(self.step_size, float) and self.step_size <= 0:
             raise ValueError("step_size must be positive")
-        if callable(self.step_size):
-            test_step_size = [self.step_size(k) for k in range(self.iterations)]
-            if any(s <= 0 for s in test_step_size):
-                raise ValueError("step_size function must return positive values for all iterations")
 
     def initialize(self, network: P2PNetwork) -> None:
         self.x0 = initial_states(self.x0, network)
@@ -78,9 +74,7 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
             }
             i.initialize(x=self.x0[i], aux_vars=aux_vars)
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:
-        step_size = self.step_size(iteration) if callable(self.step_size) else self.step_size
-
+    def step(self, network: P2PNetwork, _: int) -> None:
         # Step 1: Select random sample and update local stochastic gradient estimator
         for i in network.active_agents():
             self._update_gradient_estimator(i)
@@ -100,7 +94,7 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
         # x_i^{k+1} = sum_{r=1}^n w_ir (x_r^k - alpha*y_r^{k+1})
         for i in network.active_agents():
             # Broadcast x_i - alpha*y_i to reduce communication
-            x_minus_alpha_y = i.x - step_size * i.aux_vars["y"]
+            x_minus_alpha_y = i.x - self.step_size * i.aux_vars["y"]
             i.aux_vars["x_minus_alpha_y"] = x_minus_alpha_y
             network.broadcast(i, x_minus_alpha_y)
 
@@ -119,8 +113,9 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
             TypeError: If the agent's cost function is not an instance of EmpiricalRiskCost.
 
         """
-        if not isinstance(agent.cost, EmpiricalRiskCost):
-            raise TypeError("GT-SAGA is only compatible with EmpiricalRiskCost.")
+        if TYPE_CHECKING:
+            if not isinstance(agent.cost, EmpiricalRiskCost):
+                raise TypeError("GT-SAGA is only compatible with EmpiricalRiskCost.")
 
         # Store old g_i for gradient tracking update
         agent.aux_vars["g_old"] = agent.aux_vars["g"]
@@ -161,8 +156,9 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
             TypeError: If the agent's cost function is not an instance of EmpiricalRiskCost.
 
         """
-        if not isinstance(agent.cost, EmpiricalRiskCost):
-            raise TypeError("GT-SAGA is only compatible with EmpiricalRiskCost.")
+        if TYPE_CHECKING:
+            if not isinstance(agent.cost, EmpiricalRiskCost):
+                raise TypeError("GT-SAGA is only compatible with EmpiricalRiskCost.")
 
         z_grads = agent.cost.gradient(agent.x, indices="batch", reduction=None)
         batch_used = agent.cost.batch_used

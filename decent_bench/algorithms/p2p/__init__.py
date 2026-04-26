@@ -8,13 +8,13 @@ from ._dinno import DiNNO
 from ._dlm import DLM, DecentralizedLinearizedADMM
 from ._ed import ED, ExactDiffusion
 from ._extra import EXTRA
-from ._gt_saga import GT_SAGA
-from ._gt_sarah import GT_SARAH
-from ._gt_vr import GT_VR
+from ._gt_saga import GTSAGA
+from ._gt_sarah import GTSARAH
+from ._gt_vr import GTVR
 from ._kgt import KGT
 from ._led import LED
-from ._lt_admm import LT_ADMM
-from ._lt_admm_vr import LT_ADMM_VR
+from ._lt_admm import LTADMM
+from ._lt_admm_vr import LTADMMVR
 from ._nids import NIDS
 from ._p2p_algorithm import P2PAlgorithm
 from ._prox_skip import ProxSkip
@@ -30,13 +30,13 @@ __all__ = [
     "DLM",
     "ED",
     "EXTRA",
-    "GT_SAGA",
-    "GT_SARAH",
-    "GT_VR",
+    "GTSAGA",
+    "GTSARAH",
+    "GTVR",
     "KGT",
     "LED",
-    "LT_ADMM",
-    "LT_ADMM_VR",
+    "LTADMM",
+    "LTADMMVR",
     "NEXT",
     "NIDS",
     "SONATA",

@@ -197,7 +197,8 @@ class TopK(CompressionScheme):
     Top-k compression which transmits only the top k fraction of elements by magnitude.
 
     Raises:
-        ValueError: if ``k`` is not in :math:`(0, 1]`
+        ValueError: if ``k`` is a float and not in :math:`(0, 1]`
+        ValueError: if ``k`` is an int and less than 1
 
     Note:
         If ``k * n_elements < 1``, at least one element is still transmitted.
@@ -231,7 +232,8 @@ class RandK(CompressionScheme):
     Rand-k compression which transmits a random k fraction of elements.
 
     Raises:
-        ValueError: if ``k`` is not in :math:`(0, 1]`
+        ValueError: if ``k`` is a float and not in :math:`(0, 1]`
+        ValueError: if ``k`` is an int and less than 1
 
     Note:
         If ``k * n_elements < 1``, at least one element is still transmitted.

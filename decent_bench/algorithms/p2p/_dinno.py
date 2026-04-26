@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -27,8 +26,8 @@ class DiNNO(P2PAlgorithm):
 
     Args:
         iterations: Total number of outer iterations (K)
-        step_size: Step size for primal updates, can be a constant or a function of iteration
-        local_steps: Number of inner iterations (B) for approximate primal update
+        step_size: Step size for primal updates
+        num_local_steps: Number of inner iterations (B) for approximate primal update
         penalty: Penalty parameter (rho) for augmented Lagrangian
         x0: Initial parameters (optional)
         name: Algorithm name (default "DiNNO")
@@ -38,8 +37,8 @@ class DiNNO(P2PAlgorithm):
     """
 
     iterations: int = 100  # Total number of outer iterations (K)
-    step_size: float | Callable[[int], float] = 0.01
-    local_steps: int = 5  # Number of inner iterations (B) for approximate primal update
+    step_size: float = 0.01
+    num_local_steps: int = 5  # Number of inner iterations (B) for approximate primal update
     penalty: float = 0.5  # Penalty parameter (rho) for augmented Lagrangian
     x0: InitialStates = None  # Initial parameters (optional)
     name: str = "DiNNO"
@@ -53,14 +52,10 @@ class DiNNO(P2PAlgorithm):
             step_size, penalty, or alpha).
 
         """
-        if self.local_steps <= 0:
+        if self.num_local_steps <= 0:
             raise ValueError("local_steps must be positive")
         if isinstance(self.step_size, float) and self.step_size <= 0:
             raise ValueError("step_size must be positive")
-        if callable(self.step_size):
-            test_step_size = [self.step_size(k) for k in range(self.iterations)]
-            if any(s <= 0 for s in test_step_size):
-                raise ValueError("step_size function must return positive values for all iterations")
         if self.penalty <= 0:
             raise ValueError("penalty must be positive")
 
@@ -77,10 +72,8 @@ class DiNNO(P2PAlgorithm):
                 aux_vars={"p": p_0},
             )
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:
+    def step(self, network: P2PNetwork, _: int) -> None:
         # Main optimization loop (line 7)
-        step_size = self.step_size(iteration) if callable(self.step_size) else self.step_size
-
         # Step 1: Communication - send θ_i^k to neighbors (line 8)
         for i in network.active_agents():
             self._communication(i, network)
@@ -91,7 +84,7 @@ class DiNNO(P2PAlgorithm):
 
         # Step 3: Approximate primal update (lines 11-15) - Equation (4b)
         for i in network.active_agents():
-            self._local_training(i, step_size)
+            self._local_training(i)
 
     def _communication(self, agent: Agent, network: P2PNetwork) -> None:
         network.broadcast(agent, agent.x)
@@ -108,7 +101,7 @@ class DiNNO(P2PAlgorithm):
             consensus_error = agent.x * len(agent.messages) - s
             agent.aux_vars["p"] += self.penalty * consensus_error
 
-    def _local_training(self, agent: Agent, step_size: float) -> None:
+    def _local_training(self, agent: Agent) -> None:
         # Initialize psi^0 = theta_i^k (line 11)
         psi = iop.copy(agent.x)
 
@@ -122,7 +115,7 @@ class DiNNO(P2PAlgorithm):
             neighbor_thetas_sum /= 2.0
 
         # Approximate the primal update with B iterations (lines 12-14)
-        for _ in range(self.local_steps):
+        for _ in range(self.num_local_steps):
             # Term 1: grad l(psi; D_i)
             grad_loss = agent.cost.gradient(psi)
 
@@ -140,7 +133,7 @@ class DiNNO(P2PAlgorithm):
 
             # Gradient step: psi^(tau+1) = psi^tau - step_size * grad L_augmented
             total_gradient = grad_loss + grad_dual + grad_consensus
-            psi -= step_size * total_gradient
+            psi -= self.step_size * total_gradient
 
         # Update primal variable theta_i^(k+1) = psi^B (line 15)
         agent.x = psi

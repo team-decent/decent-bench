@@ -1,6 +1,6 @@
 import random
-from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from decent_bench.agents import Agent
 from decent_bench.algorithms.utils import initial_states
@@ -12,9 +12,9 @@ from decent_bench.utils.types import InitialStates
 from ._p2p_algorithm import P2PAlgorithm
 
 
-@tags("peer-to-peer", "gradient-based")
+@tags("peer-to-peer", "gradient-tracking")
 @dataclass(eq=False)
-class GT_VR(P2PAlgorithm):  # noqa: N801
+class GTVR(P2PAlgorithm):
     """
     GT-VR: Gradient Tracking with Variance Reduction algorithm :footcite:p:`Alg_GT_VR`.
 
@@ -24,7 +24,7 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
 
     Args:
         iterations: Total number of iterations
-        step_size: Step size for primal updates, can be a constant or a function of iteration
+        step_size: Step size for primal updates
         snapshot_prob: Probability of performing a snapshot update (P in the paper)
         x0: Initial parameters (optional)
         name: Algorithm name (default "GT-VR")
@@ -34,7 +34,7 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
     """
 
     iterations: int = 100
-    step_size: float | Callable[[int], float] = 0.01
+    step_size: float = 0.01
     snapshot_prob: float = 0.3  # P in the algorithm
     x0: InitialStates = None  # Initial parameters (optional)
     name: str = "GT-VR"
@@ -50,10 +50,6 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
         """
         if isinstance(self.step_size, float) and self.step_size <= 0:
             raise ValueError("step_size must be positive")
-        if callable(self.step_size):
-            test_step_size = [self.step_size(k) for k in range(self.iterations)]
-            if any(s <= 0 for s in test_step_size):
-                raise ValueError("step_size function must return positive values for all iterations")
         if not 0 < self.snapshot_prob <= 1:
             raise ValueError("snapshot_prob must be in (0, 1]")
 
@@ -93,12 +89,10 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
                 aux_vars=aux_vars,
             )
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:
+    def step(self, network: P2PNetwork, _: int) -> None:
         # Main algorithm loop (line 2)
-        step_size = self.step_size(iteration) if callable(self.step_size) else self.step_size
-
         for i in network.active_agents():
-            x_minus_eta_y = i.x - step_size * i.aux_vars["y"]
+            x_minus_eta_y = i.x - self.step_size * i.aux_vars["y"]
             i.aux_vars["x_minus_eta_y"] = x_minus_eta_y
             network.broadcast(i, x_minus_eta_y)
 
@@ -164,8 +158,9 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
             TypeError: If the agent's cost is not an instance of EmpiricalRiskCost.
 
         """
-        if not isinstance(agent.cost, EmpiricalRiskCost):
-            raise TypeError("GT-VR is only compatible with EmpiricalRiskCost.")
+        if TYPE_CHECKING:
+            if not isinstance(agent.cost, EmpiricalRiskCost):
+                raise TypeError("GT-VR is only compatible with EmpiricalRiskCost.")
 
         # Store old v_i for gradient tracking update
         agent.aux_vars["v_old"] = agent.aux_vars["v"]

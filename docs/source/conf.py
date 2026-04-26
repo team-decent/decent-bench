@@ -31,7 +31,7 @@ extensions = [
 ]
 
 tagged_list_modules = [
-    "decent_bench.algorithms.decentralized",
+    "decent_bench.algorithms.p2p",
     "decent_bench.algorithms.federated",
     "decent_bench.costs",
 ]
@@ -70,6 +70,7 @@ intersphinx_mapping = {
     "jax": ("https://jax.readthedocs.io/en/latest/", None),
     "rich": ("https://rich.readthedocs.io/en/latest/", None),
     "sklearn": ("https://scikit-learn.org/stable/", None),
+    "zstandard": ("https://python-zstandard.readthedocs.io/en/latest/", None),
 }
 
 

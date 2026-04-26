@@ -1,5 +1,15 @@
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
+from matplotlib.figure import Figure
+from PIL import Image
 from torch import nn
+
+from decent_bench import benchmark
+from decent_bench.costs import PyTorchCost
+from decent_bench.networks import Network
 
 
 class NimModel(nn.Module):  # noqa: D101
@@ -32,7 +42,7 @@ class NimModel(nn.Module):  # noqa: D101
         return res
 
 
-class FinalActivation(nn.Module):  # noqa: D101
+class ThresholdSigmoid(nn.Module):  # noqa: D101
     def __init__(self, threshold: float = 0.5):
         super().__init__()
         self.sigmoid = nn.Sigmoid()
@@ -41,3 +51,59 @@ class FinalActivation(nn.Module):  # noqa: D101
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # noqa: D102
         ret: torch.Tensor = (self.sigmoid(x) > self.threshold).long()
         return ret
+
+
+def create_heatmap_plots(
+    image_file: str | Path,
+    result: benchmark.BenchmarkResult,
+    save_path: Path | None = None,
+) -> list[Figure]:
+    """Create heatmap plots for each agent in the networks."""
+
+    def heatmap_plot(
+        network: Network,
+        width: int,
+        height: int,
+        norm: float,
+    ) -> list[list[float]]:
+        xs = np.arange(0, width) / norm
+        ys = np.arange(0, height) / norm
+        X, Y = np.meshgrid(xs, ys, indexing="xy")
+        nx, ny = X.shape
+        points = np.column_stack((X.ravel(), Y.ravel()))
+        mats = []
+        for agent in network.agents():
+            if not isinstance(agent.cost, PyTorchCost):
+                continue
+            agent_activation = agent.cost.final_activation
+            agent.cost.final_activation = nn.Sigmoid()
+            out = agent.cost.predict(agent.x, torch.tensor(points, dtype=torch.float32))  # type: ignore[arg-type]
+            agent.cost.final_activation = agent_activation
+            out_np = np.array(out)
+
+            mats.append(out_np.reshape((nx, ny)))
+
+        return mats
+
+    image = Image.open(image_file).convert("L")
+    image_array = np.array(image)
+    height, width = image_array.shape
+    feature_norm = max(height, width)
+
+    figs = []
+    for alg, networks in result.states.items():
+        for j, n in enumerate(networks):
+            heatmaps = heatmap_plot(n, width, height, feature_norm)
+            fig, ax = plt.subplots(1, 5, figsize=(15, 10))
+            fig.suptitle(f"{alg.name} - Trial {j + 1}")
+            for i, hm in enumerate(heatmaps):
+                ax[i].imshow(image_array, cmap="gray")
+                ax[i].imshow(hm, cmap="hot", interpolation="nearest", vmin=0, vmax=1, alpha=0.8)
+                ax[i].invert_yaxis()
+                ax[i].axis("off")
+                ax[i].set_title(f"Agent {i + 1}")
+            plt.tight_layout()
+            if save_path is not None:
+                plt.savefig(save_path / f"heatmaps_{alg.name}_{j + 1}.png")
+            figs.append(fig)
+    return figs

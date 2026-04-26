@@ -7,7 +7,7 @@ import pytest
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.algorithms import Algorithm
-from decent_bench.algorithms.decentralized import ADMM, ATC, DGD
+from decent_bench.algorithms.p2p import ADMM, ATC, DGD
 from decent_bench.algorithms.federated import FedAvg
 from decent_bench.benchmark import (
     BenchmarkProblem,

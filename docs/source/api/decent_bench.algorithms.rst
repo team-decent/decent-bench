@@ -9,6 +9,6 @@ decent\_bench.algorithms
 .. toctree::
    :maxdepth: 2
 
-   decent_bench.algorithms.decentralized
+   decent_bench.algorithms.p2p
    decent_bench.algorithms.federated
    decent_bench.algorithms.utils

@@ -2,7 +2,8 @@ import networkx as nx
 import pytest
 
 from decent_bench.agents import Agent
-from decent_bench.algorithms.decentralized import (
+from decent_bench.algorithms.federated import FedAlgorithm, FedAvg, FedProx
+from decent_bench.algorithms.p2p import (
     ADMM,
     ATC,
     ATG,
@@ -10,13 +11,13 @@ from decent_bench.algorithms.decentralized import (
     DLM,
     ED,
     EXTRA,
-    GT_SAGA,
-    GT_SARAH,
-    GT_VR,
+    GTSAGA,
+    GTSARAH,
+    GTVR,
     KGT,
     LED,
-    LT_ADMM,
-    LT_ADMM_VR,
+    LTADMM,
+    LTADMMVR,
     NIDS,
     ATCTracking,
     AugDGM,
@@ -26,7 +27,6 @@ from decent_bench.algorithms.decentralized import (
     SimpleGT,
     WangElia,
 )
-from decent_bench.algorithms.federated import FedAlgorithm, FedAvg, FedProx
 from decent_bench.benchmark import create_classification_problem
 from decent_bench.costs import LogisticRegressionCost, PyTorchCost
 from decent_bench.networks import FedNetwork, P2PNetwork
@@ -47,15 +47,15 @@ all_p2p_algs = pytest.mark.parametrize(
         (ADMM, {"iterations": 10, "rho": 1.0, "alpha": 0.5}),
         (ATG, {"iterations": 10, "rho": 1.0, "alpha": 0.5}),
         (DLM, {"iterations": 10, "step_size": 0.1, "penalty": 1.0}),
-        (DiNNO, {"iterations": 10, "step_size": 0.1, "local_steps": 5}),
-        (GT_VR, {"iterations": 10, "step_size": 0.1, "snapshot_prob": 0.5}),
-        (GT_SAGA, {"iterations": 10, "step_size": 0.1}),
-        (GT_SARAH, {"iterations": 10, "step_size": 0.1, "local_steps": 5}),
-        (KGT, {"iterations": 10, "step_size": 0.1, "local_steps": 5}),
-        (LED, {"iterations": 10, "step_size": 0.1, "local_steps": 5}),
-        (LT_ADMM, {"iterations": 10, "step_size": 0.1, "local_steps": 5}),
-        (LT_ADMM_VR, {"iterations": 10, "step_size": 0.1, "local_steps": 5, "v2": False}),
-        (LT_ADMM_VR, {"iterations": 10, "step_size": 0.1, "local_steps": 5, "v2": True}),
+        (DiNNO, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5}),
+        (GTVR, {"iterations": 10, "step_size": 0.1, "snapshot_prob": 0.5}),
+        (GTSAGA, {"iterations": 10, "step_size": 0.1}),
+        (GTSARAH, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5}),
+        (KGT, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5}),
+        (LED, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5}),
+        (LTADMM, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5}),
+        (LTADMMVR, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5, "v2": False}),
+        (LTADMMVR, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5, "v2": True}),
         (ProxSkip, {"iterations": 10, "step_size": 0.1, "comm_probability": 0.5}),
     ],
 )

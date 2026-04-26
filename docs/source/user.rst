@@ -733,7 +733,7 @@ Algorithms
 ----------
 Create a new algorithm to benchmark against existing ones.
 
-When implementing a custom algorithm by subclassing :class:`~decent_bench.algorithms.decentralized.P2PAlgorithm`, you need to understand the following methods:
+When implementing a custom algorithm by subclassing :class:`~decent_bench.algorithms.p2p.P2PAlgorithm`, you need to understand the following methods:
 
 - **initialize(network)**: Called once before the algorithm starts. Use this to set up initial values for agents' primal variables (:attr:`Agent.x <decent_bench.agents.Agent.x>`), auxiliary variables (:attr:`Agent.aux_vars <decent_bench.agents.Agent.aux_vars>`), and received messages (:attr:`Agent.messages <decent_bench.agents.Agent.messages>`). **Implementation required.**
     If you want the agents' primal variable to be a customizable parameter to the algorithm, consider using a field like ``x0: Array | None = None`` in your algorithm class.

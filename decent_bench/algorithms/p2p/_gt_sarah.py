@@ -1,5 +1,5 @@
-from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
@@ -12,9 +12,9 @@ from decent_bench.utils.types import InitialStates
 from ._p2p_algorithm import P2PAlgorithm
 
 
-@tags("peer-to-peer", "gradient-based")
+@tags("peer-to-peer", "gradient-tracking")
 @dataclass(eq=False)
-class GT_SARAH(P2PAlgorithm):  # noqa: N801
+class GTSARAH(P2PAlgorithm):
     """
     GT-SARAH: Gradient Tracking with SARAH variance reduction :footcite:p:`Alg_GT_SARAH`.
 
@@ -24,8 +24,8 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
 
     Args:
         iterations: Total number of outer loops (S)
-        local_steps: Number of inner loop iterations (q)
-        step_size: Step size (alpha) for updates, can be a constant or a function of iteration
+        num_local_steps: Number of inner loop iterations (q)
+        step_size: Step size (alpha) for updates
         x0: Initial parameters (optional)
         name: Algorithm name (default "GT-SARAH")
 
@@ -34,8 +34,8 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
     """
 
     iterations: int = 100  # S: number of outer loops
-    local_steps: int = 5  # q: number of inner loop iterations
-    step_size: float | Callable[[int], float] = 0.01  # alpha: step size
+    num_local_steps: int = 5  # q: number of inner loop iterations
+    step_size: float = 0.01  # alpha: step size
     x0: InitialStates = None  # Initial parameters (optional)
     name: str = "GT-SARAH"
 
@@ -48,14 +48,10 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
             step_size, penalty, or alpha).
 
         """
-        if self.local_steps <= 0:
+        if self.num_local_steps <= 0:
             raise ValueError("local_steps must be positive")
         if isinstance(self.step_size, float) and self.step_size <= 0:
             raise ValueError("step_size must be positive")
-        if callable(self.step_size):
-            test_step_size = [self.step_size(k) for k in range(self.iterations)]
-            if any(s <= 0 for s in test_step_size):
-                raise ValueError("step_size function must return positive values for all iterations")
 
     def initialize(self, network: P2PNetwork) -> None:
         """
@@ -90,9 +86,7 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
                 aux_vars=aux_vars,
             )
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:
-        step_size = self.step_size(iteration) if callable(self.step_size) else self.step_size
-
+    def step(self, network: P2PNetwork, _: int) -> None:
         # Step 1: Compute full gradient (batch gradient computation)
         for i in network.active_agents():
             self._compute_batch_grad(i)
@@ -109,9 +103,9 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
             network.broadcast(i, i.x)
 
         for i in network.active_agents():
-            self._state_update(i, step_size)
+            self._state_update(i)
 
-        self._inner_loop(network, step_size)
+        self._inner_loop(network)
 
     def _compute_batch_grad(self, agent: Agent) -> None:
         """
@@ -135,8 +129,9 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
             TypeError: If the agent's cost function is not an instance of EmpiricalRiskCost.
 
         """
-        if not isinstance(agent.cost, EmpiricalRiskCost):
-            raise TypeError("GT-SARAH only supports EmpiricalRiskCost instances.")
+        if TYPE_CHECKING:
+            if not isinstance(agent.cost, EmpiricalRiskCost):
+                raise TypeError("GT-SAGA is only compatible with EmpiricalRiskCost.")
 
         # Store previous inner loop gradient for tracking update
         agent.aux_vars["v_prev"] = agent.aux_vars["v"]
@@ -163,7 +158,7 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
             weighted_sum += self.W[agent, j] * y
         agent.aux_vars["y"] = weighted_sum + agent.aux_vars["v"] - agent.aux_vars["v_prev"]
 
-    def _state_update(self, agent: Agent, step_size: float) -> None:
+    def _state_update(self, agent: Agent) -> None:
         """
         Update local estimate via consensus.
 
@@ -174,15 +169,15 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
         weighted_sum = self.W[agent, agent] * agent.x
         for j, x in agent.messages.items():
             weighted_sum += self.W[agent, j] * x
-        agent.x = weighted_sum - step_size * agent.aux_vars["y"]
+        agent.x = weighted_sum - self.step_size * agent.aux_vars["y"]
 
-    def _inner_loop(self, network: P2PNetwork, step_size: float) -> None:
+    def _inner_loop(self, network: P2PNetwork) -> None:
         """
         Inner loop of GT-SARAH.
 
         Algorithm 2.1, lines 7-10.
         """
-        for _ in range(self.local_steps):
+        for _ in range(self.num_local_steps):
             # Step 4: SARAH variance reduction
             for i in network.active_agents():
                 self._update_sarah_estimator(i)  # line 8
@@ -199,4 +194,4 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
                 network.broadcast(i, i.x)
 
             for i in network.active_agents():
-                self._state_update(i, step_size)
+                self._state_update(i)

@@ -1,4 +1,4 @@
-from . import decentralized, federated, utils
+from . import federated, p2p, utils
 from ._algorithm import Algorithm
 
-__all__ = ["Algorithm", "decentralized", "federated", "utils"]
+__all__ = ["Algorithm", "federated", "p2p", "utils"]

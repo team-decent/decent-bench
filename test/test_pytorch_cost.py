@@ -206,3 +206,68 @@ def test_picklable(device: SupportedDevices, cost_kwargs: dict[str, Any] | None)
             rtol=5e-5,
             atol=1e-6,
         )
+
+
+@backends
+def test_local_training_supports_vector_correction(device: SupportedDevices) -> None:
+    dataset = _make_dataset(n_samples=7)
+    cost = _make_cost(dataset, max_batch_size=7, batch_size=7, device=device)
+
+    lr = 0.05
+    cost.init_local_training(opt_cls=torch.optim.SGD, opt_kwargs={"lr": lr})
+
+    x0 = cost._get_model_parameters().detach().clone()  # noqa: SLF001
+    correction = torch.ones_like(x0) * 0.01
+
+    # Expected manual update for one local step:
+    # x <- x - lr * grad(x) - correction
+    grad = cost.gradient(x0, indices="all")
+    expected = x0 - lr * grad - correction
+
+    class _DummyAgent:
+        _n_gradient_calls: int = 0
+
+    actual = cost.local_training(
+        x=x0,
+        iterations=1,
+        agent=_DummyAgent(),
+        regularization=correction,
+        indices="all",
+    )
+
+    assert actual.shape == expected.shape
+    assert torch.allclose(actual, expected, rtol=5e-5, atol=1e-6)
+
+
+@backends
+def test_local_training_scalar_regularizer_contributes_gradient(device: SupportedDevices) -> None:
+    dataset = _make_dataset(n_samples=7)
+    cost = _make_cost(dataset, max_batch_size=7, batch_size=7, device=device)
+
+    lr = 0.05
+    lam = 0.2
+    cost.init_local_training(opt_cls=torch.optim.SGD, opt_kwargs={"lr": lr})
+
+    x0 = cost._get_model_parameters().detach().clone()  # noqa: SLF001
+
+    # Data-loss gradient at x0 (full batch)
+    grad_data = cost.gradient(x0, indices="all")
+
+    # Regularizer: 0.5 * lam * ||x||^2  -> grad = lam * x
+    def l2_penalty(x: torch.Tensor) -> torch.Tensor:
+        return 0.5 * lam * (x**2).sum()
+
+    expected = x0 - lr * (grad_data + lam * x0)
+
+    class _DummyAgent:
+        _n_gradient_calls: int = 0
+
+    actual = cost.local_training(
+        x=x0,
+        iterations=1,
+        agent=_DummyAgent(),
+        regularization=l2_penalty,
+        indices="all",
+    )
+
+    assert torch.allclose(actual, expected, rtol=5e-5, atol=1e-6)

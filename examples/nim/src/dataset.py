@@ -1,11 +1,6 @@
-from __future__ import annotations
-
-import json
-import math
 import random
 from collections import Counter
 from collections.abc import Callable, Sequence
-from pathlib import Path
 
 import numpy as np
 from numpy import float64
@@ -17,16 +12,47 @@ from decent_bench.utils.array import Array
 from decent_bench.utils.logger import LOGGER, start_logger
 from decent_bench.utils.types import Dataset
 
-from .lidar import (
-    compute_headings,
-    densify_path,
-    image_to_occupancy,
-    sample_along_path,
-)
+
+def image_to_occupancy(
+    image_array: NDArray[np.float64],
+    threshold: float = 0.5,
+) -> NDArray[np.uint8]:
+    """
+    Convert grayscale image (0..1) to boolean occupancy map.
+
+    True means occupied (wall), False means free.
+
+    Args:
+        image_array: 2D array of shape (H,W) with values in [0,1]
+        threshold: value below which is considered occupied
+
+    Returns:
+        2D boolean array of shape (H,W) where True=occupied, False=free.
+
+    """
+    return (image_array < threshold).astype(np.uint8)
 
 
 class NIMDatasetHandler(DatasetHandler):
-    """Neural Implicit Mapping Dataset."""
+    """
+    Neural Implicit Mapping Dataset.
+
+    Args:
+        image_file: Path to the input image file (grayscale, where black=occupied and white=free).
+        n_partitions: Number of spatial partitions to divide the data into.
+        samples_per_partition: Optional max number of samples per partition after balancing. If None, keep all samples.
+        transform: Optional function to apply to features (coordinates) before normalization. Should take a tuple
+            (x, y) and return an array.
+        label_transform: Optional function to apply to labels before returning. Should take an int label and return
+            an array.
+        label_balance: Optional ratio of majority to minority class in each partition after balancing. Attempts to
+            balance labels as closely to 1:1 as possible, with a maximum ratio of 1:label_balance. If None, no
+            balancing is done. Must be >= 1 if set.
+        occupancy_threshold: Threshold for converting grayscale values to occupancy labels. Defaults to 0.5.
+        leakage: Fraction of partition size to allow for overlapping samples between partitions.
+            Defaults to 0 (no overlap).
+
+    """
 
     def __init__(
         self,
@@ -38,16 +64,7 @@ class NIMDatasetHandler(DatasetHandler):
         *,
         label_balance: float | None = None,
         occupancy_threshold: float = 0.5,
-        # Random sampling options
         leakage: float = 0.0,
-        # Path-based lidar sampling options
-        paths: list[list[tuple[int, int]]] | str | None = None,
-        samples_per_pose: int = 5,
-        num_beams: int = 36,
-        fov: float = 2 * math.pi,
-        max_range: float | None = None,
-        scan_spacing: float | None = None,
-        add_empty_lidar_samples: bool = False,
     ) -> None:
         start_logger()
         self.image_file = image_file
@@ -55,17 +72,8 @@ class NIMDatasetHandler(DatasetHandler):
         self.samples_per_partition = samples_per_partition
         self.transform = transform or self._identity_transform
         self.label_transform = label_transform or self._identity_transform
-        # Random sampling options
         self.leakage = leakage
         self.label_balance = label_balance
-        # Path-based lidar sampling options
-        self.paths = paths
-        self.samples_per_pose = samples_per_pose
-        self.num_beams = num_beams
-        self.fov = fov
-        self.max_range = max_range
-        self.scan_spacing = scan_spacing
-        self.add_empty_lidar_samples = add_empty_lidar_samples
         self.occupancy_threshold = occupancy_threshold
 
         if self.label_balance is not None and self.label_balance < 1:
@@ -78,7 +86,7 @@ class NIMDatasetHandler(DatasetHandler):
         self.feature_norm = max(self.height, self.width)
 
         # If configured to use provided paths for LIDAR sampling, do that and return
-        res = self._lidar(image_array) if self.paths is not None else self._create_spatial_partitions(image_array)
+        res = self._create_spatial_partitions(image_array)
 
         if len(res) != self.n_partitions:
             raise ValueError(
@@ -145,50 +153,6 @@ class NIMDatasetHandler(DatasetHandler):
 
     def _identity_transform(self, x: object) -> Array:
         return x  # type: ignore[return-value]
-
-    def _lidar(self, image_array: NDArray[float64]) -> list[list[tuple[tuple[int, int], int]]]:
-        occ = image_to_occupancy(image_array, threshold=self.occupancy_threshold)
-
-        # Load paths either from provided list or file
-        if isinstance(self.paths, list):
-            paths_list = self.paths
-        elif self.paths is not None:
-            try:
-                with Path(self.paths).open("r", encoding="utf-8") as f:
-                    paths_list = json.load(f)
-            except Exception as e:
-                raise RuntimeError(f"Unable to load paths file {self.paths}: {e}") from e
-        else:
-            raise ValueError("Paths must be provided as a list or a file path")
-
-        if len(paths_list) < self.n_partitions:
-            raise ValueError(
-                f"Number of provided paths {len(paths_list)} is less than the number of partitions {self.n_partitions}"
-            )
-
-        if len(paths_list) > self.n_partitions:
-            LOGGER.warning(
-                f"Truncated paths list to {self.n_partitions} partitions from {len(paths_list)} available paths."
-            )
-            paths_list = paths_list[: self.n_partitions]
-
-        res_paths: list[list[tuple[tuple[int, int], int]]] = []
-        for path in paths_list:
-            # densify based on scan_spacing; always compute headings if requested
-            positions = densify_path(path, self.scan_spacing) if self.scan_spacing else path
-            poses = compute_headings(positions)
-            samples = sample_along_path(
-                occ,
-                poses,
-                samples_per_pose=self.samples_per_pose,
-                num_beams=self.num_beams,
-                fov=self.fov,
-                max_range=(max(self.height, self.width) / 2 if self.max_range is None else self.max_range),
-                add_empty_space=self.add_empty_lidar_samples,
-            )
-            res_paths.append(samples)
-
-        return res_paths
 
     def _create_spatial_partitions(
         self,

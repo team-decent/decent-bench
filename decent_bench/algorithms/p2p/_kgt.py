@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import decent_bench.utils.interoperability as iop
@@ -19,9 +18,9 @@ class KGT(P2PAlgorithm):
 
     Args:
         iterations: Total number of communication rounds (T)
-        local_steps: Number of local gradient steps (K)
-        step_size: Local step size (eta_c), can be a constant or a function of iteration
-        aux_step_size: Communication step size (eta_s), can be a constant or a function of iteration
+        num_local_steps: Number of local gradient steps (K)
+        step_size: Local step size (eta_c)
+        aux_step_size: Communication step size (eta_s)
         x0: Initial parameters (optional)
         name: Algorithm name (default "K-GT")
 
@@ -30,9 +29,9 @@ class KGT(P2PAlgorithm):
     """
 
     iterations: int = 100  # Total number of communication rounds (T)
-    local_steps: int = 5  # Number of local gradient steps (K)
-    step_size: float | Callable[[int], float] = 0.01  # Local step size (eta_c)
-    aux_step_size: float | Callable[[int], float] = 0.01  # Communication step size (eta_s)
+    num_local_steps: int = 5  # Number of local gradient steps (K)
+    step_size: float = 0.01  # Local step size (eta_c)
+    aux_step_size: float = 0.01  # Communication step size (eta_s)
     x0: InitialStates = None  # Initial parameters (optional)
     name: str = "K-GT"
 
@@ -45,20 +44,12 @@ class KGT(P2PAlgorithm):
             step_size, penalty, or alpha).
 
         """
-        if self.local_steps <= 0:
+        if self.num_local_steps <= 0:
             raise ValueError("local_steps must be positive")
         if isinstance(self.step_size, float) and self.step_size <= 0:
             raise ValueError("step_size must be positive")
-        if callable(self.step_size):
-            test_step_size = [self.step_size(k) for k in range(self.iterations)]
-            if any(s <= 0 for s in test_step_size):
-                raise ValueError("step_size function must return positive values for all iterations")
         if isinstance(self.aux_step_size, float) and self.aux_step_size <= 0:
             raise ValueError("aux_step_size must be positive")
-        if callable(self.aux_step_size):
-            test_aux_step_size = [self.aux_step_size(k) for k in range(self.iterations)]
-            if any(s <= 0 for s in test_aux_step_size):
-                raise ValueError("aux_step_size function must return positive values for all iterations")
 
     def initialize(self, network: P2PNetwork) -> None:
         """
@@ -84,20 +75,17 @@ class KGT(P2PAlgorithm):
                 },
             )
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:
+    def step(self, network: P2PNetwork, _: int) -> None:
         # Main algorithm loop (lines 4-12)
-        step_size = self.step_size(iteration) if callable(self.step_size) else self.step_size
-        aux_step_size = self.aux_step_size(iteration) if callable(self.aux_step_size) else self.aux_step_size
-
         # Step 1: Local training phase (lines 5-7)
         for i in network.active_agents():
-            self._local_training(i, step_size)
+            self._local_training(i)
 
         # Step 2: Compute z_i and store in aux_vars
-        multiplier = self.local_steps * aux_step_size * step_size
+        multiplier = self.num_local_steps * self.aux_step_size * self.step_size
         for i in network.active_agents():
             # Compute z_i^(t) = (1/K eta_c)(x_i^(t) - x_i^(t+K))
-            i.aux_vars["z_i"] = (i.aux_vars["x_before_local"] - i.x) / (self.local_steps * step_size)
+            i.aux_vars["z_i"] = (i.aux_vars["x_before_local"] - i.x) / (self.num_local_steps * self.step_size)
             msg = i.aux_vars["x_before_local"] - multiplier * i.aux_vars["z_i"]
             i.aux_vars["msg"] = msg
             # Step 3: Communication phase
@@ -108,7 +96,7 @@ class KGT(P2PAlgorithm):
         for i in network.active_agents():
             self._update_tracking_and_params(i)
 
-    def _local_training(self, agent: Agent, step_size: float) -> None:
+    def _local_training(self, agent: Agent) -> None:
         """
         Perform K local gradient steps.
 
@@ -120,9 +108,9 @@ class KGT(P2PAlgorithm):
 
         # Perform K local gradient steps (line 6)
         # x_i^(t)+k+1 = x_i^(t)+k - eta_c(grad F_i(x_i^(t)+k; xi_i^(t)+k) + c_i^(t))
-        for _ in range(self.local_steps):
+        for _ in range(self.num_local_steps):
             gradient = agent.cost.gradient(x_k)
-            x_k -= step_size * (gradient + agent.aux_vars["c"])
+            x_k -= self.step_size * (gradient + agent.aux_vars["c"])
         agent.x = x_k
 
     def _update_tracking_and_params(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast, override
 
 import decent_bench.utils.interoperability as iop
@@ -476,9 +476,10 @@ class PyTorchCost(EmpiricalRiskCost):
         x: torch.Tensor,
         iterations: int,
         agent: Agent,
+        regularization: torch.Tensor | Callable[[torch.Tensor], torch.Tensor] | None,
         indices: EmpiricalRiskIndices = "batch",
     ) -> torch.Tensor:
-        """
+        r"""
         Perform local training steps using the provided optimizer.
 
         Note:
@@ -488,6 +489,13 @@ class PyTorchCost(EmpiricalRiskCost):
             x (torch.Tensor): Initial parameters to start local training from.
             iterations (int): Number of local training iterations to perform.
             agent (Agent): The agent performing the local training.
+            regularization (torch.Tensor | Callable[[torch.Tensor], torch.Tensor] | None): Optional regularization.
+                Two forms are supported:
+
+                - Scalar tensor (or callable returning a scalar): interpreted as an additive loss penalty.
+                - Flat tensor with the same number of elements as the flattened parameter vector: interpreted as a
+                  parameter-space correction step applied after each optimizer step
+                  (i.e., :math:`x \leftarrow x - r`).
             indices (EmpiricalRiskIndices): Indices of the samples to use for local training.
 
         Returns:
@@ -495,6 +503,9 @@ class PyTorchCost(EmpiricalRiskCost):
 
         Raises:
             RuntimeError: If no optimizer was provided during initialization.
+            ValueError: If `regularization` is a non-scalar tensor but does not have the same number of elements as the
+                flattened parameter vector.
+            TypeError: If `regularization` is not a torch.Tensor or a callable returning a torch.Tensor.
 
         """
         if self._optimizer is None:
@@ -514,8 +525,50 @@ class PyTorchCost(EmpiricalRiskCost):
                 self._optimizer.zero_grad()
                 outputs = self.model(batch_x)
                 loss = self.loss_fn(outputs, batch_y)
+                reg_value: torch.Tensor | None = None
+                if regularization is not None:
+                    reg_value = (
+                        regularization(torch.cat([p.flatten() for p in self._params_list]).to(self._pytorch_device))
+                        if callable(regularization)
+                        else regularization
+                    )
+                    if not isinstance(reg_value, torch.Tensor):
+                        raise TypeError(
+                            "`regularization` must be a torch.Tensor or a callable returning a torch.Tensor, "
+                            f"got {type(reg_value)}."
+                        )
+                    reg_value = reg_value.to(
+                        device=self._pytorch_device,
+                        dtype=self._params_list[0].dtype,
+                    )
+
+                    # Two supported forms:
+                    # 1) Scalar tensor: interpreted as an additive loss penalty.
+                    # 2) Flat vector of model-parameter shape: interpreted as an additive parameter update step.
+                    #    This is useful for algorithms that add a correction term directly in parameter space.
+                    if reg_value.ndim == 0 or reg_value.numel() == 1:
+                        loss += reg_value.reshape(())
+                    elif reg_value.numel() != self.total_params:
+                        raise ValueError(
+                            "If `regularization` is non-scalar, it must have the same number of elements as the "
+                            f"flattened parameter vector (expected {self.total_params}, got {reg_value.numel()})."
+                        )
+
                 loss.backward()
                 self._optimizer.step()
+
+                if reg_value is not None and reg_value.ndim != 0 and reg_value.numel() != 1:
+                    # Apply parameter-space correction step: x <- x - reg_value
+                    reg_value = reg_value.detach().flatten()
+                    reg_chunks = torch.split(reg_value, self.param_sizes)
+                    with torch.no_grad():
+                        for param, chunk, shape in zip(
+                            self._params_list,
+                            reg_chunks,
+                            self.param_shapes,
+                            strict=True,
+                        ):
+                            param.data.sub_(chunk.view(shape))
 
             # Since we are not calling the gradient method,
             # we need to manually update the agent's gradient call count for benchmarking purposes.

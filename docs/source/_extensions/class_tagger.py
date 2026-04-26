@@ -15,7 +15,7 @@ Configuration (conf.py)
 Add the modules to scan::
 
     tagged_list_modules = [
-        "decent_bench.algorithms.decentralized",
+        "decent_bench.algorithms.p2p",
         "decent_bench.costs",
     ]
 """

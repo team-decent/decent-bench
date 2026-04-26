@@ -8,6 +8,7 @@ from typing import Any, TypedDict, cast
 
 import zstandard as zstd
 from rich.progress import track
+from rich.status import Status
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
@@ -97,14 +98,26 @@ class CheckpointManager:  # noqa: PLR0904
         - Metadata is written once at initialization.
 
     Args:
-        checkpoint_dir: Path to the checkpoint directory.
+        checkpoint_dir: Path to save checkpoints during execution. If provided, progress will be saved
+            at regular intervals allowing resumption if interrupted. When starting a new benchmark
+            the directory must be empty or non-existent.
         checkpoint_step: Number of iterations between checkpoints within each trial.
-            If None, only save at trial completion.
+            If ``None``, only save at the end of each trial. For long-running algorithms,
+            set this to checkpoint during trial execution (e.g., every 1000 iterations).
         keep_n_checkpoints: Maximum number of iteration checkpoints to keep per trial.
             Older checkpoints are automatically deleted to save disk space.
+        benchmark_metadata: Optional dictionary of additional metadata to save in the checkpoint directory,
+                such as hyperparameters or system information. This can be useful for keeping track of the benchmark
+                configuration and context when analyzing results later.
+        compression_level: Level of compression to use for checkpoint files. Higher levels result in smaller file
+            sizes but take more time to compress and decompress. See zstandard documentation
+            (:class:`~zstandard.ZstdCompressor`) for details on compression levels. Default is 1, which provides a good
+            balance between compression ratio and speed for typical checkpoint payloads. Adjust as needed based on
+            the size of the checkpoint data and performance requirements.
 
     Raises:
-            ValueError: If checkpoint_step is not a positive integer or None.
+        ValueError: If checkpoint_step is not a positive integer or ``None``.
+        ValueError: If keep_n_checkpoints is not a positive integer.
 
     """
 
@@ -132,10 +145,10 @@ class CheckpointManager:  # noqa: PLR0904
                     such as hyperparameters or system information. This can be useful for keeping track of the benchmark
                     configuration and context when analyzing results later.
             compression_level: Level of compression to use for checkpoint files. Higher levels result in smaller file
-                sizes but take more time to compress and decompress. See zstandard documentation for details on
-                compression levels. Default is 1, which provides a good balance between compression ratio and speed for
-                typical checkpoint payloads. Adjust as needed based on the size of the checkpoint data and performance
-                requirements.
+                sizes but take more time to compress and decompress. See zstandard documentation
+                (:class:`~zstandard.ZstdCompressor`) for details on compression levels. Default is 1, which provides a
+                good balance between compression ratio and speed for typical checkpoint payloads. Adjust as needed based
+                on the size of the checkpoint data and performance requirements.
 
         Raises:
             ValueError: If checkpoint_step is not a positive integer or ``None``.
@@ -765,13 +778,15 @@ class CheckpointManager:  # noqa: PLR0904
     def _save_initial_algorithms(self, algorithms: list[Algorithm[Network]]) -> None:
         """Save initial algorithm states before any trials run."""
         initial_path = self.checkpoint_dir / "initial_algorithms.pkl.zst"
-        self._save_pickle(initial_path, algorithms)
+        with Status(f"Saving initial algorithms to {initial_path}..."):
+            self._save_pickle(initial_path, algorithms)
         LOGGER.debug(f"Saved initial algorithms to {initial_path}")
 
     def _save_benchmark_problem(self, problem: BenchmarkProblem) -> None:
         """Save benchmark problem configuration."""
         problem_path = self.checkpoint_dir / "benchmark_problem.pkl.zst"
-        self._save_pickle(problem_path, problem)
+        with Status(f"Saving benchmark problem configuration to {problem_path}..."):
+            self._save_pickle(problem_path, problem)
         LOGGER.debug(f"Saved benchmark problem to {problem_path}")
 
     def _resolve_data_file(self, preferred_name: str, legacy_name: str) -> Path:

@@ -9,7 +9,7 @@ from decent_bench.utils.types import InitialStates
 from ._p2p_algorithm import P2PAlgorithm
 
 
-@tags("peer-to-peer", "gradient tracking")
+@tags("peer-to-peer", "gradient-tracking")
 @dataclass(eq=False)
 class ATCTracking(P2PAlgorithm):
     r"""

@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import decent_bench.utils.interoperability as iop
@@ -11,17 +10,17 @@ from decent_bench.utils.types import InitialStates
 from ._p2p_algorithm import P2PAlgorithm
 
 
-@tags("peer-to-peer", "gradient-based")
+@tags("peer-to-peer", "gradient-based", "dual method", "ADMM")
 @dataclass(eq=False)
-class LT_ADMM(P2PAlgorithm):  # noqa: N801
+class LTADMM(P2PAlgorithm):
     """
     Local Training ADMM (LT-ADMM) :footcite:p:`Alg_LT_ADMM_VR`.
 
     Args:
         iterations: Total number of communication rounds (K)
-        local_steps: Number of local training steps (tau)
-        step_size: Local step size (gamma), can be a constant or a function of iteration
-        aux_step_size: Local step size (beta), can be a constant or a function of iteration
+        num_local_steps: Number of local training steps (tau)
+        step_size: Local step size (gamma)
+        aux_step_size: Local step size (beta)
         penalty: Penalty parameter (rho)
         alpha: Relaxation parameter (alpha)
         x0: Initial parameters (optional)
@@ -32,9 +31,9 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
     """
 
     iterations: int = 100  # Total number of communication rounds (K)
-    local_steps: int = 5  # Number of local training steps (tau)
-    step_size: float | Callable[[int], float] = 0.01  # Local step size (gamma)
-    aux_step_size: float | Callable[[int], float] = 0.01  # Local step size (beta)
+    num_local_steps: int = 5  # Number of local training steps (tau)
+    step_size: float = 0.01  # Local step size (gamma)
+    aux_step_size: float = 0.01  # Local step size (beta)
     penalty: float = 1.0  # Penalty parameter (rho)
     alpha: float = 0.5  # Relaxation parameter (alpha)
     x0: InitialStates = None  # Initial parameters (optional)
@@ -49,20 +48,12 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
             step_size, penalty, or alpha).
 
         """
-        if self.local_steps <= 0:
+        if self.num_local_steps <= 0:
             raise ValueError("local_steps must be positive")
         if isinstance(self.step_size, float) and self.step_size <= 0:
             raise ValueError("step_size must be positive")
-        if callable(self.step_size):
-            test_step_size = [self.step_size(k) for k in range(self.iterations)]
-            if any(s <= 0 for s in test_step_size):
-                raise ValueError("step_size function must return positive values for all iterations")
         if isinstance(self.aux_step_size, float) and self.aux_step_size <= 0:
             raise ValueError("aux_step_size must be positive")
-        if callable(self.aux_step_size):
-            test_aux_step_size = [self.aux_step_size(k) for k in range(self.iterations)]
-            if any(s <= 0 for s in test_aux_step_size):
-                raise ValueError("aux_step_size function must return positive values for all iterations")
         if self.penalty <= 0:
             raise ValueError("penalty must be positive")
         if self.alpha <= 0:
@@ -92,13 +83,10 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
             }
             i.initialize(x=x0[i], aux_vars=aux_vars)
 
-    def step(self, network: P2PNetwork, iteration: int) -> None:
-        step_size = self.step_size(iteration) if callable(self.step_size) else self.step_size
-        aux_step_size = self.aux_step_size(iteration) if callable(self.aux_step_size) else self.aux_step_size
-
+    def step(self, network: P2PNetwork, _: int) -> None:
         # Step 1: Local training phase
         for i in network.active_agents():
-            self._local_training(i, network, step_size, aux_step_size)
+            self._local_training(i, network)
 
         # Step 2: Communication phase
         for i in network.active_agents():
@@ -108,7 +96,7 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
         for i in network.active_agents():
             self._auxiliary_update(i)
 
-    def _local_training(self, agent: Agent, network: P2PNetwork, step_size: float, aux_step_size: float) -> None:
+    def _local_training(self, agent: Agent, network: P2PNetwork) -> None:
         """
         Perform local training steps (Algorithm 1, lines 2-9).
 
@@ -118,11 +106,11 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
         z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
         # Always use the number of neighbors for the penalty term to ensure proper scaling
         multiplier = self.penalty * len(network.neighbors(agent))
-        correction = aux_step_size * (multiplier * agent.x - z_sum)
+        correction = self.aux_step_size * (multiplier * agent.x - z_sum)
 
-        for _ in range(self.local_steps):
+        for _ in range(self.num_local_steps):
             current_gradient = agent.cost.gradient(agent.aux_vars["phi"])
-            step = step_size * current_gradient + correction
+            step = self.step_size * current_gradient + correction
             # Update phi_i,k according to gradient step (line 7)
             agent.aux_vars["phi"] -= step
 
