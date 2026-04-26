@@ -2,7 +2,7 @@ import networkx as nx
 import pytest
 
 from decent_bench.agents import Agent
-from decent_bench.algorithms.federated import FedAlgorithm, FedAvg, FedProx
+from decent_bench.algorithms.federated import FedAlgorithm, FedAvg, FedProx, FedAdagrad, FedAdam, FedYogi, Scaffold
 from decent_bench.algorithms.p2p import (
     ADMM,
     ATC,
@@ -65,6 +65,10 @@ all_fed_algs = pytest.mark.parametrize(
     [
         (FedAvg, {"iterations": 10, "step_size": 0.1}),
         (FedProx, {"iterations": 10, "step_size": 0.1}),
+        (FedAdagrad, {"iterations": 10, "step_size": 0.1}),
+        (FedYogi, {"iterations": 10, "step_size": 0.1}),
+        (FedAdam, {"iterations": 10, "step_size": 0.1}),
+        (Scaffold, {"iterations": 10, "step_size": 0.1}),
     ],
 )
 

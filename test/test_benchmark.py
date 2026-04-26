@@ -8,7 +8,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.algorithms import Algorithm
 from decent_bench.algorithms.p2p import ADMM, ATC, DGD
-from decent_bench.algorithms.federated import FedAvg
+from decent_bench.algorithms.federated import FedAvg, FedAdagrad, FedAdam, FedYogi
 from decent_bench.benchmark import (
     BenchmarkProblem,
     benchmark,
@@ -82,6 +82,9 @@ def _build_fed_problem_and_algorithms(
     problem = BenchmarkProblem(network=network, x_optimal=x_optimal, test_data=test_data)
     algorithms: list[Algorithm[Any]] = [
         FedAvg(iterations=iterations, step_size=0.01),
+        FedAdagrad(iterations=iterations, step_size=0.01, server_step_size=0.01),
+        FedYogi(iterations=iterations, step_size=0.01, server_step_size=0.01),
+        FedAdam(iterations=iterations, step_size=0.01, server_step_size=0.01),
     ]
     return problem, algorithms
 

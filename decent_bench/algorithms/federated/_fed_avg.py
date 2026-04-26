@@ -2,13 +2,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms.federated import FedAlgorithm
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
-from decent_bench.utils.types import ClientWeights, InitialStates
+from decent_bench.utils.types import InitialStates
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -19,7 +18,7 @@ if TYPE_CHECKING:
 @dataclass(eq=False)
 class FedAvg(FedAlgorithm):
     r"""
-    Federated Averaging (FedAvg) with local SGD epochs.
+    Federated Averaging (FedAvg) with local SGD epochs :footcite:p:`Alg_FedAvg`.
 
     .. math::
         \mathbf{x}_{i, k}^{(t+1)} = \mathbf{x}_{i, k}^{(t)} - \eta \nabla f_i(\mathbf{x}_{i, k}^{(t)})
@@ -30,12 +29,14 @@ class FedAvg(FedAlgorithm):
     where :math:`t` indexes the local training epochs on each client and :math:`E` is the number of local epochs per
     round (``num_local_epochs``), :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients at
     round :math:`k`. In FedAvg, each selected client performs ``num_local_epochs`` local SGD epochs, then the server
-    aggregates the final local models to form :math:`\mathbf{x}_{k+1}`. The aggregation uses client weights, defaulting
-    to data-size weights when ``client_weights`` is not provided. Client selection (subsampling) defaults to uniform
-    sampling with fraction 1.0 (all active clients) and can be customized via ``selection_scheme``. Costs that
-    preserve the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use client-side mini-batches of size
-    :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; generic cost wrappers
-    fall back to full-gradient local updates.
+    aggregates the final local models to form :math:`\mathbf{x}_{k+1}` using uniform averaging over the participating
+    clients. Client selection (subsampling) defaults to uniform sampling with fraction 1.0 (all active clients) and can
+    be customized via ``selection_scheme``. Costs that preserve the
+    :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use client-side mini-batches of size
+    :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; generic cost wrappers fall
+    back to full-gradient local updates.
+
+    .. footbibliography::
     """
 
     # C=0.1; batch size= inf/10/50 (dataset sizes are bigger; normally 1/10 of the total dataset).
@@ -43,7 +44,6 @@ class FedAvg(FedAlgorithm):
     iterations: int = 100
     step_size: float = 0.001
     num_local_epochs: int = 1
-    client_weights: ClientWeights | None = None
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -75,11 +75,15 @@ class FedAvg(FedAlgorithm):
             return
 
         self.server_broadcast(network, selected_clients)
-        self._run_local_updates(network, selected_clients)
-        self.aggregate(network, selected_clients)
+        participating_clients = self._clients_with_server_broadcast(network, selected_clients)
+        if not participating_clients:
+            return
+        self._clear_buffered_server_messages(network, participating_clients)
+        self._run_local_updates(network, participating_clients)
+        self.aggregate(network, participating_clients)
 
-    def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        for client in selected_clients:
+    def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
+        for client in participating_clients:
             client.x = self._compute_local_update(client, network.server())
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
@@ -90,7 +94,7 @@ class FedAvg(FedAlgorithm):
         Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so FedAvg
         performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
         """
-        local_x = iop.copy(client.messages[server]) if server in client.messages else iop.copy(client.x)
+        local_x = self._get_server_broadcast(client, server)
         for _ in range(self.num_local_epochs):
             grad = client.cost.gradient(local_x)
             local_x -= self.step_size * grad

@@ -111,6 +111,33 @@ Federated
 FedProx extends FedAvg with a proximal coefficient ``mu``. Setting ``mu=0`` reduces
 FedProx to FedAvg.
 
+:class:`~decent_bench.distributed_algorithms.FedAdagrad`,
+:class:`~decent_bench.distributed_algorithms.FedYogi`, and
+:class:`~decent_bench.distributed_algorithms.FedAdam` form the built-in FedOpt
+family. They keep the same client-side local SGD structure as FedAvg, but each
+client uploads its model delta to the server and the server applies an adaptive
+optimizer update instead of plain averaging to the next global iterate.
+
+Federated aggregation
+^^^^^^^^^^^^^^^^^^^^^
+For the built-in federated algorithms, aggregation affects only how client
+updates are combined at the server. It does not change the optimization
+objective itself. If you want to optimize a weighted objective, scale the
+client costs in the problem definition instead of relying on aggregation.
+
+:class:`~decent_bench.distributed_algorithms.FedAvg` and
+:class:`~decent_bench.distributed_algorithms.FedProx` use uniform averaging
+over the selected clients.
+
+:class:`~decent_bench.distributed_algorithms.FedAdagrad`,
+:class:`~decent_bench.distributed_algorithms.FedYogi`, and
+:class:`~decent_bench.distributed_algorithms.FedAdam` also average client
+model deltas uniformly over the selected clients before applying their
+server-side adaptive optimizer.
+
+:class:`~decent_bench.distributed_algorithms.Scaffold` matches the standard
+SCAFFOLD algorithm and always uses uniform averaging over the selected clients.
+
 
 Available costs
 ---------------
@@ -758,9 +785,9 @@ You can also inspect :attr:`~decent_bench.networks.Network.graph` to use Network
 In :class:`~decent_bench.networks.FedNetwork`, :meth:`~decent_bench.networks.Network.agents` and :meth:`~decent_bench.networks.Network.active_agents` refer to clients (the server is available via :attr:`~decent_bench.networks.FedNetwork.server`/ :attr:`~decent_bench.networks.FedNetwork.coordinator`).
 Federated networks enforce an always-available server: a custom server passed to :class:`~decent_bench.networks.FedNetwork` must use :class:`~decent_bench.schemes.AlwaysActive`, otherwise network construction raises ``ValueError``.
 The agents/clients lists are cached for efficiency, so the network graph should be treated as immutable after construction.
-Client weights (``client_weights``) are used only during aggregation and do not change the objective being optimized.
-If you want to optimize a weighted objective :math:`\min \sum_i w_i f_i(x)`, scale each local cost by ``w_i`` when
-defining the problem.
+Federated aggregation affects only how client updates are combined at the server and does not change the objective
+being optimized. If you want to optimize a weighted objective :math:`\min \sum_i w_i f_i(x)`, scale each local cost by
+``w_i`` when defining the problem.
 
 .. code-block:: python
 

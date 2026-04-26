@@ -1,8 +1,8 @@
 """
 Utilities for algorithm initialization and general helpers.
 
-This includes functions such as :func:`~decent_bench.algorithms.utils.infer_client_weight`, which infers
-default client weights from cost data size when explicit weights are not provided.
+This includes functions such as :func:`~decent_bench.utils.algorithm_helpers.infer_client_weight`,
+which infers client data size from common cost attributes.
 """
 
 import decent_bench.utils.interoperability as iop
@@ -217,5 +217,5 @@ def infer_client_weight(client: "Agent") -> float:
         if n_samples is not None:
             return float(n_samples)
     raise ValueError(
-        "Cannot infer client data size. Provide client_weights to the algorithm or add a size attribute to the cost."
+        "Cannot infer client data size. Add a size attribute to the cost or use uniform aggregation instead."
     )

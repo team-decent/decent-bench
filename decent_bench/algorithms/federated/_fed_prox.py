@@ -8,7 +8,7 @@ from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
-from decent_bench.utils.types import ClientWeights, InitialStates
+from decent_bench.utils.types import InitialStates
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 @dataclass(eq=False)
 class FedProx(FedAlgorithm):
     r"""
-    Federated Proximal (FedProx) with local SGD epochs.
+    Federated Proximal (FedProx) with local SGD epochs :footcite:p:`Alg_FedProx`.
 
     Each client solves a proximalized local subproblem around the round's server model:
 
@@ -38,19 +38,19 @@ class FedProx(FedAlgorithm):
     where :math:`\mathbf{w}^t` is the server model broadcast at the start of round :math:`k`, held fixed
     throughout each selected client's local epochs, :math:`\mu \geq 0` is the proximal coefficient,
     :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients. Setting ``mu=0.0``
-    recovers :class:`FedAvg <decent_bench.algorithms.federated.FedAvg>` exactly. Aggregation uses client weights,
-    defaulting to data-size weights when ``client_weights`` is not provided, and client selection defaults to uniform
-    sampling with fraction 1.0. For
+    recovers :class:`FedAvg <decent_bench.distributed_algorithms.FedAvg>` exactly. Aggregation uses uniform averaging
+    over the participating clients. Client selection defaults to uniform sampling with fraction 1.0. For
     :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
     :attr:`EmpiricalRiskCost.batch_size <decent_bench.costs.EmpiricalRiskCost.batch_size>`; for generic costs,
     local updates use full-batch gradients.
+
+    .. footbibliography::
     """
 
     iterations: int = 100
     step_size: float = 0.001
     num_local_epochs: int = 1
     mu: float = 0.01
-    client_weights: ClientWeights | None = None
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -84,11 +84,15 @@ class FedProx(FedAlgorithm):
             return
 
         self.server_broadcast(network, selected_clients)
-        self._run_local_updates(network, selected_clients)
-        self.aggregate(network, selected_clients)
+        participating_clients = self._clients_with_server_broadcast(network, selected_clients)
+        if not participating_clients:
+            return
+        self._clear_buffered_server_messages(network, participating_clients)
+        self._run_local_updates(network, participating_clients)
+        self.aggregate(network, participating_clients)
 
-    def _run_local_updates(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        for client in selected_clients:
+    def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
+        for client in participating_clients:
             client.x = self._compute_local_update(client, network.server())
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
@@ -99,7 +103,7 @@ class FedProx(FedAlgorithm):
         Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so FedProx
         performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
         """
-        reference_x = client.messages.get(server, client.x)
+        reference_x = self._get_server_broadcast(client, server)
         local_x = iop.copy(reference_x)
         for _ in range(self.num_local_epochs):
             grad = client.cost.gradient(local_x) + self.mu * (local_x - reference_x)
