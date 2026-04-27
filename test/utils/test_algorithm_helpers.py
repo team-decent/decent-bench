@@ -58,7 +58,10 @@ def test_initial_states_dict_matches_by_agent_id() -> None:
 
 def test_initial_states_non_fed_missing_agent_raises() -> None:
     net = _make_p2p_network(n_agents=3, shape=(2,))
-    x0_dict = {agent: iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device) for agent in list(net.graph)[:2]}
+    x0_dict = {
+        agent: iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
+        for agent in list(net.graph)[:2]
+    }
 
     with pytest.raises(ValueError, match="x0 not provided for agent"):
         initial_states(x0_dict, net)
@@ -177,6 +180,23 @@ def test_infer_client_weight_falls_back_to_n_samples() -> None:
     weight = infer_client_weight(client)
 
     assert weight == 11.0
+
+
+@pytest.mark.parametrize(
+    ("attribute", "value"),
+    [
+        pytest.param("n_samples", 0, id="zero-n-samples"),
+        pytest.param("n_samples", -1, id="negative-n-samples"),
+        pytest.param("A", np.zeros((0, 2)), id="empty-A"),
+        pytest.param("b", np.zeros((0,)), id="empty-b"),
+    ],
+)
+def test_infer_client_weight_raises_when_inferred_size_is_not_positive(attribute: str, value: object) -> None:
+    client = Agent(0, L2RegularizerCost((2,)))
+    setattr(client.cost, attribute, value)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="Client data size must be positive"):
+        infer_client_weight(client)
 
 
 def test_infer_client_weight_raises_when_no_size_signal() -> None:

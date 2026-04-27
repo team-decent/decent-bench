@@ -49,18 +49,6 @@ Can be a single positive integer shared by all clients, or a dictionary
 mapping each client agent to its own positive local step count.
 """
 
-type UploadPacket = dict[str, "Array"]  # noqa: TC008
-"""
-Type alias for grouped message uploads where each named field is transmitted as an array.
-"""
-
-type NetworkMessage = "Array | UploadPacket"  # noqa: TC008
-"""
-Type alias for messages exchanged over the network.
-
-Messages can be a single array or a grouped upload packet containing multiple named arrays.
-"""
-
 ArrayKey: TypeAlias = SupportsIndex | slice | tuple[SupportsIndex | slice, ...]  # noqa: UP040
 """
 Type alias for valid keys used to index into supported array types.

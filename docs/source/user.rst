@@ -120,11 +120,12 @@ optimizer update instead of plain averaging to the next global iterate.
 
 :class:`~decent_bench.distributed_algorithms.FedNova` supports the plain
 Local-SGD FedNova update together with optional local momentum, proximal local
-updates, and server momentum. Clients accumulate their communicated local
-updates together with the FedNova normalization coefficient before the server
-applies the aggregated update. The ``num_local_steps`` argument can be either
-a single integer for homogeneous local work or a per-client mapping for
-heterogeneous local step counts.
+updates, and server momentum. Clients accumulate their local updates together
+with the FedNova normalization coefficient and upload them to the server in
+two separate transmissions before the server applies the aggregated update.
+The ``num_local_steps`` argument can be either a single integer for
+homogeneous local work or a per-client mapping for heterogeneous local step
+counts.
 
 Federated aggregation
 ^^^^^^^^^^^^^^^^^^^^^
