@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, final
+from typing import TYPE_CHECKING, Any, cast, final
 
 import numpy as np
 
@@ -11,10 +11,36 @@ from decent_bench.agents import Agent
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
-from decent_bench.utils.types import InitialStates, LocalSteps, UploadPacket
+from decent_bench.utils.types import InitialStates, LocalSteps, NetworkMessage, UploadPacket
 
 if TYPE_CHECKING:
     from decent_bench.utils.array import Array
+
+
+def _require_array_message(msg: NetworkMessage) -> "Array":
+    """
+    Return ``msg`` as an array and reject grouped upload packets.
+
+    Raises:
+        TypeError: if ``msg`` is a grouped upload packet instead of an array message.
+
+    """
+    if isinstance(msg, dict):
+        raise TypeError("This algorithm expects array messages, not grouped upload packets")
+    return msg
+
+
+def _require_upload_packet(msg: NetworkMessage) -> UploadPacket:
+    """
+    Return ``msg`` as a grouped upload packet and reject plain array messages.
+
+    Raises:
+        TypeError: if ``msg`` is a plain array message instead of a grouped upload packet.
+
+    """
+    if not isinstance(msg, dict):
+        raise TypeError("This algorithm expects grouped upload packets, not plain array messages")
+    return msg
 
 
 class Algorithm[NetworkT: Network](ABC):
@@ -198,7 +224,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         """
         if server not in client.messages:
             raise ValueError("Client did not receive the current server broadcast")
-        return iop.copy(client.messages[server])
+        return iop.copy(_require_array_message(client.messages[server]))
 
     @staticmethod
     def _weighted_average(values: Sequence["Array"], weights: Sequence[float], total_weight: float) -> "Array":
@@ -236,7 +262,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         received_clients = [client for client in participating_clients if client in network.server().messages]
         if not received_clients:
             return
-        updates = [network.server().messages[client] for client in received_clients]
+        updates = [_require_array_message(network.server().messages[client]) for client in received_clients]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))
         network.server().x = self._weighted_average(updates, weights, total_weight)
@@ -563,7 +589,7 @@ class FedOpt(FedAlgorithm, ABC):
             return
 
         server_x = iop.copy(server.x)
-        model_deltas = [server.messages[client] for client in received_clients]
+        model_deltas = [_require_array_message(server.messages[client]) for client in received_clients]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))
         average_delta = self._weighted_average(model_deltas, weights, total_weight)
@@ -806,10 +832,10 @@ class FedNova(FedAlgorithm):
         a_i^{(k+1)} = (1 - \eta_l \mu) a_i^{(k)} + s_i^{(k+1)}
 
     when ``use_prox=True`` and :math:`a_i^{(k+1)} = a_i^{(k)} + s_i^{(k+1)}` otherwise.
+    During ``initialize``, the server resolves and stores each client's sample count :math:`n_i`.
     After :math:`\tau_i` local steps, client :math:`i` uploads one grouped message containing
-    :math:`\mathbf{c}_i^t`, :math:`a_i`, and :math:`n_i`, where :math:`n_i` is the number of samples stored on
-    client :math:`i`, and the server forms the
-    data-proportional client weight
+    :math:`\mathbf{c}_i^t` and :math:`a_i`. For the clients in the current round whose uploads are actually received,
+    the server forms the data-proportional client weight
 
     .. math::
         p_i = \frac{n_i}{\sum_{j \in S_t} n_j}.
@@ -838,12 +864,13 @@ class FedNova(FedAlgorithm):
 
     When ``use_momentum=False``, ``use_prox=False``, and ``use_server_momentum=False``, this reduces to the plain
     local-SGD FedNova variant. In that plain setting, FedNova reduces to FedAvg if and only if all participating
-    clients use the same number of local steps, so :math:`\tau_i = \tau_j` for all :math:`i, j \in S_t`.
+    clients use the same number of local steps (:math:`\tau_i = \tau_j` for all :math:`i, j \in S_t`) and
+    FedNova and FedAvg both use data-proportional aggregation weights.
 
     Here :math:`\tau_i` is the number of local SGD steps used by client :math:`i`, which can be homogeneous
     (single int ``num_local_steps``) or heterogeneous via a mapping keyed by client agent. In this implementation,
-    :math:`n_i` is inferred once during :meth:`initialize` from each client's local cost via
-    :func:`~decent_bench.utils.algorithm_helpers.infer_client_weight`.
+    :math:`n_i` is inferred once during ``initialize`` from each client's local cost via
+    :func:`~decent_bench.utils.algorithm_helpers.infer_client_weight`, then stored on the server for later rounds.
 
     .. footbibliography::
     """
@@ -857,12 +884,12 @@ class FedNova(FedAlgorithm):
     mu: float = 0.01
     use_server_momentum: bool = False
     gamma: float = 0.9
-    _client_weight_by_client: dict["Agent", float] = field(init=False, repr=False, default_factory=dict)
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
     x0: InitialStates = None
     name: str = "FedNova"
+    _num_local_steps_by_client: dict["Agent", int] = field(init=False, repr=False, default_factory=dict)
 
     def __post_init__(self) -> None:
         """
@@ -906,25 +933,42 @@ class FedNova(FedAlgorithm):
             )
         return {client: self.num_local_steps[client] for client in clients}
 
-    def _resolve_client_weights(self, network: FedNetwork) -> dict["Agent", float]:
-        client_weights: dict[Agent, float] = {}
+    def _resolve_client_sample_counts(self, network: FedNetwork) -> dict["Agent", float]:
+        client_sample_counts: dict[Agent, float] = {}
         for client in network.clients():
-            client_weight = alg_helpers.infer_client_weight(client)
-            if client_weight <= 0:
+            client_sample_count = alg_helpers.infer_client_weight(client)
+            if client_sample_count <= 0:
                 raise ValueError("FedNova client sample counts must be positive")
-            client_weights[client] = client_weight
-        return client_weights
+            client_sample_counts[client] = client_sample_count
+        return client_sample_counts
+
+    def _server_client_sample_counts(self, server: "Agent") -> dict["Agent", float]:
+        client_sample_counts = server.aux_vars.get("client_sample_counts")
+        if client_sample_counts is None:
+            raise RuntimeError("FedNova server must be initialized with client sample counts before aggregation")
+        if not isinstance(client_sample_counts, dict):
+            raise TypeError("FedNova server client sample counts must be stored as a dict")
+        return cast("dict[Agent, float]", client_sample_counts)
+
+    def _client_num_local_steps(self, client: "Agent") -> int:
+        if client not in self._num_local_steps_by_client:
+            if isinstance(self.num_local_steps, dict) and client in self.num_local_steps:
+                return self.num_local_steps[client]
+            raise RuntimeError("FedNova num_local_steps have not been initialized for this client")
+        return self._num_local_steps_by_client[client]
 
     def initialize(self, network: FedNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.initial_states(self.x0, network)
         server = network.server()
         server_x0 = self.x0[server]
-        aux_vars = {"m": iop.zeros_like(server_x0)} if self.use_server_momentum else None
+        aux_vars: dict[str, Any] = {"client_sample_counts": self._resolve_client_sample_counts(network)}
+        if self.use_server_momentum:
+            aux_vars["m"] = iop.zeros_like(server_x0)
         server.initialize(x=server_x0, aux_vars=aux_vars)
         for client in network.clients():
             client.initialize(x=self.x0[client])
-        self.num_local_steps = self._settle_num_local_steps(network)
-        self._client_weight_by_client = self._resolve_client_weights(network)
+        self._num_local_steps_by_client = self._settle_num_local_steps(network)
+        self.num_local_steps = self._num_local_steps_by_client
 
     def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
         selected_clients = self._selected_clients_for_round(network, iteration)
@@ -943,16 +987,12 @@ class FedNova(FedAlgorithm):
         server = network.server()
         for client in participating_clients:
             client.x, cumulative_gradient, a_i = self._compute_local_update(client, server)
-            if client not in self._client_weight_by_client:
-                raise RuntimeError("FedNova client weights have not been initialized for this client")
-            n_i = self._client_weight_by_client[client]
             network.send(
                 sender=client,
                 receiver=server,
                 msg={
                     "cum_grad_i": cumulative_gradient,
                     "a_i": iop.to_array_like(np.array([a_i]), cumulative_gradient),
-                    "n_i": iop.to_array_like(np.array([n_i]), cumulative_gradient),
                 },
             )
 
@@ -961,19 +1001,15 @@ class FedNova(FedAlgorithm):
         Run local SGD steps and return the cumulative local SGD update and FedNova coefficient ``a_i``.
 
         Costs that preserve the empirical-risk abstraction default ``gradient`` to ``indices="batch"``, so FedNova
-        performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
-
-        Raises:
-            RuntimeError: if the number of local steps has not been initialized for ``client``.
+        performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior. This
+        method assumes ``initialize`` has already normalized ``num_local_steps`` to a per-client mapping.
 
         """
         reference_x = self._get_server_broadcast(client, server)
         local_x = iop.copy(reference_x)
         cumulative_gradient = iop.zeros_like(reference_x)
         local_momentum = iop.zeros_like(reference_x)
-        if not isinstance(self.num_local_steps, dict) or client not in self.num_local_steps:
-            raise RuntimeError("FedNova num_local_steps has not been initialized for this client")
-        tau_i = self.num_local_steps[client]
+        tau_i = self._client_num_local_steps(client)
         a_i = 0.0
         momentum_scalar = 0.0
 
@@ -1010,14 +1046,14 @@ class FedNova(FedAlgorithm):
         Aggregate FedNova client uploads following the Local-SGD FedNova pseudocode.
 
         This method assumes clients upload one grouped message per round containing the array fields
-        ``cum_grad_i``, ``a_i``, and ``n_i``. When used with :class:`~decent_bench.networks.Network`
+        ``cum_grad_i`` and ``a_i``. Client sample counts are looked up from the mapping stored on the server during
+        ``initialize``. When used with :class:`~decent_bench.networks.Network`
         ``buffer_messages=True``, the caller must already have removed stale buffered client-to-server messages for
         the participating clients, so only current-round uploads are used.
 
         Raises:
-            TypeError: if the server received a non-grouped client message instead of a FedNova upload packet.
-            ValueError: if the received sample counts do not sum to a positive value, if any received sample count is
-                non-positive, or if any received FedNova coefficient ``a_i`` is non-positive.
+            ValueError: if any cached client sample count is non-positive, if the cached client sample counts do not sum
+                to a positive value, or if any received FedNova coefficient ``a_i`` is non-positive.
 
         """
         server = network.server()
@@ -1025,19 +1061,15 @@ class FedNova(FedAlgorithm):
         if not received_clients:
             return
 
+        server_sample_counts = self._server_client_sample_counts(server)
         server_x = iop.copy(server.x)
-        uploads: list[UploadPacket] = []
-        for client in received_clients:
-            upload = server.messages[client]
-            if not isinstance(upload, dict):
-                raise TypeError("FedNova expects grouped client upload packets at the server")
-            uploads.append(upload)
+        uploads = [_require_upload_packet(server.messages[client]) for client in received_clients]
         cumulative_gradients = [upload["cum_grad_i"] for upload in uploads]
         a_values = [iop.astype(upload["a_i"], float) for upload in uploads]
-        sample_counts = [iop.astype(upload["n_i"], float) for upload in uploads]
-
         if any(a_i <= 0 for a_i in a_values):
             raise ValueError("FedNova coefficients `a_i` must be positive")
+
+        sample_counts = [server_sample_counts[client] for client in received_clients]
         if any(n_i <= 0 for n_i in sample_counts):
             raise ValueError("FedNova client sample counts must be positive")
         total_samples = float(sum(sample_counts))
@@ -1210,14 +1242,15 @@ class Scaffold(FedAlgorithm):
         if not received_clients:
             return
 
-        model_deltas = [server.messages[client][0] for client in received_clients]
+        uploads = [_require_array_message(server.messages[client]) for client in received_clients]
+        model_deltas = [upload[0] for upload in uploads]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))
         average_model_delta = self._weighted_average(model_deltas, weights, total_weight)
         server_x = iop.copy(server.x)
         server.x = server_x + self.server_step_size * average_model_delta
 
-        control_deltas = [server.messages[client][1] for client in received_clients]
+        control_deltas = [upload[1] for upload in uploads]
         average_control_delta = self._weighted_average(control_deltas, weights, total_weight)
         participation_fraction = len(received_clients) / len(network.clients())
         server.aux_vars["c"] += participation_fraction * average_control_delta
@@ -1271,7 +1304,7 @@ class DGD(P2PAlgorithm):
         for i in network.active_agents():
             neighborhood_avg = self.W[i, i] * i.x
             if len(i.messages) > 0:
-                s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
+                s = iop.stack([self.W[i, j] * _require_array_message(x_j) for j, x_j in i.messages.items()])
                 neighborhood_avg += iop.sum(s, dim=0)
             i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)
 
@@ -1334,7 +1367,7 @@ class ATC(P2PAlgorithm):
         for i in network.active_agents():
             neighborhood_avg = self.W[i, i] * i.x
             if len(i.messages) > 0:
-                s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()], dim=0)
+                s = iop.stack([self.W[i, j] * _require_array_message(x_j) for j, x_j in i.messages.items()], dim=0)
                 neighborhood_avg += iop.sum(s, dim=0)
             i.x = neighborhood_avg
 
@@ -1396,7 +1429,7 @@ class SimpleGT(P2PAlgorithm):
 
             neighborhood_avg = self.W[i, i] * i.x
             if len(i.messages) > 0:
-                s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
+                s = iop.stack([self.W[i, j] * _require_array_message(x_j) for j, x_j in i.messages.items()])
                 neighborhood_avg += iop.sum(s, dim=0)
 
             i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg
@@ -1461,7 +1494,7 @@ class ED(P2PAlgorithm):
 
         for i in network.active_agents():
             s = (
-                iop.sum(iop.stack([self.W[i, j] * msg for j, msg in i.messages.items()]), dim=0)
+                iop.sum(iop.stack([self.W[i, j] * _require_array_message(msg) for j, msg in i.messages.items()]), dim=0)
                 if len(i.messages) > 0
                 else 0
             )
@@ -1538,7 +1571,7 @@ class AugDGM(P2PAlgorithm):
         for i in network.active_agents():
             neighborhood_avg = self.W[i, i] * i.aux_vars["s"]
             if len(i.messages) > 0:
-                s = iop.stack([self.W[i, j] * s_j for j, s_j in i.messages.items()])
+                s = iop.stack([self.W[i, j] * _require_array_message(s_j) for j, s_j in i.messages.items()])
                 neighborhood_avg += iop.sum(s, dim=0)
             i.x = neighborhood_avg
             i.aux_vars["g_new"] = i.cost.gradient(i.x)
@@ -1552,7 +1585,7 @@ class AugDGM(P2PAlgorithm):
         for i in network.active_agents():
             neighborhood_avg = self.W[i, i] * (i.aux_vars["y"] + i.aux_vars["g_new"] - i.aux_vars["g"])
             if len(i.messages) > 0:
-                s = iop.stack([self.W[i, j] * q_j for j, q_j in i.messages.items()])
+                s = iop.stack([self.W[i, j] * _require_array_message(q_j) for j, q_j in i.messages.items()])
                 neighborhood_avg += iop.sum(s, dim=0)
             i.aux_vars["y"] = neighborhood_avg
             i.aux_vars["g"] = i.aux_vars["g_new"]
@@ -1621,7 +1654,7 @@ class WangElia(P2PAlgorithm):
         for i in network.active_agents():
             neighborhood_avg = self.K[i, i] * (i.x + i.aux_vars["z"])
             if len(i.messages) > 0:
-                s = iop.stack([self.K[i, j] * m_j for j, m_j in i.messages.items()])
+                s = iop.stack([self.K[i, j] * _require_array_message(m_j) for j, m_j in i.messages.items()])
                 neighborhood_avg += iop.sum(s, dim=0)
 
             i.aux_vars["x_old"] = i.x
@@ -1635,7 +1668,7 @@ class WangElia(P2PAlgorithm):
         for i in network.active_agents():
             neighborhood_avg = self.K[i, i] * i.aux_vars["x_old"]
             if len(i.messages) > 0:
-                s = iop.stack([self.K[i, j] * m_j for j, m_j in i.messages.items()])
+                s = iop.stack([self.K[i, j] * _require_array_message(m_j) for j, m_j in i.messages.items()])
                 neighborhood_avg += iop.sum(s, dim=0)
             i.aux_vars["z"] += neighborhood_avg
 
@@ -1700,7 +1733,7 @@ class EXTRA(P2PAlgorithm):
             for i in network.active_agents():
                 neighborhood_avg = self.W[i, i] * i.x
                 if len(i.messages) > 0:
-                    s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
+                    s = iop.stack([self.W[i, j] * _require_array_message(x_j) for j, x_j in i.messages.items()])
                     neighborhood_avg += iop.sum(s, dim=0)
                 i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
                 i.aux_vars["x_old"] = i.x  # store x_0
@@ -1713,7 +1746,7 @@ class EXTRA(P2PAlgorithm):
             for i in network.active_agents():
                 neighborhood_avg = self.W[i, i] * i.x
                 if len(i.messages) > 0:
-                    s = iop.stack([self.W[i, j] * x_j for j, x_j in i.messages.items()])
+                    s = iop.stack([self.W[i, j] * _require_array_message(x_j) for j, x_j in i.messages.items()])
                     neighborhood_avg += iop.sum(s, dim=0)
                 i.aux_vars["x_old_old"] = i.aux_vars["x_old"]  # store x_{k-1}
                 i.aux_vars["x_old"] = i.x  # store x_k
@@ -1796,7 +1829,7 @@ class ATCTracking(P2PAlgorithm):
         for i in network.active_agents():
             neighborhood_avg = self.W[i, i] * i.aux_vars["s"]
             if len(i.messages) > 0:
-                s = iop.stack([self.W[i, j] * s_j for j, s_j in i.messages.items()])
+                s = iop.stack([self.W[i, j] * _require_array_message(s_j) for j, s_j in i.messages.items()])
                 neighborhood_avg += iop.sum(s, dim=0)
             i.x = neighborhood_avg
             i.aux_vars["g_new"] = i.cost.gradient(i.x)
@@ -1810,7 +1843,7 @@ class ATCTracking(P2PAlgorithm):
         for i in network.active_agents():
             neighborhood_avg = self.W[i, i] * i.aux_vars["y"]
             if len(i.messages) > 0:
-                s = iop.stack([self.W[i, j] * q_j for j, q_j in i.messages.items()])
+                s = iop.stack([self.W[i, j] * _require_array_message(q_j) for j, q_j in i.messages.items()])
                 neighborhood_avg += iop.sum(s, dim=0)
             i.aux_vars["y"] = neighborhood_avg + i.aux_vars["g_new"] - i.aux_vars["g"]
             i.aux_vars["g"] = i.aux_vars["g_new"]
@@ -1894,7 +1927,7 @@ class NIDS(P2PAlgorithm):
             for i in network.active_agents():
                 neighborhood_avg = self.W_tilde[i, i] * i.aux_vars["y"]
                 if len(i.messages) > 0:
-                    s = iop.stack([self.W_tilde[i, j] * y_j for j, y_j in i.messages.items()])
+                    s = iop.stack([self.W_tilde[i, j] * _require_array_message(y_j) for j, y_j in i.messages.items()])
                     neighborhood_avg += iop.sum(s, dim=0)
                 i.aux_vars["x_old"] = i.x  # store x_k
                 i.x = neighborhood_avg  # update x_{k+1}
@@ -1978,7 +2011,7 @@ class ADMM(P2PAlgorithm):
 
         for i in network.active_agents():
             for j, msg in i.messages.items():
-                i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * (msg)
+                i.aux_vars["z"][j] = (1 - self.alpha) * i.aux_vars["z"][j] - self.alpha * _require_array_message(msg)
 
 
 @tags("peer-to-peer", "gradient tracking", "ADMM")
@@ -2078,8 +2111,9 @@ class ATG(P2PAlgorithm):
                 network.send(i, j, s)
         for i in network.active_agents():
             for j, msg in i.messages.items():
-                i.aux_vars["z_y"][j] = (1 - self.alpha) * i.aux_vars["z_y"][j] + self.alpha * msg[0]
-                i.aux_vars["z_s"][j] = (1 - self.alpha) * i.aux_vars["z_s"][j] + self.alpha * msg[1]
+                msg_array = _require_array_message(msg)
+                i.aux_vars["z_y"][j] = (1 - self.alpha) * i.aux_vars["z_y"][j] + self.alpha * msg_array[0]
+                i.aux_vars["z_s"][j] = (1 - self.alpha) * i.aux_vars["z_s"][j] + self.alpha * msg_array[1]
 
 
 ADMMTracking = ATG  # alias
@@ -2145,7 +2179,7 @@ class DLM(P2PAlgorithm):
             # compute and store \sum_j (\mathbf{x}_{i,0} - \mathbf{x}_{j,0})
             for i in network.active_agents():
                 if len(i.messages) > 0:
-                    s = iop.stack([i.x - x_j for x_j in i.messages.values()])
+                    s = iop.stack([i.x - _require_array_message(x_j) for x_j in i.messages.values()])
                     i.aux_vars["s"] = iop.sum(s, dim=0)
         else:
             # step 1: update primal variable
@@ -2161,7 +2195,7 @@ class DLM(P2PAlgorithm):
             # compute and store \sum_j (\mathbf{x}_{i,k+1} - \mathbf{x}_{j,k+1})
             for i in network.active_agents():
                 if len(i.messages) > 0:
-                    s = iop.stack([i.x - x_j for x_j in i.messages.values()])
+                    s = iop.stack([i.x - _require_array_message(x_j) for x_j in i.messages.values()])
                     i.aux_vars["s"] = iop.sum(s, dim=0)
 
             # step 3: update dual variable

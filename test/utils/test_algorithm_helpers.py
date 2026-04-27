@@ -132,7 +132,18 @@ def test_uniform_initialization_samples_within_range() -> None:
         assert np.all(values < -1.0)
 
 
-def test_infer_client_weight_uses_A_first() -> None:
+def test_infer_client_weight_prefers_n_samples_over_A_and_b() -> None:
+    client = Agent(0, L2RegularizerCost((2,)))
+    client.cost.A = np.zeros((7, 2))  # type: ignore[attr-defined]
+    client.cost.b = np.zeros((5,))  # type: ignore[attr-defined]
+    client.cost.n_samples = 11  # type: ignore[attr-defined]
+
+    weight = infer_client_weight(client)
+
+    assert weight == 11.0
+
+
+def test_infer_client_weight_falls_back_to_A_when_n_samples_is_missing() -> None:
     client = Agent(0, L2RegularizerCost((2,)))
     client.cost.A = np.zeros((7, 2))  # type: ignore[attr-defined]
 

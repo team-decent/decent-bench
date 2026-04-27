@@ -180,6 +180,9 @@ def _run_federated_local_update(
     num_local_epochs: int = 1,
     mu: float = 0.5,
 ) -> np.ndarray:
+    client = Agent(0, cost)
+    server = Agent(1, ZeroCost(cost.shape))
+
     if algorithm_name == "fedavg":
         algorithm = FedAvg(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
     elif algorithm_name == "fedadagrad":
@@ -191,21 +194,17 @@ def _run_federated_local_update(
     elif algorithm_name == "fedprox":
         algorithm = FedProx(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs, mu=mu)
     elif algorithm_name == "fednova":
-        algorithm = FedNova(iterations=1, step_size=step_size, num_local_steps=num_local_epochs)
+        algorithm = FedNova(iterations=1, step_size=step_size, num_local_steps={client: num_local_epochs})
     elif algorithm_name == "scaffold":
         algorithm = Scaffold(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
     else:
         raise ValueError(f"Unsupported federated algorithm: {algorithm_name}")
 
-    client = Agent(0, cost)
-    server = Agent(1, ZeroCost(cost.shape))
     aux_vars = None
     if isinstance(algorithm, Scaffold):
         aux_vars = {"c_i": np.zeros(cost.shape, dtype=float)}
     client.initialize(x=np.zeros(cost.shape, dtype=float), aux_vars=aux_vars)
     server.initialize(x=np.zeros(cost.shape, dtype=float))
-    if isinstance(algorithm, FedNova):
-        algorithm._num_local_steps_by_client = {client: num_local_epochs}  # noqa: SLF001
     if isinstance(algorithm, Scaffold):
         client._received_messages[server] = np.stack(  # noqa: SLF001
             [np.zeros(cost.shape, dtype=float), np.zeros(cost.shape, dtype=float)]

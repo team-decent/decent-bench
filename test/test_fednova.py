@@ -138,7 +138,7 @@ def test_fednova_supports_heterogeneous_local_steps() -> None:
     np.testing.assert_allclose(network.server().x, np.array([-4.0]))
 
 
-def test_plain_fednova_equals_fedavg_when_all_clients_use_the_same_local_steps() -> None:
+def test_plain_fednova_equals_fedavg_when_local_steps_and_aggregation_weights_match() -> None:
     fednova_network = _make_fed_network(1.0, 3.0)
     fedavg_network = _make_fed_network(1.0, 3.0)
     fednova = FedNova(iterations=1, step_size=1.0, num_local_steps=2)
@@ -176,7 +176,7 @@ def test_fednova_normalizes_scalar_local_steps_to_client_mapping_on_initialize()
     assert algorithm.num_local_steps == {clients[0]: 2, clients[1]: 2}
 
 
-def test_fednova_caches_client_weights_on_initialize(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fednova_resolves_client_sample_counts_once_on_initialize(monkeypatch: pytest.MonkeyPatch) -> None:
     network = _make_fed_network((1.0, 1), (3.0, 3))
     algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps=1)
     infer_client_weight_calls = 0
@@ -300,7 +300,7 @@ def test_fednova_uses_data_proportional_client_weights() -> None:
     np.testing.assert_allclose(network.server().x, np.array([-2.5]))
 
 
-def test_fednova_uploads_cumulative_gradient_normalizer_and_sample_count() -> None:
+def test_fednova_uploads_cumulative_gradient_and_normalizer_only() -> None:
     network = _make_fed_network((2.0, 1), (4.0, 3))
     clients = network.clients()
     algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps={clients[0]: 2, clients[1]: 1})
@@ -318,14 +318,87 @@ def test_fednova_uploads_cumulative_gradient_normalizer_and_sample_count() -> No
 
     assert isinstance(client_0_payload, dict)
     assert isinstance(client_1_payload, dict)
-    assert set(client_0_payload) == {"cum_grad_i", "a_i", "n_i"}
-    assert set(client_1_payload) == {"cum_grad_i", "a_i", "n_i"}
+    assert set(client_0_payload) == {"cum_grad_i", "a_i"}
+    assert set(client_1_payload) == {"cum_grad_i", "a_i"}
     np.testing.assert_allclose(client_0_payload["cum_grad_i"], np.array([4.0]))
     np.testing.assert_allclose(client_1_payload["cum_grad_i"], np.array([4.0]))
     np.testing.assert_allclose(client_0_payload["a_i"], np.array([2.0]))
     np.testing.assert_allclose(client_1_payload["a_i"], np.array([1.0]))
-    np.testing.assert_allclose(client_0_payload["n_i"], np.array([1.0]))
-    np.testing.assert_allclose(client_1_payload["n_i"], np.array([3.0]))
+
+
+def test_fednova_stores_client_sample_counts_on_server_initialize() -> None:
+    network = _make_fed_network((2.0, 1), (4.0, 3))
+    clients = network.clients()
+    algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps=1)
+
+    algorithm.initialize(network)
+
+    assert network.server().aux_vars["client_sample_counts"] == {clients[0]: 1.0, clients[1]: 3.0}
+
+
+def test_fednova_renormalizes_client_weights_over_received_subset() -> None:
+    network = _make_fed_network((1.0, 1), (10.0, 3))
+    clients = network.clients()
+    algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps=1)
+
+    algorithm.initialize(network)
+    network._step(0)  # noqa: SLF001
+    selected_clients = network.clients()
+    algorithm.server_broadcast(network, selected_clients)
+    participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
+    algorithm._clear_buffered_server_messages(network, participating_clients)
+    algorithm._run_local_updates(network, participating_clients)
+    network.server()._received_messages.pop(clients[1])  # noqa: SLF001
+
+    algorithm.aggregate(network, participating_clients)
+
+    np.testing.assert_allclose(network.server().x, np.array([-1.0]))
+
+
+def test_fednova_aggregate_ignores_client_supplied_sample_counts() -> None:
+    network = _make_fed_network((2.0, 1), (4.0, 3))
+    clients = network.clients()
+    algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps=1)
+
+    algorithm.initialize(network)
+    network._step(0)  # noqa: SLF001
+    selected_clients = network.clients()
+    algorithm.server_broadcast(network, selected_clients)
+    participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
+    algorithm._clear_buffered_server_messages(network, participating_clients)
+    algorithm._run_local_updates(network, participating_clients)
+
+    client_0_payload = network.server().messages[clients[0]]
+    client_1_payload = network.server().messages[clients[1]]
+    assert isinstance(client_0_payload, dict)
+    assert isinstance(client_1_payload, dict)
+    client_0_payload["n_i"] = np.array([1000.0])
+    client_1_payload["n_i"] = np.array([1.0])
+
+    algorithm.aggregate(network, participating_clients)
+
+    np.testing.assert_allclose(network.server().x, np.array([-3.5]))
+
+
+def test_fednova_aggregate_rejects_non_positive_normalizer() -> None:
+    network = _make_fed_network((2.0, 1), (4.0, 3))
+    clients = network.clients()
+    algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps=1)
+
+    algorithm.initialize(network)
+    network._step(0)  # noqa: SLF001
+    selected_clients = network.clients()
+    algorithm.server_broadcast(network, selected_clients)
+    participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
+    algorithm._clear_buffered_server_messages(network, participating_clients)
+    algorithm._run_local_updates(network, participating_clients)
+
+    client_0_payload = network.server().messages[clients[0]]
+    assert isinstance(client_0_payload, dict)
+    client_0_payload["a_i"] = np.array([0.0])
+
+    with pytest.raises(ValueError, match="FedNova coefficients `a_i` must be positive"):
+        algorithm.aggregate(network, participating_clients)
 
 
 def test_fednova_differs_from_fedavg_when_local_steps_are_heterogeneous() -> None:

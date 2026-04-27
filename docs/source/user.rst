@@ -151,7 +151,9 @@ and applies the resulting descent step at the server. With the default flags,
 this is the plain no-momentum FedNova variant. Enabling ``use_momentum``,
 ``use_prox``, or ``use_server_momentum`` extends the local and server updates
 to the corresponding FedNova variants controlled by ``beta``, ``mu``, and
-``gamma``.
+``gamma``. Plain FedNova matches FedAvg only when the participating clients use
+the same number of local steps and FedNova's and FedAvg both use data-proportional aggregation
+weights.
 
 :class:`~decent_bench.distributed_algorithms.Scaffold` matches the standard
 SCAFFOLD algorithm and always uses uniform averaging over the selected clients.

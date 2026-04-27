@@ -157,13 +157,18 @@ def infer_client_weight(client: "Agent") -> float:
     """
     Infer a client's weight from its cost data size.
 
-    Looks for common attributes such as ``A``, ``b``, or ``n_samples`` on the cost.
+    Prefers an explicit ``n_samples`` attribute when present, then falls back to common size-bearing attributes such
+    as ``A`` or ``b`` on the cost.
 
     Raises:
         ValueError: if a suitable size attribute is not found on the cost.
 
     """
     cost = client.cost
+    if hasattr(cost, "n_samples"):
+        n_samples = cost.n_samples
+        if n_samples is not None:
+            return float(n_samples)
     if hasattr(cost, "A"):
         try:
             size = iop.shape(cost.A)[0]
@@ -178,10 +183,6 @@ def infer_client_weight(client: "Agent") -> float:
             size = None
         if size is not None:
             return float(size)
-    if hasattr(cost, "n_samples"):
-        n_samples = cost.n_samples
-        if n_samples is not None:
-            return float(n_samples)
     raise ValueError(
         "Cannot infer client data size. Add a size attribute to the cost or use uniform aggregation instead."
     )
