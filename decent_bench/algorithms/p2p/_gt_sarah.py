@@ -14,13 +14,9 @@ from ._p2p_algorithm import P2PAlgorithm
 
 @tags("peer-to-peer", "gradient-tracking")
 @dataclass(eq=False)
-class GTSARAH(P2PAlgorithm):
+class GT_SARAH(P2PAlgorithm):  # noqa: N801
     """
     GT-SARAH: Gradient Tracking with SARAH variance reduction :footcite:p:`Alg_GT_SARAH`.
-
-    Warning:
-        GT-SARAH is only compatible with EmpiricalRiskCost. Using it with other cost types may lead to errors or
-        undefined behavior.
 
     Args:
         iterations: Total number of outer loops (S)
@@ -28,6 +24,9 @@ class GTSARAH(P2PAlgorithm):
         step_size: Step size (alpha) for updates
         x0: Initial parameters (optional)
         name: Algorithm name (default "GT-SARAH")
+
+    Raises:
+        TypeError: If any agent's cost function is not an instance of EmpiricalRiskCost.
 
     .. footbibliography::
 

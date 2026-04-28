@@ -8,22 +8,18 @@ from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.networks import P2PNetwork
 from decent_bench.utils._tags import tags
 
-from ._lt_admm import LTADMM
+from ._lt_admm import LT_ADMM
 
 
 @tags("peer-to-peer", "gradient-based", "dual method", "ADMM", "variance-reduction")
 @dataclass(eq=False)
-class LTADMMVR(LTADMM):
+class LT_ADMM_VR(LT_ADMM):  # noqa: N801
     """
     Local Training ADMM with Variance Reduction (LT-ADMM-VR) :footcite:p:`Alg_LT_ADMM_VR`.
 
     Extends LT-ADMM with variance reduction techniques for improved convergence.
     This variant implements additional gradient variance reduction mechanisms
     during the local training phase.
-
-    Warning:
-        LT-ADMM-VR is only compatible with EmpiricalRiskCost. Using it with other cost types may lead to errors or
-        undefined behavior.
 
     Args:
         iterations: Total number of communication rounds (K)
@@ -36,6 +32,9 @@ class LTADMMVR(LTADMM):
         v2: Whether to use the LT-ADMM-VR-2 variant with improved
             variance reduction techniques which is less computational heavy (default True).
         name: Algorithm name (default "LT-ADMM-VR")
+
+    Raises:
+        TypeError: If any agent's cost function is not an instance of EmpiricalRiskCost.
 
     .. footbibliography::
 

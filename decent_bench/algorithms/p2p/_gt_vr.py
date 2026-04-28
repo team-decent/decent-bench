@@ -14,13 +14,9 @@ from ._p2p_algorithm import P2PAlgorithm
 
 @tags("peer-to-peer", "gradient-tracking")
 @dataclass(eq=False)
-class GTVR(P2PAlgorithm):
+class GT_VR(P2PAlgorithm):  # noqa: N801
     """
     GT-VR: Gradient Tracking with Variance Reduction algorithm :footcite:p:`Alg_GT_VR`.
-
-    Warning:
-        GT-VR is only compatible with EmpiricalRiskCost. Using it with other cost types may lead to errors or
-        undefined behavior.
 
     Args:
         iterations: Total number of iterations
@@ -28,6 +24,9 @@ class GTVR(P2PAlgorithm):
         snapshot_prob: Probability of performing a snapshot update (P in the paper)
         x0: Initial parameters (optional)
         name: Algorithm name (default "GT-VR")
+
+    Raises:
+        TypeError: If any agent's cost function is not an instance of EmpiricalRiskCost.
 
     .. footbibliography::
 

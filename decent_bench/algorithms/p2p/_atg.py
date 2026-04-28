@@ -41,7 +41,7 @@ class ATG(P2PAlgorithm):
     The idea of the algorithm is to apply distributed ADMM to perform gradient tracking,
     instead of the usual average consensus.
 
-    Aliases: :class:`ADMMTracking`, :class:`ADMMTrackingGradient`
+    Aliases: :class:`ADMM_Tracking`, :class:`ADMM_TrackingGradient`
 
     .. footbibliography::
 
@@ -117,5 +117,5 @@ class ATG(P2PAlgorithm):
                 i.aux_vars["z_s"][idx] = (1 - self.alpha) * i.aux_vars["z_s"][idx] + self.alpha * msg[1]
 
 
-ADMMTracking = ATG  # alias
-ADMMTrackingGradient = ATG  # alias
+ADMM_Tracking = ATG  # alias
+ADMM_TrackingGradient = ATG  # alias

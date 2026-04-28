@@ -30,7 +30,7 @@ class AugDGM(P2PAlgorithm):
     j is a neighbor of i or i itself,
     and :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j.
 
-    Alias: :class:`ATCDIGing`
+    Alias: :class:`ATC_DIGing`
 
     .. footbibliography::
 
@@ -94,4 +94,4 @@ class AugDGM(P2PAlgorithm):
             i.aux_vars["g"] = i.aux_vars["g_new"]
 
 
-ATCDIGing = AugDGM  # alias
+ATC_DIGing = AugDGM  # alias

@@ -76,7 +76,7 @@ class DiNNO(P2PAlgorithm):
         # Main optimization loop (line 7)
         # Step 1: Communication - send θ_i^k to neighbors (line 8)
         for i in network.active_agents():
-            self._communication(i, network)
+            network.broadcast(i, i.x)
 
         # Step 2: Dual variable update (line 10) - Equation (4a)
         for i in network.active_agents():
@@ -85,9 +85,6 @@ class DiNNO(P2PAlgorithm):
         # Step 3: Approximate primal update (lines 11-15) - Equation (4b)
         for i in network.active_agents():
             self._local_training(i)
-
-    def _communication(self, agent: Agent, network: P2PNetwork) -> None:
-        network.broadcast(agent, agent.x)
 
     def _auxiliary_update(self, agent: Agent) -> None:
         # p_i^(k+1) = p_i^k + rho * sum_{j in N_i}(theta_i^k - theta_j^k)

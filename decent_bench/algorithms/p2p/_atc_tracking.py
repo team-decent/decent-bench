@@ -11,7 +11,7 @@ from ._p2p_algorithm import P2PAlgorithm
 
 @tags("peer-to-peer", "gradient-tracking")
 @dataclass(eq=False)
-class ATCTracking(P2PAlgorithm):
+class ATC_Tracking(P2PAlgorithm):  # noqa: N801
     r"""
     ATC-Tracking :footcite:p:`Alg_ATCT_1, Alg_ATCT_2, Alg_ATCT_3` gradient tracking algorithm.
 
@@ -95,6 +95,6 @@ class ATCTracking(P2PAlgorithm):
             i.aux_vars["g"] = i.aux_vars["g_new"]
 
 
-SONATA = ATCTracking  # alias
-NEXT = ATCTracking  # alias
-ATCT = ATCTracking  # alias
+SONATA = ATC_Tracking  # alias
+NEXT = ATC_Tracking  # alias
+ATCT = ATC_Tracking  # alias

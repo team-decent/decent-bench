@@ -73,8 +73,8 @@ def visualize_nim_dataset(  # noqa: PLR0914
 
     # Calculate leakage in pixels
     leakage = min(
-        int(nim_data.leakage * partition_height),
-        int(nim_data.leakage * partition_width),
+        int(nim_data.overlap * partition_height),
+        int(nim_data.overlap * partition_width),
     )
 
     # Draw partition boundaries
@@ -84,7 +84,7 @@ def visualize_nim_dataset(  # noqa: PLR0914
         ax.axvline(x=i * partition_width, color="blue", linestyle="--", alpha=0.5)
 
     # Draw leakage boundaries if leakage > 0
-    if nim_data.leakage > 0:
+    if nim_data.overlap > 0:
         for i in range(1, rows):
             y_pos = i * partition_height
             ax.axhline(y=y_pos - leakage, color="red", linestyle=":", alpha=0.3)
@@ -100,7 +100,7 @@ def visualize_nim_dataset(  # noqa: PLR0914
     # Plot sampled points from each partition
     for i, partition_data in enumerate(nim_data.get_partitions()):
         p_data = random.sample(partition_data, min(num_samples_per_partition, len(partition_data)))
-        features = np.array([item[0] for item in p_data]) * nim_data.feature_norm
+        features = np.array([item[0] for item in p_data]) * nim_data._feature_norm  # noqa: SLF001
         labels = np.array([item[1] for item in p_data])
 
         # Plot points with different markers based on label
@@ -131,7 +131,7 @@ def visualize_nim_dataset(  # noqa: PLR0914
     ]
     # Add boundary lines to legend
     handles.append(Line2D([0], [0], color="blue", linestyle="--", label="Partition Boundaries"))
-    if nim_data.leakage > 0:
+    if nim_data.overlap > 0:
         handles.append(Line2D([0], [0], color="red", linestyle=":", label="Leakage Boundaries"))
 
     ax.legend(handles=handles, bbox_to_anchor=(1.05, 1), loc="upper left")

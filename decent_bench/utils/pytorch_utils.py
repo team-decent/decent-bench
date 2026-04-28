@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-import matplotlib.pyplot as plt
-
 TORCH_AVAILABLE = True
 
 if TYPE_CHECKING:
@@ -137,28 +135,3 @@ class ArgminActivation(torch.nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass applying argmin."""
         return torch.argmin(x, dim=self.dim)
-
-
-def visualize_scheduler(scheduler: torch.optim.lr_scheduler.LRScheduler, num_iterations: int) -> None:
-    """
-    Visualize the learning rate schedule over a specified number of iterations.
-
-    Args:
-        scheduler (torch.optim.lr_scheduler.LRScheduler): The PyTorch learning rate scheduler to visualize.
-        num_iterations (int): The number of iterations to visualize the learning rate for.
-
-    """
-    lrs: list[float] = []
-    for _ in range(num_iterations):
-        value = scheduler.get_last_lr()[0]
-        if isinstance(value, torch.Tensor):
-            value = float(value.item())
-        lrs.append(value)  # Assuming a single parameter group
-        scheduler.step()
-
-    plt.plot(lrs)
-    plt.xlabel("Iteration")
-    plt.ylabel("Learning Rate")
-    plt.title("Learning Rate Schedule")
-    plt.grid()
-    plt.show()

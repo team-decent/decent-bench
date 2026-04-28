@@ -1,21 +1,22 @@
 import random
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
+from typing import cast
 
 import numpy as np
+import torch
 from numpy import float64
 from numpy.typing import NDArray
 from PIL import Image
 
 from decent_bench.datasets import DatasetHandler
-from decent_bench.utils.array import Array
 from decent_bench.utils.logger import LOGGER, start_logger
 from decent_bench.utils.types import Dataset
 
 
 def image_to_occupancy(
     image_array: NDArray[np.float64],
-    threshold: float = 0.5,
+    threshold: float = 0.8,
 ) -> NDArray[np.uint8]:
     """
     Convert grayscale image (0..1) to boolean occupancy map.
@@ -37,19 +38,31 @@ class NIMDatasetHandler(DatasetHandler):
     """
     Neural Implicit Mapping Dataset.
 
+    Partition layout:
+        The image domain is divided into a regular grid of ``rows x cols`` axis-aligned rectangles.
+        The grid is chosen to use exactly ``n_partitions`` cells and to be as close to square as possible.
+        Concretely, the code starts with a number of rows near the square-root of ``n_partitions`` and decreases it
+        until it evenly divides ``n_partitions``; the number of columns is then whatever is needed to reach exactly
+        ``n_partitions``.
+
+        If ``overlap > 0``, partitions overlap slightly: pixels near a partition boundary are also included in the
+        neighboring partition(s). The overlap size is derived from the partition height/width.
+
+    Note:
+        Coordinates are normalized to [0,1] by dividing by the maximum image dimension (width or height).
+        The normalization factor is determined from the original image dimensions before
+        partitioning, so all partitions are normalized consistently based on the same factor (:attr:`feature_norm`).
+
     Args:
-        image_file: Path to the input image file (grayscale, where black=occupied and white=free).
+        image_file: Path to the input image file (grayscale, where black above occupancy_threshold=occupied and any
+            pixel value below occupancy_threshold=free).
         n_partitions: Number of spatial partitions to divide the data into.
         samples_per_partition: Optional max number of samples per partition after balancing. If None, keep all samples.
-        transform: Optional function to apply to features (coordinates) before normalization. Should take a tuple
-            (x, y) and return an array.
-        label_transform: Optional function to apply to labels before returning. Should take an int label and return
-            an array.
         label_balance: Optional ratio of majority to minority class in each partition after balancing. Attempts to
             balance labels as closely to 1:1 as possible, with a maximum ratio of 1:label_balance. If None, no
             balancing is done. Must be >= 1 if set.
-        occupancy_threshold: Threshold for converting grayscale values to occupancy labels. Defaults to 0.5.
-        leakage: Fraction of partition size to allow for overlapping samples between partitions.
+        occupancy_threshold: Threshold for converting grayscale values to occupancy labels. Defaults to 0.8.
+        overlap: Fraction of partition size to allow for overlapping samples between partitions.
             Defaults to 0 (no overlap).
 
     """
@@ -59,20 +72,16 @@ class NIMDatasetHandler(DatasetHandler):
         image_file: str,
         n_partitions: int,
         samples_per_partition: int | None = None,
-        transform: Callable[[tuple[int, int]], Array] | None = None,
-        label_transform: Callable[[int], Array] | None = None,
         *,
         label_balance: float | None = None,
-        occupancy_threshold: float = 0.5,
-        leakage: float = 0.0,
+        occupancy_threshold: float = 0.8,
+        overlap: float = 0.0,
     ) -> None:
         start_logger()
         self.image_file = image_file
         self._n_partitions = n_partitions
         self.samples_per_partition = samples_per_partition
-        self.transform = transform or self._identity_transform
-        self.label_transform = label_transform or self._identity_transform
-        self.leakage = leakage
+        self.overlap = overlap
         self.label_balance = label_balance
         self.occupancy_threshold = occupancy_threshold
 
@@ -83,9 +92,8 @@ class NIMDatasetHandler(DatasetHandler):
         image = Image.open(self.image_file).convert("L")
         image_array = np.array(image, dtype=float64) / 255.0
         self.height, self.width = image_array.shape
-        self.feature_norm = max(self.height, self.width)
+        self._feature_norm: float = max(self.height, self.width)
 
-        # If configured to use provided paths for LIDAR sampling, do that and return
         res = self._create_spatial_partitions(image_array)
 
         if len(res) != self.n_partitions:
@@ -125,6 +133,11 @@ class NIMDatasetHandler(DatasetHandler):
         """
         return 1  # occupancy label (0 or 1)
 
+    @property
+    def feature_norm(self) -> float:
+        """Normalization factor for features (coordinates)."""
+        return self._feature_norm
+
     def get_datapoints(self) -> Dataset:  # noqa: D102
         return [item for partition in self._partitions for item in partition]
 
@@ -151,8 +164,11 @@ class NIMDatasetHandler(DatasetHandler):
         )[0]
         return self._apply_transforms_and_normalize([raw_test_set])[0]
 
-    def _identity_transform(self, x: object) -> Array:
-        return x  # type: ignore[return-value]
+    def _feature_transform(self, x: tuple[int, int]) -> torch.Tensor:
+        return torch.tensor(x)
+
+    def _target_transform(self, x: int) -> torch.Tensor:
+        return torch.tensor(x, dtype=torch.float32).unsqueeze(0)
 
     def _create_spatial_partitions(
         self,
@@ -193,8 +209,8 @@ class NIMDatasetHandler(DatasetHandler):
 
         # Calculate leakage in pixels based on partition dimensions
         leakage = min(
-            int(self.leakage * partition_height),
-            int(self.leakage * partition_width),
+            int(self.overlap * partition_height),
+            int(self.overlap * partition_width),
         )
 
         # Initialize partition lists
@@ -308,6 +324,9 @@ class NIMDatasetHandler(DatasetHandler):
         for partition in partitions:
             transformed_partition = []
             for feature, label in partition:
-                transformed_partition.append((self.transform(feature) / self.feature_norm, self.label_transform(label)))
-            transformed_partitions.append(transformed_partition)
+                transformed_partition.append((
+                    self._feature_transform(feature) / self._feature_norm,
+                    self._target_transform(label),
+                ))
+            transformed_partitions.append(cast("Dataset", transformed_partition))
         return transformed_partitions

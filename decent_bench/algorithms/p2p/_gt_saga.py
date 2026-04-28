@@ -14,19 +14,18 @@ from ._p2p_algorithm import P2PAlgorithm
 
 @tags("peer-to-peer", "gradient-tracking")
 @dataclass(eq=False)
-class GTSAGA(P2PAlgorithm):
+class GT_SAGA(P2PAlgorithm):  # noqa: N801
     """
     Gradient Tracking with SAGA variance reduction :footcite:p:`Alg_GT_SAGA_2020` :footcite:p:`Alg_GT_SAGA_2022`.
-
-    Warning:
-        GT-SAGA is only compatible with EmpiricalRiskCost. Using it with other cost types may lead to errors or
-        undefined behavior.
 
     Args:
         iterations: Total number of iterations
         step_size: Step size for local updates
         x0: Initial parameters (optional)
         name: Algorithm name (default "GT-SAGA")
+
+    Raises:
+        TypeError: If any agent's cost function is not an instance of EmpiricalRiskCost.
 
     .. footbibliography::
 

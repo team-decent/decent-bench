@@ -194,7 +194,14 @@ class Quantization(CompressionScheme):
 
 class TopK(CompressionScheme):
     """
-    Top-k compression which transmits only the top k fraction of elements by magnitude.
+    Top-k compression which transmits only a subset of elements with largest magnitude.
+
+    The parameter ``k`` can be either:
+
+    - an ``int``: transmit exactly ``k`` elements, or
+    - a ``float`` in :math:`(0, 1]`: transmit a fraction ``k`` of elements.
+
+    Message size is preserved by transmitting zeros in place of non-transmitted elements.
 
     Raises:
         ValueError: if ``k`` is a float and not in :math:`(0, 1]`
@@ -229,7 +236,14 @@ class TopK(CompressionScheme):
 
 class RandK(CompressionScheme):
     """
-    Rand-k compression which transmits a random k fraction of elements.
+    Rand-k compression which transmits only a random subset of elements.
+
+    The parameter ``k`` can be either:
+
+    - an ``int``: transmit exactly ``k`` elements chosen uniformly at random (without replacement), or
+    - a ``float`` in :math:`(0, 1]`: transmit a fraction ``k`` of elements.
+
+    Message size is preserved by transmitting zeros in place of non-transmitted elements.
 
     Raises:
         ValueError: if ``k`` is a float and not in :math:`(0, 1]`

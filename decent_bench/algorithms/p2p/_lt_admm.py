@@ -12,7 +12,7 @@ from ._p2p_algorithm import P2PAlgorithm
 
 @tags("peer-to-peer", "gradient-based", "dual method", "ADMM")
 @dataclass(eq=False)
-class LTADMM(P2PAlgorithm):
+class LT_ADMM(P2PAlgorithm):  # noqa: N801
     """
     Local Training ADMM (LT-ADMM) :footcite:p:`Alg_LT_ADMM_VR`.
 

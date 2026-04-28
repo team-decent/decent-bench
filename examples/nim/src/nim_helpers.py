@@ -65,10 +65,10 @@ def create_heatmap_plots(
         width: int,
         height: int,
         norm: float,
-    ) -> list[list[float]]:
+    ) -> list[np.ndarray]:
         xs = np.arange(0, width) / norm
         ys = np.arange(0, height) / norm
-        X, Y = np.meshgrid(xs, ys, indexing="xy")
+        X, Y = np.meshgrid(xs, ys, indexing="xy")  # noqa: N806
         nx, ny = X.shape
         points = np.column_stack((X.ravel(), Y.ravel()))
         mats = []
