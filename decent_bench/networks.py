@@ -140,6 +140,14 @@ class Network(ABC):  # noqa: B024
         Returns:
             dict[Agent, scheme]: mapping each agent in `self.graph` to its scheme instance.
 
+        Note:
+            For stateless schemes (for example, :class:`~decent_bench.schemes.NoNoise`
+            or :class:`~decent_bench.schemes.NoCompression`), passing a single instance
+            is safe and efficient. For stateful schemes that maintain internal state,
+            however, all agents would share the same instance when a single scheme
+            object is provided. In that case, pass a dictionary of separate instances
+            or use ``None`` with a default factory to create a fresh scheme per agent.
+
         Raises:
             ValueError: if `scheme` is a sequence and length != number of agents in network.
 
