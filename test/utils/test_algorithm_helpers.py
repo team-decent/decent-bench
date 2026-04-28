@@ -135,7 +135,18 @@ def test_uniform_initialization_samples_within_range() -> None:
         assert np.all(values < -1.0)
 
 
-def test_infer_client_weight_uses_A_first() -> None:
+def test_infer_client_weight_prefers_n_samples_over_A_and_b() -> None:
+    client = Agent(0, L2RegularizerCost((2,)))
+    client.cost.A = np.zeros((7, 2))  # type: ignore[attr-defined]
+    client.cost.b = np.zeros((5,))  # type: ignore[attr-defined]
+    client.cost.n_samples = 11  # type: ignore[attr-defined]
+
+    weight = infer_client_weight(client)
+
+    assert weight == 11.0
+
+
+def test_infer_client_weight_falls_back_to_A_when_n_samples_is_missing() -> None:
     client = Agent(0, L2RegularizerCost((2,)))
     client.cost.A = np.zeros((7, 2))  # type: ignore[attr-defined]
 
@@ -169,6 +180,23 @@ def test_infer_client_weight_falls_back_to_n_samples() -> None:
     weight = infer_client_weight(client)
 
     assert weight == 11.0
+
+
+@pytest.mark.parametrize(
+    ("attribute", "value"),
+    [
+        pytest.param("n_samples", 0, id="zero-n-samples"),
+        pytest.param("n_samples", -1, id="negative-n-samples"),
+        pytest.param("A", np.zeros((0, 2)), id="empty-A"),
+        pytest.param("b", np.zeros((0,)), id="empty-b"),
+    ],
+)
+def test_infer_client_weight_raises_when_inferred_size_is_not_positive(attribute: str, value: object) -> None:
+    client = Agent(0, L2RegularizerCost((2,)))
+    setattr(client.cost, attribute, value)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="Client data size must be positive"):
+        infer_client_weight(client)
 
 
 def test_infer_client_weight_raises_when_no_size_signal() -> None:

@@ -41,6 +41,14 @@ Type alias for what can be passed to
 :func:`~decent_bench.algorithms.utils.initial_states`.
 """
 
+type LocalSteps = int | dict["Agent", int]  # noqa: TC008
+"""
+Type alias for specifying local step counts in federated algorithms.
+
+Can be a single positive integer shared by all clients, or a dictionary
+mapping each client agent to its own positive local step count.
+"""
+
 ArrayKey: TypeAlias = SupportsIndex | slice | tuple[SupportsIndex | slice, ...]  # noqa: UP040
 """
 Type alias for valid keys used to index into supported array types.

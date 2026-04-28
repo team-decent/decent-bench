@@ -166,14 +166,15 @@ class Scaffold(FedAlgorithm):
         if not received_clients:
             return
 
-        model_deltas = [server.messages[client][0] for client in received_clients]
+        uploads = [server.messages[client] for client in received_clients]
+        model_deltas = [upload[0] for upload in uploads]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))
         average_model_delta = self._weighted_average(model_deltas, weights, total_weight)
         server_x = iop.copy(server.x)
         server.x = server_x + self.server_step_size * average_model_delta
 
-        control_deltas = [server.messages[client][1] for client in received_clients]
+        control_deltas = [upload[1] for upload in uploads]
         average_control_delta = self._weighted_average(control_deltas, weights, total_weight)
         participation_fraction = len(received_clients) / len(network.clients())
         server.aux_vars["c"] += participation_fraction * average_control_delta

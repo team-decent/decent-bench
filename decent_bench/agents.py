@@ -106,7 +106,7 @@ class Agent:
 
     @property
     def messages(self) -> Mapping[Agent, Array]:
-        """Messages received by neighbors."""
+        """Messages received from neighbors, stored one per sender."""
         return MappingProxyType(self._received_messages)
 
     @property

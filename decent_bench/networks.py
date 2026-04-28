@@ -272,7 +272,7 @@ class Network(ABC):  # noqa: B024
         Args:
             sender: sender agent
             receiver: receiver agent, sequence of receiver agents, or ``None`` to broadcast to connected agents.
-            msg: message to send
+            msg: array message to send
 
         Raises:
             ValueError: if ``msg`` is not provided, if agents are not part of the network, or if sender/receiver are not

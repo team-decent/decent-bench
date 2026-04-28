@@ -180,6 +180,9 @@ def _run_federated_local_update(
     num_local_epochs: int = 1,
     mu: float = 0.5,
 ) -> np.ndarray:
+    client = Agent(0, cost)
+    server = Agent(1, ZeroCost(cost.shape))
+
     if algorithm_name == "fedavg":
         algorithm = FedAvg(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
     elif algorithm_name == "fedadagrad":
@@ -195,8 +198,6 @@ def _run_federated_local_update(
     else:
         raise ValueError(f"Unsupported federated algorithm: {algorithm_name}")
 
-    client = Agent(0, cost)
-    server = Agent(1, ZeroCost(cost.shape))
     aux_vars = None
     if isinstance(algorithm, Scaffold):
         aux_vars = {"c_i": np.zeros(cost.shape, dtype=float)}
