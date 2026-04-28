@@ -12,6 +12,7 @@ from decent_bench.distributed_algorithms import (
     FedAdagrad,
     FedAdam,
     FedAvg,
+    FedLT,
     FedNova,
     FedYogi,
     FedProx,
@@ -27,6 +28,7 @@ from decent_bench.distributed_algorithms import (
     ("algorithm_cls", "kwargs"),
     [
         (FedAvg, {"iterations": 10, "step_size": 0.1}),
+        (FedLT, {"iterations": 10, "step_size": 0.1}),
         (FedNova, {"iterations": 10, "step_size": 0.1}),
         (FedProx, {"iterations": 10, "step_size": 0.1}),
         (FedAdagrad, {"iterations": 10, "step_size": 0.1}),

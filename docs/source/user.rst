@@ -127,6 +127,15 @@ The ``num_local_steps`` argument can be either a single integer for
 homogeneous local work or a per-client mapping for heterogeneous local step
 counts.
 
+:class:`~decent_bench.distributed_algorithms.FedLT` implements Federated Local
+Training with ``gradient_descent``, ``stochastic_gradient_descent``, and
+``accelerated_gradient_descent`` local solvers. The SGD option relies on
+:class:`~decent_bench.costs.EmpiricalRiskCost` batching, so generic costs use
+full gradients. Fed-LT compression and Fed-PLT-style noisy-message experiments
+are configured through :class:`~decent_bench.networks.FedNetwork`
+``message_compression`` and ``message_noise`` schemes rather than algorithm
+arguments.
+
 Federated aggregation
 ^^^^^^^^^^^^^^^^^^^^^
 For the built-in federated algorithms, aggregation affects only how client

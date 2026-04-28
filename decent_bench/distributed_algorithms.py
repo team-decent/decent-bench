@@ -3,6 +3,8 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, final
 
+import numpy as np
+
 import decent_bench.utils.algorithm_helpers as alg_helpers
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
@@ -421,6 +423,204 @@ class FedProx(FedAlgorithm):
             grad = client.cost.gradient(local_x) + self.mu * (local_x - reference_x)
             local_x -= self.step_size * grad
         return local_x
+
+
+@tags("federated")
+@dataclass(eq=False)
+class FedLT(FedAlgorithm):
+    r"""
+    Federated Local Training (Fed-LT) with GD, SGD, or accelerated GD local solvers :footcite:p:`Alg_FedLT`.
+
+    Fed-LT maintains a client auxiliary variable :math:`z_i` and computes the server variable
+
+    .. math::
+        y_{k+1} = \operatorname{prox}_{\rho h / N}\left(\frac{1}{N}\sum_{i=1}^N z_{i,k}\right),
+
+    In this implementation, each client cost :math:`f_i` is treated as the full local objective already available on
+    that client, including any regularization terms the user composed into the cost object. Fed-LT does not duplicate
+    that regularization logic inside the algorithm. The optional extra global paper regularizer :math:`h` is represented
+    by the server cost's proximal operator; with the default :class:`~decent_bench.costs.ZeroCost` server, this is the
+    documented :math:`h=0` case and the server step is plain averaging. Selected clients then solve local penalized
+    subproblems for ``num_local_epochs`` steps from their current local model:
+
+    .. math::
+        w^{\ell+1}_{i,k} = w^\ell_{i,k} - \gamma\left(\nabla f_i(w^\ell_{i,k})
+        + \frac{1}{\rho}(w^\ell_{i,k} - v_{i,k})\right),
+        \qquad v_{i,k}=2y_{k+1}-z_{i,k}.
+
+    ``local_solver`` can be ``"gradient_descent"``, ``"stochastic_gradient_descent"``, or
+    ``"accelerated_gradient_descent"``; aliases ``"gd"``, ``"sgd"``, and ``"agd"`` are accepted. The stochastic
+    variant deliberately calls :meth:`~decent_bench.costs.Cost.gradient` in the same way as the deterministic one.
+    Costs preserving the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use its default mini-batch sampling
+    and generic costs use their normal full-gradient behavior.
+
+    The accelerated variant uses each client cost's ``m_smooth`` and ``m_cvx`` metadata for the smoothness and
+    strong-convexity constants of the local objective plus the quadratic penalty. These constants must be finite and
+    non-negative.
+
+    Fed-PLT is the privacy-noise version of Fed-LT :footcite:p:`Alg_FedPLT`. This class does not add Gaussian noise
+    internally; select a network-level noise scheme such as :class:`~decent_bench.schemes.GaussianNoise` when creating
+    the :class:`~decent_bench.networks.FedNetwork`. The framework applies network noise to all messages, not only
+    client-to-server uploads. Fed-LT with compression is benchmarked the same way: pass the desired
+    :class:`~decent_bench.schemes.CompressionScheme` to the network and the network applies compression to messages.
+
+    .. footbibliography::
+    """
+
+    iterations: int = 100
+    step_size: float = 0.001
+    num_local_epochs: int = 1
+    rho: float = 1.0
+    local_solver: str = "gradient_descent"
+    selection_scheme: ClientSelectionScheme | None = field(
+        default_factory=lambda: UniformClientSelection(client_fraction=1.0)
+    )
+    x0: InitialStates = None
+    name: str = "FedLT"
+
+    def __post_init__(self) -> None:
+        """
+        Validate hyperparameters.
+
+        Raises:
+            ValueError: if hyperparameters are invalid.
+
+        """
+        if self.step_size <= 0:
+            raise ValueError("`step_size` must be positive")
+        if self.num_local_epochs <= 0:
+            raise ValueError("`num_local_epochs` must be positive")
+        if self.rho <= 0:
+            raise ValueError("`rho` must be positive")
+        self.local_solver = self._normalize_local_solver(self.local_solver)
+
+    @staticmethod
+    def _normalize_local_solver(local_solver: str) -> str:
+        solver = local_solver.lower().replace("-", "_")
+        solver_aliases = {
+            "gd": "gradient_descent",
+            "gradient_descent": "gradient_descent",
+            "sgd": "stochastic_gradient_descent",
+            "stochastic_gradient_descent": "stochastic_gradient_descent",
+            "agd": "accelerated_gradient_descent",
+            "accelerated_gradient_descent": "accelerated_gradient_descent",
+        }
+        if solver not in solver_aliases:
+            raise ValueError(
+                "`local_solver` must be one of 'gradient_descent', 'stochastic_gradient_descent', "
+                "or 'accelerated_gradient_descent'"
+            )
+        return solver_aliases[solver]
+
+    def initialize(self, network: FedNetwork) -> None:  # noqa: D102
+        self.x0 = alg_helpers.initial_states(self.x0, network)
+        if self.local_solver == "accelerated_gradient_descent":
+            self._validate_accelerated_constants(network)
+
+        server = network.server()
+        z_by_client = {client: iop.copy(self.x0[client]) for client in network.clients()}
+        server.initialize(x=self.x0[server], aux_vars={"z_by_client": z_by_client})
+        for client in network.clients():
+            client_x0 = self.x0[client]
+            client.initialize(x=client_x0, aux_vars={"z": iop.copy(client_x0)})
+
+    def _validate_accelerated_constants(self, network: FedNetwork) -> None:
+        for client in network.clients():
+            m_smooth = client.cost.m_smooth
+            m_cvx = client.cost.m_cvx
+            if not np.isfinite(m_smooth) or not np.isfinite(m_cvx) or m_smooth < 0 or m_cvx < 0:
+                raise ValueError(
+                    "`accelerated_gradient_descent` requires finite non-negative `m_smooth` and `m_cvx` "
+                    "on every client cost"
+                )
+            if m_smooth < m_cvx:
+                raise ValueError("`accelerated_gradient_descent` requires `m_smooth >= m_cvx` on every client cost")
+
+    def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
+        y = self._compute_server_y(network)
+        network.server().x = y
+
+        selected_clients = self._selected_clients_for_round(network, iteration)
+        if not selected_clients:
+            return
+
+        self.server_broadcast(network, selected_clients)
+        participating_clients = self._clients_with_server_broadcast(network, selected_clients)
+        if not participating_clients:
+            return
+        self._clear_buffered_server_messages(network, participating_clients)
+        self._run_local_updates(network, participating_clients)
+        self.aggregate(network, participating_clients)
+
+    def _compute_server_y(self, network: FedNetwork) -> "Array":
+        z_values = list(network.server().aux_vars["z_by_client"].values())
+        average_z = iop.mean(iop.stack(z_values, dim=0), dim=0)
+        return network.server().cost.proximal(average_z, self.rho / len(network.clients()))
+
+    def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
+        """Send the current Fed-LT server variable ``y`` to the selected clients."""
+        network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x)
+
+    def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
+        for client in participating_clients:
+            client.x, client.aux_vars["z"] = self._compute_local_update(client, network.server())
+            network.send(sender=client, receiver=network.server(), msg=client.aux_vars["z"])
+
+    def _compute_local_update(self, client: "Agent", server: "Agent") -> tuple["Array", "Array"]:
+        """
+        Run Fed-LT local training and return the updated local model and auxiliary variable.
+
+        The gradient call intentionally delegates batching to ``client.cost.gradient``. For
+        :class:`~decent_bench.costs.EmpiricalRiskCost`, that default call samples mini-batches; for generic costs it
+        is a full-gradient call.
+        """
+        y = self._get_server_broadcast(client, server)
+        z = client.aux_vars["z"]
+        v = (2 * y) - z
+        local_x = iop.copy(client.x)
+
+        if self.local_solver == "accelerated_gradient_descent":
+            local_x = self._compute_accelerated_local_update(client, local_x, v)
+        else:
+            local_x = self._compute_gradient_local_update(client, local_x, v)
+
+        z_next = z + (2 * (local_x - y))
+        return local_x, z_next
+
+    def _compute_gradient_local_update(self, client: "Agent", local_x: "Array", v: "Array") -> "Array":
+        for _ in range(self.num_local_epochs):
+            grad = client.cost.gradient(local_x) + ((local_x - v) / self.rho)
+            local_x -= self.step_size * grad
+        return local_x
+
+    def _compute_accelerated_local_update(self, client: "Agent", local_x: "Array", v: "Array") -> "Array":
+        smooth = client.cost.m_smooth + (1 / self.rho)
+        strong = client.cost.m_cvx + (1 / self.rho)
+        momentum = (np.sqrt(smooth) - np.sqrt(strong)) / (np.sqrt(smooth) + np.sqrt(strong))
+        u_previous = iop.copy(local_x)
+
+        for _ in range(self.num_local_epochs):
+            grad = client.cost.gradient(local_x) + ((local_x - v) / self.rho)
+            u_next = local_x - ((1 / smooth) * grad)
+            local_x = u_next + (momentum * (u_next - u_previous))
+            u_previous = u_next
+        return local_x
+
+    def aggregate(
+        self,
+        network: FedNetwork,
+        participating_clients: Sequence["Agent"],
+    ) -> None:
+        """
+        Store received Fed-LT ``z`` uploads for future server averages.
+
+        Clients whose uploads are not received keep their previous server-side ``z`` value, matching the stale-value
+        aggregation in partial participation and lossy communication settings.
+        """
+        z_by_client = network.server().aux_vars["z_by_client"]
+        for client in participating_clients:
+            if client in network.server().messages:
+                z_by_client[client] = network.server().messages[client]
 
 
 @dataclass(eq=False)
