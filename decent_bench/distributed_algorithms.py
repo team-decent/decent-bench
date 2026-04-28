@@ -843,6 +843,8 @@ class FedNova(FedAlgorithm):
     (single int ``num_local_steps``) or heterogeneous via a mapping keyed by client agent. In this implementation,
     :math:`n_i` is inferred once during ``initialize`` from each client's local cost via
     :func:`~decent_bench.utils.algorithm_helpers.infer_client_weight`, then stored on the server for later rounds.
+    If no first-phase ``a_i`` uploads are received in a round under network impairments, the server skips that round
+    without error.
 
     .. footbibliography::
     """
@@ -939,6 +941,10 @@ class FedNova(FedAlgorithm):
         self._clear_buffered_server_messages(network, participating_clients)
         self._run_local_updates(network, participating_clients)
         self._collect_received_normalizers(network, participating_clients)
+        if not network.server().aux_vars["received_a_i"]:
+            for client in participating_clients:
+                client.aux_vars.pop("_fednova_cumulative_gradient", None)
+            return
         self._clear_buffered_server_messages(network, participating_clients)
         self._communicate_cumulative_gradients(network, participating_clients)
         self.aggregate(network, participating_clients)
@@ -1000,8 +1006,6 @@ class FedNova(FedAlgorithm):
             for client in participating_clients
             if client in server.messages
         }
-        if not received_normalizers:
-            raise RuntimeError("FedNova server did not receive any normalizer uploads in this round")
         server.aux_vars["received_a_i"] = received_normalizers
 
     def _communicate_cumulative_gradients(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
@@ -1023,7 +1027,8 @@ class FedNova(FedAlgorithm):
         :math:`\mathbf{c}_i^t`. Client sample counts are looked up from the mapping stored on the server during
         ``initialize``. When used with :class:`~decent_bench.networks.Network` ``buffer_messages=True``, the caller
         must already have removed stale buffered client-to-server messages for the participating clients at the start
-        of the round and between the ``a_i`` and cumulative-gradient upload phases.
+        of the round and between the ``a_i`` and cumulative-gradient upload phases. If no client has both uploads
+        available in the current round, this method returns without updating the server model.
 
         Raises:
             ValueError: if any received FedNova coefficient ``a_i`` is non-positive.

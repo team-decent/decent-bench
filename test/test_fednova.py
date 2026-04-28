@@ -390,7 +390,7 @@ def test_fednova_aggregate_rejects_non_positive_normalizer() -> None:
         algorithm.aggregate(network, participating_clients)
 
 
-def test_fednova_collect_received_normalizers_raises_when_all_are_dropped() -> None:
+def test_fednova_collect_received_normalizers_stores_empty_dict_when_all_are_dropped() -> None:
     clients = [Agent(0, TrackingCost(1.0, n_samples=1)), Agent(1, TrackingCost(10.0, n_samples=3))]
     server = Agent(2, TrackingCost(0.0))
     network = FedNetwork(
@@ -408,8 +408,29 @@ def test_fednova_collect_received_normalizers_raises_when_all_are_dropped() -> N
     algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
 
-    with pytest.raises(RuntimeError, match="FedNova server did not receive any normalizer uploads in this round"):
-        algorithm._collect_received_normalizers(network, participating_clients)
+    algorithm._collect_received_normalizers(network, participating_clients)
+
+    assert network.server().aux_vars["received_a_i"] == {}
+
+
+def test_fednova_skips_round_when_all_normalizer_uploads_are_dropped() -> None:
+    clients = [Agent(0, TrackingCost(1.0, n_samples=1)), Agent(1, TrackingCost(10.0, n_samples=3))]
+    server = Agent(2, TrackingCost(0.0))
+    network = FedNetwork(
+        clients=clients,
+        server=server,
+        message_drop={server: NoDrops(), clients[0]: DropOnCalls({1}), clients[1]: DropOnCalls({1})},
+    )
+    algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps=1)
+
+    algorithm.initialize(network)
+    network._step(0)  # noqa: SLF001
+    algorithm.step(network, 0)
+
+    np.testing.assert_allclose(network.server().x, np.array([0.0]))
+    assert network.server().aux_vars["received_a_i"] == {}
+    assert "_fednova_cumulative_gradient" not in clients[0].aux_vars
+    assert "_fednova_cumulative_gradient" not in clients[1].aux_vars
 
 
 @pytest.mark.parametrize("dropped_calls", [{1}, {2}])
