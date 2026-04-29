@@ -429,34 +429,59 @@ class FedProx(FedAlgorithm):
 @dataclass(eq=False)
 class FedLT(FedAlgorithm):
     r"""
-    Federated Local Training (Fed-LT) with GD, SGD, or accelerated GD local solvers :footcite:p:`Alg_FedLT`.
+    Federated Local Training (Fed-LT) with GD, SGD, or AGD local solvers :footcite:p:`Alg_FedPLT,Alg_FedLT`.
 
-    Fed-LT maintains a client auxiliary variable :math:`z_i` and computes the server variable
+    Fed-LT maintains one auxiliary variable :math:`z_i` per client. At the start of round :math:`k`, the server
+    computes the broadcast variable
 
     .. math::
-        y_{k+1} = \operatorname{prox}_{\rho h / N}\left(\frac{1}{N}\sum_{i=1}^N z_{i,k}\right),
+        y_{k+1} = \operatorname{prox}_{\rho h / N}\left(\frac{1}{N}\sum_{i=1}^N z_{i,k}\right)
+
+    where :math:`N` is the number of clients. The server sends :math:`y_{k+1}` to the selected clients.
 
     In this implementation, each client cost :math:`f_i` is treated as the full local objective already available on
-    that client, including any regularization terms the user composed into the cost object. Fed-LT does not duplicate
-    that regularization logic inside the algorithm. The optional extra global paper regularizer :math:`h` is represented
+    that client. The global regularizer :math:`h` is represented
     by the server cost's proximal operator; with the default :class:`~decent_bench.costs.ZeroCost` server, this is the
-    documented :math:`h=0` case and the server step is plain averaging. Selected clients then solve local penalized
-    subproblems for ``num_local_epochs`` steps from their current local model:
+    documented :math:`h=0` case and the server step is plain averaging.
+
+    A selected client :math:`i` sets :math:`w^0_{i,k}=x_{i,k}` and :math:`v_{i,k}=2y_{k+1}-z_{i,k}`, then performs
+    ``num_local_epochs`` local steps. The gradient descent and stochastic gradient descent solvers use
 
     .. math::
         w^{\ell+1}_{i,k} = w^\ell_{i,k} - \gamma\left(\nabla f_i(w^\ell_{i,k})
-        + \frac{1}{\rho}(w^\ell_{i,k} - v_{i,k})\right),
-        \qquad v_{i,k}=2y_{k+1}-z_{i,k}.
+        + \frac{1}{\rho}(w^\ell_{i,k} - v_{i,k})\right).
+
+    The extra term :math:`(w^\ell_{i,k} - v_{i,k}) / \rho` is the quadratic local-training penalty from the Fed-LT
+    update. Costs preserving the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use its default
+    mini-batch sampling and generic costs use their normal full-gradient behavior.
+
+    The accelerated variant uses each client cost's ``m_smooth`` and ``m_cvx`` metadata. It initializes
+    :math:`u_i^0=w^0_{i,k}`. With :math:`L_i=\texttt{m_smooth}` and :math:`\mu_i=\texttt{m_cvx}`, it applies
+
+    .. math::
+        u_i^{\ell+1} = w^\ell_{i,k} - \frac{1}{L_i + 1/\rho}\left(\nabla f_i(w^\ell_{i,k})
+        + \frac{1}{\rho}(w^\ell_{i,k} - v_{i,k})\right)
+
+    .. math::
+        w^{\ell+1}_{i,k} = u_i^{\ell+1}
+        + \frac{\sqrt{L_i + 1/\rho} - \sqrt{\mu_i + 1/\rho}}
+        {\sqrt{L_i + 1/\rho} + \sqrt{\mu_i + 1/\rho}}
+        \left(u_i^{\ell+1} - u_i^\ell\right).
+
+    If the client cost has :math:`\mu_i=0`, this coefficient reduces to the Fed-LT expression with
+    :math:`\sqrt{1/\rho}` in the second term. The constants must be finite and non-negative.
+
+    After local training, the client sets
+
+    .. math::
+        x_{i,k+1}=w^{N_e}_{i,k}, \qquad z_{i,k+1}=z_{i,k}+2(x_{i,k+1}-y_{k+1}),
+
+    and uploads :math:`z_{i,k+1}` to the server. Inactive clients keep
+    :math:`x_{i,k+1}=x_{i,k}` and :math:`z_{i,k+1}=z_{i,k}`. For later server averages, the server stores a received
+    fresh :math:`z_{i,k+1}` when the upload arrives and otherwise keeps its previous stored :math:`z_i`.
 
     ``local_solver`` can be ``"gradient_descent"``, ``"stochastic_gradient_descent"``, or
-    ``"accelerated_gradient_descent"``; aliases ``"gd"``, ``"sgd"``, and ``"agd"`` are accepted. The stochastic
-    variant deliberately calls :meth:`~decent_bench.costs.Cost.gradient` in the same way as the deterministic one.
-    Costs preserving the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use its default mini-batch sampling
-    and generic costs use their normal full-gradient behavior.
-
-    The accelerated variant uses each client cost's ``m_smooth`` and ``m_cvx`` metadata for the smoothness and
-    strong-convexity constants of the local objective plus the quadratic penalty. These constants must be finite and
-    non-negative.
+    ``"accelerated_gradient_descent"``; aliases ``"gd"``, ``"sgd"``, and ``"agd"`` are accepted.
 
     Fed-PLT is the privacy-noise version of Fed-LT :footcite:p:`Alg_FedPLT`. This class does not add Gaussian noise
     internally; select a network-level noise scheme such as :class:`~decent_bench.schemes.GaussianNoise` when creating
@@ -557,10 +582,6 @@ class FedLT(FedAlgorithm):
         average_z = iop.mean(iop.stack(z_values, dim=0), dim=0)
         return network.server().cost.proximal(average_z, self.rho / len(network.clients()))
 
-    def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        """Send the current Fed-LT server variable ``y`` to the selected clients."""
-        network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x)
-
     def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
         for client in participating_clients:
             client.x, client.aux_vars["z"] = self._compute_local_update(client, network.server())
@@ -594,14 +615,14 @@ class FedLT(FedAlgorithm):
         return local_x
 
     def _compute_accelerated_local_update(self, client: "Agent", local_x: "Array", v: "Array") -> "Array":
-        smooth = client.cost.m_smooth + (1 / self.rho)
-        strong = client.cost.m_cvx + (1 / self.rho)
-        momentum = (np.sqrt(smooth) - np.sqrt(strong)) / (np.sqrt(smooth) + np.sqrt(strong))
+        smoothness = client.cost.m_smooth + (1 / self.rho)
+        strong_convexity = client.cost.m_cvx + (1 / self.rho)
+        momentum = (np.sqrt(smoothness) - np.sqrt(strong_convexity)) / (np.sqrt(smoothness) + np.sqrt(strong_convexity))
         u_previous = iop.copy(local_x)
 
         for _ in range(self.num_local_epochs):
             grad = client.cost.gradient(local_x) + ((local_x - v) / self.rho)
-            u_next = local_x - ((1 / smooth) * grad)
+            u_next = local_x - ((1 / smoothness) * grad)
             local_x = u_next + (momentum * (u_next - u_previous))
             u_previous = u_next
         return local_x
