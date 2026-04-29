@@ -1,10 +1,10 @@
 from decent_bench import (
     agents,
+    algorithms,
     benchmark,
     centralized_algorithms,
     costs,
     datasets,
-    distributed_algorithms,
     metrics,
     networks,
     schemes,
@@ -12,11 +12,11 @@ from decent_bench import (
 
 __all__ = [
     "agents",
+    "algorithms",
     "benchmark",
     "centralized_algorithms",
     "costs",
     "datasets",
-    "distributed_algorithms",
     "metrics",
     "networks",
     "schemes",

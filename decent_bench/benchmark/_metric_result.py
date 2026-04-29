@@ -2,7 +2,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from decent_bench.agents import AgentMetricsView
-from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.algorithms import Algorithm
 from decent_bench.metrics import Metric
 from decent_bench.networks import Network
 from decent_bench.utils._metric_helpers import _flatten_plot_metrics

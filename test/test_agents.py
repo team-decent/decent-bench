@@ -652,3 +652,24 @@ class TestAgentHistory:
         for it in [5, 1, 3]:
             h[it] = np.array([float(it)])
         assert list(iter(h)) == [1, 3, 5]
+
+    def test_getitem_with_negative_iteration(self):
+        h = AgentHistory()
+        h[0] = np.array([0.0])
+        h[10] = np.array([10.0])
+        # -1 should return the latest snapshot at iteration 10
+        np.testing.assert_array_equal(h[-1], [10.0])
+
+    def test_getitem_with_large_negative_iteration(self):
+        h = AgentHistory()
+        h[5] = np.array([5.0])
+        h[10] = np.array([10.0])
+        # Should raise ValueError for iteration < -1
+        with pytest.raises(ValueError):
+            _ = h[-2]
+
+    def test_setitem_with_negative_iteration(self):
+        h = AgentHistory()
+        # Should raise ValueError for negative iteration
+        with pytest.raises(ValueError):
+            h[-1] = np.array([1.0])

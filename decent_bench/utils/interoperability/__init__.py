@@ -38,7 +38,7 @@ from ._functions import (
     zeros,
     zeros_like,
 )
-from ._helpers import device_to_framework_device, framework_device_of_array
+from ._helpers import device_to_framework_device, framework_device_of_array, is_supported_array_type
 from ._operators import (
     absolute,
     add,
@@ -115,6 +115,7 @@ __all__ = [  # noqa: RUF022
     # From _helpers
     "device_to_framework_device",
     "framework_device_of_array",
+    "is_supported_array_type",
     # From _decorators
     "autodecorate_cost_method",
     # Extensions

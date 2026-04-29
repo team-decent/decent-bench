@@ -251,7 +251,8 @@ class Network(ABC):  # noqa: B024
         if self._message_drop[sender].should_drop():
             sender._n_sent_messages_dropped += 1  # noqa: SLF001
             return
-        msg = self._message_noise[sender].make_noise(self._message_compression[sender].compress(msg))
+        msg = iop.copy(msg)
+        msg = self._message_noise[sender].make_noise(msg)
         receiver._n_received_messages += 1  # noqa: SLF001
         receiver._received_messages[sender] = msg  # noqa: SLF001
 
@@ -292,6 +293,7 @@ class Network(ABC):  # noqa: B024
             receiver = [receiver]
 
         currently_active_connected_agents = self._allowed_receivers(sender)
+        msg = self._message_compression[sender].compress(iop.copy(msg))
         for r in receiver:
             if r not in currently_active_connected_agents:
                 raise ValueError(

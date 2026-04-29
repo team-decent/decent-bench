@@ -46,6 +46,8 @@ def start_logger(log_level: int = logging.INFO) -> None:
         inherits this by using NOTSET (the default).
 
     """
+    if LOGGER.hasHandlers():
+        return
     LOGGER.handlers.clear()
     LOGGER.addHandler(RichHandler())
     LOGGER.setLevel(log_level)

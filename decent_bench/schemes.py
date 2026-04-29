@@ -175,63 +175,105 @@ class Quantization(CompressionScheme):
     """Scheme that rounds each element in a message to *significant_digits*."""
 
     def __init__(self, n_significant_digits: int):
+        if n_significant_digits <= 0:
+            raise ValueError("`n_significant_digits` must be a positive integer")
         self.n_significant_digits = n_significant_digits
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
-        res = np.vectorize(lambda x: float(format(x, f".{self.n_significant_digits - 1}e")))(iop.to_numpy(msg))
-        return iop.to_array_like(res, msg)
+        msg_np = iop.to_numpy(msg, dtype=np.float64)
+
+        # Round finite non-zero entries to the requested number of significant digits.
+        mask = np.isfinite(msg_np) & (msg_np != 0)
+        if np.any(mask):
+            magnitudes = np.floor(np.log10(np.abs(msg_np[mask])))
+            scale = np.power(10.0, self.n_significant_digits - 1 - magnitudes)
+            msg_np[mask] = np.round(msg_np[mask] * scale) / scale
+
+        return iop.to_array_like(msg_np, msg)
 
 
 class TopK(CompressionScheme):
     """
-    Top-k compression which transmits only the k elements with largest magnitude.
+    Top-k compression which transmits only a subset of elements with largest magnitude.
+
+    The parameter ``k`` can be either:
+
+    - an ``int``: transmit exactly ``k`` elements, or
+    - a ``float`` in :math:`(0, 1]`: transmit a fraction ``k`` of elements.
+
+    Message size is preserved by transmitting zeros in place of non-transmitted elements.
 
     Raises:
-        ValueError: if ``k <= 0``
+        ValueError: if ``k`` is a float and not in :math:`(0, 1]`
+        ValueError: if ``k`` is an int and less than 1
 
     Note:
-        If the message has fewer than ``k`` elements, no compression is applied.
+        If ``k * n_elements < 1``, at least one element is still transmitted.
 
     """
 
-    def __init__(self, k: int):
-        if k <= 0:
-            raise ValueError(f"`k` must be a positive integer, got {k}")
+    def __init__(self, k: float):
+        if isinstance(k, int):
+            if k < 1:
+                raise ValueError(f"If `k` is an integer, it must be at least 1, got {k}")
+        elif k <= 0 or k > 1:
+            raise ValueError(f"If `k` is a float, it must be in (0, 1], got {k}")
         self.k = k
+        self.is_integer_k = isinstance(self.k, int)
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
-        msg_np = np.copy(iop.to_numpy(msg))
-        k = min(self.k, msg_np.size)
-        idx = np.argpartition(np.abs(msg_np), -k, axis=None)[-k:]
-        mask = np.isin(np.arange(msg_np.size), idx).reshape(msg_np.shape)
-        msg_np[~mask] = 0
-        return iop.to_array_like(msg_np, msg)
+        msg_np = iop.to_numpy(msg)
+        n_elements = msg_np.size
+        k_count = min(int(self.k), n_elements) if self.is_integer_k else max(1, int(np.ceil(self.k * n_elements)))
+
+        flat_msg = msg_np.reshape(-1)
+        idx = np.argpartition(np.abs(flat_msg), -k_count)[-k_count:]
+        compressed_flat = np.zeros_like(flat_msg)
+        compressed_flat[idx] = flat_msg[idx]
+
+        return iop.to_array_like(compressed_flat.reshape(msg_np.shape), msg)
 
 
 class RandK(CompressionScheme):
     """
-    Rand-k compression which transmits only k randomly selected elements.
+    Rand-k compression which transmits only a random subset of elements.
+
+    The parameter ``k`` can be either:
+
+    - an ``int``: transmit exactly ``k`` elements chosen uniformly at random (without replacement), or
+    - a ``float`` in :math:`(0, 1]`: transmit a fraction ``k`` of elements.
+
+    Message size is preserved by transmitting zeros in place of non-transmitted elements.
 
     Raises:
-        ValueError: if ``k <= 0``
+        ValueError: if ``k`` is a float and not in :math:`(0, 1]`
+        ValueError: if ``k`` is an int and less than 1
 
     Note:
-        If the message has fewer than ``k`` elements, no compression is applied.
+        If ``k * n_elements < 1``, at least one element is still transmitted.
 
     """
 
-    def __init__(self, k: int):
-        if k <= 0:
-            raise ValueError("`k` must be a positive integer")
+    def __init__(self, k: float):
+        if isinstance(k, int):
+            if k < 1:
+                raise ValueError(f"`k` must be at least 1 if an integer, got {k}")
+        elif k <= 0 or k > 1:
+            raise ValueError(f"`k` must be in (0, 1], got {k}")
         self.k = k
+        self.is_integer_k = isinstance(self.k, int)
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
-        msg_np = np.copy(iop.to_numpy(msg))
-        k = min(self.k, msg_np.size)
-        idx = iop.rng_numpy().choice(msg_np.size, size=k, replace=False)
-        mask = np.isin(np.arange(msg_np.size), idx).reshape(msg_np.shape)
-        msg_np[~mask] = 0
-        return iop.to_array_like(msg_np, msg)
+        msg_np = iop.to_numpy(msg)
+        n_elements = msg_np.size
+        k_count = min(int(self.k), n_elements) if self.is_integer_k else max(1, int(np.ceil(self.k * n_elements)))
+
+        flat_msg = msg_np.reshape(-1)
+        idx = iop.rng_numpy().choice(n_elements, size=k_count, replace=False)
+        compressed_flat = np.zeros_like(flat_msg)
+        compressed_flat[idx] = flat_msg[idx]
+
+        return iop.to_array_like(compressed_flat.reshape(msg_np.shape), msg)
 
 
 class DropScheme(ABC):

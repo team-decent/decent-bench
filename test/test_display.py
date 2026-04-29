@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 import tempfile
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -25,6 +26,7 @@ from decent_bench.metrics.metric_library import Accuracy, MSE, Precision, Recall
 # -----------------------------------------------------------------------------
 # Test Helpers
 # -----------------------------------------------------------------------------
+
 
 class _AlgorithmStub:
     def __init__(self, name: str) -> None:
@@ -77,13 +79,17 @@ def _run_display_with_capture(
 ) -> dict[str, MetricResult]:
     captured: dict[str, MetricResult] = {}
 
+    def _snapshot_metric_result(source: MetricResult) -> MetricResult:
+        """Capture display-time state so later restoration does not affect assertions."""
+        return deepcopy(source)
+
     def _capture_tables(
         passed_metrics_result: MetricResult,
         table_fmt: str = "grid",
         scale_compute: float = 1.0,
         table_path=None,
     ) -> None:
-        captured["table"] = passed_metrics_result
+        captured["table"] = _snapshot_metric_result(passed_metrics_result)
 
     def _capture_plots(
         passed_metrics_result: MetricResult,
@@ -95,8 +101,9 @@ def _run_display_with_capture(
         plot_grid: bool = True,
         plot_format: str = "png",
         plot_path=None,
+        show_plots=True,
     ) -> None:
-        captured["plot"] = passed_metrics_result
+        captured["plot"] = _snapshot_metric_result(passed_metrics_result)
 
     monkeypatch.setattr("decent_bench.benchmark._display.display_tables", _capture_tables)
     monkeypatch.setattr("decent_bench.benchmark._display.display_plots", _capture_plots)
@@ -136,17 +143,22 @@ def _build_display_metric_result(
     *,
     agent_x_values: list[float] | None = None,
     table_results: dict[_AlgorithmStub, dict[_MetricStub, dict[str, tuple[float, float]]]] | None = None,
-    plot_results: dict[_AlgorithmStub, dict[_MetricStub, tuple[list[float], list[float], list[float], list[float]]]] | None = None,
+    plot_results: dict[_AlgorithmStub, dict[_MetricStub, tuple[list[float], list[float], list[float], list[float]]]]
+    | None = None,
 ) -> MetricResult:
     if agent_x_values is None:
         agent_x_values = [1.0] * len(algorithms)
 
-    flat_plot_metrics = plot_metrics if isinstance(plot_metrics[0], _MetricStub) else [
-        metric for group in plot_metrics for metric in group
-    ]
+    flat_plot_metrics = (
+        plot_metrics
+        if isinstance(plot_metrics[0], _MetricStub)
+        else [metric for group in plot_metrics for metric in group]
+    )
 
     default_table_results: dict[_AlgorithmStub, dict[_MetricStub, dict[str, tuple[float, float]]]] = {}
-    default_plot_results: dict[_AlgorithmStub, dict[_MetricStub, tuple[list[float], list[float], list[float], list[float]]]] = {}
+    default_plot_results: dict[
+        _AlgorithmStub, dict[_MetricStub, tuple[list[float], list[float], list[float], list[float]]]
+    ] = {}
 
     for alg_idx, alg in enumerate(algorithms):
         default_table_results[alg] = {}
@@ -171,6 +183,7 @@ def _build_display_metric_result(
 # display_metrics Filtering Tests
 # -----------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     ("algorithm_filter", "expected_algorithms"),
     [
@@ -192,6 +205,7 @@ def test_display_metrics_filters_algorithms(monkeypatch, algorithm_filter: str, 
     assert [alg.name for alg in captured["table"].table_results] == expected_algorithms
     assert [alg.name for alg in captured["table"].plot_results] == expected_algorithms
     assert [alg.name for alg in captured["table"].agent_metrics] == expected_algorithms
+    assert [alg.name for alg in metrics_result.table_results] == ["A", "B"]
 
 
 def test_display_metrics_keeps_nan_table_metrics(monkeypatch) -> None:  # noqa: D103
@@ -303,6 +317,7 @@ def test_display_metrics_filters_algorithms_with_mixed_objects_and_names(monkeyp
     assert [alg.name for alg in captured["table"].table_results] == ["A", "C"]
     assert [alg.name for alg in captured["table"].plot_results] == ["A", "C"]
     assert [alg.name for alg in captured["table"].agent_metrics] == ["A", "C"]
+    assert [alg.name for alg in metrics_result.table_results] == ["A", "B", "C"]
 
 
 def test_display_metrics_raises_when_all_algorithms_filtered_out(monkeypatch) -> None:  # noqa: D103
@@ -435,6 +450,7 @@ def test_compute_metrics_rejects_duplicate_plot_metric_descriptions(monkeypatch)
 # compute_plots Truncation Tests
 # -----------------------------------------------------------------------------
 
+
 def test_compute_plots_truncates_trials_at_first_non_finite_value() -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
     metric = _PlotMetricStub(
@@ -529,6 +545,7 @@ def test_compute_plots_truncates_trials_at_over_threshold_value() -> None:  # no
 # -----------------------------------------------------------------------------
 # Legend Layout Threshold Tests
 # -----------------------------------------------------------------------------
+
 
 def test_select_legend_mode_prefers_same_figure_for_small_label_sets() -> None:  # noqa: D103
     mode, cols, rows = _select_legend_mode(["A", "B", "C", "D"])
@@ -625,6 +642,7 @@ def test_add_legend_and_save_creates_missing_parent_directory() -> None:  # noqa
 # Metric Availability Tests
 # -----------------------------------------------------------------------------
 
+
 def test_xerror_unavailable_without_x_optimal() -> None:  # noqa: D103
     x_error = XError([np.average])
     available, reason = x_error.is_available(SimpleNamespace(x_optimal=None))
@@ -689,6 +707,7 @@ def test_is_available_default_returns_true() -> None:  # noqa: D103
 # -----------------------------------------------------------------------------
 # Plot Metric Stub
 # -----------------------------------------------------------------------------
+
 
 class _PlotMetricStub(Metric):
     def __init__(self, plot_description: str, plot_data_by_x_value: dict[float, list[tuple[float, float]]]) -> None:
