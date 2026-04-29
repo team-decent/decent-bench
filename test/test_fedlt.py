@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from decent_bench.agents import Agent
-from decent_bench.costs import Cost, EmpiricalRiskCost, QuadraticCost, ZeroCost
+from decent_bench.costs import Cost, EmpiricalRiskCost, L1RegularizerCost, QuadraticCost, ZeroCost
 from decent_bench.distributed_algorithms import FedLT
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, GaussianNoise, Quantization
@@ -226,6 +226,20 @@ def test_fedlt_server_step_uses_server_cost_proximal_for_optional_global_regular
 
     np.testing.assert_allclose(y, np.array([2.5]))
     assert server_cost.proximal_rhos == [1.0]
+
+
+def test_fedlt_server_step_supports_regularizer_server_cost() -> None:
+    clients = [Agent(0, ConstantGradientCost(0.0)), Agent(1, ConstantGradientCost(0.0))]
+    server = Agent(2, L1RegularizerCost(shape=(1,)))
+    network = FedNetwork(clients=clients, server=server)
+    algorithm = FedLT(iterations=1, step_size=0.1, num_local_epochs=1, rho=2.0)
+    algorithm.initialize(network)
+    server.aux_vars["z_by_client"][clients[0]] = np.array([3.0])
+    server.aux_vars["z_by_client"][clients[1]] = np.array([1.0])
+
+    y = algorithm._compute_server_y(network)
+
+    np.testing.assert_allclose(y, np.array([1.0]))
 
 
 def test_fedlt_empirical_cost_uses_existing_minibatch_gradient_default() -> None:
