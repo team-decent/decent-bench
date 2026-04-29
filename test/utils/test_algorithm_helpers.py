@@ -4,15 +4,15 @@ import pytest
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
-from decent_bench.costs import L2RegularizerCost, PyTorchCost
-from decent_bench.networks import FedNetwork, P2PNetwork
-from decent_bench.utils.algorithm_helpers import (
+from decent_bench.algorithms.utils import (
     infer_client_weight,
     initial_states,
     normal_initialization,
     pytorch_initialization,
     uniform_initialization,
 )
+from decent_bench.costs import L2RegularizerCost, PyTorchCost
+from decent_bench.networks import FedNetwork, P2PNetwork
 from decent_bench.utils.array import Array
 from decent_bench.utils.pytorch_utils import SimpleLinearModel
 

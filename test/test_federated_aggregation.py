@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 from decent_bench.agents import Agent
+from decent_bench.algorithms.federated import FedAdagrad, FedAdam, FedAvg, FedProx, FedYogi
 from decent_bench.costs import Cost
-from decent_bench.distributed_algorithms import FedAdagrad, FedAdam, FedAvg, FedProx, FedYogi
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import DropScheme, NoDrops
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks

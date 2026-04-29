@@ -1,8 +1,8 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark._benchmark_problem import BenchmarkProblem
-from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.networks import Network
 
 

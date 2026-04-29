@@ -16,7 +16,7 @@ decent\_bench
    decent_bench.centralized_algorithms
    decent_bench.costs
    decent_bench.datasets
-   decent_bench.distributed_algorithms
+   decent_bench.algorithms
    decent_bench.networks
    decent_bench.schemes
 

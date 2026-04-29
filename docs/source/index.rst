@@ -22,3 +22,4 @@ Report any bugs you *may find* to `GitHub <https://github.com/team-decent/decent
    developer
    advanced
    author
+   (TEMP) PyTorch Optimizer Integration <advanced_pytorch_optimizer>

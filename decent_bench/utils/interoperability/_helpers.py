@@ -26,7 +26,7 @@ def device_to_framework_device(device: SupportedDevices, framework: SupportedFra
     if framework == SupportedFrameworks.NUMPY:
         return device  # NumPy does not have explicit device management
     if torch and framework == SupportedFrameworks.PYTORCH:
-        return "cuda" if device == SupportedDevices.GPU else "cpu"
+        return _identify_torch_device(device)
     if tf and framework == SupportedFrameworks.TENSORFLOW:
         return f"/{device.value}:0"
     if jax and framework == SupportedFrameworks.JAX:
@@ -34,6 +34,16 @@ def device_to_framework_device(device: SupportedDevices, framework: SupportedFra
             return jax.devices("cpu")[0]
         return jax.devices("gpu")[0]
     raise ValueError(f"Unsupported framework: {framework}")
+
+
+def _identify_torch_device(device: SupportedDevices) -> str:
+    if device == SupportedDevices.CPU:
+        return "cpu"
+    if device == SupportedDevices.GPU:
+        return "cuda"
+    if device == SupportedDevices.MPS:
+        return "mps"
+    raise ValueError(f"Unsupported device: {device}")
 
 
 def _return_array(array: SupportedArrayTypes) -> Array:
@@ -77,17 +87,43 @@ def framework_device_of_array(array: Array | SupportedArrayTypes) -> tuple[Suppo
     if isinstance(value, _np_types):
         return SupportedFrameworks.NUMPY, SupportedDevices.CPU
     if torch and isinstance(value, _torch_types):
-        device_type = SupportedDevices.GPU if value.device.type == "cuda" else SupportedDevices.CPU  # type: ignore[union-attr]
+        if value.device.type == "mps":  # type: ignore[union-attr]
+            device_type = SupportedDevices.MPS
+        elif value.device.type == "cuda":  # type: ignore[union-attr]
+            device_type = SupportedDevices.GPU
+        elif value.device.type == "cpu":  # type: ignore[union-attr]
+            device_type = SupportedDevices.CPU
+        else:
+            raise TypeError(f"Unsupported PyTorch device type: {value.device.type}")  # type: ignore[union-attr]
         return SupportedFrameworks.PYTORCH, device_type
-
     if tf and isinstance(value, _tf_types):
         device_str = value.device.lower()  # type: ignore[union-attr]
         device_type = SupportedDevices.GPU if "gpu" in device_str or "cuda" in device_str else SupportedDevices.CPU
         return SupportedFrameworks.TENSORFLOW, device_type
-
     if jnp and isinstance(value, _jnp_types):
         backend = value.device.platform
         device_type = SupportedDevices.GPU if backend == "gpu" else SupportedDevices.CPU
         return SupportedFrameworks.JAX, device_type
 
     raise TypeError(f"Unsupported framework type: {type(value)}")
+
+
+def is_supported_array_type(array: Any) -> bool:  # noqa: ANN401
+    """
+    Check if the given array is of a supported type.
+
+    Args:
+        array (Any): Input array.
+
+    Returns:
+        bool: True if the array is of a supported type, False otherwise.
+
+    """
+    value = array.value if isinstance(array, Array) else array
+
+    return bool(
+        isinstance(value, _np_types)
+        or (torch and isinstance(value, _torch_types))
+        or (tf and isinstance(value, _tf_types))
+        or (jnp and isinstance(value, _jnp_types))
+    )

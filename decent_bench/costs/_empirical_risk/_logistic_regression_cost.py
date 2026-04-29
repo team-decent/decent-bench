@@ -262,7 +262,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
     ) -> NDArray[float64]:
         A, b = self._get_batch_data(indices)  # noqa: N806
         sig = special.expit(A.dot(x))
-        res = [A[i, :].reshape(-1, 1) * (sig[i] - b[i]) for i in range(A.shape[0])]
+        res = [A[i, :].reshape(-1) * (sig[i] - b[i]) for i in range(A.shape[0])]
         return np.asarray(res)
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.hessian)

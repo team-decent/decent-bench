@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import pickle  # noqa: S403
 import random
 import sys
 from copy import deepcopy
@@ -11,9 +12,12 @@ from typing import Any
 import networkx as nx
 import numpy as np
 import pytest
+import zstandard as zstd
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
+from decent_bench.algorithms import Algorithm
+from decent_bench.algorithms.p2p import ADMM, ATC, DGD
 from decent_bench.benchmark import (
     BenchmarkProblem,
     MetricResult,
@@ -22,10 +26,9 @@ from decent_bench.benchmark import (
     resume_benchmark,
 )
 from decent_bench.costs import LogisticRegressionCost, PyTorchCost
-from decent_bench.distributed_algorithms import ADMM, ATC, DGD, Algorithm
 from decent_bench.networks import Network, P2PNetwork
 from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
-from decent_bench.utils.checkpoint_manager import CheckpointManager
+from decent_bench.utils.checkpoint_manager import _ZSTD_MAGIC, CheckpointManager  # noqa: PLC2701
 
 try:
     import torch
@@ -107,8 +110,8 @@ def test_initialize_saves_structure_and_metadata(tmp_path: Path) -> None:  # noq
     manager.initialize(algorithms=algorithms, problem=problem, n_trials=3)
 
     assert (checkpoint_dir / "metadata.json").exists()
-    assert (checkpoint_dir / "initial_algorithms.pkl").exists()
-    assert (checkpoint_dir / "benchmark_problem.pkl").exists()
+    assert (checkpoint_dir / "initial_algorithms.pkl.zst").exists()
+    assert (checkpoint_dir / "benchmark_problem.pkl.zst").exists()
     assert (checkpoint_dir / "algorithm_0").exists()
     assert (checkpoint_dir / "algorithm_1").exists()
     assert (checkpoint_dir / "algorithm_2").exists()
@@ -169,6 +172,9 @@ def test_save_and_load_checkpoint_roundtrip(tmp_path: Path) -> None:  # noqa: D1
     )
 
     assert checkpoint_path.exists()
+    with checkpoint_path.open("rb") as f:
+        assert f.read(4) == _ZSTD_MAGIC
+
     progress_path = tmp_path / "ckpt" / "algorithm_0" / "trial_0" / "progress.json"
     with progress_path.open(encoding="utf-8") as f:
         progress = json.load(f)
@@ -181,6 +187,36 @@ def test_save_and_load_checkpoint_roundtrip(tmp_path: Path) -> None:  # noqa: D1
     assert len(loaded_net.agents()) == 4
     assert last_iteration == 4
     assert rng_state == {"seed": 123, "python_random_state": random.getstate()}
+
+
+def test_load_checkpoint_supports_legacy_uncompressed_pickle(tmp_path: Path) -> None:  # noqa: D103
+    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
+    manager = CheckpointManager(tmp_path / "ckpt")
+    manager.initialize(algorithms=algorithms, problem=problem, n_trials=1)
+
+    trial_dir = tmp_path / "ckpt" / "algorithm_0" / "trial_0"
+    trial_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_data = {
+        "algorithm": algorithms[0],
+        "network": problem.network,
+        "iteration": 4,
+        "rng_state": {"seed": 123},
+    }
+    checkpoint_path = trial_dir / "checkpoint_0000004.pkl"
+    with checkpoint_path.open("wb") as f:
+        pickle.dump(checkpoint_data, f)
+
+    progress_path = trial_dir / "progress.json"
+    with progress_path.open("w", encoding="utf-8") as f:
+        json.dump({"last_completed_iteration": 4}, f)
+
+    loaded = manager.load_checkpoint(alg_idx=0, trial=0)
+    assert loaded is not None
+    loaded_alg, loaded_net, iteration, rng_state = loaded
+    assert loaded_alg.name == "DGD"
+    assert len(loaded_net.agents()) == 4
+    assert iteration == 4
+    assert rng_state == {"seed": 123}
 
 
 def test_mark_unmark_and_load_trial_result(tmp_path: Path) -> None:  # noqa: D103
@@ -223,8 +259,8 @@ def test_cleanup_old_checkpoints_keeps_latest_n(tmp_path: Path) -> None:  # noqa
         )
 
     trial_dir = tmp_path / "ckpt" / "algorithm_0" / "trial_0"
-    checkpoints = sorted(p.name for p in trial_dir.glob("checkpoint_*.pkl"))
-    assert checkpoints == ["checkpoint_0000002.pkl", "checkpoint_0000003.pkl"]
+    checkpoints = sorted(p.name for p in trial_dir.glob("checkpoint_*.pkl.zst"))
+    assert checkpoints == ["checkpoint_0000002.pkl.zst", "checkpoint_0000003.pkl.zst"]
 
     loaded = manager.load_checkpoint(alg_idx=0, trial=0)
     assert loaded is not None
@@ -274,7 +310,9 @@ def test_load_benchmark_result_skips_incomplete_algorithms(  # noqa: D103
 
 
 def test_save_and_load_metrics_result(tmp_path: Path) -> None:  # noqa: D103
-    manager = CheckpointManager(tmp_path / "ckpt")
+    ckpt_path = tmp_path / "ckpt"
+    ckpt_path.mkdir(parents=True, exist_ok=True)
+    manager = CheckpointManager(ckpt_path)
     metrics_result = MetricResult(
         agent_metrics=None,
         table_metrics=None,
@@ -282,12 +320,14 @@ def test_save_and_load_metrics_result(tmp_path: Path) -> None:  # noqa: D103
         table_results=None,
         plot_results=None,
     )
-
     manager.save_metrics_result(metrics_result)
     loaded = manager.load_metrics_result()
 
     assert loaded == metrics_result
-    assert (tmp_path / "ckpt" / "metric_computation.pkl").exists()
+    assert (ckpt_path / "metric_computation.pkl.zst").exists()
+    with (ckpt_path / "metric_computation.pkl.zst").open("rb") as f:
+        assert f.read(4) == _ZSTD_MAGIC
+    assert (ckpt_path / "metric_computation_complete.json").exists()
 
 
 def test_create_backup_and_clear(tmp_path: Path) -> None:  # noqa: D103
@@ -701,7 +741,9 @@ def test_resume_from_non_completed_checkpoint(
             else:
                 raise FileNotFoundError(f"Expected complete marker not found at {complete_marker}")
             for i in [3, 4]:  # Remove checkpoints for iterations 3 and 4
-                checkpoint_path = tmp_path / "ckpt" / f"algorithm_{alg}" / f"trial_{trial}" / f"checkpoint_{i:07d}.pkl"
+                checkpoint_path = (
+                    tmp_path / "ckpt" / f"algorithm_{alg}" / f"trial_{trial}" / f"checkpoint_{i:07d}.pkl.zst"
+                )
                 if checkpoint_path.exists():
                     checkpoint_path.unlink()
                 else:

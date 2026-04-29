@@ -9,8 +9,8 @@ from scipy import stats
 
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
+from decent_bench.algorithms import Algorithm
 from decent_bench.costs import EmpiricalRiskCost
-from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.metrics._metric import Metric
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
