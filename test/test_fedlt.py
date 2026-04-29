@@ -163,15 +163,13 @@ def _make_network(*costs: Cost) -> FedNetwork:
     return FedNetwork(clients=[Agent(i, cost) for i, cost in enumerate(costs)])
 
 
-@pytest.mark.parametrize(
-    "local_solver", ["gradient_descent", "stochastic_gradient_descent", "accelerated_gradient_descent"]
-)
-def test_fedlt_runs_with_all_local_solvers(local_solver: str) -> None:
+@pytest.mark.parametrize("use_acceleration", [False, True])
+def test_fedlt_runs_with_default_and_accelerated_local_updates(use_acceleration: bool) -> None:
     network = _make_network(
         QuadraticCost(A=np.array([[1.0]]), b=np.array([-1.0])),
         QuadraticCost(A=np.array([[2.0]]), b=np.array([1.0])),
     )
-    algorithm = FedLT(iterations=3, step_size=0.2, num_local_epochs=2, rho=1.0, local_solver=local_solver)
+    algorithm = FedLT(iterations=3, step_size=0.2, num_local_epochs=2, rho=1.0, use_acceleration=use_acceleration)
 
     algorithm.run(network)
 
@@ -185,17 +183,16 @@ def test_fedlt_runs_with_all_local_solvers(local_solver: str) -> None:
         ({"rho": 0.0}, "`rho` must be positive"),
         ({"num_local_epochs": 0}, "`num_local_epochs` must be positive"),
         ({"step_size": 0.0}, "`step_size` must be positive"),
-        ({"local_solver": "bad"}, "`local_solver` must be one of"),
     ],
 )
-def test_fedlt_rejects_invalid_parameters(kwargs: dict[str, float | int | str], error: str) -> None:
+def test_fedlt_rejects_invalid_parameters(kwargs: dict[str, float | int], error: str) -> None:
     with pytest.raises(ValueError, match=error):
         FedLT(iterations=1, **kwargs)
 
 
 def test_fedlt_accelerated_solver_requires_valid_client_constants() -> None:
     network = _make_network(ConstantGradientCost(m_smooth=np.inf, m_cvx=0.0))
-    algorithm = FedLT(iterations=1, local_solver="accelerated_gradient_descent")
+    algorithm = FedLT(iterations=1, use_acceleration=True)
 
     with pytest.raises(ValueError, match="requires finite non-negative"):
         algorithm.initialize(network)
@@ -235,7 +232,7 @@ def test_fedlt_empirical_cost_uses_existing_minibatch_gradient_default() -> None
     cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
     client = Agent(0, cost)
     server = Agent(1, ZeroCost((1,)))
-    algorithm = FedLT(iterations=1, step_size=1.0, num_local_epochs=3, rho=1.0, local_solver="sgd")
+    algorithm = FedLT(iterations=1, step_size=1.0, num_local_epochs=3, rho=1.0)
     client.initialize(x=np.array([0.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
     client._received_messages[server] = np.array([0.0])  # noqa: SLF001
@@ -245,6 +242,20 @@ def test_fedlt_empirical_cost_uses_existing_minibatch_gradient_default() -> None
     assert len(cost.gradient_indices) == 3
     assert all(len(indices) == 2 for indices in cost.gradient_indices)
     assert set().union(*(set(indices) for indices in cost.gradient_indices)) == set(range(cost.n_samples))
+
+
+def test_fedlt_generic_cost_uses_full_gradient_call_default() -> None:
+    cost = ConstantGradientCost(gradient_value=1.0)
+    client = Agent(0, cost)
+    server = Agent(1, ZeroCost((1,)))
+    algorithm = FedLT(iterations=1, step_size=1.0, num_local_epochs=2, rho=1.0)
+    client.initialize(x=np.array([0.0]), aux_vars={"z": np.array([0.0])})
+    server.initialize(x=np.array([0.0]))
+    client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+
+    algorithm._compute_local_update(client, server)
+
+    assert cost.gradient_kwargs == [{}, {}]
 
 
 def test_fedlt_supports_partial_participation_and_keeps_stale_server_z() -> None:
