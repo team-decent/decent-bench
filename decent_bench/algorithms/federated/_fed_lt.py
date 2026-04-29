@@ -1,8 +1,7 @@
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
-
-import numpy as np
 
 import decent_bench.algorithms.utils as alg_helpers
 import decent_bench.utils.interoperability as iop
@@ -111,7 +110,7 @@ class FedLT(FedAlgorithm):
         if self.rho <= 0:
             raise ValueError("`rho` must be positive")
 
-    def initialize(self, network: FedNetwork) -> None:  # noqa: D102
+    def initialize(self, network: FedNetwork) -> None:
         self.x0 = alg_helpers.initial_states(self.x0, network)
         if self.use_acceleration:
             self._validate_accelerated_constants(network)
@@ -127,14 +126,14 @@ class FedLT(FedAlgorithm):
         for client in network.clients():
             m_smooth = client.cost.m_smooth
             m_cvx = client.cost.m_cvx
-            if not np.isfinite(m_smooth) or not np.isfinite(m_cvx) or m_smooth < 0 or m_cvx < 0:
+            if not math.isfinite(m_smooth) or not math.isfinite(m_cvx) or m_smooth < 0 or m_cvx < 0:
                 raise ValueError(
                     "`use_acceleration=True` requires finite non-negative `m_smooth` and `m_cvx` on every client cost"
                 )
             if m_smooth < m_cvx:
                 raise ValueError("`use_acceleration=True` requires `m_smooth >= m_cvx` on every client cost")
 
-    def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
+    def step(self, network: FedNetwork, iteration: int) -> None:
         y = self._compute_server_y(network)
         network.server().x = y
 
@@ -186,7 +185,9 @@ class FedLT(FedAlgorithm):
     def _compute_accelerated_local_update(self, client: "Agent", local_x: "Array", v: "Array") -> "Array":
         smoothness = client.cost.m_smooth + (1 / self.rho)
         strong_convexity = client.cost.m_cvx + (1 / self.rho)
-        momentum = (np.sqrt(smoothness) - np.sqrt(strong_convexity)) / (np.sqrt(smoothness) + np.sqrt(strong_convexity))
+        sqrt_smoothness = math.sqrt(smoothness)
+        sqrt_strong_convexity = math.sqrt(strong_convexity)
+        momentum = (sqrt_smoothness - sqrt_strong_convexity) / (sqrt_smoothness + sqrt_strong_convexity)
         u_previous = iop.copy(local_x)
 
         for _ in range(self.num_local_epochs):
