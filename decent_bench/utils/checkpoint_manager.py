@@ -1,15 +1,36 @@
 import json
 import pickle  # noqa: S403
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, cast
+
+import zstandard as zstd
+from rich.progress import track
+from rich.status import Status
 
 import decent_bench.utils.interoperability as iop
+from decent_bench.agents import AgentMetricsView
+from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, MetricResult
-from decent_bench.distributed_algorithms import Algorithm
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
+
+# NOTE: On some platforms (notably Windows), the Python binding can expose the 32-bit
+# Zstandard magic number as a signed int, which makes it negative.
+# `int.to_bytes(..., signed=False)` then raises: OverflowError: can't convert negative int to unsigned
+_ZSTD_MAGIC = (int(zstd.MAGIC_NUMBER) & 0xFFFFFFFF).to_bytes(4, "little")
+_CHECKPOINT_NAME_RE = re.compile(r"^checkpoint_(\d+)\.pkl(?:\.zst)?$")
+
+
+class _CheckpointData(TypedDict):
+    """Serialized checkpoint payload persisted in each iteration checkpoint file."""
+
+    algorithm: Algorithm[Network]
+    network: Network
+    iteration: int
+    rng_state: dict[str, Any]
 
 
 class CheckpointManager:  # noqa: PLR0904
@@ -25,13 +46,13 @@ class CheckpointManager:  # noqa: PLR0904
 
             checkpoint_dir/
             ├── metadata.json                   # Run configuration and algorithm metadata
-            ├── benchmark_problem.pkl           # Initial benchmark problem state (before any trials)
-            ├── initial_algorithms.pkl          # Initial algorithm states (before any trials)
-            ├── metric_computation.pkl          # Computed metrics results (after all trials complete)
+            ├── benchmark_problem.pkl.zst       # Initial benchmark problem state (before any trials), zstd-compressed
+            ├── initial_algorithms.pkl.zst      # Initial algorithm states (before any trials), zstd-compressed
+            ├── metric_computation.pkl.zst      # Computed metrics results (after all trials complete), zstd-compressed
             ├── algorithm_0/                    # Directory for first algorithm
             │   ├── trial_0/                    # Directory for trial 0
-            │   │   ├── checkpoint_0000100.pkl  # Combined algorithm+network state at iteration 100
-            │   │   ├── checkpoint_0000200.pkl  # Combined algorithm+network state at iteration 200
+            │   │   ├── checkpoint_0000100.pkl.zst  # Combined algorithm+network state at iteration 100, zstd-compressed
+            │   │   ├── checkpoint_0000200.pkl.zst  # Combined algorithm+network state at iteration 200, zstd-compressed
             │   │   ├── progress.json           # {"last_completed_iteration": N}
             │   │   └── complete.json           # Marker file, contains path to final checkpoint
             │   ├── trial_1/
@@ -46,24 +67,28 @@ class CheckpointManager:  # noqa: PLR0904
 
     File Descriptions:
         - **metadata.json**: Benchmark configuration and any user-provided metadata
-          (e.g., hyperparameters, system info). User-provided metadata can be added through the
-          :func:`~decent_bench.benchmark.benchmark` function or appended later using
-          :func:`~decent_bench.utils.checkpoint_manager.CheckpointManager.append_metadata`.
-        - **benchmark_problem.pkl**: Initial benchmark problem state before any trials run.
-        - **initial_algorithms.pkl**: Initial algorithm states before any trials run.
-        - **metric_computation.pkl**: Computed metrics results after :func:`~decent_bench.benchmark.compute_metrics`
-          completes.
-        - **checkpoint_NNNNNNN.pkl**: Combined checkpoint containing both algorithm and network state.
-          This preserves shared object references and ensures consistency between algorithm and network
-          states at each checkpoint. The checkpoint data is a dictionary with the following structure:
+            (e.g., hyperparameters, system info). User-provided metadata can be added through the
+            :func:`~decent_bench.benchmark.benchmark` function or appended later using
+            :func:`~decent_bench.utils.checkpoint_manager.CheckpointManager.append_metadata`.
+        - **benchmark_problem.pkl.zst**: Initial benchmark problem state before any trials run,
+            stored as a zstd-compressed pickle payload.
+        - **initial_algorithms.pkl.zst**: Initial algorithm states before any trials run,
+            stored as a zstd-compressed pickle payload.
+        - **metric_computation.pkl.zst**: Computed metrics results after
+            :func:`~decent_bench.benchmark.compute_metrics` completes, stored as a
+            zstd-compressed pickle payload.
+        - **checkpoint_NNNNNNN.pkl.zst**: Combined checkpoint containing both algorithm and network
+            state, stored as a zstd-compressed pickle payload. This preserves shared object references and ensures
+            consistency between algorithm and network states at each checkpoint. The checkpoint data is a dictionary
+            with the following structure:
 
-            - algorithm: :class:`~decent_bench.distributed_algorithms.Algorithm`
+            - algorithm: :class:`~decent_bench.algorithms.Algorithm`
             - network: :class:`~decent_bench.networks.Network`
             - iteration: iteration
 
-          where "algorithm" is the :class:`~decent_bench.distributed_algorithms.Algorithm` object with its internal
-          state at the checkpoint, "network" is the :class:`~decent_bench.networks.Network` object with agent states
-          at the checkpoint and "iteration" is the iteration number of the checkpoint.
+            where "algorithm" is the :class:`~decent_bench.algorithms.Algorithm` object with its internal
+            state at the checkpoint, "network" is the :class:`~decent_bench.networks.Network` object with agent states
+            at the checkpoint and "iteration" is the iteration number of the checkpoint.
         - **progress.json**: Tracks the last completed iteration within a trial.
         - **complete.json**: Marker file, contains path to final checkpoint.
         - **plots_figX.png**: Final plots for figures after benchmark completion.
@@ -76,14 +101,26 @@ class CheckpointManager:  # noqa: PLR0904
         - Metadata is written once at initialization.
 
     Args:
-        checkpoint_dir: Path to the checkpoint directory.
+        checkpoint_dir: Path to save checkpoints during execution. If provided, progress will be saved
+            at regular intervals allowing resumption if interrupted. When starting a new benchmark
+            the directory must be empty or non-existent.
         checkpoint_step: Number of iterations between checkpoints within each trial.
-            If None, only save at trial completion.
+            If ``None``, only save at the end of each trial. For long-running algorithms,
+            set this to checkpoint during trial execution (e.g., every 1000 iterations).
         keep_n_checkpoints: Maximum number of iteration checkpoints to keep per trial.
             Older checkpoints are automatically deleted to save disk space.
+        benchmark_metadata: Optional dictionary of additional metadata to save in the checkpoint directory,
+                such as hyperparameters or system information. This can be useful for keeping track of the benchmark
+                configuration and context when analyzing results later.
+        compression_level: Level of compression to use for checkpoint files. Higher levels result in smaller file
+            sizes but take more time to compress and decompress. See zstandard documentation
+            (:class:`~zstandard.ZstdCompressor`) for details on compression levels. Default is 1, which provides a good
+            balance between compression ratio and speed for typical checkpoint payloads. Adjust as needed based on
+            the size of the checkpoint data and performance requirements.
 
     Raises:
-            ValueError: If checkpoint_step is not a positive integer or None.
+        ValueError: If checkpoint_step is not a positive integer or ``None``.
+        ValueError: If keep_n_checkpoints is not a positive integer.
 
     """
 
@@ -93,6 +130,7 @@ class CheckpointManager:  # noqa: PLR0904
         checkpoint_step: int | None = None,
         keep_n_checkpoints: int = 3,
         benchmark_metadata: dict[str, Any] | None = None,
+        compression_level: int = 1,
     ) -> None:
         """
         Initialize CheckpointManager with a checkpoint directory path.
@@ -109,6 +147,11 @@ class CheckpointManager:  # noqa: PLR0904
             benchmark_metadata: Optional dictionary of additional metadata to save in the checkpoint directory,
                     such as hyperparameters or system information. This can be useful for keeping track of the benchmark
                     configuration and context when analyzing results later.
+            compression_level: Level of compression to use for checkpoint files. Higher levels result in smaller file
+                sizes but take more time to compress and decompress. See zstandard documentation
+                (:class:`~zstandard.ZstdCompressor`) for details on compression levels. Default is 1, which provides a
+                good balance between compression ratio and speed for typical checkpoint payloads. Adjust as needed based
+                on the size of the checkpoint data and performance requirements.
 
         Raises:
             ValueError: If checkpoint_step is not a positive integer or ``None``.
@@ -124,7 +167,7 @@ class CheckpointManager:  # noqa: PLR0904
         self.checkpoint_step = checkpoint_step
         self.keep_n_checkpoints = keep_n_checkpoints
         self._metadata = benchmark_metadata
-        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self.compression_level = compression_level
 
     def is_empty(self) -> bool:
         """Check if checkpoint directory is empty or doesn't exist."""
@@ -225,10 +268,8 @@ class CheckpointManager:  # noqa: PLR0904
             List of Algorithm objects representing the initial algorithm states.
 
         """
-        initial_path = self.checkpoint_dir / "initial_algorithms.pkl"
-        with initial_path.open("rb") as f:
-            ret: list[Algorithm[Network]] = pickle.load(f)  # noqa: S301
-        return ret
+        initial_path = self._resolve_data_file("initial_algorithms.pkl.zst", "initial_algorithms.pkl")
+        return cast("list[Algorithm[Network]]", self._load_pickle(initial_path))
 
     def load_benchmark_problem(self) -> BenchmarkProblem:
         """
@@ -238,10 +279,8 @@ class CheckpointManager:  # noqa: PLR0904
             BenchmarkProblem object representing the benchmark problem configuration.
 
         """
-        problem_path = self.checkpoint_dir / "benchmark_problem.pkl"
-        with problem_path.open("rb") as f:
-            ret: BenchmarkProblem = pickle.load(f)  # noqa: S301
-        return ret
+        problem_path = self._resolve_data_file("benchmark_problem.pkl.zst", "benchmark_problem.pkl")
+        return cast("BenchmarkProblem", self._load_pickle(problem_path))
 
     def should_checkpoint(self, iteration: int) -> bool:
         """
@@ -297,19 +336,30 @@ class CheckpointManager:  # noqa: PLR0904
         trial_dir.mkdir(parents=True, exist_ok=True)
 
         # Save both algorithm and network in a single pickle file to preserve shared object references
-        checkpoint_path = trial_dir / f"checkpoint_{iteration:07d}.pkl"
-        checkpoint_data = {
+        checkpoint_path = trial_dir / f"checkpoint_{iteration:07d}.pkl.zst"
+        progress_path = trial_dir / "progress.json"
+
+        # Check if checkpoint already exists to avoid overwriting
+        if checkpoint_path.exists() and progress_path.exists():
+            with progress_path.open(encoding="utf-8") as f:
+                progress = json.load(f)
+            last_completed_iteration: int = progress.get("last_completed_iteration", -1)
+            if last_completed_iteration == iteration:
+                LOGGER.debug(
+                    f"Checkpoint already exists for alg={alg_idx}, trial={trial}, iter={iteration}, skipping save"
+                )
+                return checkpoint_path
+
+        checkpoint_data: _CheckpointData = {
             "algorithm": algorithm,
             "network": network,
             "iteration": iteration,
             "rng_state": rng_state,
         }
-        with checkpoint_path.open("wb") as f:
-            pickle.dump(checkpoint_data, f)
+        self._save_pickle(checkpoint_path, checkpoint_data)
 
         # Update progress
         progress = {"last_completed_iteration": iteration}
-        progress_path = trial_dir / "progress.json"
         with progress_path.open("w", encoding="utf-8") as f:
             json.dump(progress, f)
 
@@ -345,9 +395,8 @@ class CheckpointManager:  # noqa: PLR0904
         last_iteration: int = progress["last_completed_iteration"]
 
         # Load both algorithm and network from single checkpoint file
-        checkpoint_path = trial_dir / f"checkpoint_{last_iteration:07d}.pkl"
-        with checkpoint_path.open("rb") as f:
-            checkpoint_data = pickle.load(f)  # noqa: S301
+        checkpoint_path = self._resolve_checkpoint_path(trial_dir, last_iteration)
+        checkpoint_data = cast("_CheckpointData", self._load_pickle(checkpoint_path))
 
         algorithm: Algorithm[Network] = checkpoint_data["algorithm"]
         network: Network = checkpoint_data["network"]
@@ -398,7 +447,7 @@ class CheckpointManager:  # noqa: PLR0904
             "alg_idx": alg_idx,
             "trial": trial,
             "iteration": iteration,
-            "checkpoint_path": str(checkpoint_path),
+            "checkpoint_path": str(checkpoint_path.name),
         }
         with complete_path.open("w") as f:
             json.dump(completed_metadata, f)
@@ -436,6 +485,61 @@ class CheckpointManager:  # noqa: PLR0904
         trial_dir = self._get_trial_dir(alg_idx, trial)
         return (trial_dir / "complete.json").exists()
 
+    def is_benchmark_started(self) -> bool:
+        """
+        Check if the benchmark has been started by looking for any existing checkpoints.
+
+        Returns:
+            True if any trial has at least one checkpoint saved, False otherwise.
+
+        """
+        metadata = self.load_metadata()
+        if metadata is None or "n_trials" not in metadata or "algorithms" not in metadata:
+            return False
+
+        n_trials = metadata["n_trials"]
+        algorithms = metadata["algorithms"]
+        for alg in algorithms:
+            alg_idx = alg["index"]
+            for trial in range(n_trials):
+                trial_dir = self._get_trial_dir(alg_idx, trial)
+                if any(trial_dir.glob("checkpoint_*.pkl*")):
+                    return True
+        return False
+
+    def is_benchmark_completed(self) -> bool:
+        """
+        Check if all trials for all algorithms have been completed.
+
+        Returns:
+            True if all trials for all algorithms are marked as complete, False otherwise.
+
+        """
+        metadata = self.load_metadata()
+
+        if metadata is None or "n_trials" not in metadata or "algorithms" not in metadata:
+            return False
+
+        n_trials = metadata["n_trials"]
+        algorithms = metadata["algorithms"]
+        for alg in algorithms:
+            alg_idx = alg["index"]
+            for trial in range(n_trials):
+                if not self.is_trial_complete(alg_idx, trial):
+                    return False
+        return True
+
+    def are_metrics_computed(self) -> bool:
+        """
+        Check if the metrics have been computed and saved in the checkpoint.
+
+        Returns:
+            True if the metrics result file exists, False otherwise.
+
+        """
+        metric_path = self.checkpoint_dir / "metric_computation_complete.json"
+        return metric_path.exists()
+
     def load_trial_result(self, alg_idx: int, trial: int) -> tuple[Algorithm[Network], Network]:
         """
         Load final result of a completed trial.
@@ -447,16 +551,22 @@ class CheckpointManager:  # noqa: PLR0904
         Returns:
             Tuple of (Algorithm object, Network object) with final state after all iterations.
 
+        Raises:
+            ValueError: If the trial is not marked as complete or if the checkpoint data is invalid.
+
         """
         trial_dir = self._get_trial_dir(alg_idx, trial)
         complete_path = trial_dir / "complete.json"
 
+        if not complete_path.exists():
+            raise ValueError(f"Trial {trial} for algorithm index {alg_idx} is not marked as complete")
+
         with complete_path.open(encoding="utf-8") as f:
             completed_metadata = json.load(f)
-        final_path = Path(completed_metadata["checkpoint_path"])
+        checkpoint_path = Path(completed_metadata["checkpoint_path"])
+        final_path = trial_dir / checkpoint_path.name
 
-        with final_path.open("rb") as f:
-            checkpoint_data = pickle.load(f)  # noqa: S301
+        checkpoint_data = cast("_CheckpointData", self._load_pickle(final_path))
 
         alg: Algorithm[Network] = checkpoint_data["algorithm"]
         network: Network = checkpoint_data["network"]
@@ -507,12 +617,20 @@ class CheckpointManager:  # noqa: PLR0904
             BenchmarkResult object containing the loaded benchmark problem, initial algorithms, and initial network.
 
         """
+        progress_bar_threshold = 1_000  # How many MB of checkpoint data should trigger showing a progress bar
+        progress_bar = self.checkpoint_size() > progress_bar_threshold
         problem = self.load_benchmark_problem()
         algorithms = self.load_initial_algorithms()
         metadata = self.load_metadata()
         n_trials = metadata["n_trials"]
         states: dict[Algorithm[Network], list[Network]] = {}
-        for idx, alg in enumerate(algorithms):
+        for idx, alg in track(
+            enumerate(algorithms),
+            total=len(algorithms),
+            description="Loading benchmark results...",
+            transient=True,
+            disable=not progress_bar,
+        ):
             completed_trials = self.get_completed_trials(idx, n_trials)
             if len(completed_trials) != n_trials:
                 LOGGER.warning(
@@ -546,22 +664,66 @@ class CheckpointManager:  # noqa: PLR0904
             metrics_result: MetricsResult object containing the computed metrics to save.
 
         """
-        metric_path = self.checkpoint_dir / "metric_computation.pkl"
-        with metric_path.open("wb") as f:
-            pickle.dump(metrics_result, f)
+        metric_path = self.checkpoint_dir / "metric_computation.pkl.zst"
+        metric_marker_path = self.checkpoint_dir / "metric_computation_complete.json"
+
+        # Remove agent metrics from checkpoint to save space (can be a lot),
+        # this can be loaded again from the benchmark result
+        if self.is_benchmark_completed():
+            metrics_result.agent_metrics = None
+
+        self._save_pickle(metric_path, metrics_result)
+
+        # Save a small marker file to indicate that metric computation was saved successfully.
+        # This is used to avoid issues where the process is killed while writing the potentially
+        # large metric_computation.pkl.zst file,
+        with metric_marker_path.open("w") as f:
+            json.dump({"metric_computation_complete": True}, f)
+
         LOGGER.info(f"Saved computed metrics result to {metric_path}")
 
-    def load_metrics_result(self) -> MetricResult:
+    def load_metrics_result(self, skip_agent_metrics: bool = False) -> MetricResult:
         """
         Load the computed metrics result from the checkpoint directory.
+
+        Args:
+            skip_agent_metrics: If True, do not attempt to load agent metrics from the benchmark
+                result if they are not present in the checkpoint. This can save time if agent metrics
+                are not needed for the intended analysis, which can be useful for automatic analysis.
+                Agent metrics are needed for :class:`~decent_bench.metrics.ComputationalCost` and may be used if
+                :class:`~decent_bench.costs.EmpiricalRiskCost` is used.
 
         Returns:
             MetricsResult object containing the computed metrics.
 
         """
-        metric_path = self.checkpoint_dir / "metric_computation.pkl"
-        with metric_path.open("rb") as f:
-            metrics_result: MetricResult = pickle.load(f)  # noqa: S301
+        metric_path = self._resolve_data_file("metric_computation.pkl.zst", "metric_computation.pkl")
+        metrics_result = cast("MetricResult", self._load_pickle(metric_path))
+
+        if metrics_result.agent_metrics is None and not skip_agent_metrics:
+            try:
+                benchmark_result = self.load_benchmark_result()
+                resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
+                for alg, networks in benchmark_result.states.items():
+                    algorithms = list(metrics_result.table_results or metrics_result.plot_results or [])
+                    original_alg = next((a for a in algorithms if a.name == alg.name), None)
+                    if original_alg is None:
+                        LOGGER.warning(
+                            f"Original algorithm '{alg.name}' not found in benchmark problem configuration. "
+                            "Cannot reconstruct agent metrics for this algorithm."
+                        )
+                        continue
+                    resulting_agent_states[original_alg] = [
+                        [AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks
+                    ]
+                metrics_result.agent_metrics = resulting_agent_states
+            except Exception as e:
+                LOGGER.warning(
+                    f"Failed to load benchmark result to reconstruct agent metrics: {e}"
+                    "Some functionality may be limited without agent metrics available."
+                )
+                metrics_result.agent_metrics = None
+
         LOGGER.info(f"Loaded computed metrics result from {metric_path}")
         return metrics_result
 
@@ -587,6 +749,20 @@ class CheckpointManager:  # noqa: PLR0904
             shutil.rmtree(self.checkpoint_dir)
             LOGGER.info(f"Cleared checkpoint directory: {self.checkpoint_dir}")
 
+    def checkpoint_size(self) -> int:
+        """
+        Calculate the total size of all checkpoint files in MB.
+
+        Returns:
+            Total size of checkpoint files in MB.
+
+        """
+        total_size = 0
+        for file in self.checkpoint_dir.rglob("*"):
+            if file.is_file():
+                total_size += file.stat().st_size
+        return total_size // (1024 * 1024)  # Convert to MB
+
     def _get_algorithm_dir(self, alg_idx: int) -> Path:
         """Get directory path for an algorithm."""
         return self.checkpoint_dir / f"algorithm_{alg_idx}"
@@ -604,17 +780,72 @@ class CheckpointManager:  # noqa: PLR0904
 
     def _save_initial_algorithms(self, algorithms: list[Algorithm[Network]]) -> None:
         """Save initial algorithm states before any trials run."""
-        initial_path = self.checkpoint_dir / "initial_algorithms.pkl"
-        with initial_path.open("wb") as f:
-            pickle.dump(algorithms, f)
+        initial_path = self.checkpoint_dir / "initial_algorithms.pkl.zst"
+        with Status(f"Saving initial algorithms to {initial_path}..."):
+            self._save_pickle(initial_path, algorithms)
         LOGGER.debug(f"Saved initial algorithms to {initial_path}")
 
     def _save_benchmark_problem(self, problem: BenchmarkProblem) -> None:
         """Save benchmark problem configuration."""
-        problem_path = self.checkpoint_dir / "benchmark_problem.pkl"
-        with problem_path.open("wb") as f:
-            pickle.dump(problem, f)
+        problem_path = self.checkpoint_dir / "benchmark_problem.pkl.zst"
+        with Status(f"Saving benchmark problem configuration to {problem_path}..."):
+            self._save_pickle(problem_path, problem)
         LOGGER.debug(f"Saved benchmark problem to {problem_path}")
+
+    def _resolve_data_file(self, preferred_name: str, legacy_name: str) -> Path:
+        """Resolve a data file path, preferring the current format with legacy fallback."""
+        preferred = self.checkpoint_dir / preferred_name
+        if preferred.exists():
+            return preferred
+
+        legacy = self.checkpoint_dir / legacy_name
+        if legacy.exists():
+            return legacy
+
+        return preferred
+
+    def _resolve_checkpoint_path(self, trial_dir: Path, iteration: int) -> Path:
+        """Resolve a checkpoint path for an iteration with current/legacy extension support."""
+        preferred = trial_dir / f"checkpoint_{iteration:07d}.pkl.zst"
+        if preferred.exists():
+            return preferred
+
+        legacy = trial_dir / f"checkpoint_{iteration:07d}.pkl"
+        if legacy.exists():
+            return legacy
+
+        return preferred
+
+    def _checkpoint_iteration(self, path: Path) -> int:
+        """
+        Extract checkpoint iteration from a checkpoint filename.
+
+        Raises:
+            ValueError: If the filename is not a valid checkpoint name.
+
+        """
+        match = _CHECKPOINT_NAME_RE.match(path.name)
+        if match is None:
+            raise ValueError(f"Invalid checkpoint filename: {path.name}")
+        return int(match.group(1))
+
+    def _save_pickle(self, path: Path, data: object) -> None:
+        """Save Python object as zstd-compressed pickle payload."""
+        compressor = zstd.ZstdCompressor(level=self.compression_level)
+        with path.open("wb") as file_obj, compressor.stream_writer(file_obj) as compressed_writer:
+            pickle.dump(data, compressed_writer, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def _load_pickle(self, path: Path) -> object:
+        """Load pickle payload, supporting both zstd-compressed and legacy uncompressed files."""
+        with path.open("rb") as file_obj:
+            magic = file_obj.read(len(_ZSTD_MAGIC))
+            file_obj.seek(0)
+            if magic == _ZSTD_MAGIC:
+                decompressor = zstd.ZstdDecompressor()
+                with decompressor.stream_reader(file_obj) as decompressed_reader:
+                    return pickle.load(decompressed_reader)  # noqa: S301
+            # Fall back to legacy uncompressed pickle for backward compatibility
+            return pickle.load(file_obj)  # noqa: S301
 
     def _cleanup_old_checkpoints(self, alg_idx: int, trial: int) -> None:
         """
@@ -630,9 +861,12 @@ class CheckpointManager:  # noqa: PLR0904
             return
 
         # Find all iteration checkpoint files
-        checkpoint_files = list(trial_dir.glob("checkpoint_*.pkl"))
-        # Sort by iteration number in filename (checkpoint_0000100.pkl -> 100)
-        checkpoint_files.sort(key=lambda p: int(p.stem.split("_")[-1]), reverse=True)
+        checkpoint_files = [
+            *trial_dir.glob("checkpoint_*.pkl"),
+            *trial_dir.glob("checkpoint_*.pkl.zst"),
+        ]
+        # Sort by iteration number in filename (checkpoint_0000100.pkl.zst -> 100)
+        checkpoint_files.sort(key=self._checkpoint_iteration, reverse=True)
 
         # Remove older checkpoints
         if len(checkpoint_files) > self.keep_n_checkpoints:

@@ -112,6 +112,9 @@ def to_torch(array: Array | SupportedArrayTypes, device: SupportedDevices, dtype
 
     value = array.value if isinstance(array, Array) else array
     framework_device = device_to_framework_device(device, SupportedFrameworks.PYTORCH)
+    if dtype == np.float64:
+        # PyTorch does not support float64 on some devices, so we convert to float32 if float64 is requested
+        dtype = torch.float32
 
     if isinstance(value, torch.Tensor):
         return cast("TorchTensor", value.to(device=framework_device, dtype=dtype))

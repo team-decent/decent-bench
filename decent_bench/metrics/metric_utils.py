@@ -13,6 +13,7 @@ from sklearn import metrics as sk_metrics
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
 from decent_bench.utils.array import Array
+from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import Dataset
 
 if TYPE_CHECKING:
@@ -40,6 +41,13 @@ class MetricProgressBar(Progress):
         )
 
 
+def _clear_caches() -> None:
+    """Clear module-level functools caches used by metric utilities."""
+    x_mean.cache_clear()
+    _x_error.cache_clear()
+    _predict_agent.cache_clear()
+
+
 def single(values: Sequence[float]) -> float:
     """
     Assert that *values* contain exactly one element and return it.
@@ -64,10 +72,7 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
         ValueError: if no agent reached *iteration*
 
     """
-    if iteration == -1:
-        all_x_at_iter = [a.x_history[a.x_history.max()] for a in agents]
-    else:
-        all_x_at_iter = [a.x_history[iteration] for a in agents]
+    all_x_at_iter = [a.x_history[iteration] for a in agents]
 
     if len(all_x_at_iter) == 0:
         raise ValueError(f"No agent reached iteration {iteration}")
@@ -104,6 +109,7 @@ def _gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> f
     return float(la.norm(grad_avg)) ** 2
 
 
+@cache
 def _x_error(agent: AgentMetricsView, problem: "BenchmarkProblem", iteration: int = -1) -> float:
     r"""
     Calculate x error at *iteration* (or at the agent's final x if *iteration* is -1).
@@ -139,8 +145,13 @@ def _accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", i
     _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
     ret: list[float] = []
     for agent in agents:
-        agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-        preds = _predict_agent(agent, agent_iteration, problem)
+        preds = _predict_agent(agent, iteration, problem)
+        if np.any(~np.isfinite(preds)):
+            LOGGER.warning(
+                "Predictions contain NaN or Inf values, which are not valid for Accuracy calculation, "
+                "returning NaN for Accuracy"
+            )
+            return [np.nan for _ in agents]
         ret.append(float(sk_metrics.accuracy_score(test_y, preds)))
     return ret
 
@@ -163,8 +174,12 @@ def _mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iterat
     ret: list[float] = []
     _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
     for agent in agents:
-        agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-        preds = _predict_agent(agent, agent_iteration, problem)
+        preds = _predict_agent(agent, iteration, problem)
+        if np.any(~np.isfinite(preds)):
+            LOGGER.warning(
+                "Predictions contain NaN or Inf values, which are not valid for MSE calculation, returning NaN for MSE"
+            )
+            return [np.nan for _ in agents]
         ret.append(sk_metrics.mean_squared_error(test_y, preds))
     return ret
 
@@ -188,8 +203,13 @@ def _precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", 
     _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
     ret: list[float] = []
     for agent in agents:
-        agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-        preds = _predict_agent(agent, agent_iteration, problem)
+        preds = _predict_agent(agent, iteration, problem)
+        if np.any(~np.isfinite(preds)):
+            LOGGER.warning(
+                "Predictions contain NaN or Inf values, which are not valid for Precision calculation, "
+                "returning NaN for Precision"
+            )
+            return [np.nan for _ in agents]
         ret.append(float(sk_metrics.precision_score(test_y, preds, average="micro")))
     return ret
 
@@ -213,8 +233,13 @@ def _recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", ite
     _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
     ret: list[float] = []
     for agent in agents:
-        agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-        preds = _predict_agent(agent, agent_iteration, problem)
+        preds = _predict_agent(agent, iteration, problem)
+        if np.any(~np.isfinite(preds)):
+            LOGGER.warning(
+                "Predictions contain NaN or Inf values, which are not valid for Recall calculation,"
+                " returning NaN for Recall"
+            )
+            return [np.nan for _ in agents]
         ret.append(float(sk_metrics.recall_score(test_y, preds, average="micro")))
     return ret
 

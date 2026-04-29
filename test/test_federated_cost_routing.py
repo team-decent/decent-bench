@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 from decent_bench.agents import Agent
+from decent_bench.algorithms.federated import FedAdagrad, FedAdam, FedAvg, FedProx, FedYogi, Scaffold
 from decent_bench.costs import BaseRegularizerCost, Cost, EmpiricalRiskCost, ZeroCost
-from decent_bench.distributed_algorithms import FedAdagrad, FedAdam, FedAvg, FedProx, FedYogi, Scaffold
 from decent_bench.utils.types import (
     Dataset,
     EmpiricalRiskIndices,

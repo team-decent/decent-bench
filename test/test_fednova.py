@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 from decent_bench.agents import Agent
+from decent_bench.algorithms.federated import FedAvg, FedNova
 from decent_bench.costs import Cost
-from decent_bench.distributed_algorithms import FedAvg, FedNova
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import DropScheme, NoDrops
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
@@ -198,7 +198,7 @@ def test_fednova_resolves_client_sample_counts_once_on_initialize(monkeypatch: p
         return float(client.cost.n_samples)  # type: ignore[attr-defined]
 
     monkeypatch.setattr(
-        "decent_bench.distributed_algorithms.alg_helpers.infer_client_weight",
+        "decent_bench.algorithms.federated._fed_nova.infer_client_weight",
         _tracking_infer_client_weight,
     )
 

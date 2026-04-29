@@ -3,11 +3,18 @@ from copy import deepcopy
 from json import JSONDecodeError
 from typing import TYPE_CHECKING, Literal, cast
 
+from rich.status import Status
+
 from decent_bench.agents import AgentMetricsView
+from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
 from decent_bench.benchmark._metric_result import MetricResult
-from decent_bench.distributed_algorithms import Algorithm
-from decent_bench.metrics import Metric, compute_plots, compute_tables
+from decent_bench.metrics import (
+    Metric,
+    compute_plots,
+    compute_tables,
+    metric_utils,
+)
 from decent_bench.metrics import metric_library as ml
 from decent_bench.networks import Network
 from decent_bench.utils._metric_helpers import _find_duplicates, _flatten_plot_metrics
@@ -123,13 +130,16 @@ def compute_metrics(
     )
 
     if checkpoint_manager is not None:
-        flat_metrics = _flatten_plot_metrics(plot_metrics)
-        metadata = {
-            "table_metrics": [metric.table_description for metric in table_metrics],
-            "plot_metrics": [metric.plot_description for metric in flat_metrics],
-        }
-        checkpoint_manager.save_metrics_result(result)
-        checkpoint_manager.append_metadata(metadata)
+        with Status("Saving computed metrics..."):
+            flat_metrics = _flatten_plot_metrics(plot_metrics)
+            metadata = {
+                "table_metrics": [metric.table_description for metric in table_metrics],
+                "plot_metrics": [metric.plot_description for metric in flat_metrics],
+            }
+            checkpoint_manager.save_metrics_result(result)
+            checkpoint_manager.append_metadata(metadata)
+
+    metric_utils._clear_caches()  # noqa: SLF001
 
     return result
 

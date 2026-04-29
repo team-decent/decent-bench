@@ -13,7 +13,7 @@ from matplotlib.figure import Figure
 
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.agents import AgentMetricsView
-from decent_bench.distributed_algorithms import Algorithm
+from decent_bench.algorithms import Algorithm
 from decent_bench.metrics._computational_cost import ComputationalCost
 from decent_bench.metrics._metric import Metric, X, Y
 from decent_bench.networks import Network
@@ -65,6 +65,7 @@ def display_plots(
     plot_grid: bool = True,
     plot_format: Literal["png", "pdf", "svg"] = "png",
     plot_path: Path | None = None,
+    show_plots: bool = True,
 ) -> None:
     """
     Display plots for the metric results.
@@ -87,6 +88,8 @@ def display_plots(
         plot_path: optional directory path to save the generated plots as image files.
             Will be saved as "plot.png" or "plot_fig1.png", "plot_fig2.png", etc. if multiple figures.
             If not provided, the plots will only be displayed.
+        show_plots: whether to show the plots after creating them, defaults to ``True``. Can be useful to set to
+            ``False`` when running in a non-interactive environment or when only saving the plots without displaying.
 
     Note:
         Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
@@ -132,7 +135,7 @@ def display_plots(
         return
 
     # Save and show figures
-    _save_and_show_figures(all_figures, plot_path=plot_path, plot_format=plot_format)
+    _save_and_show_figures(all_figures, plot_path=plot_path, plot_format=plot_format, show_plots=show_plots)
 
 
 def compute_plots(  # noqa: PLR0914
@@ -235,7 +238,7 @@ def compute_plots(  # noqa: PLR0914
     return results
 
 
-def _create_and_plot_figures(
+def _create_and_plot_figures(  # noqa: PLR0912
     metric_groups: list[list[Metric]],
     plot_results: Mapping[
         Algorithm[Network],
@@ -303,10 +306,16 @@ def _create_and_plot_figures(
 
                 # Transform x-axis for computational cost if needed
                 x_to_plot = x
-                if use_cost and computational_cost is not None and resulting_agent_states is not None:
-                    agent_states_for_alg = [list(trial) for trial in resulting_agent_states[alg]]
-                    total_computational_cost = _calc_total_cost(agent_states_for_alg, computational_cost)
-                    x_to_plot = tuple(val * total_computational_cost * scale_x_axis for val in x)
+                if use_cost and computational_cost is not None:
+                    if resulting_agent_states is None:
+                        LOGGER.warning(
+                            f"Computational cost provided but resulting agent states are missing. Cannot compute "
+                            f"total computational cost for algorithm {alg.name}. Plotting against iterations instead."
+                        )
+                    else:
+                        agent_states_for_alg = [list(trial) for trial in resulting_agent_states[alg]]
+                        total_computational_cost = _calc_total_cost(agent_states_for_alg, computational_cost)
+                        x_to_plot = tuple(val * total_computational_cost * scale_x_axis for val in x)
 
                 # Plot iterations version if comparing
                 if two_columns:
@@ -329,6 +338,7 @@ def _save_and_show_figures(
     *,
     plot_path: Path | None,
     plot_format: Literal["png", "pdf", "svg"],
+    show_plots: bool,
 ) -> None:
     """Add legends, save figures to files, and display them."""
     for fig_idx, (fig, metric_subplots) in enumerate(figures_to_show):
@@ -343,7 +353,12 @@ def _save_and_show_figures(
         _add_legend_and_save(fig, metric_subplots, current_plot_path)
 
     # Show all figures at once
-    plt.show()
+    if show_plots:
+        plt.show()
+    else:
+        # Prevent figure objects from accumulating across repeated benchmark runs.
+        for fig, _ in figures_to_show:
+            plt.close(fig)
 
 
 def _organize_metrics_into_groups(

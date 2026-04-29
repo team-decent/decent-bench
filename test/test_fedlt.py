@@ -6,7 +6,7 @@ import pytest
 
 from decent_bench.agents import Agent
 from decent_bench.costs import Cost, EmpiricalRiskCost, L1RegularizerCost, QuadraticCost, ZeroCost
-from decent_bench.distributed_algorithms import FedLT
+from decent_bench.algorithms.federated import FedLT
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, GaussianNoise, Quantization
 from decent_bench.utils.types import (

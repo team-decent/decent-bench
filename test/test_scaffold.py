@@ -4,8 +4,8 @@ from typing import Any
 import numpy as np
 
 from decent_bench.agents import Agent
+from decent_bench.algorithms.federated import Scaffold
 from decent_bench.costs import Cost, ZeroCost
-from decent_bench.distributed_algorithms import Scaffold
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, DropScheme, NoDrops
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
@@ -246,6 +246,7 @@ def test_scaffold_partial_participation_persists_control_variates_across_rounds(
     np.testing.assert_allclose(clients[0].aux_vars["c_i"], np.array([1.0]))
     np.testing.assert_allclose(clients[1].aux_vars["c_i"], np.array([2.0]))
     np.testing.assert_allclose(clients[2].aux_vars["c_i"], np.array([3.0]))
+
 
 def test_scaffold_skips_participation_when_broadcast_is_dropped() -> None:
     algorithm = Scaffold(iterations=2, step_size=1.0, num_local_epochs=1)
