@@ -429,7 +429,7 @@ class FedProx(FedAlgorithm):
 @dataclass(eq=False)
 class FedLT(FedAlgorithm):
     r"""
-    Federated Local Training (Fed-LT) with GD, SGD, or AGD local solvers :footcite:p:`Alg_FedPLT,Alg_FedLT`.
+    Federated Local Training (Fed-LT) with cost-driven local gradients :footcite:p:`Alg_FedPLT,Alg_FedLT`.
 
     Fed-LT maintains one auxiliary variable :math:`z_i` per client. At the start of round :math:`k`, the server
     computes the broadcast variable
@@ -445,7 +445,7 @@ class FedLT(FedAlgorithm):
     documented :math:`h=0` case and the server step is plain averaging.
 
     A selected client :math:`i` sets :math:`w^0_{i,k}=x_{i,k}` and :math:`v_{i,k}=2y_{k+1}-z_{i,k}`, then performs
-    ``num_local_epochs`` local steps. The gradient descent and stochastic gradient descent solvers use
+    ``num_local_epochs`` local steps. The default local update uses
 
     .. math::
         w^{\ell+1}_{i,k} = w^\ell_{i,k} - \gamma\left(\nabla f_i(w^\ell_{i,k})
@@ -453,10 +453,12 @@ class FedLT(FedAlgorithm):
 
     The extra term :math:`(w^\ell_{i,k} - v_{i,k}) / \rho` is the quadratic local-training penalty from the Fed-LT
     update. Costs preserving the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use its default
-    mini-batch sampling and generic costs use their normal full-gradient behavior.
+    mini-batch sampling, so this behaves as local SGD. Generic :class:`~decent_bench.costs.Cost` objects use their
+    normal full-gradient behavior, so this behaves as local GD.
 
-    The accelerated variant uses each client cost's ``m_smooth`` and ``m_cvx`` metadata. It initializes
-    :math:`u_i^0=w^0_{i,k}`. With :math:`L_i=\texttt{m_smooth}` and :math:`\mu_i=\texttt{m_cvx}`, it applies
+    If ``use_acceleration`` is true, Fed-LT uses the accelerated local update with each client cost's ``m_smooth`` and
+    ``m_cvx`` metadata. It initializes :math:`u_i^0=w^0_{i,k}`. With :math:`L_i=\texttt{m_smooth}` and
+    :math:`\mu_i=\texttt{m_cvx}`, it applies
 
     .. math::
         u_i^{\ell+1} = w^\ell_{i,k} - \frac{1}{L_i + 1/\rho}\left(\nabla f_i(w^\ell_{i,k})
@@ -469,7 +471,8 @@ class FedLT(FedAlgorithm):
         \left(u_i^{\ell+1} - u_i^\ell\right).
 
     If the client cost has :math:`\mu_i=0`, this coefficient reduces to the Fed-LT expression with
-    :math:`\sqrt{1/\rho}` in the second term. The constants must be finite and non-negative.
+    :math:`\sqrt{1/\rho}` in the second term. The constants must be finite and non-negative. The gradient call remains
+    cost-driven: empirical costs use their default mini-batches and generic costs use full gradients.
 
     After local training, the client sets
 
@@ -479,9 +482,6 @@ class FedLT(FedAlgorithm):
     and uploads :math:`z_{i,k+1}` to the server. Inactive clients keep
     :math:`x_{i,k+1}=x_{i,k}` and :math:`z_{i,k+1}=z_{i,k}`. For later server averages, the server stores a received
     fresh :math:`z_{i,k+1}` when the upload arrives and otherwise keeps its previous stored :math:`z_i`.
-
-    ``local_solver`` can be ``"gradient_descent"``, ``"stochastic_gradient_descent"``, or
-    ``"accelerated_gradient_descent"``; aliases ``"gd"``, ``"sgd"``, and ``"agd"`` are accepted.
 
     Fed-PLT is the privacy-noise version of Fed-LT :footcite:p:`Alg_FedPLT`. This class does not add Gaussian noise
     internally; select a network-level noise scheme such as :class:`~decent_bench.schemes.GaussianNoise` when creating
@@ -496,7 +496,7 @@ class FedLT(FedAlgorithm):
     step_size: float = 0.001
     num_local_epochs: int = 1
     rho: float = 1.0
-    local_solver: str = "gradient_descent"
+    use_acceleration: bool = False
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -517,29 +517,10 @@ class FedLT(FedAlgorithm):
             raise ValueError("`num_local_epochs` must be positive")
         if self.rho <= 0:
             raise ValueError("`rho` must be positive")
-        self.local_solver = self._normalize_local_solver(self.local_solver)
-
-    @staticmethod
-    def _normalize_local_solver(local_solver: str) -> str:
-        solver = local_solver.lower().replace("-", "_")
-        solver_aliases = {
-            "gd": "gradient_descent",
-            "gradient_descent": "gradient_descent",
-            "sgd": "stochastic_gradient_descent",
-            "stochastic_gradient_descent": "stochastic_gradient_descent",
-            "agd": "accelerated_gradient_descent",
-            "accelerated_gradient_descent": "accelerated_gradient_descent",
-        }
-        if solver not in solver_aliases:
-            raise ValueError(
-                "`local_solver` must be one of 'gradient_descent', 'stochastic_gradient_descent', "
-                "or 'accelerated_gradient_descent'"
-            )
-        return solver_aliases[solver]
 
     def initialize(self, network: FedNetwork) -> None:  # noqa: D102
         self.x0 = alg_helpers.initial_states(self.x0, network)
-        if self.local_solver == "accelerated_gradient_descent":
+        if self.use_acceleration:
             self._validate_accelerated_constants(network)
 
         server = network.server()
@@ -555,11 +536,10 @@ class FedLT(FedAlgorithm):
             m_cvx = client.cost.m_cvx
             if not np.isfinite(m_smooth) or not np.isfinite(m_cvx) or m_smooth < 0 or m_cvx < 0:
                 raise ValueError(
-                    "`accelerated_gradient_descent` requires finite non-negative `m_smooth` and `m_cvx` "
-                    "on every client cost"
+                    "`use_acceleration=True` requires finite non-negative `m_smooth` and `m_cvx` on every client cost"
                 )
             if m_smooth < m_cvx:
-                raise ValueError("`accelerated_gradient_descent` requires `m_smooth >= m_cvx` on every client cost")
+                raise ValueError("`use_acceleration=True` requires `m_smooth >= m_cvx` on every client cost")
 
     def step(self, network: FedNetwork, iteration: int) -> None:  # noqa: D102
         y = self._compute_server_y(network)
@@ -600,19 +580,15 @@ class FedLT(FedAlgorithm):
         v = (2 * y) - z
         local_x = iop.copy(client.x)
 
-        if self.local_solver == "accelerated_gradient_descent":
+        if self.use_acceleration:
             local_x = self._compute_accelerated_local_update(client, local_x, v)
         else:
-            local_x = self._compute_gradient_local_update(client, local_x, v)
+            for _ in range(self.num_local_epochs):
+                grad = client.cost.gradient(local_x) + ((local_x - v) / self.rho)
+                local_x -= self.step_size * grad
 
         z_next = z + (2 * (local_x - y))
         return local_x, z_next
-
-    def _compute_gradient_local_update(self, client: "Agent", local_x: "Array", v: "Array") -> "Array":
-        for _ in range(self.num_local_epochs):
-            grad = client.cost.gradient(local_x) + ((local_x - v) / self.rho)
-            local_x -= self.step_size * grad
-        return local_x
 
     def _compute_accelerated_local_update(self, client: "Agent", local_x: "Array", v: "Array") -> "Array":
         smoothness = client.cost.m_smooth + (1 / self.rho)
