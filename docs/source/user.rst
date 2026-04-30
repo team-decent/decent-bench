@@ -181,6 +181,9 @@ clients with fewer past selections. This is useful when availability or random
 sampling can repeatedly skip some clients and you want selection opportunities
 to remain balanced across rounds.
 
+:class:`~decent_bench.schemes.StaleClientSelection` prioritizes clients that
+have never been selected or have waited longest since their last selection.
+
 :class:`~decent_bench.schemes.HighLossClientSelection` evaluates client losses
 at each client's current ``x`` and selects the clients with highest loss.
 

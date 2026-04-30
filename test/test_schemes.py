@@ -22,6 +22,7 @@ from decent_bench.schemes import (
     ParticipationFairClientSelection,
     Quantization,
     RandK,
+    StaleClientSelection,
     TopK,
     UniformActivationRate,
     UniformClientSelection,
@@ -112,6 +113,8 @@ def make_clients(n_clients: int) -> list[Agent]:
         (DataSizeClientSelection(client_fraction=0.4), 5, 2),
         (ParticipationFairClientSelection(clients_per_round=3), 5, 3),
         (ParticipationFairClientSelection(client_fraction=0.4), 5, 2),
+        (StaleClientSelection(clients_per_round=3), 5, 3),
+        (StaleClientSelection(client_fraction=0.4), 5, 2),
     ],
 )
 def test_client_selection(
@@ -162,6 +165,24 @@ def test_participation_fair_client_selection_updates_counts_when_all_selected() 
 
     assert scheme.select(clients[:2], iteration=0) == clients[:2]
     assert clients[2] in scheme.select(clients, iteration=1)
+
+
+def test_stale_client_selection_prioritizes_never_selected_clients() -> None:
+    clients = make_clients(2)
+    scheme = StaleClientSelection(clients_per_round=1)
+
+    assert scheme.select([clients[0]], iteration=0) == [clients[0]]
+    assert scheme.select(clients, iteration=1) == [clients[1]]
+
+
+def test_stale_client_selection_prioritizes_least_recently_selected_clients() -> None:
+    clients = make_clients(3)
+    scheme = StaleClientSelection(clients_per_round=1)
+
+    assert scheme.select([clients[0]], iteration=0) == [clients[0]]
+    assert scheme.select([clients[1]], iteration=1) == [clients[1]]
+    assert scheme.select([clients[2]], iteration=2) == [clients[2]]
+    assert scheme.select(clients, iteration=3) == [clients[0]]
 
 
 def test_high_loss_client_selection_selects_largest_loss() -> None:

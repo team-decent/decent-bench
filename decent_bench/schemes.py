@@ -322,6 +322,65 @@ class ParticipationFairClientSelection(ClientSelectionScheme):
         return selected_clients
 
 
+class StaleClientSelection(ClientSelectionScheme):
+    """
+    Staleness-aware client selection :footcite:p:`Scheme_FairFedCS`.
+
+    The scheme prioritizes clients that have never been selected or have waited longest since their last selection,
+    breaking ties at random.
+
+    Args:
+        clients_per_round: number of clients to sample per round.
+        client_fraction: fraction of provided clients to sample per round.
+
+    Raises:
+        ValueError: if the selection size is invalid.
+
+    .. footbibliography::
+
+    """
+
+    def __init__(
+        self,
+        *,
+        clients_per_round: int | None = None,
+        client_fraction: float | None = None,
+    ) -> None:
+        self._validate_selection_size(clients_per_round, client_fraction)
+        self.clients_per_round = clients_per_round
+        self.client_fraction = client_fraction
+        self._last_selected_iterations: dict[Agent, int] = {}
+
+    def _staleness(self, client: Agent, iteration: int) -> float:
+        last_selected_iteration = self._last_selected_iterations.get(client)
+        if last_selected_iteration is None:
+            return float("inf")
+        return float(iteration - last_selected_iteration)
+
+    def select(  # noqa: D102
+        self,
+        clients: Sequence[Agent],
+        iteration: int,
+    ) -> list[Agent]:
+        if not clients:
+            return []
+        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
+        clients_list = list(clients)
+        if k >= len(clients_list):
+            selected_clients = clients_list
+        else:
+            tie_breakers = iop.rng_numpy().permutation(len(clients_list))
+            ranked_indices = sorted(
+                range(len(clients_list)),
+                key=lambda index: (-self._staleness(clients_list[index], iteration), int(tie_breakers[index])),
+            )
+            selected_clients = [clients_list[index] for index in ranked_indices[:k]]
+
+        for client in selected_clients:
+            self._last_selected_iterations[client] = iteration
+        return selected_clients
+
+
 class HighLossClientSelection(ClientSelectionScheme):
     """
     High-loss client selection :footcite:p:`Scheme_PowerOfChoice`.
