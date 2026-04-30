@@ -162,7 +162,11 @@ class ClientSelectionScheme(ABC):
         return min(k, len(clients))
 
     @abstractmethod
-    def select(self, clients: Sequence[Agent], iteration: int) -> list[Agent]:
+    def select(
+        self,
+        clients: Sequence[Agent],
+        iteration: int,
+    ) -> list[Agent]:
         """
         Select a subset of available clients.
 
@@ -199,7 +203,12 @@ class UniformClientSelection(ClientSelectionScheme):
         self.clients_per_round = clients_per_round
         self.client_fraction = client_fraction
 
-    def select(self, clients: Sequence[Agent], iteration: int) -> list[Agent]:  # noqa: D102, ARG002
+    def select(  # noqa: D102
+        self,
+        clients: Sequence[Agent],
+        iteration: int,
+    ) -> list[Agent]:
+        del iteration
         if not clients:
             return []
         k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
@@ -238,7 +247,12 @@ class DataSizeClientSelection(ClientSelectionScheme):
         self.client_fraction = client_fraction
         self.data_size_key = data_size_key
 
-    def select(self, clients: Sequence[Agent], iteration: int) -> list[Agent]:  # noqa: D102, ARG002
+    def select(  # noqa: D102
+        self,
+        clients: Sequence[Agent],
+        iteration: int,
+    ) -> list[Agent]:
+        del iteration
         if not clients:
             return []
         k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
@@ -283,7 +297,12 @@ class ParticipationFairClientSelection(ClientSelectionScheme):
         self.client_fraction = client_fraction
         self._selection_counts: dict[Agent, int] = {}
 
-    def select(self, clients: Sequence[Agent], iteration: int) -> list[Agent]:  # noqa: D102, ARG002
+    def select(  # noqa: D102
+        self,
+        clients: Sequence[Agent],
+        iteration: int,
+    ) -> list[Agent]:
+        del iteration
         if not clients:
             return []
         k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
@@ -301,6 +320,62 @@ class ParticipationFairClientSelection(ClientSelectionScheme):
         for client in selected_clients:
             self._selection_counts[client] = self._selection_counts.get(client, 0) + 1
         return selected_clients
+
+
+class HighLossClientSelection(ClientSelectionScheme):
+    """
+    High-loss client selection :footcite:p:`Scheme_PowerOfChoice`.
+
+    The scheme evaluates each client's local loss at its current ``x`` and selects the clients with highest loss,
+    breaking ties at random.
+
+    Args:
+        clients_per_round: number of clients to sample per round.
+        client_fraction: fraction of provided clients to sample per round.
+
+    Raises:
+        ValueError: if the selection size is invalid.
+        RuntimeError: if any evaluated client's ``x`` has not been initialized.
+
+    .. footbibliography::
+
+    """
+
+    def __init__(
+        self,
+        *,
+        clients_per_round: int | None = None,
+        client_fraction: float | None = None,
+    ) -> None:
+        self._validate_selection_size(clients_per_round, client_fraction)
+        self.clients_per_round = clients_per_round
+        self.client_fraction = client_fraction
+
+    @staticmethod
+    def _loss(client: Agent) -> float:
+        return client.cost.function(client.x)
+
+    def select(  # noqa: D102
+        self,
+        clients: Sequence[Agent],
+        iteration: int,
+    ) -> list[Agent]:
+        del iteration
+        if not clients:
+            return []
+
+        n_selected_clients = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
+        clients_list = list(clients)
+        if n_selected_clients >= len(clients_list):
+            return clients_list
+
+        losses = [self._loss(client) for client in clients_list]
+        tie_breakers = iop.rng_numpy().permutation(len(clients_list))
+        ranked_indices = sorted(
+            range(len(clients_list)),
+            key=lambda index: (-losses[index], int(tie_breakers[index])),
+        )
+        return [clients_list[index] for index in ranked_indices[:n_selected_clients]]
 
 
 class CompressionScheme(ABC):

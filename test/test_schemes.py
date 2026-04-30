@@ -12,6 +12,7 @@ from decent_bench.schemes import (
     DropScheme,
     GaussianNoise,
     GilbertElliott,
+    HighLossClientSelection,
     MarkovChainActivation,
     NoCompression,
     NoDrops,
@@ -161,6 +162,38 @@ def test_participation_fair_client_selection_updates_counts_when_all_selected() 
 
     assert scheme.select(clients[:2], iteration=0) == clients[:2]
     assert clients[2] in scheme.select(clients, iteration=1)
+
+
+def test_high_loss_client_selection_selects_largest_loss() -> None:
+    clients = [
+        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(2, 2.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+    ]
+    for client in clients:
+        client.x = Array(np.ones(2))
+    scheme = HighLossClientSelection(clients_per_round=1)
+
+    selected_clients = scheme.select(clients, iteration=0)
+
+    assert selected_clients == [clients[1]]
+
+
+def test_high_loss_client_selection_selects_fraction() -> None:
+    clients = [
+        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(2, 2.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(3, 5.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(4, 3.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+    ]
+    for client in clients:
+        client.x = Array(np.ones(2))
+    scheme = HighLossClientSelection(client_fraction=0.4)
+
+    selected_clients = scheme.select(clients, iteration=0)
+
+    assert selected_clients == [clients[1], clients[3]]
 
 
 ## CompressionScheme
