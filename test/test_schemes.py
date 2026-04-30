@@ -18,6 +18,7 @@ from decent_bench.schemes import (
     NoiseScheme,
     NoNoise,
     PoissonActivation,
+    ParticipationFairClientSelection,
     Quantization,
     RandK,
     TopK,
@@ -85,6 +86,11 @@ def test_randomly_active(
     assert 0 <= activations <= n_iterations
 
 
+def test_uniform_activation_rate_requires_probability() -> None:
+    with pytest.raises(ValueError, match="activation_probability"):
+        UniformActivationRate(activation_probability=1.1)
+
+
 ## ClientSelectionScheme
 
 # test client selection
@@ -103,6 +109,8 @@ def make_clients(n_clients: int) -> list[Agent]:
         (UniformClientSelection(clients_per_round=5), 5, 5),
         (DataSizeClientSelection(clients_per_round=3), 5, 3),
         (DataSizeClientSelection(client_fraction=0.4), 5, 2),
+        (ParticipationFairClientSelection(clients_per_round=3), 5, 3),
+        (ParticipationFairClientSelection(client_fraction=0.4), 5, 2),
     ],
 )
 def test_client_selection(
@@ -137,6 +145,22 @@ def test_data_size_client_selection_requires_positive_data_size() -> None:
 
     with pytest.raises(ValueError, match="must be positive"):
         scheme.select(clients, iteration=0)
+
+
+def test_participation_fair_client_selection_prioritizes_under_selected_clients() -> None:
+    clients = make_clients(2)
+    scheme = ParticipationFairClientSelection(clients_per_round=1)
+
+    assert scheme.select([clients[0]], iteration=0) == [clients[0]]
+    assert scheme.select(clients, iteration=1) == [clients[1]]
+
+
+def test_participation_fair_client_selection_updates_counts_when_all_selected() -> None:
+    clients = make_clients(3)
+    scheme = ParticipationFairClientSelection(clients_per_round=2)
+
+    assert scheme.select(clients[:2], iteration=0) == clients[:2]
+    assert clients[2] in scheme.select(clients, iteration=1)
 
 
 ## CompressionScheme

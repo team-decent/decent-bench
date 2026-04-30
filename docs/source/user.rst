@@ -159,7 +159,7 @@ weights.
 :class:`~decent_bench.algorithms.federated.Scaffold` matches the standard
 SCAFFOLD algorithm and always uses uniform averaging over the selected clients.
 
-Federated client selection
+Client selection
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 Federated algorithms accept a ``selection_scheme`` argument. The scheme receives
 the active clients for the current round and returns the subset that should
@@ -175,6 +175,11 @@ useful when local dataset sizes are imbalanced and you want larger clients to
 have more participation opportunities. The scheme reads data size from
 ``client.data["n_samples"]`` when present, then falls back to common cost
 attributes such as ``n_samples``, ``A``, or ``b``.
+
+:class:`~decent_bench.schemes.ParticipationFairClientSelection` prioritizes
+clients with fewer past selections. This is useful when availability or random
+sampling can repeatedly skip some clients and you want selection opportunities
+to remain balanced across rounds.
 
 .. code-block:: python
 

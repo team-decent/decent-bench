@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import random
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -14,7 +16,11 @@ if TYPE_CHECKING:
 
 
 class AgentActivationScheme(ABC):
-    """Scheme defining how agents go active/inactive over the course of the algorithm execution."""
+    """
+    Scheme defining how agents go active/inactive over the course of the algorithm execution.
+
+    Activation schemes are attached to agents by networks and are queried during algorithm execution.
+    """
 
     @abstractmethod
     def is_active(self, iteration: int) -> bool:
@@ -35,9 +41,22 @@ class AlwaysActive(AgentActivationScheme):
 
 
 class UniformActivationRate(AgentActivationScheme):
-    """Scheme where the agent's probability of being active is uniformly distributed."""
+    """
+    Scheme where the agent is active with fixed probability.
+
+    Each call samples an independent Bernoulli event with probability ``activation_probability``.
+
+    Args:
+        activation_probability: probability that the agent is active at a queried iteration.
+
+    Raises:
+        ValueError: if ``activation_probability`` is not in :math:`[0, 1]`.
+
+    """
 
     def __init__(self, activation_probability: float):
+        if activation_probability < 0 or activation_probability > 1:
+            raise ValueError("activation_probability must be in [0, 1]")
         self.activation_probability = activation_probability
 
     def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002
@@ -133,7 +152,7 @@ class ClientSelectionScheme(ABC):
 
     @staticmethod
     def _num_selected_clients(
-        clients: Sequence["Agent"],
+        clients: Sequence[Agent],
         clients_per_round: int | None,
         client_fraction: float | None,
     ) -> int:
@@ -143,7 +162,7 @@ class ClientSelectionScheme(ABC):
         return min(k, len(clients))
 
     @abstractmethod
-    def select(self, clients: Sequence["Agent"], iteration: int) -> list["Agent"]:
+    def select(self, clients: Sequence[Agent], iteration: int) -> list[Agent]:
         """
         Select a subset of available clients.
 
@@ -155,7 +174,20 @@ class ClientSelectionScheme(ABC):
 
 
 class UniformClientSelection(ClientSelectionScheme):
-    """Uniformly sample clients without replacement."""
+    """
+    Uniform client selection.
+
+    The scheme samples clients uniformly without replacement. It selects either a fixed number of clients or a fraction
+    of the clients passed to :meth:`select`.
+
+    Args:
+        clients_per_round: number of clients to sample per round.
+        client_fraction: fraction of provided clients to sample per round.
+
+    Raises:
+        ValueError: if the selection size is invalid.
+
+    """
 
     def __init__(
         self,
@@ -167,7 +199,7 @@ class UniformClientSelection(ClientSelectionScheme):
         self.clients_per_round = clients_per_round
         self.client_fraction = client_fraction
 
-    def select(self, clients: Sequence["Agent"], iteration: int) -> list["Agent"]:  # noqa: D102, ARG002
+    def select(self, clients: Sequence[Agent], iteration: int) -> list[Agent]:  # noqa: D102, ARG002
         if not clients:
             return []
         k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
@@ -184,7 +216,7 @@ class DataSizeClientSelection(ClientSelectionScheme):
 
     Args:
         clients_per_round: number of clients to sample per round.
-        client_fraction: fraction of currently active clients to sample per round.
+        client_fraction: fraction of provided clients to sample per round.
         data_size_key: key used to read explicit data sizes from ``Agent.data``.
 
     Raises:
@@ -206,7 +238,7 @@ class DataSizeClientSelection(ClientSelectionScheme):
         self.client_fraction = client_fraction
         self.data_size_key = data_size_key
 
-    def select(self, clients: Sequence["Agent"], iteration: int) -> list["Agent"]:  # noqa: D102, ARG002
+    def select(self, clients: Sequence[Agent], iteration: int) -> list[Agent]:  # noqa: D102, ARG002
         if not clients:
             return []
         k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
@@ -221,6 +253,54 @@ class DataSizeClientSelection(ClientSelectionScheme):
         probabilities = data_sizes / data_sizes.sum()
         selected_indices = iop.rng_numpy().choice(len(clients_list), size=k, replace=False, p=probabilities)
         return [clients_list[int(index)] for index in selected_indices]
+
+
+class ParticipationFairClientSelection(ClientSelectionScheme):
+    """
+    Participation-fair client selection :footcite:p:`Scheme_FairFedCS`.
+
+    The scheme prioritizes clients with fewer past selections, breaking ties at random.
+
+    Args:
+        clients_per_round: number of clients to sample per round.
+        client_fraction: fraction of provided clients to sample per round.
+
+    Raises:
+        ValueError: if the selection size is invalid.
+
+    .. footbibliography::
+
+    """
+
+    def __init__(
+        self,
+        *,
+        clients_per_round: int | None = None,
+        client_fraction: float | None = None,
+    ) -> None:
+        self._validate_selection_size(clients_per_round, client_fraction)
+        self.clients_per_round = clients_per_round
+        self.client_fraction = client_fraction
+        self._selection_counts: dict[Agent, int] = {}
+
+    def select(self, clients: Sequence[Agent], iteration: int) -> list[Agent]:  # noqa: D102, ARG002
+        if not clients:
+            return []
+        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
+        clients_list = list(clients)
+        if k >= len(clients_list):
+            selected_clients = clients_list
+        else:
+            tie_breakers = iop.rng_numpy().permutation(len(clients_list))
+            ranked_indices = sorted(
+                range(len(clients_list)),
+                key=lambda index: (self._selection_counts.get(clients_list[index], 0), int(tie_breakers[index])),
+            )
+            selected_clients = [clients_list[index] for index in ranked_indices[:k]]
+
+        for client in selected_clients:
+            self._selection_counts[client] = self._selection_counts.get(client, 0) + 1
+        return selected_clients
 
 
 class CompressionScheme(ABC):
@@ -239,7 +319,19 @@ class NoCompression(CompressionScheme):
 
 
 class Quantization(CompressionScheme):
-    """Scheme that rounds each element in a message to *significant_digits*."""
+    """
+    Scheme that rounds each element in a message to *significant_digits*.
+
+    The scheme rounds finite, non-zero message entries to ``n_significant_digits`` significant digits and leaves zeros,
+    infinities, and NaNs unchanged.
+
+    Args:
+        n_significant_digits: number of significant digits to retain.
+
+    Raises:
+        ValueError: if ``n_significant_digits`` is not positive.
+
+    """
 
     def __init__(self, n_significant_digits: int):
         if n_significant_digits <= 0:
@@ -359,7 +451,18 @@ class NoDrops(DropScheme):
 
 
 class UniformDropRate(DropScheme):
-    """Scheme that drops messages with uniform probability."""
+    """
+    Scheme that drops messages with uniform probability.
+
+    Each call samples an independent Bernoulli event with probability ``drop_rate``.
+
+    Args:
+        drop_rate: probability that a message is dropped.
+
+    Raises:
+        ValueError: if ``drop_rate`` is not in :math:`[0, 1]`.
+
+    """
 
     def __init__(self, drop_rate: float):
         if drop_rate < 0 or drop_rate > 1:
@@ -426,7 +529,20 @@ class NoNoise(NoiseScheme):
 
 
 class GaussianNoise(NoiseScheme):
-    """Scheme that applies Gaussian noise - that is, noise following a normal distribution."""
+    """
+    Scheme that applies additive Gaussian noise.
+
+    The scheme adds independent noise sampled from a normal distribution with mean ``mean`` and standard deviation
+    ``std`` to each message entry.
+
+    Args:
+        mean: mean of the Gaussian noise.
+        std: standard deviation of the Gaussian noise.
+
+    Raises:
+        ValueError: if ``std`` is negative.
+
+    """
 
     def __init__(self, mean: float, std: float):
         if std < 0:
