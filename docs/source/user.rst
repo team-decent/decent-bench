@@ -187,6 +187,10 @@ have never been selected or have waited longest since their last selection.
 :class:`~decent_bench.schemes.HighLossClientSelection` evaluates client losses
 at each client's current ``x`` and selects the clients with highest loss.
 
+:class:`~decent_bench.schemes.HybridFairHighLossClientSelection` combines
+normalized client loss and selection staleness with a configurable
+``loss_weight``.
+
 .. code-block:: python
 
     from decent_bench.algorithms.federated import FedAvg

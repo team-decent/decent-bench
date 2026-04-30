@@ -437,6 +437,89 @@ class HighLossClientSelection(ClientSelectionScheme):
         return [clients_list[index] for index in ranked_indices[:n_selected_clients]]
 
 
+class HybridFairHighLossClientSelection(ClientSelectionScheme):
+    """
+    Hybrid fair high-loss client selection.
+
+    The scheme combines each client's current local loss with its selection staleness and selects the clients with
+    highest combined score, breaking ties at random.
+
+    Args:
+        clients_per_round: number of clients to sample per round.
+        client_fraction: fraction of provided clients to sample per round.
+        loss_weight: weight assigned to normalized loss in the combined score. The staleness weight is
+            ``1 - loss_weight``.
+
+    Raises:
+        ValueError: if the selection size is invalid or ``loss_weight`` is not in :math:`[0, 1]`.
+        RuntimeError: if ``loss_weight`` is positive and any evaluated client's ``x`` has not been initialized.
+
+    .. footbibliography::
+
+    """
+
+    def __init__(
+        self,
+        *,
+        clients_per_round: int | None = None,
+        client_fraction: float | None = None,
+        loss_weight: float = 0.5,
+    ) -> None:
+        self._validate_selection_size(clients_per_round, client_fraction)
+        if loss_weight < 0 or loss_weight > 1:
+            raise ValueError("loss_weight must be in [0, 1]")
+        self.clients_per_round = clients_per_round
+        self.client_fraction = client_fraction
+        self.loss_weight = loss_weight
+        self._last_selected_iterations: dict[Agent, int] = {}
+
+    def _staleness(self, client: Agent, iteration: int) -> float:
+        last_selected_iteration = self._last_selected_iterations.get(client)
+        if last_selected_iteration is None:
+            return float(iteration + 1)
+        return float(iteration - last_selected_iteration)
+
+    def select(  # noqa: D102
+        self,
+        clients: Sequence[Agent],
+        iteration: int,
+    ) -> list[Agent]:
+        if not clients:
+            return []
+        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
+        clients_list = list(clients)
+        if k >= len(clients_list):
+            selected_clients = clients_list
+        else:
+            staleness_weight = 1.0 - self.loss_weight
+            losses = [client.cost.function(client.x) for client in clients_list] if self.loss_weight > 0 else []
+            staleness_values = (
+                [self._staleness(client, iteration) for client in clients_list] if staleness_weight > 0 else []
+            )
+
+            min_loss = min(losses, default=0.0)
+            loss_range = max(losses, default=0.0) - min(losses, default=0.0)
+            min_staleness = min(staleness_values, default=0.0)
+            staleness_range = max(staleness_values, default=0.0) - min_staleness
+
+            scores = [
+                self.loss_weight * (0.0 if loss_range == 0 else (losses[index] - min_loss) / loss_range)
+                + staleness_weight
+                * (0.0 if staleness_range == 0 else (staleness_values[index] - min_staleness) / staleness_range)
+                for index in range(len(clients_list))
+            ]
+            tie_breakers = iop.rng_numpy().permutation(len(clients_list))
+            ranked_indices = sorted(
+                range(len(clients_list)),
+                key=lambda index: (-scores[index], int(tie_breakers[index])),
+            )
+            selected_clients = [clients_list[index] for index in ranked_indices[:k]]
+
+        for client in selected_clients:
+            self._last_selected_iterations[client] = iteration
+        return selected_clients
+
+
 class CompressionScheme(ABC):
     """Scheme defining how messages are compressed when sent over the network."""
 
