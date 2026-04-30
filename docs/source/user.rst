@@ -159,6 +159,34 @@ weights.
 :class:`~decent_bench.algorithms.federated.Scaffold` matches the standard
 SCAFFOLD algorithm and always uses uniform averaging over the selected clients.
 
+Federated client selection
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+Federated algorithms accept a ``selection_scheme`` argument. The scheme receives
+the active clients for the current round and returns the subset that should
+receive the server broadcast.
+
+:class:`~decent_bench.schemes.UniformClientSelection` samples active clients
+uniformly without replacement. This is the default for the built-in federated
+algorithms.
+
+:class:`~decent_bench.schemes.DataSizeClientSelection` samples active clients
+without replacement with probabilities proportional to client data size. This is
+useful when local dataset sizes are imbalanced and you want larger clients to
+have more participation opportunities. The scheme reads data size from
+``client.data["n_samples"]`` when present, then falls back to common cost
+attributes such as ``n_samples``, ``A``, or ``b``.
+
+.. code-block:: python
+
+    from decent_bench.algorithms.federated import FedAvg
+    from decent_bench.schemes import DataSizeClientSelection
+
+    algorithm = FedAvg(
+        iterations=100,
+        step_size=0.01,
+        selection_scheme=DataSizeClientSelection(client_fraction=0.1),
+    )
+
 
 Available costs
 ---------------

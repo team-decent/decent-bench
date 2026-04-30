@@ -5,7 +5,6 @@ import pytest
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.algorithms.utils import (
-    infer_client_weight,
     initial_states,
     normal_initialization,
     pytorch_initialization,
@@ -13,6 +12,7 @@ from decent_bench.algorithms.utils import (
 )
 from decent_bench.costs import L2RegularizerCost, PyTorchCost
 from decent_bench.networks import FedNetwork, P2PNetwork
+from decent_bench.utils.agent_utils import infer_client_data_size
 from decent_bench.utils.array import Array
 from decent_bench.utils.pytorch_utils import SimpleLinearModel
 
@@ -135,27 +135,27 @@ def test_uniform_initialization_samples_within_range() -> None:
         assert np.all(values < -1.0)
 
 
-def test_infer_client_weight_prefers_n_samples_over_A_and_b() -> None:
+def test_infer_client_data_size_prefers_n_samples_over_A_and_b() -> None:
     client = Agent(0, L2RegularizerCost((2,)))
     client.cost.A = np.zeros((7, 2))  # type: ignore[attr-defined]
     client.cost.b = np.zeros((5,))  # type: ignore[attr-defined]
     client.cost.n_samples = 11  # type: ignore[attr-defined]
 
-    weight = infer_client_weight(client)
+    data_size = infer_client_data_size(client)
 
-    assert weight == 11.0
+    assert data_size == 11.0
 
 
-def test_infer_client_weight_falls_back_to_A_when_n_samples_is_missing() -> None:
+def test_infer_client_data_size_falls_back_to_A_when_n_samples_is_missing() -> None:
     client = Agent(0, L2RegularizerCost((2,)))
     client.cost.A = np.zeros((7, 2))  # type: ignore[attr-defined]
 
-    weight = infer_client_weight(client)
+    data_size = infer_client_data_size(client)
 
-    assert weight == 7.0
+    assert data_size == 7.0
 
 
-def test_infer_client_weight_falls_back_to_b() -> None:
+def test_infer_client_data_size_falls_back_to_b() -> None:
     class UnsupportedArray:
         pass
 
@@ -163,12 +163,12 @@ def test_infer_client_weight_falls_back_to_b() -> None:
     client.cost.A = UnsupportedArray()  # type: ignore[attr-defined]
     client.cost.b = np.zeros((5,))  # type: ignore[attr-defined]
 
-    weight = infer_client_weight(client)
+    data_size = infer_client_data_size(client)
 
-    assert weight == 5.0
+    assert data_size == 5.0
 
 
-def test_infer_client_weight_falls_back_to_n_samples() -> None:
+def test_infer_client_data_size_falls_back_to_n_samples() -> None:
     class UnsupportedArray:
         pass
 
@@ -177,9 +177,9 @@ def test_infer_client_weight_falls_back_to_n_samples() -> None:
     client.cost.b = UnsupportedArray()  # type: ignore[attr-defined]
     client.cost.n_samples = 11  # type: ignore[attr-defined]
 
-    weight = infer_client_weight(client)
+    data_size = infer_client_data_size(client)
 
-    assert weight == 11.0
+    assert data_size == 11.0
 
 
 @pytest.mark.parametrize(
@@ -191,19 +191,19 @@ def test_infer_client_weight_falls_back_to_n_samples() -> None:
         pytest.param("b", np.zeros((0,)), id="empty-b"),
     ],
 )
-def test_infer_client_weight_raises_when_inferred_size_is_not_positive(attribute: str, value: object) -> None:
+def test_infer_client_data_size_raises_when_inferred_size_is_not_positive(attribute: str, value: object) -> None:
     client = Agent(0, L2RegularizerCost((2,)))
     setattr(client.cost, attribute, value)  # type: ignore[arg-type]
 
     with pytest.raises(ValueError, match="Client data size must be positive"):
-        infer_client_weight(client)
+        infer_client_data_size(client)
 
 
-def test_infer_client_weight_raises_when_no_size_signal() -> None:
+def test_infer_client_data_size_raises_when_no_size_signal() -> None:
     client = Agent(0, L2RegularizerCost((2,)))
 
     with pytest.raises(ValueError, match="Cannot infer client data size"):
-        infer_client_weight(client)
+        infer_client_data_size(client)
 
 
 def test_pytorch_initialization_rejects_non_pytorch_cost() -> None:

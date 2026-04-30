@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
+from decent_bench.utils.agent_utils import infer_client_data_size
 from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
@@ -109,7 +110,37 @@ class PoissonActivation(AgentActivationScheme):
 
 
 class ClientSelectionScheme(ABC):
-    """Scheme defining how to select a subset of available clients."""
+    """
+    Scheme defining how to select a subset of available clients.
+
+    Federated algorithms call :meth:`select` once per round with the currently active clients. Implementations may be
+    stateful, but they should not mutate the client sequence they receive.
+    """
+
+    @staticmethod
+    def _validate_selection_size(
+        clients_per_round: int | None,
+        client_fraction: float | None,
+    ) -> None:
+        if clients_per_round is None and client_fraction is None:
+            raise ValueError("Provide clients_per_round or client_fraction")
+        if clients_per_round is not None and client_fraction is not None:
+            raise ValueError("Provide only one of clients_per_round or client_fraction")
+        if clients_per_round is not None and clients_per_round <= 0:
+            raise ValueError("clients_per_round must be positive")
+        if client_fraction is not None and not (0 < client_fraction <= 1):
+            raise ValueError("client_fraction must be in (0, 1]")
+
+    @staticmethod
+    def _num_selected_clients(
+        clients: Sequence["Agent"],
+        clients_per_round: int | None,
+        client_fraction: float | None,
+    ) -> int:
+        if clients_per_round is not None:
+            return min(clients_per_round, len(clients))
+        k = max(1, int(client_fraction * len(clients)))  # type: ignore[operator]
+        return min(k, len(clients))
 
     @abstractmethod
     def select(self, clients: Sequence["Agent"], iteration: int) -> list["Agent"]:
@@ -132,28 +163,64 @@ class UniformClientSelection(ClientSelectionScheme):
         clients_per_round: int | None = None,
         client_fraction: float | None = None,
     ) -> None:
-        if clients_per_round is None and client_fraction is None:
-            raise ValueError("Provide clients_per_round or client_fraction")
-        if clients_per_round is not None and client_fraction is not None:
-            raise ValueError("Provide only one of clients_per_round or client_fraction")
-        if clients_per_round is not None and clients_per_round <= 0:
-            raise ValueError("clients_per_round must be positive")
-        if client_fraction is not None and not (0 < client_fraction <= 1):
-            raise ValueError("client_fraction must be in (0, 1]")
+        self._validate_selection_size(clients_per_round, client_fraction)
         self.clients_per_round = clients_per_round
         self.client_fraction = client_fraction
 
     def select(self, clients: Sequence["Agent"], iteration: int) -> list["Agent"]:  # noqa: D102, ARG002
         if not clients:
             return []
-        if self.clients_per_round is not None:
-            k = min(self.clients_per_round, len(clients))
-        else:
-            k = max(1, int(self.client_fraction * len(clients)))  # type: ignore[operator]
-            k = min(k, len(clients))
+        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
         if k >= len(clients):
             return list(clients)
         return random.sample(list(clients), k)
+
+
+class DataSizeClientSelection(ClientSelectionScheme):
+    """
+    Data-size weighted client selection :footcite:p:`Scheme_FedSampling`.
+
+    The scheme samples clients without replacement with probability proportional to each client's local data size.
+
+    Args:
+        clients_per_round: number of clients to sample per round.
+        client_fraction: fraction of currently active clients to sample per round.
+        data_size_key: key used to read explicit data sizes from ``Agent.data``.
+
+    Raises:
+        ValueError: if the selection size is invalid or any client's data size cannot be inferred.
+
+    .. footbibliography::
+
+    """
+
+    def __init__(
+        self,
+        *,
+        clients_per_round: int | None = None,
+        client_fraction: float | None = None,
+        data_size_key: str = "n_samples",
+    ) -> None:
+        self._validate_selection_size(clients_per_round, client_fraction)
+        self.clients_per_round = clients_per_round
+        self.client_fraction = client_fraction
+        self.data_size_key = data_size_key
+
+    def select(self, clients: Sequence["Agent"], iteration: int) -> list["Agent"]:  # noqa: D102, ARG002
+        if not clients:
+            return []
+        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
+        clients_list = list(clients)
+        if k >= len(clients_list):
+            return clients_list
+
+        data_sizes = np.array(
+            [infer_client_data_size(client, self.data_size_key) for client in clients_list],
+            dtype=np.float64,
+        )
+        probabilities = data_sizes / data_sizes.sum()
+        selected_indices = iop.rng_numpy().choice(len(clients_list), size=k, replace=False, p=probabilities)
+        return [clients_list[int(index)] for index in selected_indices]
 
 
 class CompressionScheme(ABC):

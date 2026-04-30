@@ -8,6 +8,7 @@ from decent_bench.schemes import (
     AlwaysActive,
     ClientSelectionScheme,
     CompressionScheme,
+    DataSizeClientSelection,
     DropScheme,
     GaussianNoise,
     GilbertElliott,
@@ -88,7 +89,10 @@ def test_randomly_active(
 
 # test client selection
 def make_clients(n_clients: int) -> list[Agent]:
-    return [Agent(agent_id, L2RegularizerCost((2,))) for agent_id in range(n_clients)]
+    return [
+        Agent(agent_id, L2RegularizerCost((2,)), data={"n_samples": agent_id + 1})
+        for agent_id in range(n_clients)
+    ]
 
 
 @pytest.mark.parametrize(
@@ -97,6 +101,8 @@ def make_clients(n_clients: int) -> list[Agent]:
         (UniformClientSelection(clients_per_round=3), 5, 3),
         (UniformClientSelection(client_fraction=0.4), 5, 2),
         (UniformClientSelection(clients_per_round=5), 5, 5),
+        (DataSizeClientSelection(clients_per_round=3), 5, 3),
+        (DataSizeClientSelection(client_fraction=0.4), 5, 2),
     ],
 )
 def test_client_selection(
@@ -107,6 +113,30 @@ def test_client_selection(
     selected_clients = scheme.select(make_clients(n_clients), iteration=0)
 
     assert len(selected_clients) == expected_selected
+
+
+def test_data_size_client_selection_prefers_larger_clients() -> None:
+    iop.set_seed(0)
+    clients = [
+        Agent(0, L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(1, L2RegularizerCost((2,)), data={"n_samples": 1000}),
+    ]
+    scheme = DataSizeClientSelection(clients_per_round=1)
+
+    selected_client_ids = [scheme.select(clients, iteration=i)[0].id for i in range(200)]
+
+    assert selected_client_ids.count(1) > 190
+
+
+def test_data_size_client_selection_requires_positive_data_size() -> None:
+    clients = [
+        Agent(0, L2RegularizerCost((2,)), data={"n_samples": 0}),
+        Agent(1, L2RegularizerCost((2,)), data={"n_samples": 1}),
+    ]
+    scheme = DataSizeClientSelection(clients_per_round=1)
+
+    with pytest.raises(ValueError, match="must be positive"):
+        scheme.select(clients, iteration=0)
 
 
 ## CompressionScheme

@@ -190,25 +190,25 @@ def test_fednova_normalizes_scalar_local_steps_to_client_mapping_on_initialize()
 def test_fednova_resolves_client_sample_counts_once_on_initialize(monkeypatch: pytest.MonkeyPatch) -> None:
     network = _make_fed_network((1.0, 1), (3.0, 3))
     algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps=1)
-    infer_client_weight_calls = 0
+    infer_client_data_size_calls = 0
 
-    def _tracking_infer_client_weight(client: Agent) -> float:
-        nonlocal infer_client_weight_calls
-        infer_client_weight_calls += 1
+    def _tracking_infer_client_data_size(client: Agent) -> float:
+        nonlocal infer_client_data_size_calls
+        infer_client_data_size_calls += 1
         return float(client.cost.n_samples)  # type: ignore[attr-defined]
 
     monkeypatch.setattr(
-        "decent_bench.algorithms.federated._fed_nova.infer_client_weight",
-        _tracking_infer_client_weight,
+        "decent_bench.algorithms.federated._fed_nova.infer_client_data_size",
+        _tracking_infer_client_data_size,
     )
 
     algorithm.initialize(network)
-    assert infer_client_weight_calls == len(network.clients())
+    assert infer_client_data_size_calls == len(network.clients())
 
     network._step(0)  # noqa: SLF001
     algorithm.step(network, 0)
 
-    assert infer_client_weight_calls == len(network.clients())
+    assert infer_client_data_size_calls == len(network.clients())
 
 
 @pytest.mark.parametrize(
