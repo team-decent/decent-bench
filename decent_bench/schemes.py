@@ -714,6 +714,66 @@ class Quantization(CompressionScheme):
         return iop.to_array_like(msg_np, msg)
 
 
+class QSGDCompression(CompressionScheme):
+    r"""
+    QSGD stochastic quantization :footcite:p:`Scheme_QSGD`.
+
+    The scheme quantizes each coordinate using ``n_levels`` stochastic levels scaled by the message norm. This keeps the
+    compressed message unbiased in expectation while preserving the original message shape.
+    Given a message :math:`x` and :math:`s=\texttt{n\_levels}`, QSGD computes
+
+    .. math::
+
+        a_i = \frac{s |x_i|}{\lVert x \rVert_2}, \qquad
+        \ell_i = \lfloor a_i \rfloor, \qquad
+        p_i = a_i - \ell_i.
+
+    The quantization level is sampled as
+
+    .. math::
+
+        \xi_i =
+        \begin{cases}
+            \ell_i + 1, & \text{with probability } p_i, \\
+            \ell_i, & \text{with probability } 1 - p_i,
+        \end{cases}
+
+    and the compressed coordinate is
+
+    .. math::
+
+        Q_s(x_i) = \lVert x \rVert_2 \operatorname{sign}(x_i) \frac{\xi_i}{s}.
+
+    Args:
+        n_levels: number of quantization levels.
+
+    Raises:
+        ValueError: if ``n_levels`` is not positive.
+
+    .. footbibliography::
+
+    """
+
+    def __init__(self, n_levels: int):
+        if n_levels <= 0:
+            raise ValueError("`n_levels` must be a positive integer")
+        self.n_levels = n_levels
+
+    def compress(self, msg: Array) -> Array:  # noqa: D102
+        msg_norm = float(iop.norm(msg))
+        if msg_norm == 0:
+            return iop.zeros_like(msg)
+
+        magnitudes = iop.to_numpy(iop.absolute(msg), dtype=np.float64)
+        signs = iop.to_numpy(iop.sign(msg), dtype=np.float64)
+        scaled_magnitudes = self.n_levels * magnitudes / msg_norm
+        lower_levels = np.floor(scaled_magnitudes)
+        probabilities = scaled_magnitudes - lower_levels
+        quantized_levels = lower_levels + (iop.rng_numpy().random(size=magnitudes.shape) < probabilities)
+        compressed_msg = msg_norm * signs * quantized_levels / self.n_levels
+        return iop.to_array_like(compressed_msg, msg)
+
+
 class TopK(CompressionScheme):
     """
     Top-k compression which transmits only a subset of elements with largest magnitude.

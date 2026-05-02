@@ -495,6 +495,19 @@ Create a custom benchmark problem using existing resources.
         benchmark.display_metrics(metrics_result)
 
 
+Communication schemes
+^^^^^^^^^^^^^^^^^^^^^
+Communication schemes are applied by the network when agents send messages.
+:class:`~decent_bench.schemes.Quantization` rounds message entries to a fixed
+number of significant digits. :class:`~decent_bench.schemes.QSGDCompression`
+implements the stochastic norm-scaled quantization step from QSGD
+:footcite:p:`Scheme_QSGD`. It preserves the message shape and simulates the
+numerical effect of QSGD compression; the framework does not yet encode
+compressed messages or count transmitted bits.
+
+.. footbibliography::
+
+
 Create problems from scratch
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Create a custom benchmark problem with your own dataset, cost function, and communication schemes by implementing the

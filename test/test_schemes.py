@@ -23,6 +23,7 @@ from decent_bench.schemes import (
     NoNoise,
     PoissonActivation,
     ParticipationFairClientSelection,
+    QSGDCompression,
     Quantization,
     RandK,
     StaleClientSelection,
@@ -368,6 +369,7 @@ def test_data_size_high_loss_client_selection_requires_loss_weight_in_range() ->
     [
         (NoCompression(), Array(np.array([3.0, -4.0, 1.0]))),
         (Quantization(n_significant_digits=5), Array(np.array([1.2345, -2.3456]))),
+        (QSGDCompression(n_levels=4), Array(np.array([0.0, 0.0, 0.0]))),
         (TopK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
         (RandK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
         (TopK(k=3), Array(np.array([3.0, -4.0, 1.0]))),
@@ -427,6 +429,39 @@ def test_randk_compression(k) -> None:
         observed_norms.add(compression_error)
 
     assert observed_norms == {1.0, 3.0, 4.0}
+
+
+def test_qsgd_compression_preserves_shape_and_signs() -> None:
+    message = Array(np.array([[3.0, -4.0], [0.0, 1.0]]))
+    compressed_message = QSGDCompression(n_levels=4).compress(message)
+
+    assert iop.to_numpy(compressed_message).shape == iop.to_numpy(message).shape
+    assert np.all(np.sign(iop.to_numpy(compressed_message)) == np.sign(iop.to_numpy(message)))
+
+
+def test_qsgd_compression_uses_norm_scaled_levels() -> None:
+    iop.set_seed(0)
+    message = Array(np.array([3.0, 4.0]))
+    compressed_message = QSGDCompression(n_levels=4).compress(message)
+    quantized_levels = 4 * np.abs(iop.to_numpy(compressed_message)) / float(iop.norm(message))
+
+    assert set(quantized_levels).issubset({0.0, 1.0, 2.0, 3.0, 4.0})
+
+
+def test_qsgd_compression_is_stochastic() -> None:
+    message = Array(np.array([3.0, 4.0]))
+    scheme = QSGDCompression(n_levels=4)
+    observed_messages = {
+        tuple(iop.to_numpy(scheme.compress(message)))
+        for _ in range(100)
+    }
+
+    assert len(observed_messages) > 1
+
+
+def test_qsgd_compression_requires_positive_levels() -> None:
+    with pytest.raises(ValueError, match="n_levels"):
+        QSGDCompression(n_levels=0)
 
 
 # test RandK and TopK
