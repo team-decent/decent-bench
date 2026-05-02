@@ -8,7 +8,9 @@ from decent_bench.schemes import (
     AlwaysActive,
     ClientSelectionScheme,
     CompressionScheme,
+    CountFairHighLossClientSelection,
     DataSizeClientSelection,
+    DataSizeHighLossClientSelection,
     DropScheme,
     GaussianNoise,
     GilbertElliott,
@@ -118,6 +120,10 @@ def make_clients(n_clients: int) -> list[Agent]:
         (StaleClientSelection(client_fraction=0.4), 5, 2),
         (HybridFairHighLossClientSelection(clients_per_round=3, loss_weight=0.0), 5, 3),
         (HybridFairHighLossClientSelection(client_fraction=0.4, loss_weight=0.0), 5, 2),
+        (CountFairHighLossClientSelection(clients_per_round=3, loss_weight=0.0), 5, 3),
+        (CountFairHighLossClientSelection(client_fraction=0.4, loss_weight=0.0), 5, 2),
+        (DataSizeHighLossClientSelection(clients_per_round=3, loss_weight=0.0), 5, 3),
+        (DataSizeHighLossClientSelection(client_fraction=0.4, loss_weight=0.0), 5, 2),
     ],
 )
 def test_client_selection(
@@ -265,6 +271,93 @@ def test_hybrid_fair_high_loss_client_selection_combines_loss_and_staleness() ->
 def test_hybrid_fair_high_loss_client_selection_requires_loss_weight_in_range() -> None:
     with pytest.raises(ValueError, match="loss_weight"):
         HybridFairHighLossClientSelection(clients_per_round=1, loss_weight=1.1)
+
+
+def test_count_fair_high_loss_client_selection_can_prioritize_loss() -> None:
+    clients = [
+        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+    ]
+    for client in clients:
+        client.x = Array(np.ones(2))
+    scheme = CountFairHighLossClientSelection(clients_per_round=1, loss_weight=1.0)
+
+    selected_clients = scheme.select(clients, iteration=0)
+
+    assert selected_clients == [clients[1]]
+
+
+def test_count_fair_high_loss_client_selection_can_prioritize_under_selected_clients() -> None:
+    clients = make_clients(3)
+    scheme = CountFairHighLossClientSelection(clients_per_round=1, loss_weight=0.0)
+
+    assert scheme.select([clients[0]], iteration=0) == [clients[0]]
+    assert scheme.select([clients[1]], iteration=1) == [clients[1]]
+    assert scheme.select(clients, iteration=2) == [clients[2]]
+
+
+def test_count_fair_high_loss_client_selection_combines_loss_and_selection_counts() -> None:
+    clients = [
+        Agent(0, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(1, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+    ]
+    for client in clients:
+        client.x = Array(np.ones(2))
+    scheme = CountFairHighLossClientSelection(clients_per_round=1, loss_weight=0.25)
+
+    assert scheme.select([clients[0]], iteration=0) == [clients[0]]
+    assert scheme.select([clients[0]], iteration=1) == [clients[0]]
+    assert scheme.select(clients, iteration=2) == [clients[1]]
+
+
+def test_count_fair_high_loss_client_selection_requires_loss_weight_in_range() -> None:
+    with pytest.raises(ValueError, match="loss_weight"):
+        CountFairHighLossClientSelection(clients_per_round=1, loss_weight=-0.1)
+
+
+def test_data_size_high_loss_client_selection_can_prioritize_loss() -> None:
+    clients = [
+        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 100}),
+        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+    ]
+    for client in clients:
+        client.x = Array(np.ones(2))
+    scheme = DataSizeHighLossClientSelection(clients_per_round=1, loss_weight=1.0)
+
+    selected_clients = scheme.select(clients, iteration=0)
+
+    assert selected_clients == [clients[1]]
+
+
+def test_data_size_high_loss_client_selection_can_prioritize_data_size() -> None:
+    clients = [
+        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 100}),
+        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+    ]
+    scheme = DataSizeHighLossClientSelection(clients_per_round=1, loss_weight=0.0)
+
+    selected_clients = scheme.select(clients, iteration=0)
+
+    assert selected_clients == [clients[0]]
+
+
+def test_data_size_high_loss_client_selection_combines_loss_and_data_size() -> None:
+    clients = [
+        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 100}),
+        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+    ]
+    for client in clients:
+        client.x = Array(np.ones(2))
+    scheme = DataSizeHighLossClientSelection(clients_per_round=1, loss_weight=0.25)
+
+    selected_clients = scheme.select(clients, iteration=0)
+
+    assert selected_clients == [clients[0]]
+
+
+def test_data_size_high_loss_client_selection_requires_loss_weight_in_range() -> None:
+    with pytest.raises(ValueError, match="loss_weight"):
+        DataSizeHighLossClientSelection(clients_per_round=1, loss_weight=1.1)
 
 
 ## CompressionScheme

@@ -161,6 +161,17 @@ class ClientSelectionScheme(ABC):
         k = max(1, int(client_fraction * len(clients)))  # type: ignore[operator]
         return min(k, len(clients))
 
+    @staticmethod
+    def _normalized_scores(values: Sequence[float]) -> list[float]:
+        value_list = list(values)
+        if not value_list:
+            return []
+        min_value = min(value_list)
+        value_range = max(value_list) - min_value
+        if value_range == 0:
+            return [0.0 for _ in value_list]
+        return [(value - min_value) / value_range for value in value_list]
+
     @abstractmethod
     def select(
         self,
@@ -492,20 +503,16 @@ class HybridFairHighLossClientSelection(ClientSelectionScheme):
             selected_clients = clients_list
         else:
             staleness_weight = 1.0 - self.loss_weight
-            losses = [client.cost.function(client.x) for client in clients_list] if self.loss_weight > 0 else []
-            staleness_values = (
-                [self._staleness(client, iteration) for client in clients_list] if staleness_weight > 0 else []
-            )
-
-            min_loss = min(losses, default=0.0)
-            loss_range = max(losses, default=0.0) - min(losses, default=0.0)
-            min_staleness = min(staleness_values, default=0.0)
-            staleness_range = max(staleness_values, default=0.0) - min_staleness
-
+            loss_scores = [0.0 for _ in clients_list]
+            staleness_scores = [0.0 for _ in clients_list]
+            if self.loss_weight > 0:
+                loss_scores = self._normalized_scores([client.cost.function(client.x) for client in clients_list])
+            if staleness_weight > 0:
+                staleness_scores = self._normalized_scores(
+                    [self._staleness(client, iteration) for client in clients_list],
+                )
             scores = [
-                self.loss_weight * (0.0 if loss_range == 0 else (losses[index] - min_loss) / loss_range)
-                + staleness_weight
-                * (0.0 if staleness_range == 0 else (staleness_values[index] - min_staleness) / staleness_range)
+                self.loss_weight * loss_scores[index] + staleness_weight * staleness_scores[index]
                 for index in range(len(clients_list))
             ]
             tie_breakers = iop.rng_numpy().permutation(len(clients_list))
@@ -518,6 +525,145 @@ class HybridFairHighLossClientSelection(ClientSelectionScheme):
         for client in selected_clients:
             self._last_selected_iterations[client] = iteration
         return selected_clients
+
+
+class CountFairHighLossClientSelection(ClientSelectionScheme):
+    """
+    Count-fair high-loss client selection.
+
+    The scheme combines each client's current local loss with a bonus for clients selected fewer times, breaking ties
+    at random.
+
+    Args:
+        clients_per_round: number of clients to sample per round.
+        client_fraction: fraction of provided clients to sample per round.
+        loss_weight: weight assigned to normalized loss in the combined score. The count-fairness weight is
+            ``1 - loss_weight``.
+
+    Raises:
+        ValueError: if the selection size is invalid or ``loss_weight`` is not in :math:`[0, 1]`.
+        RuntimeError: if ``loss_weight`` is positive and any evaluated client's ``x`` has not been initialized.
+
+    """
+
+    def __init__(
+        self,
+        *,
+        clients_per_round: int | None = None,
+        client_fraction: float | None = None,
+        loss_weight: float = 0.5,
+    ) -> None:
+        self._validate_selection_size(clients_per_round, client_fraction)
+        if loss_weight < 0 or loss_weight > 1:
+            raise ValueError("loss_weight must be in [0, 1]")
+        self.clients_per_round = clients_per_round
+        self.client_fraction = client_fraction
+        self.loss_weight = loss_weight
+        self._selection_counts: dict[Agent, int] = {}
+
+    def select(  # noqa: D102
+        self,
+        clients: Sequence[Agent],
+        iteration: int,
+    ) -> list[Agent]:
+        del iteration
+        if not clients:
+            return []
+        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
+        clients_list = list(clients)
+        if k >= len(clients_list):
+            selected_clients = clients_list
+        else:
+            count_weight = 1.0 - self.loss_weight
+            loss_scores = [0.0 for _ in clients_list]
+            count_scores = [0.0 for _ in clients_list]
+            if self.loss_weight > 0:
+                loss_scores = self._normalized_scores([client.cost.function(client.x) for client in clients_list])
+            if count_weight > 0:
+                counts = [self._selection_counts.get(client, 0) for client in clients_list]
+                max_count = max(counts)
+                count_scores = self._normalized_scores([float(max_count - count) for count in counts])
+            scores = [
+                self.loss_weight * loss_scores[index] + count_weight * count_scores[index]
+                for index in range(len(clients_list))
+            ]
+            tie_breakers = iop.rng_numpy().permutation(len(clients_list))
+            ranked_indices = sorted(
+                range(len(clients_list)),
+                key=lambda index: (-scores[index], int(tie_breakers[index])),
+            )
+            selected_clients = [clients_list[index] for index in ranked_indices[:k]]
+
+        for client in selected_clients:
+            self._selection_counts[client] = self._selection_counts.get(client, 0) + 1
+        return selected_clients
+
+
+class DataSizeHighLossClientSelection(ClientSelectionScheme):
+    """
+    Data-size high-loss client selection.
+
+    The scheme combines each client's current local loss with its local data size, breaking ties at random.
+
+    Args:
+        clients_per_round: number of clients to sample per round.
+        client_fraction: fraction of provided clients to sample per round.
+        loss_weight: weight assigned to normalized loss in the combined score. The data-size weight is
+            ``1 - loss_weight``.
+
+    Raises:
+        ValueError: if the selection size is invalid, ``loss_weight`` is not in :math:`[0, 1]`, or any client's data
+            size cannot be inferred.
+        RuntimeError: if ``loss_weight`` is positive and any evaluated client's ``x`` has not been initialized.
+
+    """
+
+    def __init__(
+        self,
+        *,
+        clients_per_round: int | None = None,
+        client_fraction: float | None = None,
+        loss_weight: float = 0.5,
+    ) -> None:
+        self._validate_selection_size(clients_per_round, client_fraction)
+        if loss_weight < 0 or loss_weight > 1:
+            raise ValueError("loss_weight must be in [0, 1]")
+        self.clients_per_round = clients_per_round
+        self.client_fraction = client_fraction
+        self.loss_weight = loss_weight
+
+    def select(  # noqa: D102
+        self,
+        clients: Sequence[Agent],
+        iteration: int,
+    ) -> list[Agent]:
+        del iteration
+        if not clients:
+            return []
+        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
+        clients_list = list(clients)
+        if k >= len(clients_list):
+            return clients_list
+
+        data_size_weight = 1.0 - self.loss_weight
+        loss_scores = [0.0 for _ in clients_list]
+        data_size_scores = [0.0 for _ in clients_list]
+        if self.loss_weight > 0:
+            loss_scores = self._normalized_scores([client.cost.function(client.x) for client in clients_list])
+        if data_size_weight > 0:
+            data_size_scores = self._normalized_scores(
+                [float(infer_client_data_size(client)) for client in clients_list],
+            )
+        scores = [
+            self.loss_weight * loss_scores[index] + data_size_weight * data_size_scores[index]
+            for index in range(len(clients_list))
+        ]
+        tie_breakers = iop.rng_numpy().permutation(len(clients_list))
+        ranked_indices = sorted(
+            range(len(clients_list)),
+            key=lambda index: (-scores[index], int(tie_breakers[index])),
+        )
+        return [clients_list[index] for index in ranked_indices[:k]]
 
 
 class CompressionScheme(ABC):

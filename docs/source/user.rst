@@ -191,6 +191,16 @@ at each client's current ``x`` and selects the clients with highest loss.
 normalized client loss and selection staleness with a configurable
 ``loss_weight``.
 
+:class:`~decent_bench.schemes.CountFairHighLossClientSelection` combines
+normalized client loss and lifetime selection counts with a configurable
+``loss_weight``. Clients selected fewer times receive a larger exploration
+bonus.
+
+:class:`~decent_bench.schemes.DataSizeHighLossClientSelection` combines
+normalized client loss and local data size with a configurable ``loss_weight``.
+This is useful to balance high-loss clients with clients that
+represent more samples in the global objective.
+
 .. code-block:: python
 
     from decent_bench.algorithms.federated import FedAvg
