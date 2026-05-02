@@ -495,15 +495,66 @@ Create a custom benchmark problem using existing resources.
         benchmark.display_metrics(metrics_result)
 
 
-Communication schemes
-^^^^^^^^^^^^^^^^^^^^^
-Communication schemes are applied by the network when agents send messages.
+Network constraints
+^^^^^^^^^^^^^^^^^^^
+Networks can model constrained communication through activation, compression,
+noise, and message-drop schemes. These schemes are configured when creating a
+network or benchmark problem and are applied automatically during
+:meth:`~decent_bench.networks.Network.send`.
+
+Activation schemes control whether an agent is available at a given iteration.
+The built-in options are :class:`~decent_bench.schemes.AlwaysActive`,
+:class:`~decent_bench.schemes.UniformActivationRate`,
+:class:`~decent_bench.schemes.MarkovChainActivation`, and
+:class:`~decent_bench.schemes.PoissonActivation`. Federated algorithms first ask
+the network for active clients and then apply the client-selection scheme to
+that active set.
+
+Compression schemes transform messages before they are sent. The default
+:class:`~decent_bench.schemes.NoCompression` leaves messages unchanged.
 :class:`~decent_bench.schemes.Quantization` rounds message entries to a fixed
-number of significant digits. :class:`~decent_bench.schemes.QSGDCompression`
-implements the stochastic norm-scaled quantization step from QSGD
-:footcite:p:`Scheme_QSGD`. It preserves the message shape and simulates the
-numerical effect of QSGD compression; the framework does not yet encode
-compressed messages or count transmitted bits.
+number of significant digits. :class:`~decent_bench.schemes.TopK` and
+:class:`~decent_bench.schemes.RandK` keep only a subset of coordinates and set
+the rest to zero. :class:`~decent_bench.schemes.QSGDCompression` implements the
+stochastic norm-scaled quantization step from QSGD
+:footcite:p:`Scheme_QSGD`. The current compression API preserves message shape;
+it simulates the numerical effect of compression but does not yet encode
+messages or count transmitted bits.
+
+Noise schemes perturb delivered messages. The default
+:class:`~decent_bench.schemes.NoNoise` leaves messages unchanged, while
+:class:`~decent_bench.schemes.GaussianNoise` adds independent Gaussian noise to
+each message entry.
+
+Drop schemes decide whether a message is lost before delivery. The default
+:class:`~decent_bench.schemes.NoDrops` delivers every message.
+:class:`~decent_bench.schemes.UniformDropRate` drops messages independently
+with fixed probability, and :class:`~decent_bench.schemes.GilbertElliott`
+models bursty drops with a two-state channel.
+
+Message schemes can be provided as one shared instance or as a dictionary
+mapping each sender agent to its own scheme. Use one instance per sender for
+stateful schemes, since sharing a stateful scheme shares its internal state
+across all senders.
+
+.. code-block:: python
+
+    from decent_bench.schemes import (
+        GaussianNoise,
+        QSGDCompression,
+        UniformActivationRate,
+        UniformDropRate,
+    )
+
+    problem = BenchmarkProblem(
+        network_structure=network_structure,
+        costs=costs,
+        x_optimal=x_optimal,
+        agent_activations=[UniformActivationRate(0.8) for _ in costs],
+        message_compression=QSGDCompression(n_levels=8),
+        message_noise=GaussianNoise(mean=0, std=0.001),
+        message_drop=UniformDropRate(drop_rate=0.1),
+    )
 
 .. footbibliography::
 
