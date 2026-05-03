@@ -12,6 +12,7 @@ from decent_bench.schemes import (
     DataSizeClientSelection,
     DataSizeHighLossClientSelection,
     DropScheme,
+    ErrorFeedbackCompression,
     GaussianNoise,
     GilbertElliott,
     HighLossClientSelection,
@@ -370,6 +371,7 @@ def test_data_size_high_loss_client_selection_requires_loss_weight_in_range() ->
         (NoCompression(), Array(np.array([3.0, -4.0, 1.0]))),
         (Quantization(n_significant_digits=5), Array(np.array([1.2345, -2.3456]))),
         (QSGDCompression(n_levels=4), Array(np.array([0.0, 0.0, 0.0]))),
+        (ErrorFeedbackCompression(NoCompression()), Array(np.array([3.0, -4.0, 1.0]))),
         (TopK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
         (RandK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
         (TopK(k=3), Array(np.array([3.0, -4.0, 1.0]))),
@@ -462,6 +464,29 @@ def test_qsgd_compression_is_stochastic() -> None:
 def test_qsgd_compression_requires_positive_levels() -> None:
     with pytest.raises(ValueError, match="n_levels"):
         QSGDCompression(n_levels=0)
+
+
+def test_error_feedback_compression_accumulates_residual() -> None:
+    scheme = ErrorFeedbackCompression(TopK(k=1))
+
+    first_message = scheme.compress(Array(np.array([1.0, 2.0, 3.0])))
+    second_message = scheme.compress(Array(np.array([0.0, 0.0, 0.0])))
+    third_message = scheme.compress(Array(np.array([0.0, 0.0, 0.0])))
+
+    np.testing.assert_array_equal(first_message, Array(np.array([0.0, 0.0, 3.0])))
+    np.testing.assert_array_equal(second_message, Array(np.array([0.0, 2.0, 0.0])))
+    np.testing.assert_array_equal(third_message, Array(np.array([1.0, 0.0, 0.0])))
+
+
+def test_error_feedback_compression_leaves_no_residual_with_no_compression() -> None:
+    scheme = ErrorFeedbackCompression(NoCompression())
+    message = Array(np.array([1.0, 2.0, 3.0]))
+
+    compressed_message = scheme.compress(message)
+    zero_message = scheme.compress(Array(np.zeros(3)))
+
+    np.testing.assert_array_equal(compressed_message, message)
+    np.testing.assert_array_equal(zero_message, Array(np.zeros(3)))
 
 
 # test RandK and TopK

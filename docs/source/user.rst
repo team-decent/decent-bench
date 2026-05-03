@@ -517,9 +517,53 @@ number of significant digits. :class:`~decent_bench.schemes.TopK` and
 :class:`~decent_bench.schemes.RandK` keep only a subset of coordinates and set
 the rest to zero. :class:`~decent_bench.schemes.QSGDCompression` implements the
 stochastic norm-scaled quantization step from QSGD
-:footcite:p:`Scheme_QSGD`. The current compression API preserves message shape;
-it simulates the numerical effect of compression but does not yet encode
-messages or count transmitted bits.
+:footcite:p:`Scheme_QSGD`.
+:class:`~decent_bench.schemes.ErrorFeedbackCompression` wraps another
+compression scheme and keeps a residual of the previous compression error
+:footcite:p:`Scheme_ErrorFeedbackCompression`. Before each transmission from
+that sender, the residual is added to the outgoing message; after compression,
+the new residual is updated to the difference between the residual-corrected
+message and the compressed message.
+
+Error feedback is stateful. When using
+:class:`~decent_bench.schemes.ErrorFeedbackCompression`, pass one instance per
+sender so each sender keeps its own residual. This is usually done by passing a
+dictionary from sender agents to compression schemes. The current network-level
+error-feedback scheme stores one residual per compression instance. It is best
+suited to senders that repeatedly transmit the same kind of message with the
+same shape, such as FedAvg client model uploads. Algorithms where the same
+sender transmits multiple logical message types, such as a scalar normalizer
+followed by a vector update, should either avoid network-level error feedback
+for those mixed messages or implement algorithm-specific residuals for each
+message type.
+
+For example, a federated setup that applies error feedback to client uploads can
+be configured by building the network directly:
+
+.. code-block:: python
+
+    from decent_bench.agents import Agent
+    from decent_bench.benchmark import BenchmarkProblem
+    from decent_bench.networks import FedNetwork
+    from decent_bench.schemes import ErrorFeedbackCompression, TopK
+
+    clients = [Agent(i, cost) for i, cost in enumerate(costs)]
+    message_compression = {
+        client: ErrorFeedbackCompression(TopK(k=0.2))
+        for client in clients
+    }
+    network = FedNetwork(
+        clients=clients,
+        message_compression=message_compression,
+    )
+    problem = BenchmarkProblem(
+        network=network,
+        x_optimal=x_optimal,
+    )
+
+The current compression API preserves message shape; it simulates the numerical
+effect of compression but does not yet encode messages or count transmitted
+bits.
 
 Noise schemes perturb delivered messages. The default
 :class:`~decent_bench.schemes.NoNoise` leaves messages unchanged, while

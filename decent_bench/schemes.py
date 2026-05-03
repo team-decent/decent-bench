@@ -681,6 +681,43 @@ class NoCompression(CompressionScheme):
         return msg
 
 
+class ErrorFeedbackCompression(CompressionScheme):
+    r"""
+    Error-feedback compression wrapper :footcite:p:`Scheme_ErrorFeedbackCompression`.
+
+    The scheme keeps a residual equal to the previous compression error. On each call, the residual is added to the new
+    message before applying the wrapped compression scheme. The new residual is then updated to the part of the
+    corrected message that was not transmitted:
+
+    .. math::
+
+        u_k = x_k + e_k, \qquad c_k = C(u_k), \qquad e_{k+1} = u_k - c_k.
+
+    Args:
+        compression: compression scheme to apply to residual-corrected messages.
+
+    Note:
+        The residual is stored in the scheme instance. When using this scheme for messages from multiple senders,
+        pass a dictionary with one ``ErrorFeedbackCompression`` instance per sender.
+
+    .. footbibliography::
+
+    """
+
+    def __init__(self, compression: CompressionScheme):
+        self.compression = compression
+        self._residual: Array | None = None
+
+    def compress(self, msg: Array) -> Array:  # noqa: D102
+        corrected_msg = iop.copy(msg)
+        if self._residual is not None:
+            corrected_msg += self._residual
+
+        compressed_msg = self.compression.compress(iop.copy(corrected_msg))
+        self._residual = corrected_msg - compressed_msg
+        return compressed_msg
+
+
 class Quantization(CompressionScheme):
     """
     Scheme that rounds each element in a message to *significant_digits*.
