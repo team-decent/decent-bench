@@ -190,6 +190,20 @@ def test_fedlt_rejects_invalid_parameters(kwargs: dict[str, float | int], error:
         FedLT(iterations=1, **kwargs)
 
 
+def test_fedlt_initializes_auxiliary_variables_from_z0() -> None:
+    network = _make_network(ConstantGradientCost(0.0), ConstantGradientCost(0.0))
+    clients = network.clients()
+    z0 = {clients[0]: np.array([2.0]), clients[1]: np.array([-1.0])}
+    algorithm = FedLT(iterations=1, z0=z0)
+
+    algorithm.initialize(network)
+
+    np.testing.assert_allclose(clients[0].aux_vars["z"], np.array([2.0]))
+    np.testing.assert_allclose(clients[1].aux_vars["z"], np.array([-1.0]))
+    np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[0]], np.array([2.0]))
+    np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[1]], np.array([-1.0]))
+
+
 def test_fedlt_accelerated_solver_requires_valid_client_constants() -> None:
     network = _make_network(ConstantGradientCost(m_smooth=np.inf, m_cvx=0.0))
     algorithm = FedLT(iterations=1, use_acceleration=True)

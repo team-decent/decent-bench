@@ -3,8 +3,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import decent_bench.algorithms.utils as alg_helpers
 import decent_bench.utils.interoperability as iop
+from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
 from decent_bench.utils._tags import tags
@@ -30,6 +30,8 @@ class FedLT(FedAlgorithm):
         y_{k+1} = \operatorname{prox}_{\rho h / N}\left(\frac{1}{N}\sum_{i=1}^N z_{i,k}\right)
 
     where :math:`N` is the number of clients. The server sends :math:`y_{k+1}` to the selected clients.
+    The initial auxiliary states ``z0`` follow the same :obj:`~decent_bench.utils.types.InitialStates` convention as
+    ``x0``. If ``z0`` is ``None``, Fed-LT initializes :math:`z_{i,0}=x_{i,0}` for every client.
 
     In this implementation, each client cost :math:`f_i` is treated as the full local objective already available on
     that client. The global regularizer :math:`h` is represented
@@ -75,11 +77,7 @@ class FedLT(FedAlgorithm):
     :math:`x_{i,k+1}=x_{i,k}` and :math:`z_{i,k+1}=z_{i,k}`. For later server averages, the server stores a received
     fresh :math:`z_{i,k+1}` when the upload arrives and otherwise keeps its previous stored :math:`z_i`.
 
-    Fed-PLT is the privacy-noise version of Fed-LT :footcite:p:`Alg_FedPLT`. This class does not add Gaussian noise
-    internally; select a network-level noise scheme such as :class:`~decent_bench.schemes.GaussianNoise` when creating
-    the :class:`~decent_bench.networks.FedNetwork`. The framework applies network noise to all messages, not only
-    client-to-server uploads. Fed-LT with compression is benchmarked the same way: pass the desired
-    :class:`~decent_bench.schemes.CompressionScheme` to the network and the network applies compression to messages.
+    Fed-PLT is the privacy-noise version of Fed-LT :footcite:p:`Alg_FedPLT`.
 
     .. footbibliography::
     """
@@ -93,7 +91,10 @@ class FedLT(FedAlgorithm):
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
     x0: InitialStates = None
+    z0: InitialStates = None
     name: str = "FedLT"
+    _accelerated_smoothness: dict["Agent", float] = field(init=False, default_factory=dict, repr=False)
+    _accelerated_momentum: dict["Agent", float] = field(init=False, default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         """
@@ -111,18 +112,21 @@ class FedLT(FedAlgorithm):
             raise ValueError("`rho` must be positive")
 
     def initialize(self, network: FedNetwork) -> None:
-        self.x0 = alg_helpers.initial_states(self.x0, network)
         if self.use_acceleration:
-            self._validate_accelerated_constants(network)
+            self._initialize_accelerated_parameters(network)
+
+        self.x0 = initial_states(self.x0, network)
+        self.z0 = self.x0 if self.z0 is None else initial_states(self.z0, network)
 
         server = network.server()
-        z_by_client = {client: iop.copy(self.x0[client]) for client in network.clients()}
+        z_by_client = {client: self.z0[client] for client in network.clients()}
         server.initialize(x=self.x0[server], aux_vars={"z_by_client": z_by_client})
         for client in network.clients():
-            client_x0 = self.x0[client]
-            client.initialize(x=client_x0, aux_vars={"z": iop.copy(client_x0)})
+            client.initialize(x=self.x0[client], aux_vars={"z": self.z0[client]})
 
-    def _validate_accelerated_constants(self, network: FedNetwork) -> None:
+    def _initialize_accelerated_parameters(self, network: FedNetwork) -> None:
+        self._accelerated_smoothness = {}
+        self._accelerated_momentum = {}
         for client in network.clients():
             m_smooth = client.cost.m_smooth
             m_cvx = client.cost.m_cvx
@@ -132,6 +136,15 @@ class FedLT(FedAlgorithm):
                 )
             if m_smooth < m_cvx:
                 raise ValueError("`use_acceleration=True` requires `m_smooth >= m_cvx` on every client cost")
+
+            smoothness = m_smooth + (1 / self.rho)
+            strong_convexity = m_cvx + (1 / self.rho)
+            sqrt_smoothness = math.sqrt(smoothness)
+            sqrt_strong_convexity = math.sqrt(strong_convexity)
+            self._accelerated_smoothness[client] = smoothness
+            self._accelerated_momentum[client] = (sqrt_smoothness - sqrt_strong_convexity) / (
+                sqrt_smoothness + sqrt_strong_convexity
+            )
 
     def step(self, network: FedNetwork, iteration: int) -> None:
         y = self._compute_server_y(network)
@@ -183,11 +196,8 @@ class FedLT(FedAlgorithm):
         return local_x, z_next
 
     def _compute_accelerated_local_update(self, client: "Agent", local_x: "Array", v: "Array") -> "Array":
-        smoothness = client.cost.m_smooth + (1 / self.rho)
-        strong_convexity = client.cost.m_cvx + (1 / self.rho)
-        sqrt_smoothness = math.sqrt(smoothness)
-        sqrt_strong_convexity = math.sqrt(strong_convexity)
-        momentum = (sqrt_smoothness - sqrt_strong_convexity) / (sqrt_smoothness + sqrt_strong_convexity)
+        smoothness = self._accelerated_smoothness[client]
+        momentum = self._accelerated_momentum[client]
         u_previous = iop.copy(local_x)
 
         for _ in range(self.num_local_epochs):
