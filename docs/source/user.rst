@@ -506,9 +506,12 @@ Activation schemes control whether an agent is available at a given iteration.
 The built-in options are :class:`~decent_bench.schemes.AlwaysActive`,
 :class:`~decent_bench.schemes.UniformActivationRate`,
 :class:`~decent_bench.schemes.MarkovChainActivation`, and
-:class:`~decent_bench.schemes.PoissonActivation`. Federated algorithms first ask
-the network for active clients and then apply the client-selection scheme to
-that active set.
+:class:`~decent_bench.schemes.PoissonActivation`.
+:class:`~decent_bench.schemes.TraceActivation` follows a fixed availability
+trace, while :class:`~decent_bench.schemes.CyclicActivation` alternates between
+active and inactive intervals. 
+Implemtned federated algorithms in decent-benchfirst ask the network for
+active clients and then apply the client-selection scheme to that active set.
 
 Compression schemes transform messages before they are sent. The default
 :class:`~decent_bench.schemes.NoCompression` leaves messages unchanged.

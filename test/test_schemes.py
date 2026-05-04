@@ -9,6 +9,7 @@ from decent_bench.schemes import (
     ClientSelectionScheme,
     CompressionScheme,
     CountFairHighLossClientSelection,
+    CyclicActivation,
     DataSizeClientSelection,
     DataSizeHighLossClientSelection,
     DropScheme,
@@ -29,6 +30,7 @@ from decent_bench.schemes import (
     RandK,
     StaleClientSelection,
     TopK,
+    TraceActivation,
     UniformActivationRate,
     UniformClientSelection,
     UniformDropRate,
@@ -46,6 +48,8 @@ from decent_bench.utils.array import Array
         UniformActivationRate(activation_probability=1),
         MarkovChainActivation(inactive_to_active=1.0, active_to_inactive=0.0),
         PoissonActivation(mean_interval=0),
+        TraceActivation([True], repeat=True),
+        CyclicActivation(active_for=1, inactive_for=0),
     ],
 )
 def test_always_active(
@@ -64,6 +68,8 @@ def test_always_active(
         UniformActivationRate(activation_probability=0),
         MarkovChainActivation(inactive_to_active=0, active_to_inactive=1),
         PoissonActivation(mean_interval=1e10),
+        TraceActivation([False], repeat=True),
+        CyclicActivation(active_for=0, inactive_for=1),
     ],
 )
 def test_never_active(
@@ -96,6 +102,48 @@ def test_randomly_active(
 def test_uniform_activation_rate_requires_probability() -> None:
     with pytest.raises(ValueError, match="activation_probability"):
         UniformActivationRate(activation_probability=1.1)
+
+
+def test_trace_activation_follows_trace_and_then_deactivates() -> None:
+    scheme = TraceActivation([True, False, True])
+
+    activations = [scheme.is_active(iteration) for iteration in range(5)]
+
+    assert activations == [True, False, True, False, False]
+
+
+def test_trace_activation_repeats_trace() -> None:
+    scheme = TraceActivation([True, False, False], repeat=True)
+
+    activations = [scheme.is_active(iteration) for iteration in range(7)]
+
+    assert activations == [True, False, False, True, False, False, True]
+
+
+def test_trace_activation_requires_non_empty_trace() -> None:
+    with pytest.raises(ValueError, match="activation_trace"):
+        TraceActivation([])
+
+
+def test_cyclic_activation_follows_active_then_inactive_cycle() -> None:
+    scheme = CyclicActivation(active_for=2, inactive_for=3)
+
+    activations = [scheme.is_active(iteration) for iteration in range(8)]
+
+    assert activations == [True, True, False, False, False, True, True, False]
+
+
+def test_cyclic_activation_can_start_inactive() -> None:
+    scheme = CyclicActivation(active_for=2, inactive_for=3, start_active=False)
+
+    activations = [scheme.is_active(iteration) for iteration in range(8)]
+
+    assert activations == [False, False, False, True, True, False, False, False]
+
+
+def test_cyclic_activation_requires_non_empty_cycle() -> None:
+    with pytest.raises(ValueError, match="active_for"):
+        CyclicActivation(active_for=0, inactive_for=0)
 
 
 ## ClientSelectionScheme

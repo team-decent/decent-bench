@@ -128,6 +128,74 @@ class PoissonActivation(AgentActivationScheme):
         return False
 
 
+class TraceActivation(AgentActivationScheme):
+    """
+    Scheme where agent availability follows a fixed activation trace.
+
+    The trace is indexed by iteration. If ``repeat`` is ``False``, the agent is inactive after the trace ends.
+    If ``repeat`` is ``True``, the trace is repeated periodically.
+
+    Args:
+        activation_trace: sequence whose truth values define activation at each trace index.
+        repeat: whether to repeat the trace after its final entry.
+
+    Raises:
+        ValueError: if ``activation_trace`` is empty or ``iteration`` is negative.
+
+    """
+
+    def __init__(self, activation_trace: Sequence[bool], repeat: bool = False):
+        if not activation_trace:
+            raise ValueError("activation_trace must be non-empty")
+        self.activation_trace = tuple(bool(active) for active in activation_trace)
+        self.repeat = repeat
+
+    def is_active(self, iteration: int) -> bool:  # noqa: D102
+        if iteration < 0:
+            raise ValueError("iteration must be non-negative")
+        if iteration >= len(self.activation_trace):
+            if not self.repeat:
+                return False
+            iteration %= len(self.activation_trace)
+        return self.activation_trace[iteration]
+
+
+class CyclicActivation(AgentActivationScheme):
+    """
+    Scheme where an agent cycles through active and inactive intervals.
+
+    The agent is active for ``active_for`` iterations and inactive for ``inactive_for`` iterations in each cycle.
+    The first interval is active by default, but ``start_active=False`` starts each cycle with the inactive interval.
+
+    Args:
+        active_for: number of active iterations in each cycle.
+        inactive_for: number of inactive iterations in each cycle.
+        start_active: whether each cycle starts with the active interval.
+
+    Raises:
+        ValueError: if ``active_for`` or ``inactive_for`` is negative, both are zero, or ``iteration`` is negative.
+
+    """
+
+    def __init__(self, active_for: int, inactive_for: int, start_active: bool = True):
+        if active_for < 0 or inactive_for < 0:
+            raise ValueError("active_for and inactive_for must be non-negative")
+        if active_for == 0 and inactive_for == 0:
+            raise ValueError("At least one of active_for or inactive_for must be positive")
+        self.active_for = active_for
+        self.inactive_for = inactive_for
+        self.start_active = start_active
+
+    def is_active(self, iteration: int) -> bool:  # noqa: D102
+        if iteration < 0:
+            raise ValueError("iteration must be non-negative")
+        period = self.active_for + self.inactive_for
+        phase = iteration % period
+        if self.start_active:
+            return phase < self.active_for
+        return phase >= self.inactive_for
+
+
 class ClientSelectionScheme(ABC):
     """
     Scheme defining how to select a subset of available clients.
