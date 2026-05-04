@@ -108,7 +108,10 @@ def _run_display_with_capture(
     monkeypatch.setattr("decent_bench.benchmark._display.display_tables", _capture_tables)
     monkeypatch.setattr("decent_bench.benchmark._display.display_plots", _capture_plots)
 
-    display_metrics(metrics_result=metrics_result, **display_kwargs)
+    try:
+        display_metrics(metrics_result=metrics_result, **display_kwargs)
+    finally:
+        plt.close("all")
     return captured
 
 
@@ -602,40 +605,47 @@ def test_get_separate_legend_path_appends_legend_suffix() -> None:  # noqa: D103
 
 def test_create_separate_legend_figure_tightly_fits_legend() -> None:  # noqa: D103
     fig, ax = plt.subplots()
-    ax.plot([0.0, 1.0], [0.0, 1.0], label="Algorithm A")
-    ax.plot([0.0, 1.0], [1.0, 0.0], label="Algorithm B")
-    handles, labels = ax.get_legend_handles_labels()
+    legend_fig = None
 
-    legend_fig = _create_separate_legend_figure(handles, labels, label_cols=2, estimated_rows=1)
+    try:
+        ax.plot([0.0, 1.0], [0.0, 1.0], label="Algorithm A")
+        ax.plot([0.0, 1.0], [1.0, 0.0], label="Algorithm B")
+        handles, labels = ax.get_legend_handles_labels()
 
-    legend = legend_fig.legends[0]
-    legend_fig.canvas.draw()
-    renderer = legend_fig.canvas.get_renderer()
-    legend_bbox = legend.get_window_extent(renderer)
-    figure_width, figure_height = legend_fig.get_size_inches()
-    legend_width = legend_bbox.width / legend_fig.dpi
-    legend_height = legend_bbox.height / legend_fig.dpi
+        legend_fig = _create_separate_legend_figure(handles, labels, label_cols=2, estimated_rows=1)
 
-    assert figure_width >= legend_width
-    assert figure_height >= legend_height
-    assert figure_width - legend_width < 0.5
-    assert figure_height - legend_height < 0.5
+        legend = legend_fig.legends[0]
+        legend_fig.canvas.draw()
+        renderer = legend_fig.canvas.get_renderer()
+        legend_bbox = legend.get_window_extent(renderer)
+        figure_width, figure_height = legend_fig.get_size_inches()
+        legend_width = legend_bbox.width / legend_fig.dpi
+        legend_height = legend_bbox.height / legend_fig.dpi
 
-    plt.close(fig)
-    plt.close(legend_fig)
+        assert figure_width >= legend_width
+        assert figure_height >= legend_height
+        assert figure_width - legend_width < 0.5
+        assert figure_height - legend_height < 0.5
+    finally:
+        plt.close(fig)
+        if legend_fig is not None:
+            plt.close(legend_fig)
 
 
 def test_add_legend_and_save_creates_missing_parent_directory() -> None:  # noqa: D103
     fig, ax = plt.subplots()
     ax.plot([0.0, 1.0], [0.0, 1.0], label="A")
 
-    with tempfile.TemporaryDirectory(dir=".") as temp_dir:
-        target = Path(temp_dir) / "nested" / "results" / "plot.png"
-        assert not target.parent.exists()
+    try:
+        with tempfile.TemporaryDirectory(dir=".") as temp_dir:
+            target = Path(temp_dir) / "nested" / "results" / "plot.png"
+            assert not target.parent.exists()
 
-        _add_legend_and_save(fig, [ax], plot_path=target)
+            _add_legend_and_save(fig, [ax], plot_path=target)
 
-        assert target.exists()
+            assert target.exists()
+    finally:
+        plt.close(fig)
 
 
 # -----------------------------------------------------------------------------
