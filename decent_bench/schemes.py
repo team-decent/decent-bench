@@ -777,9 +777,7 @@ class ErrorFeedbackCompression(CompressionScheme):
         self._residual: Array | None = None
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
-        corrected_msg = iop.copy(msg)
-        if self._residual is not None:
-            corrected_msg += self._residual
+        corrected_msg = msg if self._residual is None else msg + self._residual
 
         compressed_msg = self.compression.compress(iop.copy(corrected_msg))
         self._residual = corrected_msg - compressed_msg
@@ -869,8 +867,9 @@ class QSGDCompression(CompressionScheme):
         if msg_norm == 0:
             return iop.zeros_like(msg)
 
-        magnitudes = iop.to_numpy(iop.absolute(msg), dtype=np.float64)
-        signs = iop.to_numpy(iop.sign(msg), dtype=np.float64)
+        msg_np = iop.to_numpy(msg, dtype=np.float64)
+        magnitudes = np.abs(msg_np)
+        signs = np.sign(msg_np)
         scaled_magnitudes = self.n_levels * magnitudes / msg_norm
         lower_levels = np.floor(scaled_magnitudes)
         probabilities = scaled_magnitudes - lower_levels
