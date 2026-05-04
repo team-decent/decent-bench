@@ -82,12 +82,14 @@ def _create_p2p_network(impairments: bool, cost_cls: type) -> P2PNetwork:
         costs, _, _ = create_classification_problem(
             cost_cls=cost_cls,
             n_agents=4,
+            show_progress=False,
         )
     except Exception:
         # Bad solver might fail, will be updated soon...
         costs, _, _ = create_classification_problem(
             cost_cls=cost_cls,
             n_agents=4,
+            show_progress=False,
         )
     agents = [
         Agent(
@@ -114,12 +116,14 @@ def _create_fed_network(impairments: bool, cost_cls: type) -> FedNetwork:
         costs, _, _ = create_classification_problem(
             cost_cls=cost_cls,
             n_agents=4,
+            show_progress=False,
         )
     except Exception:
         # Bad solver might fail, will be updated soon...
         costs, _, _ = create_classification_problem(
             cost_cls=cost_cls,
             n_agents=4,
+            show_progress=False,
         )
     agents = [
         Agent(

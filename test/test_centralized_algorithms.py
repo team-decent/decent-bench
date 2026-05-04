@@ -159,6 +159,14 @@ def test_solver_run_uses_snapshot_for_inplace_updates() -> None:
     np.testing.assert_allclose(np.asarray(out), np.asarray([5.0], dtype=float))
 
 
+def test_solver_run_supports_progress_display() -> None:
+    solver = InPlaceStepSolver(cost=DummyCost(m_smooth=1.0, m_cvx=0.0), x0=np.asarray([0.0], dtype=float))
+
+    out = solver.run(max_iter=1, show_progress=True)
+
+    np.testing.assert_allclose(np.asarray(out), np.asarray([1.0], dtype=float))
+
+
 def test_solver_run_honors_stop_tol() -> None:
     solver = DecayStepSolver(cost=DummyCost(m_smooth=1.0, m_cvx=0.0), x0=np.asarray([0.0], dtype=float))
 

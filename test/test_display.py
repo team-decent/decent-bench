@@ -1,8 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-import tempfile
 from copy import deepcopy
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -603,17 +605,25 @@ def test_get_separate_legend_path_appends_legend_suffix() -> None:  # noqa: D103
     assert legend_path.as_posix() == "plots/plot_fig1_legend.png"
 
 
-def test_create_separate_legend_figure_tightly_fits_legend() -> None:  # noqa: D103
-    fig, ax = plt.subplots()
-    legend_fig = None
+def _test_figure(*, figsize: tuple[float, float] | None = None) -> Figure:
+    fig = Figure(figsize=figsize)
+    FigureCanvasAgg(fig)
+    return fig
 
+
+def test_create_separate_legend_figure_tightly_fits_legend(monkeypatch) -> None:  # noqa: D103
+    monkeypatch.setattr(
+        "decent_bench.metrics._plots.plt.figure",
+        lambda *args, **kwargs: _test_figure(figsize=kwargs.get("figsize")),
+    )
+    handles = [
+        Line2D([], [], label="Algorithm A"),
+        Line2D([], [], label="Algorithm B"),
+    ]
+    labels = ["Algorithm A", "Algorithm B"]
+
+    legend_fig = _create_separate_legend_figure(handles, labels, label_cols=2, estimated_rows=1)
     try:
-        ax.plot([0.0, 1.0], [0.0, 1.0], label="Algorithm A")
-        ax.plot([0.0, 1.0], [1.0, 0.0], label="Algorithm B")
-        handles, labels = ax.get_legend_handles_labels()
-
-        legend_fig = _create_separate_legend_figure(handles, labels, label_cols=2, estimated_rows=1)
-
         legend = legend_fig.legends[0]
         legend_fig.canvas.draw()
         renderer = legend_fig.canvas.get_renderer()
@@ -627,23 +637,31 @@ def test_create_separate_legend_figure_tightly_fits_legend() -> None:  # noqa: D
         assert figure_width - legend_width < 0.5
         assert figure_height - legend_height < 0.5
     finally:
-        plt.close(fig)
-        if legend_fig is not None:
-            plt.close(legend_fig)
+        plt.close(legend_fig)
 
 
-def test_add_legend_and_save_creates_missing_parent_directory() -> None:  # noqa: D103
-    fig, ax = plt.subplots()
+def test_add_legend_and_save_creates_missing_parent_directory(monkeypatch) -> None:  # noqa: D103
+    fig = _test_figure()
+    ax = fig.subplots()
     ax.plot([0.0, 1.0], [0.0, 1.0], label="A")
+    target = Path("missing_parent") / "nested" / "results" / "plot.png"
+    mkdir_calls = []
+    savefig_calls = []
+
+    def _capture_mkdir(self, *, parents=False, exist_ok=False):  # noqa: ANN001, ANN202, FBT002
+        mkdir_calls.append((self, parents, exist_ok))
+
+    def _capture_savefig(path, *args, **kwargs):  # noqa: ANN001, ANN202, ARG001
+        savefig_calls.append(path)
+
+    monkeypatch.setattr(Path, "mkdir", _capture_mkdir)
+    monkeypatch.setattr(fig, "savefig", _capture_savefig)
 
     try:
-        with tempfile.TemporaryDirectory(dir=".") as temp_dir:
-            target = Path(temp_dir) / "nested" / "results" / "plot.png"
-            assert not target.parent.exists()
+        _add_legend_and_save(fig, [ax], plot_path=target)
 
-            _add_legend_and_save(fig, [ax], plot_path=target)
-
-            assert target.exists()
+        assert mkdir_calls == [(target.parent, True, True)]
+        assert savefig_calls == [target]
     finally:
         plt.close(fig)
 

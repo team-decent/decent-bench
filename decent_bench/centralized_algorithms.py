@@ -14,7 +14,13 @@ if TYPE_CHECKING:
     from decent_bench.costs import Cost
 
 
-def solve(cost: "Cost", max_iter: int = 100, stop_tol: float | None = None, max_tol: float | None = None) -> Array:
+def solve(
+    cost: "Cost",
+    max_iter: int = 100,
+    stop_tol: float | None = None,
+    max_tol: float | None = None,
+    show_progress: bool = True,
+) -> Array:
     """
     Minimize a cost function using a suitable solver.
 
@@ -27,6 +33,7 @@ def solve(cost: "Cost", max_iter: int = 100, stop_tol: float | None = None, max_
         stop_tol: optional early stopping tolerance; stops if ``||x_new - x_old||^2`` drops below this value.
         max_tol: optional final tolerance; RuntimeError is raised if ``||x_new - x_old||^2`` exceeds this value
                  after max_iter iterations.
+        show_progress: whether to display a progress bar during iterative solves. Defaults to ``True``.
 
     Returns:
         Approximate minimizer or stationary point.
@@ -57,11 +64,21 @@ def solve(cost: "Cost", max_iter: int = 100, stop_tol: float | None = None, max_
     # smooth and convex/strongly convex
     elif np.isfinite(cost.m_smooth) and np.isfinite(cost.m_cvx) and cost.m_smooth > 0:
         LOGGER.info(f"{stop_criteria}")
-        x_optimal = AcceleratedGradientDescent(cost).run(max_iter=max_iter, stop_tol=stop_tol, max_tol=max_tol)
+        x_optimal = AcceleratedGradientDescent(cost).run(
+            max_iter=max_iter,
+            stop_tol=stop_tol,
+            max_tol=max_tol,
+            show_progress=show_progress,
+        )
     # non-smooth or non-convex
     else:
         LOGGER.info(f"{stop_criteria}")
-        x_optimal = GradientDescent(cost).run(max_iter=max_iter, stop_tol=stop_tol, max_tol=max_tol)
+        x_optimal = GradientDescent(cost).run(
+            max_iter=max_iter,
+            stop_tol=stop_tol,
+            max_tol=max_tol,
+            show_progress=show_progress,
+        )
 
     LOGGER.info("... done!")
 
