@@ -510,7 +510,7 @@ The built-in options are :class:`~decent_bench.schemes.AlwaysActive`,
 :class:`~decent_bench.schemes.TraceActivation` follows a fixed availability
 trace, while :class:`~decent_bench.schemes.CyclicActivation` alternates between
 active and inactive intervals. 
-Implemtned federated algorithms in decent-benchfirst ask the network for
+Implemented federated algorithms in decent-bench first ask the network for
 active clients and then apply the client-selection scheme to that active set.
 
 Compression schemes transform messages before they are sent. The default

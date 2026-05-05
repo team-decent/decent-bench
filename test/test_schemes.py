@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from decent_bench.agents import Agent
-from decent_bench.costs import L2RegularizerCost
+from decent_bench.costs import L2RegularizerCost, LinearRegressionCost
 from decent_bench.schemes import (
     AgentActivationScheme,
     AlwaysActive,
@@ -274,6 +274,35 @@ def test_high_loss_client_selection_selects_fraction() -> None:
     selected_clients = scheme.select(clients, iteration=0)
 
     assert selected_clients == [clients[1], clients[3]]
+
+
+def test_high_loss_client_selection_does_not_consume_empirical_risk_batch() -> None:
+    dataset = [
+        (np.array([1.0, 0.0]), np.array([1.0])),
+        (np.array([0.0, 1.0]), np.array([1.0])),
+        (np.array([2.0, 0.0]), np.array([2.0])),
+        (np.array([0.0, 2.0]), np.array([2.0])),
+    ]
+    x = Array(np.zeros(2))
+
+    iop.set_seed(0)
+    control_cost = LinearRegressionCost(dataset, batch_size=2)
+    control_cost.gradient(x)
+    expected_batch = control_cost.batch_used
+
+    iop.set_seed(0)
+    selected_cost = LinearRegressionCost(dataset, batch_size=2)
+    clients = [
+        Agent(0, selected_cost),
+        Agent(1, LinearRegressionCost(dataset, batch_size=2)),
+    ]
+    for client in clients:
+        client.x = x
+
+    HighLossClientSelection(clients_per_round=1).select(clients, iteration=0)
+    selected_cost.gradient(x)
+
+    assert selected_cost.batch_used == expected_batch
 
 
 def test_hybrid_fair_high_loss_client_selection_can_prioritize_loss() -> None:

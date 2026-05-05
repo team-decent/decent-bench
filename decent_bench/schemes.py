@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
+from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.utils.agent_utils import infer_client_data_size
 from decent_bench.utils.array import Array
 
@@ -239,6 +240,12 @@ class ClientSelectionScheme(ABC):
         if value_range == 0:
             return [0.0 for _ in value_list]
         return [(value - min_value) / value_range for value in value_list]
+
+    @staticmethod
+    def _client_loss(client: Agent) -> float:
+        if isinstance(client.cost, EmpiricalRiskCost):
+            return client.cost.function(client.x, indices="all")
+        return client.cost.function(client.x)
 
     @abstractmethod
     def select(
@@ -489,10 +496,6 @@ class HighLossClientSelection(ClientSelectionScheme):
         self.clients_per_round = clients_per_round
         self.client_fraction = client_fraction
 
-    @staticmethod
-    def _loss(client: Agent) -> float:
-        return client.cost.function(client.x)
-
     def select(  # noqa: D102
         self,
         clients: Sequence[Agent],
@@ -507,7 +510,7 @@ class HighLossClientSelection(ClientSelectionScheme):
         if n_selected_clients >= len(clients_list):
             return clients_list
 
-        losses = [self._loss(client) for client in clients_list]
+        losses = [self._client_loss(client) for client in clients_list]
         tie_breakers = iop.rng_numpy().permutation(len(clients_list))
         ranked_indices = sorted(
             range(len(clients_list)),
@@ -574,7 +577,7 @@ class HybridFairHighLossClientSelection(ClientSelectionScheme):
             loss_scores = [0.0 for _ in clients_list]
             staleness_scores = [0.0 for _ in clients_list]
             if self.loss_weight > 0:
-                loss_scores = self._normalized_scores([client.cost.function(client.x) for client in clients_list])
+                loss_scores = self._normalized_scores([self._client_loss(client) for client in clients_list])
             if staleness_weight > 0:
                 staleness_scores = self._normalized_scores(
                     [self._staleness(client, iteration) for client in clients_list],
@@ -646,7 +649,7 @@ class CountFairHighLossClientSelection(ClientSelectionScheme):
             loss_scores = [0.0 for _ in clients_list]
             count_scores = [0.0 for _ in clients_list]
             if self.loss_weight > 0:
-                loss_scores = self._normalized_scores([client.cost.function(client.x) for client in clients_list])
+                loss_scores = self._normalized_scores([self._client_loss(client) for client in clients_list])
             if count_weight > 0:
                 counts = [self._selection_counts.get(client, 0) for client in clients_list]
                 max_count = max(counts)
@@ -717,7 +720,7 @@ class DataSizeHighLossClientSelection(ClientSelectionScheme):
         loss_scores = [0.0 for _ in clients_list]
         data_size_scores = [0.0 for _ in clients_list]
         if self.loss_weight > 0:
-            loss_scores = self._normalized_scores([client.cost.function(client.x) for client in clients_list])
+            loss_scores = self._normalized_scores([self._client_loss(client) for client in clients_list])
         if data_size_weight > 0:
             data_size_scores = self._normalized_scores(
                 [float(infer_client_data_size(client)) for client in clients_list],
