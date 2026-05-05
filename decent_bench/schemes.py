@@ -766,7 +766,8 @@ class ErrorFeedbackCompression(CompressionScheme):
 
     Note:
         The residual is stored in the scheme instance. When using this scheme for messages from multiple senders,
-        pass a dictionary with one ``ErrorFeedbackCompression`` instance per sender.
+        pass a dictionary with one ``ErrorFeedbackCompression`` instance per sender. Residuals are cached by message
+        shape to avoid mixing residuals between same-sender messages with incompatible shapes.
 
     .. footbibliography::
 
@@ -774,13 +775,15 @@ class ErrorFeedbackCompression(CompressionScheme):
 
     def __init__(self, compression: CompressionScheme):
         self.compression = compression
-        self._residual: Array | None = None
+        self._residuals: dict[tuple[int, ...], Array] = {}
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
-        corrected_msg = msg if self._residual is None else msg + self._residual
+        msg_shape = iop.shape(msg)
+        residual = self._residuals.get(msg_shape)
+        corrected_msg = msg if residual is None else msg + residual
 
         compressed_msg = self.compression.compress(iop.copy(corrected_msg))
-        self._residual = corrected_msg - compressed_msg
+        self._residuals[msg_shape] = corrected_msg - compressed_msg
         return compressed_msg
 
 

@@ -526,6 +526,22 @@ def test_error_feedback_compression_accumulates_residual() -> None:
     np.testing.assert_array_equal(third_message, Array(np.array([1.0, 0.0, 0.0])))
 
 
+def test_error_feedback_compression_keeps_separate_residuals_by_shape() -> None:
+    class HalfCompression(CompressionScheme):
+        def compress(self, msg: Array) -> Array:
+            return msg / 2
+
+    scheme = ErrorFeedbackCompression(HalfCompression())
+
+    scalar_message = scheme.compress(Array(np.array([2.0])))
+    vector_message = scheme.compress(Array(np.array([0.0, 0.0, 0.0])))
+    next_scalar_message = scheme.compress(Array(np.array([0.0])))
+
+    np.testing.assert_array_equal(scalar_message, Array(np.array([1.0])))
+    np.testing.assert_array_equal(vector_message, Array(np.array([0.0, 0.0, 0.0])))
+    np.testing.assert_array_equal(next_scalar_message, Array(np.array([0.5])))
+
+
 def test_error_feedback_compression_leaves_no_residual_with_no_compression() -> None:
     scheme = ErrorFeedbackCompression(NoCompression())
     message = Array(np.array([1.0, 2.0, 3.0]))
