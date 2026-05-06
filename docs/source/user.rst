@@ -127,6 +127,18 @@ The ``num_local_steps`` argument can be either a single integer for
 homogeneous local work or a per-client mapping for heterogeneous local step
 counts.
 
+:class:`~decent_bench.algorithms.federated.FedPD` implements the FedPD
+primal-dual update. Clients keep persistent local primal variables, dual
+variables, and centre candidates. Each round uses ``num_local_steps`` local
+gradient steps on the augmented Lagrangian, with ``step_size`` controlling the
+local learning rate and ``eta`` controlling the FedPD quadratic
+penalty/dual-update parameter. The ``skip_probability`` argument controls the
+paper's optional communication skipping: ``0`` aggregates every round and ``1``
+always keeps local centre candidates without server aggregation. Like
+``FedNova``, ``num_local_steps`` can be either a single integer or a per-client
+mapping. FedPD always uses all active clients; partial participation is not
+supported.
+
 Federated aggregation
 ^^^^^^^^^^^^^^^^^^^^^
 For the built-in federated algorithms, aggregation affects only how client
@@ -155,6 +167,12 @@ to the corresponding FedNova variants controlled by ``beta``, ``mu``, and
 ``gamma``. Plain FedNova matches FedAvg only when the participating clients use
 the same number of local steps and FedNova's and FedAvg both use data-proportional aggregation
 weights.
+
+:class:`~decent_bench.algorithms.federated.FedPD` aggregates received centre
+candidates uniformly when communication is not skipped. The synchronized centre
+is sent back through the network to all active clients only if at least one
+centre candidate was received; if the network drops that server message, the
+affected client keeps its local centre candidate.
 
 :class:`~decent_bench.algorithms.federated.Scaffold` matches the standard
 SCAFFOLD algorithm and always uses uniform averaging over the selected clients.

@@ -58,6 +58,14 @@ class Scaffold(FedAlgorithm):
     where both aggregated deltas are averaged uniformly over the selected clients.
 
     .. footbibliography::
+
+    Note:
+        ``x0`` and ``c0`` follow the :obj:`~decent_bench.utils.types.InitialStates` convention and are resolved
+        per agent during ``initialize`` via
+        :func:`~decent_bench.algorithms.utils.initial_states`. For federated networks, ``c0`` dictionaries can
+        include both client control variates and the server control variate. If the server entry is missing, it is
+        inferred as the average of the client control variates.
+
     """
 
     iterations: int = 100
@@ -68,6 +76,7 @@ class Scaffold(FedAlgorithm):
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
     x0: InitialStates = None
+    c0: InitialStates = None
     name: str = "Scaffold"
 
     def __post_init__(self) -> None:
@@ -87,17 +96,18 @@ class Scaffold(FedAlgorithm):
 
     def initialize(self, network: FedNetwork) -> None:
         self.x0 = initial_states(self.x0, network)
+        self.c0 = initial_states(self.c0, network)
         server = network.server()
         server_x0 = self.x0[server]
         server.initialize(
             x=server_x0,
-            aux_vars={"c": iop.zeros_like(server_x0)},
+            aux_vars={"c": self.c0[server]},
         )
         for client in network.clients():
             client_x0 = self.x0[client]
             client.initialize(
                 x=client_x0,
-                aux_vars={"c_i": iop.zeros_like(client_x0)},
+                aux_vars={"c_i": self.c0[client]},
             )
 
     def step(self, network: FedNetwork, iteration: int) -> None:

@@ -5,6 +5,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms._algorithm import Algorithm
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme
+from decent_bench.utils.types import LocalSteps
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -15,6 +16,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     """Federated algorithm - clients collaborate via a central server."""
 
     selection_scheme: ClientSelectionScheme | None = None
+    num_local_steps: LocalSteps
 
     def cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
         return [network.server(), *network.clients()]
@@ -69,6 +71,45 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         if self.selection_scheme is None:
             return list(active_clients)
         return self.selection_scheme.select(active_clients, iteration)
+
+    def _validate_num_local_steps(self) -> None:
+        """
+        Validate homogeneous or per-client local step counts.
+
+        Raises:
+            TypeError: if ``num_local_steps`` is not an integer or client mapping.
+            ValueError: if ``num_local_steps`` contains non-positive step counts.
+
+        """
+        if isinstance(self.num_local_steps, int):
+            if self.num_local_steps <= 0:
+                raise ValueError("`num_local_steps` must be positive")
+            return
+        if isinstance(self.num_local_steps, dict):
+            for step in self.num_local_steps.values():
+                if step <= 0:
+                    raise ValueError("`num_local_steps` must have positive values")
+            return
+        raise TypeError("`num_local_steps` must be an int or a mapping from Agent to integer values")
+
+    def _settle_num_local_steps(self, network: FedNetwork) -> dict["Agent", int]:
+        """
+        Resolve homogeneous or per-client local step counts for the network clients.
+
+        Raises:
+            ValueError: if a per-client mapping is missing a network client.
+
+        """
+        clients = network.clients()
+        if isinstance(self.num_local_steps, int):
+            return dict.fromkeys(clients, self.num_local_steps)
+        missing_clients = [client for client in clients if client not in self.num_local_steps]
+        if missing_clients:
+            raise ValueError(
+                "`num_local_steps` mapping must provide a value for every network client; "
+                f"missing clients: {missing_clients}"
+            )
+        return {client: self.num_local_steps[client] for client in clients}
 
     def aggregate(
         self,

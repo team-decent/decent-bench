@@ -96,6 +96,43 @@ def _run_scaffold_local_update(
     return local_x, client.aux_vars["c_i"], control_delta
 
 
+def test_scaffold_initializes_control_variates_from_c0() -> None:
+    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))]
+    network = FedNetwork(clients=clients)
+    algorithm = Scaffold(
+        iterations=1,
+        c0={
+            clients[0]: np.array([1.0]),
+            clients[1]: np.array([3.0]),
+            network.server(): np.array([7.0]),
+        },
+    )
+
+    algorithm.initialize(network)
+
+    np.testing.assert_allclose(network.server().aux_vars["c"], np.array([7.0]))
+    np.testing.assert_allclose(clients[0].aux_vars["c_i"], np.array([1.0]))
+    np.testing.assert_allclose(clients[1].aux_vars["c_i"], np.array([3.0]))
+
+
+def test_scaffold_infers_server_control_from_client_c0() -> None:
+    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))]
+    network = FedNetwork(clients=clients)
+    algorithm = Scaffold(
+        iterations=1,
+        c0={
+            clients[0]: np.array([1.0]),
+            clients[1]: np.array([3.0]),
+        },
+    )
+
+    algorithm.initialize(network)
+
+    np.testing.assert_allclose(network.server().aux_vars["c"], np.array([2.0]))
+    np.testing.assert_allclose(clients[0].aux_vars["c_i"], np.array([1.0]))
+    np.testing.assert_allclose(clients[1].aux_vars["c_i"], np.array([3.0]))
+
+
 def test_control_variate_correction_changes_the_local_step() -> None:
     cost = TrackingCost(gradient_value=1.0)
 
