@@ -2,6 +2,7 @@ from ._fed_adagrad import FedAdagrad
 from ._fed_adam import FedAdam
 from ._fed_algorithm import FedAlgorithm
 from ._fed_avg import FedAvg
+from ._fed_lt import FedLT
 from ._fed_nova import FedNova
 from ._fed_opt import FedOpt
 from ._fed_pd import FedPD
@@ -14,6 +15,7 @@ __all__ = [
     "FedAdam",
     "FedAlgorithm",
     "FedAvg",
+    "FedLT",
     "FedNova",
     "FedOpt",
     "FedPD",
