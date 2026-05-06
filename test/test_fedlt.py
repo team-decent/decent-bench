@@ -5,10 +5,10 @@ import numpy as np
 import pytest
 
 from decent_bench.agents import Agent
-from decent_bench.costs import Cost, EmpiricalRiskCost, L1RegularizerCost, QuadraticCost, ZeroCost
 from decent_bench.algorithms.federated import FedLT
+from decent_bench.costs import Cost, EmpiricalRiskCost, L1RegularizerCost, QuadraticCost, ZeroCost
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import ClientSelectionScheme, GaussianNoise, Quantization
+from decent_bench.schemes import ClientSelectionScheme, DropScheme, GaussianNoise, NoDrops, Quantization
 from decent_bench.utils.types import (
     Dataset,
     EmpiricalRiskIndices,
@@ -159,6 +159,16 @@ class FirstClientSelection(ClientSelectionScheme):
         return [clients[0]]
 
 
+class DropOnCalls(DropScheme):
+    def __init__(self, dropped_calls: set[int]):
+        self._dropped_calls = dropped_calls
+        self._call_count = 0
+
+    def should_drop(self) -> bool:
+        self._call_count += 1
+        return self._call_count in self._dropped_calls
+
+
 def _make_network(*costs: Cost) -> FedNetwork:
     return FedNetwork(clients=[Agent(i, cost) for i, cost in enumerate(costs)])
 
@@ -303,6 +313,31 @@ def test_fedlt_supports_partial_participation_and_keeps_stale_server_z() -> None
     np.testing.assert_allclose(clients[1].x, np.array([0.0]))
     np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[0]], np.array([-2.0]))
     np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[1]], np.array([0.0]))
+
+
+def test_fedlt_ignores_buffered_stale_server_broadcasts() -> None:
+    clients = [Agent(0, ConstantGradientCost(1.0)), Agent(1, ConstantGradientCost(3.0))]
+    server = Agent(2, ZeroCost((1,)))
+    network = FedNetwork(
+        clients=clients,
+        server=server,
+        buffer_messages=True,
+        message_drop={server: DropOnCalls({3}), clients[0]: NoDrops(), clients[1]: NoDrops()},
+    )
+    algorithm = FedLT(iterations=2, step_size=1.0, num_local_epochs=1, rho=1.0)
+    algorithm.initialize(network)
+
+    network._step(0)  # noqa: SLF001
+    algorithm.step(network, 0)
+    np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[0]], np.array([-2.0]))
+    np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[1]], np.array([-6.0]))
+
+    network._step(1)  # noqa: SLF001
+    algorithm.step(network, 1)
+
+    np.testing.assert_allclose(network.server().x, np.array([-4.0]))
+    np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[0]], np.array([-2.0]))
+    np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[1]], np.array([-8.0]))
 
 
 def test_fedlt_smoke_with_network_noise_and_compression() -> None:

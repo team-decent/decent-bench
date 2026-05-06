@@ -334,3 +334,27 @@ def test_scaffold_ignores_buffered_stale_client_messages() -> None:
 
     np.testing.assert_allclose(network.server().x, np.array([-4.0]))
     np.testing.assert_allclose(network.server().aux_vars["c"], np.array([2.0]))
+
+
+def test_scaffold_ignores_buffered_stale_server_broadcasts() -> None:
+    algorithm = Scaffold(iterations=2, step_size=1.0, num_local_epochs=1)
+    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))]
+    server = Agent(2, ZeroCost((1,)))
+    network = FedNetwork(
+        clients=clients,
+        server=server,
+        buffer_messages=True,
+        message_drop={server: DropOnCalls({3}), clients[0]: NoDrops(), clients[1]: NoDrops()},
+    )
+    algorithm.initialize(network)
+
+    network._step(0)  # noqa: SLF001
+    algorithm.step(network, 0)
+    np.testing.assert_allclose(network.server().x, np.array([-2.0]))
+    np.testing.assert_allclose(network.server().aux_vars["c"], np.array([2.0]))
+
+    network._step(1)  # noqa: SLF001
+    algorithm.step(network, 1)
+
+    np.testing.assert_allclose(network.server().x, np.array([-4.0]))
+    np.testing.assert_allclose(network.server().aux_vars["c"], np.array([2.0]))

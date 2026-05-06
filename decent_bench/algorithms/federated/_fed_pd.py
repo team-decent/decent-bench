@@ -170,7 +170,9 @@ class FedPD(FedAlgorithm):
 
         When used with :class:`~decent_bench.networks.Network` ``buffer_messages=True``, this method assumes the
         caller has already removed stale buffered client-to-server messages for the participating clients, so only
-        current-round centre candidates are aggregated.
+        current-round centre candidates are aggregated. The subsequent server synchronization uses
+        :meth:`~decent_bench.algorithms.federated.FedAlgorithm.server_broadcast`, which clears stale server-to-client
+        messages before sending, so clients update their centre only when they receive the current synchronization.
         """
         server = network.server()
         received_clients = [client for client in participating_clients if client in network.server().messages]

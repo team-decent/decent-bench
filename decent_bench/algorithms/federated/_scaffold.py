@@ -124,7 +124,8 @@ class Scaffold(FedAlgorithm):
         self.aggregate(network, participating_clients)
 
     def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        """Send the current server model and server control variate to the selected clients."""
+        """Clear stale server broadcasts, then send the current server model and control variate."""
+        self._clear_buffered_client_server_messages(network, selected_clients)
         payload = iop.stack([network.server().x, network.server().aux_vars["c"]], dim=0)
         network.send(sender=network.server(), receiver=selected_clients, msg=payload)
 

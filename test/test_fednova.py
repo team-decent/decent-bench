@@ -451,6 +451,28 @@ def test_fednova_uses_only_clients_with_both_uploads(dropped_calls: set[int]) ->
     np.testing.assert_allclose(network.server().x, np.array([-10.0]))
 
 
+def test_fednova_ignores_buffered_stale_server_broadcasts() -> None:
+    clients = [Agent(0, TrackingCost(1.0, n_samples=1)), Agent(1, TrackingCost(3.0, n_samples=1))]
+    server = Agent(2, TrackingCost(0.0))
+    network = FedNetwork(
+        clients=clients,
+        server=server,
+        buffer_messages=True,
+        message_drop={server: DropOnCalls({3}), clients[0]: NoDrops(), clients[1]: NoDrops()},
+    )
+    algorithm = FedNova(iterations=2, step_size=1.0, num_local_steps=1)
+    algorithm.initialize(network)
+
+    network._step(0)  # noqa: SLF001
+    algorithm.step(network, 0)
+    np.testing.assert_allclose(network.server().x, np.array([-2.0]))
+
+    network._step(1)  # noqa: SLF001
+    algorithm.step(network, 1)
+
+    np.testing.assert_allclose(network.server().x, np.array([-5.0]))
+
+
 def test_fednova_differs_from_fedavg_when_local_steps_are_heterogeneous() -> None:
     fednova_network = _make_fed_network(1.0, 3.0)
     fedavg_network = _make_fed_network(1.0, 3.0)

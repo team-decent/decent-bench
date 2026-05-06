@@ -249,6 +249,32 @@ def test_fedpd_keeps_local_center_when_server_sync_message_is_dropped() -> None:
     np.testing.assert_allclose(clients[1].aux_vars["center"], np.array([-4.0]))
 
 
+def test_fedpd_ignores_buffered_stale_server_sync_messages() -> None:
+    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))]
+    server = Agent(2, ZeroCost((1,)))
+    network = FedNetwork(
+        clients=clients,
+        server=server,
+        buffer_messages=True,
+        message_drop={server: DropOnCalls({3}), clients[0]: NoDrops(), clients[1]: NoDrops()},
+    )
+    algorithm = FedPD(iterations=2, step_size=1.0, eta=1.0, skip_probability=0.0)
+    algorithm.initialize(network)
+
+    network._step(0)  # noqa: SLF001
+    algorithm.step(network, 0)
+    np.testing.assert_allclose(network.server().x, np.array([-4.0]))
+    np.testing.assert_allclose(clients[0].aux_vars["center"], np.array([-4.0]))
+    np.testing.assert_allclose(clients[1].aux_vars["center"], np.array([-4.0]))
+
+    network._step(1)  # noqa: SLF001
+    algorithm.step(network, 1)
+
+    np.testing.assert_allclose(network.server().x, np.array([-6.0]))
+    np.testing.assert_allclose(clients[0].aux_vars["center"], np.array([-5.0]))
+    np.testing.assert_allclose(clients[1].aux_vars["center"], np.array([-6.0]))
+
+
 def test_fedpd_probabilistic_communication_is_reproducible_when_seeded() -> None:
     def run_once() -> tuple[np.ndarray, list[np.ndarray]]:
         iop.set_seed(123, frameworks=[])
