@@ -167,6 +167,12 @@ always keeps local centre candidates without server aggregation. Like
 mapping. FedPD always uses all active clients; partial participation is not
 supported.
 
+:class:`~decent_bench.algorithms.federated.FedDyn` implements Federated Dynamic
+Regularization. Clients keep a persistent dynamic state ``g`` and the server
+keeps an auxiliary vector ``h``. Selected clients run ``num_local_epochs`` local
+gradient steps on the dynamic-regularized local objective using ``step_size`` as
+the local learning rate and ``alpha`` as the regularization coefficient.
+
 Federated aggregation
 ^^^^^^^^^^^^^^^^^^^^^
 For the built-in federated algorithms, aggregation affects only how client
@@ -201,6 +207,13 @@ aggregation weights.
 
 :class:`~decent_bench.algorithms.federated.FedPD` aggregates received centre
 candidates uniformly when communication is not skipped.
+
+:class:`~decent_bench.algorithms.federated.FedDyn` averages the received
+selected-client models uniformly, so the local-model average is scaled by the
+number of received selected clients. The next server model also includes the
+FedDyn dynamic correction from the server auxiliary vector ``h``. The ``h``
+update uses only received client models and scales their model deltas by the
+total number of clients.
 
 :class:`~decent_bench.algorithms.federated.Scaffold` matches the standard
 SCAFFOLD algorithm and always uses uniform averaging over the selected clients.

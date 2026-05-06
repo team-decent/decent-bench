@@ -7,6 +7,7 @@ from decent_bench.algorithms.federated import (
     FedAdam,
     FedAlgorithm,
     FedAvg,
+    FedDyn,
     FedLT,
     FedNova,
     FedPD,
@@ -75,6 +76,7 @@ all_fed_algs = pytest.mark.parametrize(
     ("algorithm_cls", "kwargs"),
     [
         (FedAvg, {"iterations": 10, "step_size": 0.1}),
+        (FedDyn, {"iterations": 10, "step_size": 0.1}),
         (FedLT, {"iterations": 10, "step_size": 0.1}),
         (FedProx, {"iterations": 10, "step_size": 0.1}),
         (FedAdagrad, {"iterations": 10, "step_size": 0.1}),
