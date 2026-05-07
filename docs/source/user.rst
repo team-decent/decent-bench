@@ -138,12 +138,13 @@ homogeneous local work or a per-client mapping for heterogeneous local step
 counts.
 
 :class:`~decent_bench.algorithms.federated.FedLT` implements Federated Local
-Training with cost-driven local gradients and optional acceleration through
-``use_acceleration``. :class:`~decent_bench.costs.EmpiricalRiskCost` objects use
-their default mini-batch gradient behavior, so they behave as local SGD, while
-generic :class:`~decent_bench.costs.Cost` objects use full gradients and behave
-as local GD. Fed-LT compression and Fed-PLT-style noisy-message experiments are
-configured through :class:`~decent_bench.networks.FedNetwork`
+Training with cost-driven local gradients. Its ``local_solver`` option supports
+``"gd"``, ``"accelerated"``, and ``"adam"`` local updates.
+:class:`~decent_bench.costs.EmpiricalRiskCost` objects use their default
+mini-batch gradient behavior, so gradient-based local solvers use mini-batches,
+while generic :class:`~decent_bench.costs.Cost` objects use full gradients.
+Fed-LT compression and Fed-PLT-style noisy-message experiments are configured
+through :class:`~decent_bench.networks.FedNetwork`
 ``message_compression`` and ``message_noise`` schemes rather than algorithm
 arguments.
 

@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+import math
 from typing import Any
 
 import numpy as np
@@ -173,13 +174,26 @@ def _make_network(*costs: Cost) -> FedNetwork:
     return FedNetwork(clients=[Agent(i, cost) for i, cost in enumerate(costs)])
 
 
-@pytest.mark.parametrize("use_acceleration", [False, True])
-def test_fedlt_runs_with_default_and_accelerated_local_updates(use_acceleration: bool) -> None:
+@pytest.mark.parametrize("local_solver", ["gd", "accelerated"])
+def test_fedlt_runs_with_default_and_accelerated_local_updates(local_solver: str) -> None:
     network = _make_network(
         QuadraticCost(A=np.array([[1.0]]), b=np.array([-1.0])),
         QuadraticCost(A=np.array([[2.0]]), b=np.array([1.0])),
     )
-    algorithm = FedLT(iterations=3, step_size=0.2, num_local_epochs=2, rho=1.0, use_acceleration=use_acceleration)
+    algorithm = FedLT(iterations=3, step_size=0.2, num_local_epochs=2, rho=1.0, local_solver=local_solver)
+
+    algorithm.run(network)
+
+    assert np.isfinite(network.server().x).all()
+    assert all(np.isfinite(client.x).all() for client in network.clients())
+
+
+def test_fedlt_accepts_adam_local_solver() -> None:
+    network = _make_network(
+        QuadraticCost(A=np.array([[1.0]]), b=np.array([-1.0])),
+        QuadraticCost(A=np.array([[2.0]]), b=np.array([1.0])),
+    )
+    algorithm = FedLT(iterations=3, step_size=0.2, num_local_epochs=2, rho=1.0, local_solver="adam")
 
     algorithm.run(network)
 
@@ -193,9 +207,15 @@ def test_fedlt_runs_with_default_and_accelerated_local_updates(use_acceleration:
         ({"rho": 0.0}, "`rho` must be positive"),
         ({"num_local_epochs": 0}, "`num_local_epochs` must be positive"),
         ({"step_size": 0.0}, "`step_size` must be positive"),
+        ({"local_solver": "bad"}, "`local_solver` must be one of"),
+        ({"adam_beta1": -0.1}, "`adam_beta1` must satisfy 0 <= adam_beta1 < 1"),
+        ({"adam_beta1": 1.0}, "`adam_beta1` must satisfy 0 <= adam_beta1 < 1"),
+        ({"adam_beta2": -0.1}, "`adam_beta2` must satisfy 0 <= adam_beta2 < 1"),
+        ({"adam_beta2": 1.0}, "`adam_beta2` must satisfy 0 <= adam_beta2 < 1"),
+        ({"adam_epsilon": 0.0}, "`adam_epsilon` must be positive"),
     ],
 )
-def test_fedlt_rejects_invalid_parameters(kwargs: dict[str, float | int], error: str) -> None:
+def test_fedlt_rejects_invalid_parameters(kwargs: dict[str, float | int | str], error: str) -> None:
     with pytest.raises(ValueError, match=error):
         FedLT(iterations=1, **kwargs)
 
@@ -216,7 +236,7 @@ def test_fedlt_initializes_auxiliary_variables_from_z0() -> None:
 
 def test_fedlt_accelerated_solver_requires_valid_client_constants() -> None:
     network = _make_network(ConstantGradientCost(m_smooth=np.inf, m_cvx=0.0))
-    algorithm = FedLT(iterations=1, use_acceleration=True)
+    algorithm = FedLT(iterations=1, local_solver="accelerated")
 
     with pytest.raises(ValueError, match="requires finite non-negative"):
         algorithm.initialize(network)
@@ -234,6 +254,93 @@ def test_fedlt_local_gradient_step_uses_penalty_term() -> None:
 
     np.testing.assert_allclose(local_x, np.array([-1.0]))
     np.testing.assert_allclose(z_next, np.array([-2.0]))
+
+
+def test_fedlt_adam_one_step_matches_formula() -> None:
+    client = Agent(0, ConstantGradientCost(gradient_value=2.0))
+    server = Agent(1, ZeroCost((1,)))
+    algorithm = FedLT(iterations=1, step_size=0.5, num_local_epochs=1, rho=1.0, local_solver="adam")
+    client.initialize(x=np.array([0.0]), aux_vars={"z": np.array([0.0])})
+    server.initialize(x=np.array([0.0]))
+    client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+
+    local_x, z_next = algorithm._compute_local_update(client, server)
+
+    expected_x = np.array([-0.5 * 2.0 / (math.sqrt(4.0) + algorithm.adam_epsilon)])
+    np.testing.assert_allclose(local_x, expected_x)
+    np.testing.assert_allclose(z_next, 2 * expected_x)
+
+
+def _manual_adam_steps(
+    *,
+    x0: float,
+    step_size: float,
+    beta1: float,
+    beta2: float,
+    epsilon: float,
+    num_steps: int,
+) -> float:
+    x = x0
+    m = 0.0
+    v = 0.0
+    for step in range(1, num_steps + 1):
+        grad = 2 * x
+        m = (beta1 * m) + ((1 - beta1) * grad)
+        v = (beta2 * v) + ((1 - beta2) * (grad * grad))
+        m_hat = m / (1 - (beta1**step))
+        v_hat = v / (1 - (beta2**step))
+        x -= step_size * m_hat / (math.sqrt(v_hat) + epsilon)
+    return x
+
+
+def test_fedlt_adam_multi_step_matches_formula_on_quadratic() -> None:
+    client = Agent(0, QuadraticCost(A=np.array([[1.0]]), b=np.array([0.0])))
+    server = Agent(1, ZeroCost((1,)))
+    algorithm = FedLT(
+        iterations=1,
+        step_size=0.1,
+        num_local_epochs=3,
+        rho=1.0,
+        local_solver="adam",
+        adam_beta1=0.8,
+        adam_beta2=0.9,
+        adam_epsilon=1e-6,
+    )
+    client.initialize(x=np.array([1.0]), aux_vars={"z": np.array([0.0])})
+    server.initialize(x=np.array([0.0]))
+    client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+
+    local_x, z_next = algorithm._compute_local_update(client, server)
+
+    expected_x = _manual_adam_steps(
+        x0=1.0,
+        step_size=algorithm.step_size,
+        beta1=algorithm.adam_beta1,
+        beta2=algorithm.adam_beta2,
+        epsilon=algorithm.adam_epsilon,
+        num_steps=algorithm.num_local_epochs,
+    )
+    np.testing.assert_allclose(local_x, np.array([expected_x]))
+    np.testing.assert_allclose(z_next, np.array([2 * expected_x]))
+
+
+def test_fedlt_adam_moments_reset_each_local_solve() -> None:
+    client = Agent(0, QuadraticCost(A=np.array([[1.0]]), b=np.array([0.0])))
+    server = Agent(1, ZeroCost((1,)))
+    algorithm = FedLT(iterations=1, step_size=0.1, num_local_epochs=2, rho=1.0, local_solver="adam")
+    server.initialize(x=np.array([0.0]))
+
+    def run_local_solve() -> tuple[np.ndarray, np.ndarray]:
+        client.initialize(x=np.array([1.0]), aux_vars={"z": np.array([0.0])})
+        client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+        return algorithm._compute_local_update(client, server)
+
+    local_x_1, z_next_1 = run_local_solve()
+    local_x_2, z_next_2 = run_local_solve()
+
+    np.testing.assert_allclose(local_x_1, local_x_2)
+    np.testing.assert_allclose(z_next_1, z_next_2)
+    assert set(client.aux_vars) == {"z"}
 
 
 def test_fedlt_server_step_uses_server_cost_proximal_for_optional_global_regularizer() -> None:

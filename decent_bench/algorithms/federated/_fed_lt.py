@@ -50,8 +50,9 @@ class FedLT(FedAlgorithm):
     mini-batch sampling, so this behaves as local SGD. Generic :class:`~decent_bench.costs.Cost` objects use their
     normal full-gradient behavior, so this behaves as local GD.
 
-    If ``use_acceleration`` is true, Fed-LT uses the accelerated local update with each client cost's ``m_smooth`` and
-    ``m_cvx`` metadata. It initializes :math:`u_i^0=w^0_{i,k}`. With :math:`L_i=\texttt{m_smooth}` and
+    The ``local_solver`` argument selects the method used for these local steps. The default ``"gd"`` uses the
+    gradient update above. The ``"accelerated"`` option uses each client cost's ``m_smooth`` and ``m_cvx`` metadata.
+    It initializes :math:`u_i^0=w^0_{i,k}`. With :math:`L_i=\texttt{m_smooth}` and
     :math:`\mu_i=\texttt{m_cvx}`, it applies
 
     .. math::
@@ -67,6 +68,27 @@ class FedLT(FedAlgorithm):
     If the client cost has :math:`\mu_i=0`, this coefficient reduces to the Fed-LT expression with
     :math:`\sqrt{1/\rho}` in the second term. The constants must be finite and non-negative. The gradient call remains
     cost-driven: empirical costs use their default mini-batches and generic costs use full gradients.
+
+    The ``"adam"`` option applies Adam to the same local gradient
+    :math:`\nabla f_i(w^\ell_{i,k}) + (w^\ell_{i,k} - v_{i,k})/\rho`. Adam moments are reset at the start of every
+    local solve because Fed-LT locally trains the current round's subproblem rather than maintaining a persistent
+    optimizer state across rounds.
+
+    .. math::
+        g^\ell_{i,k} =
+        \nabla f_i(w^{\ell-1}_{i,k}) + \frac{1}{\rho}(w^{\ell-1}_{i,k} - v_{i,k})
+
+    .. math::
+        m^\ell_{i,k} = \beta_1 m^{\ell-1}_{i,k} + (1-\beta_1)g^\ell_{i,k}, \qquad
+        s^\ell_{i,k} = \beta_2 s^{\ell-1}_{i,k} + (1-\beta_2)(g^\ell_{i,k})^2
+
+    .. math::
+        w^\ell_{i,k} =
+        w^{\ell-1}_{i,k}
+        - \gamma\frac{\hat m^\ell_{i,k}}{\sqrt{\hat s^\ell_{i,k}} + \epsilon},
+
+    for :math:`\ell=1,\ldots,N_e`, with :math:`m^0_{i,k}=s^0_{i,k}=0`. The terms
+    :math:`\hat m^\ell_{i,k}` and :math:`\hat s^\ell_{i,k}` are the Adam bias-corrected moments.
 
     After local training, the client sets
 
@@ -86,7 +108,10 @@ class FedLT(FedAlgorithm):
     step_size: float = 0.001
     num_local_epochs: int = 1
     rho: float = 1.0
-    use_acceleration: bool = False
+    local_solver: str = "gd"
+    adam_beta1: float = 0.9
+    adam_beta2: float = 0.999
+    adam_epsilon: float = 1e-8
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformClientSelection(client_fraction=1.0)
     )
@@ -110,9 +135,17 @@ class FedLT(FedAlgorithm):
             raise ValueError("`num_local_epochs` must be positive")
         if self.rho <= 0:
             raise ValueError("`rho` must be positive")
+        if self.local_solver not in {"gd", "accelerated", "adam"}:
+            raise ValueError("`local_solver` must be one of 'gd', 'accelerated', or 'adam'")
+        if not (0 <= self.adam_beta1 < 1):
+            raise ValueError("`adam_beta1` must satisfy 0 <= adam_beta1 < 1")
+        if not (0 <= self.adam_beta2 < 1):
+            raise ValueError("`adam_beta2` must satisfy 0 <= adam_beta2 < 1")
+        if self.adam_epsilon <= 0:
+            raise ValueError("`adam_epsilon` must be positive")
 
     def initialize(self, network: FedNetwork) -> None:
-        if self.use_acceleration:
+        if self.local_solver == "accelerated":
             self._initialize_accelerated_parameters(network)
 
         self.x0 = initial_states(self.x0, network)
@@ -132,10 +165,11 @@ class FedLT(FedAlgorithm):
             m_cvx = client.cost.m_cvx
             if not math.isfinite(m_smooth) or not math.isfinite(m_cvx) or m_smooth < 0 or m_cvx < 0:
                 raise ValueError(
-                    "`use_acceleration=True` requires finite non-negative `m_smooth` and `m_cvx` on every client cost"
+                    "`local_solver='accelerated'` requires finite non-negative `m_smooth` and `m_cvx` "
+                    "on every client cost"
                 )
             if m_smooth < m_cvx:
-                raise ValueError("`use_acceleration=True` requires `m_smooth >= m_cvx` on every client cost")
+                raise ValueError("`local_solver='accelerated'` requires `m_smooth >= m_cvx` on every client cost")
 
             smoothness = m_smooth + (1 / self.rho)
             strong_convexity = m_cvx + (1 / self.rho)
@@ -185,8 +219,10 @@ class FedLT(FedAlgorithm):
         v = (2 * y) - z
         local_x = iop.copy(client.x)
 
-        if self.use_acceleration:
+        if self.local_solver == "accelerated":
             local_x = self._compute_accelerated_local_update(client, local_x, v)
+        elif self.local_solver == "adam":
+            local_x = self._compute_adam_local_update(client, local_x, v)
         else:
             for _ in range(self.num_local_epochs):
                 grad = client.cost.gradient(local_x) + ((local_x - v) / self.rho)
@@ -205,6 +241,19 @@ class FedLT(FedAlgorithm):
             u_next = local_x - ((1 / smoothness) * grad)
             local_x = u_next + (momentum * (u_next - u_previous))
             u_previous = u_next
+        return local_x
+
+    def _compute_adam_local_update(self, client: "Agent", local_x: "Array", v: "Array") -> "Array":
+        m = iop.zeros_like(local_x)
+        s = iop.zeros_like(local_x)
+
+        for step in range(1, self.num_local_epochs + 1):
+            grad = client.cost.gradient(local_x) + ((local_x - v) / self.rho)
+            m = (self.adam_beta1 * m) + ((1 - self.adam_beta1) * grad)
+            s = (self.adam_beta2 * s) + ((1 - self.adam_beta2) * (grad * grad))
+            m_hat = m / (1 - (self.adam_beta1**step))
+            s_hat = s / (1 - (self.adam_beta2**step))
+            local_x -= self.step_size * m_hat / (iop.sqrt(s_hat) + self.adam_epsilon)
         return local_x
 
     def aggregate(
