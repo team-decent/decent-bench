@@ -321,14 +321,13 @@ def test_fednova_uploads_normalizer_then_cumulative_gradient() -> None:
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
 
     np.testing.assert_allclose(network.server().messages[clients[0]], np.array([2.0]))
     np.testing.assert_allclose(network.server().messages[clients[1]], np.array([1.0]))
 
     algorithm._collect_received_normalizers(network, participating_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
+    network._clear_received_messages(receivers=[network.server()], senders=participating_clients)  # noqa: SLF001
     algorithm._communicate_cumulative_gradients(network, participating_clients)
 
     np.testing.assert_allclose(network.server().messages[clients[0]], np.array([4.0]))
@@ -357,10 +356,9 @@ def test_fednova_renormalizes_client_weights_over_received_subset() -> None:
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
     algorithm._collect_received_normalizers(network, participating_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
+    network._clear_received_messages(receivers=[network.server()], senders=participating_clients)  # noqa: SLF001
     algorithm._communicate_cumulative_gradients(network, participating_clients)
     network.server()._received_messages.pop(clients[1])  # noqa: SLF001
 
@@ -379,10 +377,9 @@ def test_fednova_aggregate_rejects_non_positive_normalizer() -> None:
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
     algorithm._collect_received_normalizers(network, participating_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
+    network._clear_received_messages(receivers=[network.server()], senders=participating_clients)  # noqa: SLF001
     algorithm._communicate_cumulative_gradients(network, participating_clients)
     network.server().aux_vars["received_a_i"][clients[0]] = 0.0
 
@@ -405,7 +402,6 @@ def test_fednova_collect_received_normalizers_stores_empty_dict_when_all_are_dro
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
 
     algorithm._collect_received_normalizers(network, participating_clients)
@@ -449,28 +445,6 @@ def test_fednova_uses_only_clients_with_both_uploads(dropped_calls: set[int]) ->
     algorithm.step(network, 0)
 
     np.testing.assert_allclose(network.server().x, np.array([-10.0]))
-
-
-def test_fednova_ignores_buffered_stale_server_broadcasts() -> None:
-    clients = [Agent(0, TrackingCost(1.0, n_samples=1)), Agent(1, TrackingCost(3.0, n_samples=1))]
-    server = Agent(2, TrackingCost(0.0))
-    network = FedNetwork(
-        clients=clients,
-        server=server,
-        buffer_messages=True,
-        message_drop={server: DropOnCalls({3}), clients[0]: NoDrops(), clients[1]: NoDrops()},
-    )
-    algorithm = FedNova(iterations=2, step_size=1.0, num_local_steps=1)
-    algorithm.initialize(network)
-
-    network._step(0)  # noqa: SLF001
-    algorithm.step(network, 0)
-    np.testing.assert_allclose(network.server().x, np.array([-2.0]))
-
-    network._step(1)  # noqa: SLF001
-    algorithm.step(network, 1)
-
-    np.testing.assert_allclose(network.server().x, np.array([-5.0]))
 
 
 def test_fednova_differs_from_fedavg_when_local_steps_are_heterogeneous() -> None:

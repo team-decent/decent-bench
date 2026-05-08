@@ -106,7 +106,6 @@ class FedPD(FedAlgorithm):
 
         self._run_local_updates(participating_clients)
         if random.random() >= self.skip_probability:
-            self._clear_buffered_server_messages(network, participating_clients)
             self._communicate_center_candidates(network, participating_clients)
             self.aggregate_and_synchronize(network, participating_clients)
 
@@ -167,12 +166,6 @@ class FedPD(FedAlgorithm):
         Aggregate received FedPD centre candidates and synchronize the updated centre.
 
         If no centre candidates are received, the server state is left unchanged and no synchronization is sent.
-
-        When used with :class:`~decent_bench.networks.Network` ``buffer_messages=True``, this method assumes the
-        caller has already removed stale buffered client-to-server messages for the participating clients, so only
-        current-round centre candidates are aggregated. The subsequent server synchronization uses
-        :meth:`~decent_bench.algorithms.federated.FedAlgorithm.server_broadcast`, which clears stale server-to-client
-        messages before sending, so clients update their centre only when they receive the current synchronization.
         """
         server = network.server()
         received_clients = [client for client in participating_clients if client in network.server().messages]

@@ -119,13 +119,11 @@ class Scaffold(FedAlgorithm):
         participating_clients = self._clients_with_server_broadcast(network, selected_clients)
         if not participating_clients:
             return
-        self._clear_buffered_server_messages(network, participating_clients)
         self._run_local_updates(network, participating_clients)
         self.aggregate(network, participating_clients)
 
     def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        """Clear stale server broadcasts, then send the current server model and control variate."""
-        self._clear_buffered_client_server_messages(network, selected_clients)
+        """Send the current server model and control variate."""
         payload = iop.stack([network.server().x, network.server().aux_vars["c"]], dim=0)
         network.send(sender=network.server(), receiver=selected_clients, msg=payload)
 
@@ -168,9 +166,7 @@ class Scaffold(FedAlgorithm):
         """
         Aggregate received SCAFFOLD client deltas using uniform averaging.
 
-        When used with :class:`~decent_bench.networks.Network` ``buffer_messages=True``, this method assumes the
-        caller has already removed stale buffered client-to-server messages for the participating clients, so only
-        current-round updates are aggregated.
+        Only current-round client deltas received by the server are aggregated.
         """
         server = network.server()
         received_clients = [client for client in participating_clients if client in server.messages]

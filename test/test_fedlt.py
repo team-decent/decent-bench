@@ -422,29 +422,24 @@ def test_fedlt_supports_partial_participation_and_keeps_stale_server_z() -> None
     np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[1]], np.array([0.0]))
 
 
-def test_fedlt_ignores_buffered_stale_server_broadcasts() -> None:
+def test_fedlt_keeps_stale_server_z_when_client_upload_is_dropped() -> None:
     clients = [Agent(0, ConstantGradientCost(1.0)), Agent(1, ConstantGradientCost(3.0))]
-    server = Agent(2, ZeroCost((1,)))
     network = FedNetwork(
         clients=clients,
-        server=server,
-        buffer_messages=True,
-        message_drop={server: DropOnCalls({3}), clients[0]: NoDrops(), clients[1]: NoDrops()},
+        message_drop={clients[0]: DropOnCalls({1}), clients[1]: NoDrops()},
     )
-    algorithm = FedLT(iterations=2, step_size=1.0, num_local_epochs=1, rho=1.0)
+    algorithm = FedLT(iterations=1, step_size=1.0, num_local_epochs=1, rho=1.0)
     algorithm.initialize(network)
 
     network._step(0)  # noqa: SLF001
     algorithm.step(network, 0)
-    np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[0]], np.array([-2.0]))
+
+    np.testing.assert_allclose(clients[0].x, np.array([-1.0]))
+    np.testing.assert_allclose(clients[0].aux_vars["z"], np.array([-2.0]))
+    np.testing.assert_allclose(clients[1].x, np.array([-3.0]))
+    np.testing.assert_allclose(clients[1].aux_vars["z"], np.array([-6.0]))
+    np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[0]], np.array([0.0]))
     np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[1]], np.array([-6.0]))
-
-    network._step(1)  # noqa: SLF001
-    algorithm.step(network, 1)
-
-    np.testing.assert_allclose(network.server().x, np.array([-4.0]))
-    np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[0]], np.array([-2.0]))
-    np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[1]], np.array([-8.0]))
 
 
 def test_fedlt_smoke_with_network_noise_and_compression() -> None:

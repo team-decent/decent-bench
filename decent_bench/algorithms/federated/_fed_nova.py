@@ -169,14 +169,13 @@ class FedNova(FedAlgorithm):
         participating_clients = self._clients_with_server_broadcast(network, selected_clients)
         if not participating_clients:
             return
-        self._clear_buffered_server_messages(network, participating_clients)
         self._run_local_updates(network, participating_clients)
         self._collect_received_normalizers(network, participating_clients)
         if not network.server().aux_vars["received_a_i"]:
             for client in participating_clients:
                 client.aux_vars.pop("_fednova_cumulative_gradient", None)
             return
-        self._clear_buffered_server_messages(network, participating_clients)
+        network._clear_received_messages(receivers=[network.server()], senders=participating_clients)  # noqa: SLF001
         self._communicate_cumulative_gradients(network, participating_clients)
         self.aggregate(network, participating_clients)
 
@@ -256,9 +255,8 @@ class FedNova(FedAlgorithm):
         This method assumes the current round has already cached the received FedNova coefficients ``a_i`` on the
         server and that the server's current messages contain the received cumulative local updates
         :math:`\mathbf{c}_i^t`. Client sample counts are looked up from the mapping stored on the server during
-        ``initialize``. When used with :class:`~decent_bench.networks.Network` ``buffer_messages=True``, the caller
-        must already have removed stale buffered client-to-server messages for the participating clients at the start
-        of the round and between the ``a_i`` and cumulative-gradient upload phases. If no client has both uploads
+        ``initialize``. The server inbox is cleared between the ``a_i`` and cumulative-gradient upload phases so
+        dropped second-phase messages cannot be confused with first-phase normalizers. If no client has both uploads
         available in the current round, this method returns without updating the server model.
 
         Raises:

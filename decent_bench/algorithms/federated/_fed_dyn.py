@@ -98,7 +98,6 @@ class FedDyn(FedAlgorithm):
         participating_clients = self._clients_with_server_broadcast(network, selected_clients)
         if not participating_clients:
             return
-        self._clear_buffered_server_messages(network, participating_clients)
         self._run_local_updates(network, participating_clients)
         self.aggregate(network, participating_clients)
 
@@ -132,9 +131,7 @@ class FedDyn(FedAlgorithm):
         """
         Aggregate received FedDyn client models and apply the server dynamic correction.
 
-        When used with :class:`~decent_bench.networks.Network` ``buffer_messages=True``, this method assumes the
-        caller has already removed stale buffered client-to-server messages for the participating clients, so only
-        current-round client models are aggregated.
+        Only client models received in the current round are aggregated.
         """
         server = network.server()
         received_clients = [client for client in participating_clients if client in server.messages]

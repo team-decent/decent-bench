@@ -79,7 +79,6 @@ class FedAvg(FedAlgorithm):
         participating_clients = self._clients_with_server_broadcast(network, selected_clients)
         if not participating_clients:
             return
-        self._clear_buffered_server_messages(network, participating_clients)
         self._run_local_updates(network, participating_clients)
         self.aggregate(network, participating_clients)
 
