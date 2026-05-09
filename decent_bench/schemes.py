@@ -7,6 +7,7 @@ import numpy as np
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.utils.array import Array
+from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -343,23 +344,31 @@ class GilbertElliott(DropScheme):
         return iop.rng_numpy().random() < self.drop_rate if self._current_state else False
 
 
+# later remove framework and device when iop refactored
 class NoiseScheme(ABC):
-    """Scheme defining how noise impacts messages."""
+    """Scheme defining the noise impacting messages."""
 
     @abstractmethod
-    def make_noise(self, msg: Array) -> Array:
-        """Apply noise scheme without mutating the *msg* passed in."""
+    def make_noise(
+        self, shape: tuple[int, ...], framework: SupportedFrameworks, device: SupportedDevices
+    ) -> Array | None:
+        """Generate noise array of given shape (None if no noise)."""
 
 
 class NoNoise(NoiseScheme):
-    """Scheme that leaves messages untouched."""
+    """Scheme representing transmission without noise."""
 
-    def make_noise(self, msg: Array) -> Array:  # noqa: D102
-        return msg
+    def make_noise(  # noqa: D102
+        self,
+        _: tuple[int, ...],
+        _framework: SupportedFrameworks,
+        _device: SupportedDevices,
+    ) -> Array | None:
+        return None
 
 
 class GaussianNoise(NoiseScheme):
-    """Scheme that applies Gaussian noise - that is, noise following a normal distribution."""
+    """Scheme generating normal noise."""
 
     def __init__(self, mean: float, std: float):
         if std < 0:
@@ -367,5 +376,5 @@ class GaussianNoise(NoiseScheme):
         self.mean = mean
         self.std = std
 
-    def make_noise(self, msg: Array) -> Array:  # noqa: D102
-        return msg + iop.normal_like(msg, mean=self.mean, std=self.std)
+    def make_noise(self, shape: tuple[int, ...], framework: SupportedFrameworks, device: SupportedDevices) -> Array:  # noqa: D102
+        return iop.normal(framework=framework, device=device, shape=shape, mean=self.mean, std=self.std)

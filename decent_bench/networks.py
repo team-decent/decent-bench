@@ -254,27 +254,6 @@ class Network(ABC):  # noqa: B024
             self._active_connected_agents_cache[agent] = [a for a in self.connected_agents(agent) if a in active_agents]
         return self._active_connected_agents_cache[agent]
 
-    def _send_one(self, sender: Agent, receiver: Agent, msg: Array) -> None:
-        """
-        Send message to an agent.
-
-        The message may be compressed, distorted by noise, and/or dropped depending on the network's
-        :class:`~decent_bench.schemes.CompressionScheme`,
-        :class:`~decent_bench.schemes.NoiseScheme`,
-        and :class:`~decent_bench.schemes.DropScheme`.
-
-        The message will be immediately available to the receiver if it is active in the current iteration.
-        """
-        counter_increment = int(np.prod(iop.shape(msg)) / sender.cost.size)  # replace with msg.size
-        sender._n_sent_messages += counter_increment  # noqa: SLF001
-        if self._message_drop[sender].should_drop():
-            sender._n_sent_messages_dropped += counter_increment  # noqa: SLF001
-            return
-        msg = iop.copy(msg)
-        msg = self._message_noise[sender].make_noise(msg)
-        receiver._n_received_messages += counter_increment  # noqa: SLF001
-        receiver._received_messages[sender] = msg  # noqa: SLF001
-
     def _allowed_receivers(self, sender: Agent) -> set[Agent]:
         """Get the set of agents that the sender is allowed to send messages to (i.e. connected and active)."""
         return set(self.active_connected_agents(sender))
@@ -287,6 +266,12 @@ class Network(ABC):  # noqa: B024
     ) -> None:
         """
         Send message to one or more agents.
+
+        The message may be compressed, distorted by noise, and/or dropped depending on the network's
+        :class:`~decent_bench.schemes.CompressionScheme`,
+        :class:`~decent_bench.schemes.NoiseScheme`,
+        and :class:`~decent_bench.schemes.DropScheme`. The potentially compressed and noisy message (if not dropped)
+        is then instantaneously available to each receiver.
 
         Args:
             sender: sender agent
@@ -311,14 +296,29 @@ class Network(ABC):  # noqa: B024
                 raise ValueError("Sender and receiver must be connected in the network")
             receiver = [receiver]
 
-        currently_active_connected_agents = self._allowed_receivers(sender)
+        # raise for unconnected/inactive
+        unavailable_missing_receivers = set(receiver) - self._allowed_receivers(sender)
+        if unavailable_missing_receivers:
+            raise ValueError(
+                f"Receivers {unavailable_missing_receivers} are not active or not connected to {sender} "
+                f"in iteration {self._iteration}"
+            )
+
+        counter_increment = int(np.prod(iop.shape(msg)) / sender.cost.size)  # replace with msg.size once available
+        sender._n_sent_messages += counter_increment * len(receiver)  # noqa: SLF001
+        framework, device = iop.framework_device_of_array(msg)  # remove after iop refactor
+
+        # select confirmed receivers (message is not dropped)
+        confirmed_receivers = [r for r in receiver if not self._message_drop[sender].should_drop()]
+        sender._n_sent_messages_dropped += counter_increment * (len(receiver) - len(confirmed_receivers))  # noqa: SLF001
+        # compress the message
         msg = self._message_compression[sender].compress(iop.copy(msg))
-        for r in receiver:
-            if r not in currently_active_connected_agents:
-                raise ValueError(
-                    f"Receiver {r} is not active or not connected to {sender} in iteration {self._iteration}"
-                )
-            self._send_one(sender=sender, receiver=r, msg=msg)
+        # generate noise
+        noise = self._message_noise[sender].make_noise((len(confirmed_receivers), *iop.shape(msg)), framework, device)
+        # transmit messages
+        for i, r in enumerate(confirmed_receivers):
+            r._received_messages[sender] = msg if noise is None else msg + noise[i]  # noqa: SLF001
+            r._n_received_messages += counter_increment  # noqa: SLF001
 
     def _step(self, iteration: int) -> None:
         """Set the iteration counter for the network and clear all received messages from agents."""

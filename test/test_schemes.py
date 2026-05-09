@@ -302,7 +302,9 @@ def test_no_noise(
     scheme: NoiseScheme,
 ) -> None:
     message = Array(np.ones(5))
-    noise_error = float(iop.norm(message - scheme.make_noise(message)))
+    framework, device = iop.framework_device_of_array(message)
+    noise = scheme.make_noise(iop.shape(message), framework, device)
+    noise_error = 0 if noise is None else float(iop.norm(noise))
 
     assert noise_error == pytest.approx(0)
 
@@ -318,7 +320,9 @@ def test_noise(
     scheme: NoiseScheme,
 ) -> None:
     message = Array(np.ones(5))
-    noise_error = float(iop.norm(message - scheme.make_noise(message)))
+    framework, device = iop.framework_device_of_array(message)
+    noise = scheme.make_noise(iop.shape(message), framework, device)
+    noise_error = 0 if noise is None else float(iop.norm(noise))
 
     assert noise_error > 0
 

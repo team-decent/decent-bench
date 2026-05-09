@@ -39,8 +39,8 @@ class AddNoise(NoiseScheme):
     def __init__(self, offset: float):
         self.offset = offset
 
-    def make_noise(self, msg):  # noqa: ANN001, D102
-        return msg + self.offset
+    def make_noise(self, shape, framework, device):  # noqa: ANN001, D102
+        return iop.to_array(np.full(shape, self.offset), framework=framework, device=device)
 
 
 class FixedDrop(DropScheme):
