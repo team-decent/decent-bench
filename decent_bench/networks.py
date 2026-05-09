@@ -265,13 +265,14 @@ class Network(ABC):  # noqa: B024
 
         The message will be immediately available to the receiver if it is active in the current iteration.
         """
-        sender._n_sent_messages += 1  # noqa: SLF001
+        counter_increment = int(np.prod(iop.shape(msg)) / sender.cost.size)  # replace with msg.size
+        sender._n_sent_messages += counter_increment  # noqa: SLF001
         if self._message_drop[sender].should_drop():
-            sender._n_sent_messages_dropped += 1  # noqa: SLF001
+            sender._n_sent_messages_dropped += counter_increment  # noqa: SLF001
             return
         msg = iop.copy(msg)
         msg = self._message_noise[sender].make_noise(msg)
-        receiver._n_received_messages += 1  # noqa: SLF001
+        receiver._n_received_messages += counter_increment  # noqa: SLF001
         receiver._received_messages[sender] = msg  # noqa: SLF001
 
     def _allowed_receivers(self, sender: Agent) -> set[Agent]:

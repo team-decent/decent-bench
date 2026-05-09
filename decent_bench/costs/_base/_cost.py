@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from functools import cached_property
+from math import prod
 from numbers import Real
 from typing import Any
 
@@ -44,6 +46,11 @@ class Cost(ABC):  # noqa: PLR0904
     def domain_shape(self) -> tuple[int, ...]:
         """Alias for :attr:`shape`."""
         return self.shape
+
+    @cached_property
+    def size(self) -> int:
+        """Number of elements in x."""
+        return prod(self.shape)
 
     @property
     @abstractmethod
