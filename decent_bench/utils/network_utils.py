@@ -4,8 +4,9 @@ from collections.abc import Mapping
 from typing import Any, Literal
 
 import matplotlib.axes
-import networkx
 import networkx as nx
+
+from decent_bench.networks import Network
 
 _LAYOUT_FUNCS: dict[Literal["spring", "kamada_kawai", "circular", "random", "shell"], Any] = {
     "spring": nx.drawing.layout.spring_layout,
@@ -17,17 +18,17 @@ _LAYOUT_FUNCS: dict[Literal["spring", "kamada_kawai", "circular", "random", "she
 
 
 def plot_network(
-    graph: networkx.Graph[Any],
+    network: Network,
     *,
     ax: matplotlib.axes.Axes | None = None,
     layout: Literal["spring", "kamada_kawai", "circular", "random", "shell"] = "spring",
     **draw_kwargs: Mapping[str, object],
 ) -> matplotlib.axes.Axes:
     """
-    Plot a NetworkX graph using the built-in NetworkX drawing utilities.
+    Plot a Network using NetworkX drawing utilities.
 
     Args:
-        graph: NetworkX graph to plot.
+        network: Network to be plotted.
         ax: optional :class:`matplotlib.axes.Axes` to draw on. If ``None`` a new figure is created.
         layout: layout algorithm to position nodes (e.g. :func:`networkx.drawing.layout.spring_layout`,
             :func:`networkx.drawing.layout.kamada_kawai_layout`,
@@ -54,17 +55,17 @@ def plot_network(
         supported = ", ".join(sorted(_LAYOUT_FUNCS))
         raise ValueError(f"Unsupported layout '{layout}'. Supported layouts: {supported}")
 
-    pos = layout_func(graph)
+    pos = layout_func(network.graph)
     if ax is None:
         _, ax = plt.subplots()
 
     draw_kwargs_dict: dict[str, Any] = dict(draw_kwargs)
-    # use agents' ids as labels if custom labels are not specified by the user
+    # use agents' indices within the network as labels (if custom labels are not specified by the user)
     if "labels" not in draw_kwargs_dict:
-        draw_kwargs_dict["labels"] = {a: getattr(a, "id", a) for a in graph}
+        draw_kwargs_dict["labels"] = {a: a.index for a in network.graph}
 
     nx.drawing.nx_pylab.draw_networkx(
-        graph,
+        network.graph,
         pos=pos,
         ax=ax,
         **draw_kwargs_dict,
