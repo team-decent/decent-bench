@@ -135,6 +135,12 @@ def _fix_missing_ref(app, env, node, contnode):
                 "TensorflowTensor",
                 refuri="https://www.tensorflow.org/api_docs/python/tf/Tensor",
             )
+        if target in {"nx.Graph", "networkx.Graph"}:
+            return nodes.reference(
+                "",
+                "networkx.Graph",
+                refuri="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph",
+            )
     return None
 
 

@@ -94,7 +94,6 @@ def _create_p2p_network(impairments: bool, cost_cls: type) -> P2PNetwork:
         )
     agents = [
         Agent(
-            i,
             cost,
             activation=UniformActivationRate(0.8) if impairments else None,
         )
@@ -128,7 +127,6 @@ def _create_fed_network(impairments: bool, cost_cls: type) -> FedNetwork:
         )
     agents = [
         Agent(
-            i,
             cost,
             activation=UniformActivationRate(0.8) if impairments else None,
         )

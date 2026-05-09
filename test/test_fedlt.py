@@ -160,7 +160,7 @@ class FirstClientSelection(ClientSelectionScheme):
 
 
 def _make_network(*costs: Cost) -> FedNetwork:
-    return FedNetwork(clients=[Agent(i, cost) for i, cost in enumerate(costs)])
+    return FedNetwork(clients=[Agent(cost) for cost in costs])
 
 
 @pytest.mark.parametrize("use_acceleration", [False, True])
@@ -213,8 +213,8 @@ def test_fedlt_accelerated_solver_requires_valid_client_constants() -> None:
 
 
 def test_fedlt_local_gradient_step_uses_penalty_term() -> None:
-    client = Agent(0, ConstantGradientCost(gradient_value=1.0))
-    server = Agent(1, ZeroCost((1,)))
+    client = Agent(ConstantGradientCost(gradient_value=1.0))
+    server = Agent(ZeroCost((1,)))
     algorithm = FedLT(iterations=1, step_size=1.0, num_local_epochs=2, rho=1.0)
     client.initialize(x=np.array([0.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
@@ -228,8 +228,8 @@ def test_fedlt_local_gradient_step_uses_penalty_term() -> None:
 
 def test_fedlt_server_step_uses_server_cost_proximal_for_optional_global_regularizer() -> None:
     server_cost = ShiftProxCost(shift=0.5)
-    clients = [Agent(0, ConstantGradientCost(0.0)), Agent(1, ConstantGradientCost(0.0))]
-    server = Agent(2, server_cost)
+    clients = [Agent(ConstantGradientCost(0.0)), Agent(ConstantGradientCost(0.0))]
+    server = Agent(server_cost)
     network = FedNetwork(clients=clients, server=server)
     algorithm = FedLT(iterations=1, step_size=0.1, num_local_epochs=1, rho=2.0)
     algorithm.initialize(network)
@@ -243,8 +243,8 @@ def test_fedlt_server_step_uses_server_cost_proximal_for_optional_global_regular
 
 
 def test_fedlt_server_step_supports_regularizer_server_cost() -> None:
-    clients = [Agent(0, ConstantGradientCost(0.0)), Agent(1, ConstantGradientCost(0.0))]
-    server = Agent(2, L1RegularizerCost(shape=(1,)))
+    clients = [Agent(ConstantGradientCost(0.0)), Agent(ConstantGradientCost(0.0))]
+    server = Agent(L1RegularizerCost(shape=(1,)))
     network = FedNetwork(clients=clients, server=server)
     algorithm = FedLT(iterations=1, step_size=0.1, num_local_epochs=1, rho=2.0)
     algorithm.initialize(network)
@@ -258,8 +258,8 @@ def test_fedlt_server_step_supports_regularizer_server_cost() -> None:
 
 def test_fedlt_empirical_cost_uses_existing_minibatch_gradient_default() -> None:
     cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
-    client = Agent(0, cost)
-    server = Agent(1, ZeroCost((1,)))
+    client = Agent(cost)
+    server = Agent(ZeroCost((1,)))
     algorithm = FedLT(iterations=1, step_size=1.0, num_local_epochs=3, rho=1.0)
     client.initialize(x=np.array([0.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
@@ -274,8 +274,8 @@ def test_fedlt_empirical_cost_uses_existing_minibatch_gradient_default() -> None
 
 def test_fedlt_generic_cost_uses_full_gradient_call_default() -> None:
     cost = ConstantGradientCost(gradient_value=1.0)
-    client = Agent(0, cost)
-    server = Agent(1, ZeroCost((1,)))
+    client = Agent(cost)
+    server = Agent(ZeroCost((1,)))
     algorithm = FedLT(iterations=1, step_size=1.0, num_local_epochs=2, rho=1.0)
     client.initialize(x=np.array([0.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
@@ -307,7 +307,7 @@ def test_fedlt_supports_partial_participation_and_keeps_stale_server_z() -> None
 
 def test_fedlt_smoke_with_network_noise_and_compression() -> None:
     network = FedNetwork(
-        clients=[Agent(0, ConstantGradientCost(1.0)), Agent(1, ConstantGradientCost(2.0))],
+        clients=[Agent(ConstantGradientCost(1.0)), Agent(ConstantGradientCost(2.0))],
         message_noise=GaussianNoise(0.0, 0.0),
         message_compression=Quantization(6),
     )

@@ -70,7 +70,7 @@ def _make_fed_network(*client_specs: float | tuple[float, int]) -> FedNetwork:
             gradient_value, n_samples = client_spec
         else:
             gradient_value, n_samples = client_spec, 1
-        clients.append(Agent(i, TrackingCost(gradient_value, n_samples=n_samples)))
+        clients.append(Agent(TrackingCost(gradient_value, n_samples=n_samples)))
     return FedNetwork(clients=clients)
 
 
@@ -391,8 +391,8 @@ def test_fednova_aggregate_rejects_non_positive_normalizer() -> None:
 
 
 def test_fednova_collect_received_normalizers_stores_empty_dict_when_all_are_dropped() -> None:
-    clients = [Agent(0, TrackingCost(1.0, n_samples=1)), Agent(1, TrackingCost(10.0, n_samples=3))]
-    server = Agent(2, TrackingCost(0.0))
+    clients = [Agent(TrackingCost(1.0, n_samples=1)), Agent(TrackingCost(10.0, n_samples=3))]
+    server = Agent(TrackingCost(0.0))
     network = FedNetwork(
         clients=clients,
         server=server,
@@ -414,8 +414,8 @@ def test_fednova_collect_received_normalizers_stores_empty_dict_when_all_are_dro
 
 
 def test_fednova_skips_round_when_all_normalizer_uploads_are_dropped() -> None:
-    clients = [Agent(0, TrackingCost(1.0, n_samples=1)), Agent(1, TrackingCost(10.0, n_samples=3))]
-    server = Agent(2, TrackingCost(0.0))
+    clients = [Agent(TrackingCost(1.0, n_samples=1)), Agent(TrackingCost(10.0, n_samples=3))]
+    server = Agent(TrackingCost(0.0))
     network = FedNetwork(
         clients=clients,
         server=server,
@@ -435,8 +435,8 @@ def test_fednova_skips_round_when_all_normalizer_uploads_are_dropped() -> None:
 
 @pytest.mark.parametrize("dropped_calls", [{1}, {2}])
 def test_fednova_uses_only_clients_with_both_uploads(dropped_calls: set[int]) -> None:
-    clients = [Agent(0, TrackingCost(1.0, n_samples=1)), Agent(1, TrackingCost(10.0, n_samples=3))]
-    server = Agent(2, TrackingCost(0.0))
+    clients = [Agent(TrackingCost(1.0, n_samples=1)), Agent(TrackingCost(10.0, n_samples=3))]
+    server = Agent(TrackingCost(0.0))
     network = FedNetwork(
         clients=clients,
         server=server,
@@ -523,7 +523,7 @@ def test_fednova_rejects_local_step_mappings_missing_network_clients(num_local_s
 
 @pytest.mark.parametrize("step_value", [0, -1])
 def test_fednova_rejects_invalid_local_step_mapping_values(step_value: float) -> None:
-    client = Agent(0, TrackingCost())
+    client = Agent(TrackingCost())
     with pytest.raises(ValueError, match="`num_local_steps` must have positive values"):
         FedNova(iterations=1, step_size=1.0, num_local_steps={client: step_value})
 
