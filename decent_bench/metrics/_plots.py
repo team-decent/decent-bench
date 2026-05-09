@@ -17,7 +17,6 @@ from decent_bench.algorithms import Algorithm
 from decent_bench.metrics._computational_cost import ComputationalCost
 from decent_bench.metrics._metric import Metric, X, Y
 from decent_bench.networks import Network
-from decent_bench.utils._metric_helpers import _flatten_plot_metrics
 from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:
@@ -71,8 +70,8 @@ def display_plots(
     Display plots for the metric results.
 
     Each algorithm's curve is its mean across the trials. The surrounding envelope is the min and max across the trials.
-    If metrics is a list of lists, each inner list will be plotted in a separate figure. Otherwise groups of 3 metrics
-    will be plotted together in subplots of the same figure.
+    Metrics are grouped into figures with up to 3 subplots each, unless ``individual_plots`` is True, in which case
+    each metric is plotted in its own figure.
 
     Args:
         metrics_result: result of metrics computation containing the metrics to plot and the data to plot them with.
@@ -138,10 +137,10 @@ def display_plots(
     _save_and_show_figures(all_figures, plot_path=plot_path, plot_format=plot_format, show_plots=show_plots)
 
 
-def compute_plots(  # noqa: PLR0914
+def compute_plots(
     resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]],
     problem: "BenchmarkProblem",
-    metrics: list[Metric] | list[list[Metric]],
+    metrics: list[Metric],
 ) -> Mapping[
     Algorithm[Network], Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]
 ]:
@@ -153,8 +152,7 @@ def compute_plots(  # noqa: PLR0914
     Args:
         resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties are used for metric calculations
-        metrics: metrics to calculate and plot. If a list of lists is provided, each inner list will be plotted in a
-            separate figure. Otherwise groups of 3 metrics will be plotted together in subplots of the same figure
+        metrics: metrics to calculate and plot. A maximum of 3 metrics are plotted as subplots in the same figure
 
     Returns:
         A nested dictionary containing plot data for each algorithm and metric, structured as
@@ -174,8 +172,6 @@ def compute_plots(  # noqa: PLR0914
     if not metrics:
         return {}
 
-    flat_metrics = _flatten_plot_metrics(metrics)
-
     algs = list(resulting_agent_states)
     results: dict[
         Algorithm[Network],
@@ -183,15 +179,15 @@ def compute_plots(  # noqa: PLR0914
     ] = {alg: {} for alg in algs}
 
     with utils.MetricProgressBar() as progress:
-        total_plots = len(flat_metrics) * len(resulting_agent_states)
+        total_plots = len(metrics) * len(resulting_agent_states)
         plot_task = progress.add_task(
             "Computing plot metrics",
             total=total_plots,
             status="",
         )
 
-        for metric in flat_metrics:
-            progress.update(plot_task, status=f"Task: {metric.plot_description}")
+        for metric in metrics:
+            progress.update(plot_task, status=f"Task: {metric.description}")
 
             for alg, agent_states in resulting_agent_states.items():
                 data_per_trial: list[Sequence[tuple[X, Y]]] = _plot_data_per_trial(
@@ -205,12 +201,12 @@ def compute_plots(  # noqa: PLR0914
                 if not truncated_data_per_trial:
                     if had_non_finite:
                         LOGGER.warning(
-                            f"Skipping plot computation for {metric.plot_description} and {alg.name}: "
+                            f"Skipping plot computation for {metric.description} and {alg.name}: "
                             "all trials diverged before the first plottable datapoint."
                         )
                     else:
                         LOGGER.warning(
-                            f"Skipping plot computation for {metric.plot_description} and {alg.name}: "
+                            f"Skipping plot computation for {metric.description} and {alg.name}: "
                             "metric produced no datapoints."
                         )
                     progress.advance(plot_task)
@@ -221,7 +217,7 @@ def compute_plots(  # noqa: PLR0914
                     total_trials = len(data_per_trial)
                     retained_points = len(truncated_data_per_trial[0])
                     LOGGER.info(
-                        f"Truncating plot computation for {metric.plot_description} and {alg.name} "
+                        f"Truncating plot computation for {metric.description} and {alg.name} "
                         "at the first non-finite or over-threshold datapoint; retained "
                         f"{retained_points} point(s) from {retained_trials}/{total_trials} trial(s)."
                     )
@@ -283,14 +279,14 @@ def _create_and_plot_figures(  # noqa: PLR0912
                     offset = 1 - min(x)
                     x = [val + offset for val in x]  # avoid log(a), a<=0 issues
                     LOGGER.warning(
-                        f"Metric '{metric.plot_description}' has x_log=True but contains non-positive x values. "
+                        f"Metric '{metric.description}' has x_log=True but contains non-positive x values. "
                         f"Added {offset} to all x values for plotting purposes."
                     )
                 if metric.y_log and any(val <= 0 for val in y_mean):
                     non_positive_replacement = min(*(val for val in y_mean if val > 0), 1e-8)
                     y_mean = [val if val > 0 else non_positive_replacement for val in y_mean]
                     LOGGER.warning(
-                        f"Metric '{metric.plot_description}' has y_log=True but contains non-positive y values for"
+                        f"Metric '{metric.description}' has y_log=True but contains non-positive y values for"
                         f"algorithm {alg.name}. These values have been replaced with {non_positive_replacement} for "
                         f"plotting purposes."
                     )
@@ -362,44 +358,24 @@ def _save_and_show_figures(
 
 
 def _organize_metrics_into_groups(
-    metrics: list[Metric] | list[list[Metric]],
+    metrics: list[Metric],
     individual_plots: bool,
 ) -> list[list[Metric]]:
     """
     Organize metrics into groups where each group will be plotted in one figure.
 
     Args:
-        metrics: Either a flat list of metrics or a list of lists of metrics
+        metrics: list of metrics
         individual_plots: If True, each metric gets its own figure
 
     Returns:
         List of metric groups, where each group will be plotted in one figure
 
-    Raises:
-        ValueError: If metrics is a list of lists but not all elements are lists
-
     """
-    # Check if metrics is list[list[Metric]]
-    if any(isinstance(m, list) for m in metrics):
-        if not all(isinstance(m, list) for m in metrics):
-            raise ValueError("If metrics is a list of lists, all elements must be lists.")
-        if individual_plots:
-            # Flatten and make each metric its own group
-            flat_metrics: list[Metric] = [m for group in metrics for m in group]  # type: ignore[union-attr]
-            return [[metric] for metric in flat_metrics]
-
-        # Use the provided grouping
-        return metrics  # type: ignore[return-value]
-
-    # Flat list[Metric]
-    flat_metrics_list: list[Metric] = metrics  # type: ignore[assignment]
     if individual_plots:
-        # Each metric in its own figure
-        return [[metric] for metric in flat_metrics_list]
+        return [[metric] for metric in metrics]
 
-    # Group into chunks of up to 3 metrics per figure
-    groups: list[list[Metric]] = [flat_metrics_list[i : i + 3] for i in range(0, len(flat_metrics_list), 3)]
-    return groups
+    return [metrics[i : i + 3] for i in range(0, len(metrics), 3)]
 
 
 def _create_metric_subplots(
@@ -445,7 +421,7 @@ def _create_metric_subplots(
 
         # Only set y label for left column subplots
         if i % n_cols == 0:
-            sp.set_ylabel(metric.plot_description)
+            sp.set_ylabel(metric.description)
 
         if metric.x_log:
             sp.set_xscale("log")

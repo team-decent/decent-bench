@@ -60,7 +60,7 @@ def display_tables(
     ):
         metric_views = next(iter(metrics_result.agent_metrics.values()))[0]
         scale_metrics_in_use = [
-            metric.table_description for metric in metrics_result.table_metrics if isinstance(metric, SCALE_METRICS)
+            metric.description for metric in metrics_result.table_metrics if isinstance(metric, SCALE_METRICS)
         ]
         if any(isinstance(a.cost, EmpiricalRiskCost) for a in metric_views):
             LOGGER.info(
@@ -76,7 +76,7 @@ def display_tables(
 
     for metric in metrics_result.table_metrics:
         for statistic_name in table_results[algs[0]][metric]:
-            row = [f"{metric.table_description} ({statistic_name})"]
+            row = [f"{metric.description} ({statistic_name})"]
             for alg in algs:
                 mean, margin_of_error = table_results[alg][metric][statistic_name]
 
@@ -142,7 +142,7 @@ def compute_tables(
             status="",
         )
         for metric in metrics:
-            progress.update(table_task, status=f"Task: {metric.table_description}")
+            progress.update(table_task, status=f"Task: {metric.description}")
 
             data_per_trial = [_table_data_per_trial(resulting_agent_states[a], problem, metric) for a in algs]
 

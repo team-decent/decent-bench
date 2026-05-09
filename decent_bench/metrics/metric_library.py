@@ -35,8 +35,7 @@ class Regret(Metric):
 
     """
 
-    table_description: str = "regret"
-    plot_description: str = "regret"
+    description: str = "regret"
 
     def is_available(  # noqa: D102
         self,
@@ -71,8 +70,7 @@ class GradientNorm(Metric):
 
     """
 
-    table_description: str = "gradient norm"
-    plot_description: str = "gradient norm"
+    description: str = "gradient norm"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -107,8 +105,7 @@ class XError(Metric):
 
     """
 
-    table_description: str = "x error"
-    plot_description: str = "x error"
+    description: str = "x error"
 
     def is_available(  # noqa: D102
         self,
@@ -150,8 +147,7 @@ class ConsensusError(Metric):
 
     """
 
-    table_description: str = "consensus error"
-    plot_description: str = "consensus error"
+    description: str = "consensus error"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -178,8 +174,7 @@ class XUpdates(Metric):
 
     """
 
-    table_description: str = "nr x updates"
-    plot_description: str = "nr x updates"
+    description: str = "nr x updates"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -208,8 +203,7 @@ class FunctionCalls(Metric):
 
     """
 
-    table_description: str = "nr function calls"
-    plot_description: str = "nr function calls"
+    description: str = "nr function calls"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -238,8 +232,7 @@ class GradientCalls(Metric):
 
     """
 
-    table_description: str = "nr gradient calls"
-    plot_description: str = "nr gradient calls"
+    description: str = "nr gradient calls"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -268,8 +261,7 @@ class HessianCalls(Metric):
 
     """
 
-    table_description: str = "nr Hessian calls"
-    plot_description: str = "nr Hessian calls"
+    description: str = "nr Hessian calls"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -294,8 +286,7 @@ class ProximalCalls(Metric):
 
     """
 
-    table_description: str = "nr proximal calls"
-    plot_description: str = "nr proximal calls"
+    description: str = "nr proximal calls"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -320,8 +311,7 @@ class SentMessages(Metric):
 
     """
 
-    table_description: str = "nr sent messages"
-    plot_description: str = "nr sent messages"
+    description: str = "nr sent messages"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -346,8 +336,7 @@ class ReceivedMessages(Metric):
 
     """
 
-    table_description: str = "nr received messages"
-    plot_description: str = "nr received messages"
+    description: str = "nr received messages"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -372,8 +361,7 @@ class SentMessagesDropped(Metric):
 
     """
 
-    table_description: str = "nr sent messages dropped"
-    plot_description: str = "nr sent messages dropped"
+    description: str = "nr sent messages dropped"
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -416,8 +404,7 @@ class Accuracy(Metric):
 
     """
 
-    table_description: str = "accuracy"
-    plot_description: str = "accuracy"
+    description: str = "accuracy"
     can_diverge: bool = False
 
     def is_available(  # noqa: D102
@@ -472,8 +459,7 @@ class MSE(Metric):
 
     """
 
-    table_description: str = "mse"
-    plot_description: str = "mse"
+    description: str = "mse"
     can_diverge: bool = False
 
     def is_available(  # noqa: D102
@@ -527,8 +513,7 @@ class Precision(Metric):
 
     """
 
-    table_description: str = "precision"
-    plot_description: str = "precision"
+    description: str = "precision"
     can_diverge: bool = False
 
     def is_available(  # noqa: D102
@@ -585,8 +570,7 @@ class Recall(Metric):
 
     """
 
-    table_description: str = "recall"
-    plot_description: str = "recall"
+    description: str = "recall"
     can_diverge: bool = False
 
     def is_available(  # noqa: D102
@@ -626,8 +610,7 @@ class Loss(Metric):
 
     """
 
-    table_description: str = "loss"
-    plot_description: str = "loss"
+    description: str = "loss"
     can_diverge: bool = False
 
     def get_data_from_trial(  # noqa: D102

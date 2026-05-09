@@ -25,7 +25,7 @@ class Metric(ABC):
     Abstract base class for metrics.
 
     In order to create a new metric, subclass this class and implement the abstract methods
-    :func:`table_description`, :func:`plot_description`, and :func:`get_data_from_trial`.
+    :func:`description` and :func:`get_data_from_trial`.
     If you don't want the table to indicate whether the metric has diverged then override :func:`can_diverge`
     to return False. If you don't want to use the default behavior for :func:`get_table_data` or :func:`get_plot_data`
     you can also override those methods but this is not common. See the documentation for each method for more details
@@ -64,13 +64,8 @@ class Metric(ABC):
 
     @property
     @abstractmethod
-    def table_description(self) -> str:
-        """Metric description to display in the table."""
-
-    @property
-    @abstractmethod
-    def plot_description(self) -> str:
-        """Label for the y-axis in plots."""
+    def description(self) -> str:
+        """Metric description used as the table row label and y-axis label in plots."""
 
     @property
     def can_diverge(self) -> bool:

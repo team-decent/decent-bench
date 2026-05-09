@@ -1,7 +1,7 @@
 import logging
 from copy import deepcopy
 from json import JSONDecodeError
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal
 
 from rich.status import Status
 
@@ -17,7 +17,7 @@ from decent_bench.metrics import (
 )
 from decent_bench.metrics import metric_library as ml
 from decent_bench.networks import Network
-from decent_bench.utils._metric_helpers import _find_duplicates, _flatten_plot_metrics
+from decent_bench.utils._metric_helpers import _find_duplicates
 from decent_bench.utils.logger import LOGGER, start_logger
 
 if TYPE_CHECKING:
@@ -30,7 +30,7 @@ def compute_metrics(
     checkpoint_manager: "CheckpointManager | None" = None,
     *,
     table_metrics: list[Metric] = ml.DEFAULT_TABLE_METRICS,
-    plot_metrics: list[Metric] | list[list[Metric]] = ml.DEFAULT_PLOT_METRICS,
+    plot_metrics: list[Metric] = ml.DEFAULT_PLOT_METRICS,
     confidence_level: float = 0.95,
     log_level: int = logging.INFO,
 ) -> MetricResult:
@@ -46,8 +46,6 @@ def compute_metrics(
             :const:`~decent_bench.metrics.metric_library.DEFAULT_TABLE_METRICS`
         plot_metrics: metrics to plot after the execution, defaults to
             :const:`~decent_bench.metrics.metric_library.DEFAULT_PLOT_METRICS`.
-            If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
-            metrics will be grouped and plotted in their own figure with subplots.
         confidence_level: confidence level for computing confidence intervals of the table metrics, expressed as a value
             between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
             wider confidence intervals.
@@ -59,7 +57,7 @@ def compute_metrics(
     Raises:
         ValueError: If neither ``benchmark_result`` nor ``checkpoint_manager`` is provided, or
             if the checkpoint manager does not contain a valid benchmark result to load.
-        ValueError: If duplicate metrics (i.e. with same ``table_description`` or ``plot_description``) are provided
+        ValueError: If duplicate metrics (i.e. with same ``description``) are provided
             in ``table_metrics`` or ``plot_metrics``.
 
     Note:
@@ -100,19 +98,13 @@ def compute_metrics(
     table_metrics = deepcopy(table_metrics)
     plot_metrics = deepcopy(plot_metrics)
 
-    # check metrics are unique, which also checks that plot_metrics is either list or list of lists
-    _validate_unique_metric_descriptions(table_metrics, plot_metrics)
+    # check metrics are unique
+    _validate_unique_descriptions(table_metrics, "table")
+    _validate_unique_descriptions(plot_metrics, "plot")
 
-    # remove unavailable tables
+    # remove unavailable metrics
     table_metrics = _remove_unavailable(table_metrics, benchmark_result.problem, "table")
-
-    if any(isinstance(metric, list) for metric in plot_metrics):
-        grouped_plot_metrics = cast("list[list[Metric]]", plot_metrics)
-        for i, group in enumerate(grouped_plot_metrics):
-            grouped_plot_metrics[i] = _remove_unavailable(group, benchmark_result.problem, "plot")
-        plot_metrics = grouped_plot_metrics
-    else:
-        plot_metrics = _remove_unavailable(cast("list[Metric]", plot_metrics), benchmark_result.problem, "plot")
+    plot_metrics = _remove_unavailable(plot_metrics, benchmark_result.problem, "plot")
 
     # compute table and plot results
     resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
@@ -131,10 +123,9 @@ def compute_metrics(
 
     if checkpoint_manager is not None:
         with Status("Saving computed metrics..."):
-            flat_metrics = _flatten_plot_metrics(plot_metrics)
             metadata = {
-                "table_metrics": [metric.table_description for metric in table_metrics],
-                "plot_metrics": [metric.plot_description for metric in flat_metrics],
+                "table_metrics": [metric.description for metric in table_metrics],
+                "plot_metrics": [metric.description for metric in plot_metrics],
             }
             checkpoint_manager.save_metrics_result(result)
             checkpoint_manager.append_metadata(metadata)
@@ -144,21 +135,11 @@ def compute_metrics(
     return result
 
 
-def _validate_unique_metric_descriptions(
-    table_metrics: list[Metric],
-    plot_metrics: list[Metric] | list[list[Metric]],
-) -> None:
-    duplicate_table_descriptions = _find_duplicates([metric.table_description for metric in table_metrics])
-    if duplicate_table_descriptions:
-        duplicates = ", ".join(duplicate_table_descriptions)
-        raise ValueError(f"Table metric descriptions must be unique, duplicates found: {duplicates}")
-
-    duplicate_plot_descriptions = _find_duplicates([
-        metric.plot_description for metric in _flatten_plot_metrics(plot_metrics)
-    ])
-    if duplicate_plot_descriptions:
-        duplicates = ", ".join(duplicate_plot_descriptions)
-        raise ValueError(f"Plot metric descriptions must be unique, duplicates found: {duplicates}")
+def _validate_unique_descriptions(metrics: list[Metric], type_: Literal["table", "plot"]) -> None:
+    duplicate_metric_descriptions = _find_duplicates([metric.description for metric in metrics])
+    if duplicate_metric_descriptions:
+        duplicates = ", ".join(duplicate_metric_descriptions)
+        raise ValueError(f"{type_.capitalize()} metric descriptions must be unique, duplicates found: {duplicates}")
 
 
 def _remove_unavailable(
@@ -168,8 +149,7 @@ def _remove_unavailable(
     for metric in metrics:
         available, reason = metric.is_available(problem)
         if not available:
-            description = metric.table_description if type_ == "table" else metric.plot_description
-            LOGGER.warning(f"Skipping {type_} metric '{description}' because it is unavailable: {reason}")
+            LOGGER.warning(f"Skipping {type_} metric '{metric.description}' because it is unavailable: {reason}")
             continue
 
         available_metrics.append(metric)
