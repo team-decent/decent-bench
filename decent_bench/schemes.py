@@ -173,24 +173,24 @@ class NoCompression(CompressionScheme):
 
 
 class Quantization(CompressionScheme):
-    """Scheme that rounds each element in a message to *significant_digits*."""
+    r"""
+    Scheme applying uniform quantization to the message.
 
-    def __init__(self, n_significant_digits: int):
-        if n_significant_digits <= 0:
-            raise ValueError("`n_significant_digits` must be a positive integer")
-        self.n_significant_digits = n_significant_digits
+    Given a message :math:`x` and quantization step :math:`\Delta`, the scheme returns
+
+        .. math:: q(x) = \Delta \operatorname{round}(x / \Delta)
+
+    where :math:`\operatorname{round}(\cdot)` represents rounding to the nearest integer.
+    """
+
+    def __init__(self, quantization_step: float):
+        if quantization_step <= 0:
+            raise ValueError("`quantization_step` must be a positive float")
+        self.quantization_step = quantization_step
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
         msg_np = iop.to_numpy(msg, dtype=np.float64)
-
-        # Round finite non-zero entries to the requested number of significant digits.
-        mask = np.isfinite(msg_np) & (msg_np != 0)
-        if np.any(mask):
-            magnitudes = np.floor(np.log10(np.abs(msg_np[mask])))
-            scale = np.power(10.0, self.n_significant_digits - 1 - magnitudes)
-            msg_np[mask] = np.round(msg_np[mask] * scale) / scale
-
-        return iop.to_array_like(msg_np, msg)
+        return iop.to_array_like(self.quantization_step * np.rint(msg_np / self.quantization_step), msg)
 
 
 class TopK(CompressionScheme):

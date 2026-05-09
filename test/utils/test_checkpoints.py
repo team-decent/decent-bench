@@ -74,7 +74,7 @@ def _build_problem_and_algorithms(
     network = P2PNetwork(
         graph=nx.complete_graph(len(agents)),
         agents=agents,
-        message_compression=Quantization(8),
+        message_compression=Quantization(quantization_step=1e-2),
         message_noise=GaussianNoise(0.0, 0.01),
         message_drop=UniformDropRate(0.1),
     )

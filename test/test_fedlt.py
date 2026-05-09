@@ -309,7 +309,7 @@ def test_fedlt_smoke_with_network_noise_and_compression() -> None:
     network = FedNetwork(
         clients=[Agent(ConstantGradientCost(1.0)), Agent(ConstantGradientCost(2.0))],
         message_noise=GaussianNoise(0.0, 0.0),
-        message_compression=Quantization(6),
+        message_compression=Quantization(quantization_step=1e-2),
     )
     algorithm = FedLT(iterations=2, step_size=0.1, num_local_epochs=1, rho=1.0)
 

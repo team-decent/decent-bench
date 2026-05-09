@@ -44,7 +44,7 @@ def _build_p2p_problem_and_algorithms(
     network = P2PNetwork(
         graph=nx.complete_graph(len(agents)),
         agents=agents,
-        message_compression=Quantization(8),
+        message_compression=Quantization(quantization_step=1e-2),
         message_noise=GaussianNoise(0.0, 0.01),
         message_drop=UniformDropRate(0.1),
     )
@@ -75,7 +75,7 @@ def _build_fed_problem_and_algorithms(
     agents = [Agent(cost, activation=UniformActivationRate(0.8)) for cost in costs]
     network = FedNetwork(
         clients=agents,
-        message_compression=Quantization(8),
+        message_compression=Quantization(quantization_step=1e-2),
         message_noise=GaussianNoise(0.0, 0.01),
         message_drop=UniformDropRate(0.1),
     )

@@ -116,7 +116,7 @@ def test_client_selection(
     ("scheme", "message"),
     [
         (NoCompression(), Array(np.array([3.0, -4.0, 1.0]))),
-        (Quantization(n_significant_digits=5), Array(np.array([1.2345, -2.3456]))),
+        (Quantization(quantization_step=1e-6), Array(np.array([1.2345, -2.3456]))),
         (TopK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
         (RandK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
         (TopK(k=3), Array(np.array([3.0, -4.0, 1.0]))),
@@ -138,9 +138,9 @@ def test_no_compression(
     ("scheme", "message", "expected_norm"),
     [
         (
-            Quantization(n_significant_digits=3),
+            Quantization(quantization_step=1e-2),
             Array(np.array([1.2345, -2.3456])),
-            float(np.linalg.norm(np.array([0.0045, -0.0044]))),
+            float(np.linalg.norm(np.array([0.0045, 0.0044]))),
         ),
         (TopK(k=2 / 3), Array(np.array([3.0, -4.0, 1.0])), 1.0),
         (TopK(k=2), Array(np.array([3.0, -4.0, 1.0])), 1.0),
@@ -155,6 +155,12 @@ def test_compression(
     compression_error = float(iop.norm(original_message - scheme.compress(message)))
 
     assert compression_error == pytest.approx(expected_norm)
+
+
+@pytest.mark.parametrize("quantization_step", [0, -1.0])
+def test_quantization_invalid_step(quantization_step: float) -> None:
+    with pytest.raises(ValueError, match="quantization_step"):
+        Quantization(quantization_step)
 
 
 # test RandK
