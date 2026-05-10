@@ -1,15 +1,17 @@
-"""
-Utilities for algorithm initialization and general helpers.
-
-This includes functions such as :func:`~decent_bench.algorithms.utils.infer_client_weight`,
-which infers client data size from common cost attributes.
-"""
+"""Utilities for algorithm initialization and general helpers."""
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.networks import FedNetwork, Network
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import InitialStates
+
+__all__ = [
+    "initial_states",
+    "normal_initialization",
+    "pytorch_initialization",
+    "uniform_initialization",
+]
 
 
 def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":  # noqa: PLR0912
@@ -185,44 +187,3 @@ def pytorch_initialization(
         )
         x0s[a] = val
     return x0s
-
-
-def infer_client_weight(client: "Agent") -> float:
-    """
-    Infer a client's weight from its cost data size.
-
-    Prefers an explicit ``n_samples`` attribute when present, then falls back to common size-bearing attributes such
-    as ``A`` or ``b`` on the cost.
-
-    Raises:
-        ValueError: if a suitable positive size attribute is not found on the cost.
-
-    """
-
-    def _validate_size(size: float) -> float:
-        if size <= 0:
-            raise ValueError("Client data size must be positive")
-        return size
-
-    cost = client.cost
-    if hasattr(cost, "n_samples"):
-        n_samples = cost.n_samples
-        if n_samples is not None:
-            return _validate_size(float(n_samples))
-    if hasattr(cost, "A"):
-        try:
-            size = iop.shape(cost.A)[0]
-        except Exception:
-            size = None
-        if size is not None:
-            return _validate_size(float(size))
-    if hasattr(cost, "b"):
-        try:
-            size = iop.shape(cost.b)[0]
-        except Exception:
-            size = None
-        if size is not None:
-            return _validate_size(float(size))
-    raise ValueError(
-        "Cannot infer client data size. Add a size attribute to the cost or use uniform aggregation instead."
-    )
