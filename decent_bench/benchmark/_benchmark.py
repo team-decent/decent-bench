@@ -385,7 +385,7 @@ def _benchmark(
         checkpoint_manager,
         runtime_metrics,
     )
-    LOGGER.info("Benchmark execution complete, thanks for using decent-bench")
+    LOGGER.info("Benchmark execution complete")
     return BenchmarkResult(problem=benchmark_problem, states=resulting_nw_states)
 
 

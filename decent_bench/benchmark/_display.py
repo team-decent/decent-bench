@@ -110,6 +110,7 @@ def display_metrics(  # noqa: PLR0912
 
     """
     logger.start_logger(log_level=log_level)
+    LOGGER.info("Displaying metrics")
 
     if metrics_result is None:
         if checkpoint_manager is None:

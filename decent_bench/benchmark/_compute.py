@@ -76,6 +76,7 @@ def compute_metrics(
 
     """
     start_logger(log_level=log_level)
+    LOGGER.info("Starting metrics computation")
 
     if benchmark_result is None:
         if checkpoint_manager is None:
