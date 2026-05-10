@@ -3,10 +3,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.algorithms.utils import infer_client_weight, initial_states
+from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
+from decent_bench.schemes import ClientSelectionScheme, UniformSelection
 from decent_bench.utils._tags import tags
+from decent_bench.utils.agent_utils import infer_client_data_size
 from decent_bench.utils.types import InitialStates, LocalSteps
 
 from ._fed_algorithm import FedAlgorithm
@@ -97,7 +98,7 @@ class FedNova(FedAlgorithm):
     Here :math:`\tau_i` is the number of local SGD steps used by client :math:`i`, which can be homogeneous
     (single int ``num_local_steps``) or heterogeneous via a mapping keyed by client agent. In this implementation,
     :math:`n_i` is inferred once during ``initialize`` from each client's local cost via
-    :func:`~decent_bench.algorithms.utils.infer_client_weight`, then stored on the server for later rounds.
+    :func:`~decent_bench.utils.agent_utils.infer_client_data_size`, then stored on the server for later rounds.
     If no first-phase ``a_i`` uploads are received in a round under network impairments, the server skips that round
     without error.
 
@@ -114,7 +115,7 @@ class FedNova(FedAlgorithm):
     use_server_momentum: bool = False
     gamma: float = 0.9
     selection_scheme: ClientSelectionScheme | None = field(
-        default_factory=lambda: UniformClientSelection(client_fraction=1.0)
+        default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
     )
     x0: InitialStates = None
     name: str = "FedNova"
@@ -141,7 +142,7 @@ class FedNova(FedAlgorithm):
     def _resolve_client_sample_counts(self, network: FedNetwork) -> dict["Agent", float]:
         client_sample_counts: dict[Agent, float] = {}
         for client in network.clients():
-            client_sample_counts[client] = infer_client_weight(client)
+            client_sample_counts[client] = infer_client_data_size(client)
         return client_sample_counts
 
     def initialize(self, network: FedNetwork) -> None:

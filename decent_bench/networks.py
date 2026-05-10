@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC
 from collections.abc import Callable, Collection, Sequence
+from copy import deepcopy
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, cast
 
@@ -38,14 +39,17 @@ class Network(ABC):  # noqa: B024
         graph: underlying NetworkX graph defining the network topology.
             Nodes must be of type :class:`~decent_bench.agents.Agent`.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
-            mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
+            :class:`~decent_bench.schemes.NoiseScheme` instance when all agents use the same kind of noise scheme, a
+            dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
+            noise to any agent.
         message_compression: compression scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.CompressionScheme` instance to apply the same scheme to all agents, a
-            dictionary mapping each agent to its scheme, or ``None`` to apply no compression to any agent.
+            :class:`~decent_bench.schemes.CompressionScheme` instance when all agents use the same kind of compression
+            scheme, a dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to
+            apply no compression to any agent.
         message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.DropScheme` instance to apply the same scheme to all agents, a dictionary
-            mapping each agent to its scheme, or ``None`` to apply no message drop to any agent.
+            :class:`~decent_bench.schemes.DropScheme` instance when all agents use the same kind of drop scheme, a
+            dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
+            message drop to any agent.
 
     """
 
@@ -121,7 +125,7 @@ class Network(ABC):  # noqa: B024
 
         Given the value of `scheme`, the method creates the dictionary as follows:
         - `None`: use `default_factory()` for every agent
-        - a single `scheme_class` instance: apply it to every agent
+        - a single `scheme_class` instance: apply an independent copy to every agent
         - uses the given dictionary (provided it contains a value for each agent)
 
         Args:
@@ -141,8 +145,8 @@ class Network(ABC):  # noqa: B024
             if default_factory is None:
                 raise ValueError(f"default_factory must be provided for {scheme_name}")
             return {agent: default_factory() for agent in self.graph}
-        if isinstance(scheme, scheme_class):  # one scheme, use for all agents
-            return dict.fromkeys(self.graph, scheme)
+        if isinstance(scheme, scheme_class):  # one scheme, copy for all agents
+            return {agent: deepcopy(scheme) for agent in self.graph}
         if isinstance(scheme, dict):  # one scheme per agent
             for agent in self.graph:
                 if agent not in scheme:
@@ -333,14 +337,17 @@ class P2PNetwork(Network):
             :class:`~decent_bench.agents.Agent` nodes. The agents in the list are assigned in order to each node of the
             graph. This argument is ignored if `graph` is a graph with :class:`~decent_bench.agents.Agent` nodes.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
-            mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
+            :class:`~decent_bench.schemes.NoiseScheme` instance when all agents use the same kind of noise scheme, a
+            dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
+            noise to any agent.
         message_compression: compression scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.CompressionScheme` instance to apply the same scheme to all agents, a
-            dictionary mapping each agent to its scheme, or ``None`` to apply no compression to any agent.
+            :class:`~decent_bench.schemes.CompressionScheme` instance when all agents use the same kind of compression
+            scheme, a dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to
+            apply no compression to any agent.
         message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.DropScheme` instance to apply the same scheme to all agents, a dictionary
-            mapping each agent to its scheme, or ``None`` to apply no message drop to any agent.
+            :class:`~decent_bench.schemes.DropScheme` instance when all agents use the same kind of drop scheme, a
+            dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
+            message drop to any agent.
 
     """
 
@@ -475,14 +482,17 @@ class FedNetwork(Network):
         server: server agent in the network. If ``None``, a default server with zero cost and always active scheme will
             be created. Custom servers must use :class:`~decent_bench.schemes.AlwaysActive`.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
-            mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
+            :class:`~decent_bench.schemes.NoiseScheme` instance when all agents use the same kind of noise scheme, a
+            dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
+            noise to any agent.
         message_compression: compression scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.CompressionScheme` instance to apply the same scheme to all agents,
-            a dictionary mapping each agent to its scheme, or ``None`` to apply no compression to any agent.
+            :class:`~decent_bench.schemes.CompressionScheme` instance when all agents use the same kind of compression
+            scheme, a dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to
+            apply no compression to any agent.
         message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.DropScheme` instance to apply the same scheme to all agents, a dictionary
-            mapping each agent to its scheme, or ``None`` to apply no message drop to any agent.
+            :class:`~decent_bench.schemes.DropScheme` instance when all agents use the same kind of drop scheme, a
+            dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
+            message drop to any agent.
 
     Raises:
         ValueError: if ``clients`` is empty or if a custom ``server`` does not use

@@ -220,6 +220,21 @@ def test_initialize_message_schemes_with_dict_extra_keys() -> None:
         assert agent in result
 
 
+def test_initialize_message_schemes_copies_single_scheme_per_agent() -> None:
+    """Test that a single scheme instance is copied independently for every agent."""
+    n_agents = 3
+    agents = [Agent(i, L2RegularizerCost((10,))) for i in range(n_agents)]
+    net = P2PNetwork(graph=nx.complete_graph(n_agents), agents=agents)
+    scheme = AddNoise(offset=1.0)
+
+    result = net._initialize_message_schemes(scheme, "noise", NoiseScheme)
+
+    assert all(result[agent] is not scheme for agent in agents)
+    assert len({id(result[agent]) for agent in agents}) == n_agents
+    result[agents[0]].offset = 2.0
+    assert result[agents[1]].offset == 1.0
+
+
 def test_initialize_message_schemes_dict_used_in_send() -> None:
     """Test that per-agent schemes in dict are actually used during send operations."""
 
