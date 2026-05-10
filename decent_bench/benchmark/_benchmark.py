@@ -133,13 +133,13 @@ def resume_benchmark(  # noqa: PLR0912
             if metadata is None or "n_trials" not in metadata:
                 raise ValueError("Invalid or missing metadata in checkpoint directory")
 
-            algorithms = checkpoint_manager.load_initial_algorithms()
-            if algorithms is None:
-                raise ValueError("Initial algorithms not found in checkpoint metadata")
-
             problem = checkpoint_manager.load_benchmark_problem()
             if problem is None:
                 raise ValueError("Benchmark problem not found in checkpoint metadata")
+
+            algorithms = checkpoint_manager.load_initial_algorithms(network=problem.network)
+            if algorithms is None:
+                raise ValueError("Initial algorithms not found in checkpoint metadata")
 
             log_listener, manager, mp_context = _init_logging_and_multiprocessing(log_level, max_processes, problem)
 
