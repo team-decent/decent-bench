@@ -535,6 +535,12 @@ def test_fednova_rejects_invalid_scalar_num_local_steps(num_local_steps: int) ->
         FedNova(iterations=1, step_size=1.0, num_local_steps=num_local_steps)
 
 
+@pytest.mark.parametrize("num_local_steps", [1.5])
+def test_fednova_rejects_non_integer_scalar_num_local_steps(num_local_steps: object) -> None:
+    with pytest.raises(TypeError, match="`num_local_steps` must be an int or a mapping from Agent"):
+        FedNova(iterations=1, step_size=1.0, num_local_steps=num_local_steps)
+
+
 @pytest.mark.parametrize("num_local_steps", [{}, {"not-an-agent": 1}, {1: 1}])
 def test_fednova_rejects_local_step_mappings_missing_network_clients(num_local_steps: object) -> None:
     network = _make_fed_network(1.0, 3.0)
@@ -548,6 +554,13 @@ def test_fednova_rejects_local_step_mappings_missing_network_clients(num_local_s
 def test_fednova_rejects_invalid_local_step_mapping_values(step_value: float) -> None:
     client = Agent(0, TrackingCost())
     with pytest.raises(ValueError, match="`num_local_steps` must have positive values"):
+        FedNova(iterations=1, step_size=1.0, num_local_steps={client: step_value})
+
+
+@pytest.mark.parametrize("step_value", [2.0])
+def test_fednova_rejects_non_integer_local_step_mapping_values(step_value: object) -> None:
+    client = Agent(0, TrackingCost())
+    with pytest.raises(TypeError, match="`num_local_steps` mapping values must be integers"):
         FedNova(iterations=1, step_size=1.0, num_local_steps={client: step_value})
 
 

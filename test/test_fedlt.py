@@ -174,8 +174,8 @@ def _make_network(*costs: Cost) -> FedNetwork:
     return FedNetwork(clients=[Agent(i, cost) for i, cost in enumerate(costs)])
 
 
-@pytest.mark.parametrize("local_solver", ["gd", "accelerated"])
-def test_fedlt_runs_with_default_and_accelerated_local_updates(local_solver: str) -> None:
+@pytest.mark.parametrize("local_solver", ["gd", "nesterov"])
+def test_fedlt_runs_with_default_and_nesterov_local_updates(local_solver: str) -> None:
     network = _make_network(
         QuadraticCost(A=np.array([[1.0]]), b=np.array([-1.0])),
         QuadraticCost(A=np.array([[2.0]]), b=np.array([1.0])),
@@ -201,6 +201,14 @@ def test_fedlt_accepts_adam_local_solver() -> None:
     assert all(np.isfinite(client.x).all() for client in network.clients())
 
 
+def test_fedlt_sets_default_solver_args() -> None:
+    nesterov = FedLT(iterations=1, local_solver="nesterov")
+    adam = FedLT(iterations=1, local_solver="adam")
+
+    assert nesterov.solver_args == {"momentum": 0.9}
+    assert adam.solver_args == {"beta1": 0.9, "beta2": 0.999, "epsilon": 1e-8}
+
+
 @pytest.mark.parametrize(
     ("kwargs", "error"),
     [
@@ -208,14 +216,39 @@ def test_fedlt_accepts_adam_local_solver() -> None:
         ({"num_local_epochs": 0}, "`num_local_epochs` must be positive"),
         ({"step_size": 0.0}, "`step_size` must be positive"),
         ({"local_solver": "bad"}, "`local_solver` must be one of"),
-        ({"adam_beta1": -0.1}, "`adam_beta1` must satisfy 0 <= adam_beta1 < 1"),
-        ({"adam_beta1": 1.0}, "`adam_beta1` must satisfy 0 <= adam_beta1 < 1"),
-        ({"adam_beta2": -0.1}, "`adam_beta2` must satisfy 0 <= adam_beta2 < 1"),
-        ({"adam_beta2": 1.0}, "`adam_beta2` must satisfy 0 <= adam_beta2 < 1"),
-        ({"adam_epsilon": 0.0}, "`adam_epsilon` must be positive"),
+        (
+            {"local_solver": "adam", "solver_args": {"beta1": -0.1}},
+            "`solver_args\\['beta1'\\]` must satisfy 0 <= beta1 < 1",
+        ),
+        (
+            {"local_solver": "adam", "solver_args": {"beta1": 1.0}},
+            "`solver_args\\['beta1'\\]` must satisfy 0 <= beta1 < 1",
+        ),
+        (
+            {"local_solver": "adam", "solver_args": {"beta2": -0.1}},
+            "`solver_args\\['beta2'\\]` must satisfy 0 <= beta2 < 1",
+        ),
+        (
+            {"local_solver": "adam", "solver_args": {"beta2": 1.0}},
+            "`solver_args\\['beta2'\\]` must satisfy 0 <= beta2 < 1",
+        ),
+        ({"local_solver": "adam", "solver_args": {"epsilon": 0.0}}, "`solver_args\\['epsilon'\\]` must be positive"),
+        (
+            {"local_solver": "nesterov", "solver_args": {"momentum": -0.1}},
+            "`solver_args\\['momentum'\\]` must satisfy 0 <= momentum < 1",
+        ),
+        (
+            {"local_solver": "nesterov", "solver_args": {"momentum": 1.0}},
+            "`solver_args\\['momentum'\\]` must satisfy 0 <= momentum < 1",
+        ),
+        ({"solver_args": {"momentum": 0.5}}, "Unsupported solver_args for local_solver='gd': momentum"),
+        (
+            {"local_solver": "adam", "solver_args": {"momentum": 0.5}},
+            "Unsupported solver_args for local_solver='adam': momentum",
+        ),
     ],
 )
-def test_fedlt_rejects_invalid_parameters(kwargs: dict[str, float | int | str], error: str) -> None:
+def test_fedlt_rejects_invalid_parameters(kwargs: dict[str, float | int | str | dict[str, float]], error: str) -> None:
     with pytest.raises(ValueError, match=error):
         FedLT(iterations=1, **kwargs)
 
@@ -234,12 +267,45 @@ def test_fedlt_initializes_auxiliary_variables_from_z0() -> None:
     np.testing.assert_allclose(network.server().aux_vars["z_by_client"][clients[1]], np.array([-1.0]))
 
 
-def test_fedlt_accelerated_solver_requires_valid_client_constants() -> None:
-    network = _make_network(ConstantGradientCost(m_smooth=np.inf, m_cvx=0.0))
-    algorithm = FedLT(iterations=1, local_solver="accelerated")
+def test_fedlt_nesterov_update_uses_step_size_and_momentum() -> None:
+    client = Agent(0, ConstantGradientCost(gradient_value=2.0))
+    server = Agent(1, ZeroCost((1,)))
+    algorithm = FedLT(
+        iterations=1,
+        step_size=0.25,
+        num_local_epochs=2,
+        rho=1.0,
+        local_solver="nesterov",
+        solver_args={"momentum": 0.5},
+    )
+    client.initialize(x=np.array([1.0]), aux_vars={"z": np.array([0.0])})
+    server.initialize(x=np.array([0.0]))
+    client._received_messages[server] = np.array([0.0])  # noqa: SLF001
 
-    with pytest.raises(ValueError, match="requires finite non-negative"):
-        algorithm.initialize(network)
+    local_x, z_next = algorithm._compute_local_update(client, server)
+
+    np.testing.assert_allclose(local_x, np.array([-1.015625]))
+    np.testing.assert_allclose(z_next, np.array([-2.03125]))
+
+
+def test_fedlt_nesterov_default_momentum_is_used() -> None:
+    client = Agent(0, ConstantGradientCost(gradient_value=2.0))
+    server = Agent(1, ZeroCost((1,)))
+    algorithm = FedLT(
+        iterations=1,
+        step_size=0.25,
+        num_local_epochs=2,
+        rho=1.0,
+        local_solver="nesterov",
+    )
+    client.initialize(x=np.array([1.0]), aux_vars={"z": np.array([0.0])})
+    server.initialize(x=np.array([0.0]))
+    client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+
+    local_x, z_next = algorithm._compute_local_update(client, server)
+
+    np.testing.assert_allclose(local_x, np.array([-1.780625]))
+    np.testing.assert_allclose(z_next, np.array([-3.56125]))
 
 
 def test_fedlt_local_gradient_step_uses_penalty_term() -> None:
@@ -266,7 +332,7 @@ def test_fedlt_adam_one_step_matches_formula() -> None:
 
     local_x, z_next = algorithm._compute_local_update(client, server)
 
-    expected_x = np.array([-0.5 * 2.0 / (math.sqrt(4.0) + algorithm.adam_epsilon)])
+    expected_x = np.array([-0.5 * 2.0 / (math.sqrt(4.0) + 1e-8)])
     np.testing.assert_allclose(local_x, expected_x)
     np.testing.assert_allclose(z_next, 2 * expected_x)
 
@@ -302,9 +368,7 @@ def test_fedlt_adam_multi_step_matches_formula_on_quadratic() -> None:
         num_local_epochs=3,
         rho=1.0,
         local_solver="adam",
-        adam_beta1=0.8,
-        adam_beta2=0.9,
-        adam_epsilon=1e-6,
+        solver_args={"beta1": 0.8, "beta2": 0.9, "epsilon": 1e-6},
     )
     client.initialize(x=np.array([1.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
@@ -315,9 +379,9 @@ def test_fedlt_adam_multi_step_matches_formula_on_quadratic() -> None:
     expected_x = _manual_adam_steps(
         x0=1.0,
         step_size=algorithm.step_size,
-        beta1=algorithm.adam_beta1,
-        beta2=algorithm.adam_beta2,
-        epsilon=algorithm.adam_epsilon,
+        beta1=algorithm.solver_args["beta1"],
+        beta2=algorithm.solver_args["beta2"],
+        epsilon=algorithm.solver_args["epsilon"],
         num_steps=algorithm.num_local_epochs,
     )
     np.testing.assert_allclose(local_x, np.array([expected_x]))

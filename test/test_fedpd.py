@@ -292,6 +292,12 @@ def test_fedpd_rejects_invalid_hyperparameters(kwargs: dict[str, float | int], e
         FedPD(iterations=1, **kwargs)
 
 
+@pytest.mark.parametrize("num_local_steps", [1.5])
+def test_fedpd_rejects_non_integer_scalar_num_local_steps(num_local_steps: object) -> None:
+    with pytest.raises(TypeError, match="`num_local_steps` must be an int or a mapping from Agent"):
+        FedPD(iterations=1, num_local_steps=num_local_steps)
+
+
 def test_fedpd_normalizes_scalar_local_steps_to_client_mapping_on_initialize() -> None:
     clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(2.0))]
     network = FedNetwork(clients=clients)
@@ -315,4 +321,11 @@ def test_fedpd_rejects_local_step_mappings_missing_network_clients(num_local_ste
 def test_fedpd_rejects_invalid_local_step_mapping_values(step_value: float) -> None:
     client = Agent(0, TrackingCost())
     with pytest.raises(ValueError, match="`num_local_steps` must have positive values"):
+        FedPD(iterations=1, num_local_steps={client: step_value})
+
+
+@pytest.mark.parametrize("step_value", [2.0])
+def test_fedpd_rejects_non_integer_local_step_mapping_values(step_value: object) -> None:
+    client = Agent(0, TrackingCost())
+    with pytest.raises(TypeError, match="`num_local_steps` mapping values must be integers"):
         FedPD(iterations=1, num_local_steps={client: step_value})

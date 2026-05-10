@@ -1,4 +1,3 @@
-import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -15,6 +14,10 @@ from ._fed_algorithm import FedAlgorithm
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
     from decent_bench.utils.array import Array
+
+    SolverArgs = dict[str, float]
+else:
+    SolverArgs = dict
 
 
 @tags("federated")
@@ -50,29 +53,34 @@ class FedLT(FedAlgorithm):
     mini-batch sampling, so this behaves as local SGD. Generic :class:`~decent_bench.costs.Cost` objects use their
     normal full-gradient behavior, so this behaves as local GD.
 
-    The ``local_solver`` argument selects the method used for these local steps. The default ``"gd"`` uses the
-    gradient update above. The ``"accelerated"`` option uses each client cost's ``m_smooth`` and ``m_cvx`` metadata.
-    It initializes :math:`u_i^0=w^0_{i,k}`. With :math:`L_i=\texttt{m_smooth}` and
-    :math:`\mu_i=\texttt{m_cvx}`, it applies
+    Local solvers
+        The ``local_solver`` argument selects the method used for these local steps. The default ``"gd"`` uses the
+        gradient update above. Solver-specific hyperparameters are passed through ``solver_args``.
+
+    Nesterov
+        The ``"nesterov"`` option applies a Nesterov-style update to the same local gradient. It initializes
+        :math:`u_i^0=w^0_{i,k}` and uses ``step_size`` as the local step size:
 
     .. math::
-        u_i^{\ell+1} = w^\ell_{i,k} - \frac{1}{L_i + 1/\rho}\left(\nabla f_i(w^\ell_{i,k})
+        u_i^{\ell+1} = w^\ell_{i,k} - \gamma\left(\nabla f_i(w^\ell_{i,k})
         + \frac{1}{\rho}(w^\ell_{i,k} - v_{i,k})\right)
 
     .. math::
         w^{\ell+1}_{i,k} = u_i^{\ell+1}
-        + \frac{\sqrt{L_i + 1/\rho} - \sqrt{\mu_i + 1/\rho}}
-        {\sqrt{L_i + 1/\rho} + \sqrt{\mu_i + 1/\rho}}
-        \left(u_i^{\ell+1} - u_i^\ell\right).
+        + \beta\left(u_i^{\ell+1} - u_i^\ell\right).
 
-    If the client cost has :math:`\mu_i=0`, this coefficient reduces to the Fed-LT expression with
-    :math:`\sqrt{1/\rho}` in the second term. The constants must be finite and non-negative. The gradient call remains
-    cost-driven: empirical costs use their default mini-batches and generic costs use full gradients.
+        The momentum coefficient :math:`\beta` is ``solver_args["momentum"]`` and defaults to ``0.9``. One possible
+        centralized strongly-convex choice is
+        :math:`(\sqrt{L_i + 1/\rho} - \sqrt{\mu_i + 1/\rho}) / (\sqrt{L_i + 1/\rho} + \sqrt{\mu_i + 1/\rho})`,
+        with local step size :math:`1/(L_i + 1/\rho)`, where :math:`L_i=\texttt{m_smooth}` and
+        :math:`\mu_i=\texttt{m_cvx}`.
 
-    The ``"adam"`` option applies Adam to the same local gradient
-    :math:`\nabla f_i(w^\ell_{i,k}) + (w^\ell_{i,k} - v_{i,k})/\rho`. Adam moments are reset at the start of every
-    local solve because Fed-LT locally trains the current round's subproblem rather than maintaining a persistent
-    optimizer state across rounds.
+    Adam
+        The ``"adam"`` option applies Adam to the same local gradient
+        :math:`\nabla f_i(w^\ell_{i,k}) + (w^\ell_{i,k} - v_{i,k})/\rho`. Adam moments are reset at the start of every
+        local solve because Fed-LT locally trains the current round's subproblem rather than maintaining a persistent
+        optimizer state across rounds. ``solver_args`` may set ``beta1``, ``beta2``, and ``epsilon``; the defaults are
+        ``0.9``, ``0.999``, and ``1e-8``.
 
     .. math::
         g^\ell_{i,k} =
@@ -109,17 +117,13 @@ class FedLT(FedAlgorithm):
     num_local_epochs: int = 1
     rho: float = 1.0
     local_solver: str = "gd"
-    adam_beta1: float = 0.9
-    adam_beta2: float = 0.999
-    adam_epsilon: float = 1e-8
+    solver_args: SolverArgs = field(default_factory=dict)
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
     )
     x0: InitialStates = None
     z0: InitialStates = None
     name: str = "FedLT"
-    _accelerated_smoothness: dict["Agent", float] = field(init=False, default_factory=dict, repr=False)
-    _accelerated_momentum: dict["Agent", float] = field(init=False, default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         """
@@ -135,19 +139,38 @@ class FedLT(FedAlgorithm):
             raise ValueError("`num_local_epochs` must be positive")
         if self.rho <= 0:
             raise ValueError("`rho` must be positive")
-        if self.local_solver not in {"gd", "accelerated", "adam"}:
-            raise ValueError("`local_solver` must be one of 'gd', 'accelerated', or 'adam'")
-        if not (0 <= self.adam_beta1 < 1):
-            raise ValueError("`adam_beta1` must satisfy 0 <= adam_beta1 < 1")
-        if not (0 <= self.adam_beta2 < 1):
-            raise ValueError("`adam_beta2` must satisfy 0 <= adam_beta2 < 1")
-        if self.adam_epsilon <= 0:
-            raise ValueError("`adam_epsilon` must be positive")
+        if self.local_solver not in {"gd", "nesterov", "adam"}:
+            raise ValueError("`local_solver` must be one of 'gd', 'nesterov', or 'adam'")
+        self._validate_solver_args()
+
+    def _validate_solver_args(self) -> None:
+        if self.local_solver == "adam":
+            allowed_args = {"beta1", "beta2", "epsilon"}
+            self.solver_args = {"beta1": 0.9, "beta2": 0.999, "epsilon": 1e-8, **self.solver_args}
+            beta1 = self.solver_args["beta1"]
+            beta2 = self.solver_args["beta2"]
+            epsilon = self.solver_args["epsilon"]
+            if not (0 <= beta1 < 1):
+                raise ValueError("`solver_args['beta1']` must satisfy 0 <= beta1 < 1")
+            if not (0 <= beta2 < 1):
+                raise ValueError("`solver_args['beta2']` must satisfy 0 <= beta2 < 1")
+            if epsilon <= 0:
+                raise ValueError("`solver_args['epsilon']` must be positive")
+        elif self.local_solver == "nesterov":
+            allowed_args = {"momentum"}
+            self.solver_args = {"momentum": 0.9, **self.solver_args}
+            momentum = self.solver_args["momentum"]
+            if not (0 <= momentum < 1):
+                raise ValueError("`solver_args['momentum']` must satisfy 0 <= momentum < 1")
+        else:
+            allowed_args = set()
+
+        unknown_args = set(self.solver_args) - allowed_args
+        if unknown_args:
+            names = ", ".join(sorted(unknown_args))
+            raise ValueError(f"Unsupported solver_args for local_solver='{self.local_solver}': {names}")
 
     def initialize(self, network: FedNetwork) -> None:
-        if self.local_solver == "accelerated":
-            self._initialize_accelerated_parameters(network)
-
         self.x0 = initial_states(self.x0, network)
         self.z0 = self.x0 if self.z0 is None else initial_states(self.z0, network)
 
@@ -156,29 +179,6 @@ class FedLT(FedAlgorithm):
         server.initialize(x=self.x0[server], aux_vars={"z_by_client": z_by_client})
         for client in network.clients():
             client.initialize(x=self.x0[client], aux_vars={"z": self.z0[client]})
-
-    def _initialize_accelerated_parameters(self, network: FedNetwork) -> None:
-        self._accelerated_smoothness = {}
-        self._accelerated_momentum = {}
-        for client in network.clients():
-            m_smooth = client.cost.m_smooth
-            m_cvx = client.cost.m_cvx
-            if not math.isfinite(m_smooth) or not math.isfinite(m_cvx) or m_smooth < 0 or m_cvx < 0:
-                raise ValueError(
-                    "`local_solver='accelerated'` requires finite non-negative `m_smooth` and `m_cvx` "
-                    "on every client cost"
-                )
-            if m_smooth < m_cvx:
-                raise ValueError("`local_solver='accelerated'` requires `m_smooth >= m_cvx` on every client cost")
-
-            smoothness = m_smooth + (1 / self.rho)
-            strong_convexity = m_cvx + (1 / self.rho)
-            sqrt_smoothness = math.sqrt(smoothness)
-            sqrt_strong_convexity = math.sqrt(strong_convexity)
-            self._accelerated_smoothness[client] = smoothness
-            self._accelerated_momentum[client] = (sqrt_smoothness - sqrt_strong_convexity) / (
-                sqrt_smoothness + sqrt_strong_convexity
-            )
 
     def step(self, network: FedNetwork, iteration: int) -> None:
         y = self._compute_server_y(network)
@@ -218,8 +218,8 @@ class FedLT(FedAlgorithm):
         v = (2 * y) - z
         local_x = iop.copy(client.x)
 
-        if self.local_solver == "accelerated":
-            local_x = self._compute_accelerated_local_update(client, local_x, v)
+        if self.local_solver == "nesterov":
+            local_x = self._compute_nesterov_local_update(client, local_x, v)
         elif self.local_solver == "adam":
             local_x = self._compute_adam_local_update(client, local_x, v)
         else:
@@ -230,29 +230,31 @@ class FedLT(FedAlgorithm):
         z_next = z + (2 * (local_x - y))
         return local_x, z_next
 
-    def _compute_accelerated_local_update(self, client: "Agent", local_x: "Array", v: "Array") -> "Array":
-        smoothness = self._accelerated_smoothness[client]
-        momentum = self._accelerated_momentum[client]
+    def _compute_nesterov_local_update(self, client: "Agent", local_x: "Array", v: "Array") -> "Array":
+        momentum = self.solver_args["momentum"]
         u_previous = iop.copy(local_x)
 
         for _ in range(self.num_local_epochs):
             grad = client.cost.gradient(local_x) + ((local_x - v) / self.rho)
-            u_next = local_x - ((1 / smoothness) * grad)
+            u_next = local_x - (self.step_size * grad)
             local_x = u_next + (momentum * (u_next - u_previous))
             u_previous = u_next
         return local_x
 
     def _compute_adam_local_update(self, client: "Agent", local_x: "Array", v: "Array") -> "Array":
+        beta1 = self.solver_args["beta1"]
+        beta2 = self.solver_args["beta2"]
+        epsilon = self.solver_args["epsilon"]
         m = iop.zeros_like(local_x)
         s = iop.zeros_like(local_x)
 
         for step in range(1, self.num_local_epochs + 1):
             grad = client.cost.gradient(local_x) + ((local_x - v) / self.rho)
-            m = (self.adam_beta1 * m) + ((1 - self.adam_beta1) * grad)
-            s = (self.adam_beta2 * s) + ((1 - self.adam_beta2) * (grad * grad))
-            m_hat = m / (1 - (self.adam_beta1**step))
-            s_hat = s / (1 - (self.adam_beta2**step))
-            local_x -= self.step_size * m_hat / (iop.sqrt(s_hat) + self.adam_epsilon)
+            m = (beta1 * m) + ((1 - beta1) * grad)
+            s = (beta2 * s) + ((1 - beta2) * (grad * grad))
+            m_hat = m / (1 - (beta1**step))
+            s_hat = s / (1 - (beta2**step))
+            local_x -= self.step_size * m_hat / (iop.sqrt(s_hat) + epsilon)
         return local_x
 
     def aggregate(

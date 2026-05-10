@@ -16,7 +16,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     """Federated algorithm - clients collaborate via a central server."""
 
     selection_scheme: ClientSelectionScheme | None = None
-    num_local_steps: LocalSteps
+    num_local_steps: LocalSteps = 1
 
     def cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
         return [network.server(), *network.clients()]
@@ -36,6 +36,8 @@ class FedAlgorithm(Algorithm[FedNetwork]):
             return
         if isinstance(self.num_local_steps, dict):
             for step in self.num_local_steps.values():
+                if not isinstance(step, int):
+                    raise TypeError("`num_local_steps` mapping values must be integers")
                 if step <= 0:
                     raise ValueError("`num_local_steps` must have positive values")
             return

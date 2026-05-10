@@ -23,13 +23,16 @@ class FedDyn(FedAlgorithm):
     Federated Dynamic Regularization (FedDyn) with local gradient steps :footcite:p:`Alg_FedDyn`.
 
     FedDyn keeps one dynamic state :math:`g_i` per client and one server auxiliary vector :math:`h`. In each
-    communication round, selected clients approximately minimize the dynamic-regularized local objective
+    communication round, the paper writes the selected-client update as the exact minimizer of the
+    dynamic-regularized local objective
 
     .. math::
         f_i(\theta) - \langle g_i, \theta \rangle
         + \frac{\alpha}{2}\|\theta - \theta^t\|^2
 
-    by running ``num_local_epochs`` gradient steps from the received server model, with local gradient
+    In practice, and following the local SGD device update used in the paper's experiments, this implementation
+    approximates that minimization by running ``num_local_epochs`` gradient steps
+    from the received server model, with local gradient
 
     .. math::
         \nabla f_i(\theta) - g_i + \alpha(\theta - \theta^t).
