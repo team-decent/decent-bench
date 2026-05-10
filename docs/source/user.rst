@@ -108,24 +108,52 @@ Federated
             :tag: federated
             :module: decent_bench.algorithms.federated
 
-FedProx extends FedAvg with a proximal coefficient ``mu``. Setting ``mu=0`` reduces
-FedProx to FedAvg.
+:class:`~decent_bench.algorithms.federated.FedAvg` performs local client
+gradient steps from the broadcast server model and then replaces the server
+model with the uniform average of the received final client models.
+
+:class:`~decent_bench.algorithms.federated.FedProx` extends
+:class:`~decent_bench.algorithms.federated.FedAvg` with a proximal coefficient
+``mu`` that penalizes local drift away from the round's broadcast server model.
+Setting ``mu=0`` reduces :class:`~decent_bench.algorithms.federated.FedProx`
+to :class:`~decent_bench.algorithms.federated.FedAvg`.
 
 :class:`~decent_bench.algorithms.federated.FedAdagrad`,
 :class:`~decent_bench.algorithms.federated.FedYogi`, and
-:class:`~decent_bench.algorithms.federated.FedAdam` form the built-in FedOpt
-family. They keep the same client-side local SGD structure as FedAvg, but each
-client uploads its model delta to the server and the server applies an adaptive
-optimizer update instead of plain averaging to the next global iterate.
+:class:`~decent_bench.algorithms.federated.FedAdam` form the built-in
+:class:`~decent_bench.algorithms.federated.FedOpt` family. They keep the same
+client-side local SGD structure as
+:class:`~decent_bench.algorithms.federated.FedAvg`, but each client uploads its
+model delta to the server and the server applies an adaptive optimizer update
+instead of plain averaging to the next global iterate.
 
 :class:`~decent_bench.algorithms.federated.FedNova` supports the plain
 Local-SGD FedNova update together with optional local momentum, proximal local
 updates, and server momentum. Clients accumulate their local updates together
 with the FedNova normalization coefficient and upload them to the server in
 two separate transmissions before the server applies the aggregated update.
+If none of the first-phase normalizer uploads are received in a round, that round is skipped without updating the server model.
 The ``num_local_steps`` argument can be either a single integer for
 homogeneous local work or a per-client mapping for heterogeneous local step
 counts.
+
+:class:`~decent_bench.algorithms.federated.FedLT` implements Federated Local
+Training with cost-driven local gradients and optional acceleration through
+``use_acceleration``. :class:`~decent_bench.costs.EmpiricalRiskCost` objects use
+their default mini-batch gradient behavior, so they behave as local SGD, while
+generic :class:`~decent_bench.costs.Cost` objects use full gradients and behave
+as local GD. Fed-LT compression and Fed-PLT-style noisy-message experiments are
+configured through :class:`~decent_bench.networks.FedNetwork`
+``message_compression`` and ``message_noise`` schemes rather than algorithm
+arguments.
+
+:class:`SCAFFOLD <decent_bench.algorithms.federated.Scaffold>` implements
+stochastic controlled averaging with a server control variate and one client
+control variate per client. Selected clients run local steps corrected by the
+difference between the server and client control variates, then upload both
+their model delta and control-variate delta. The server applies the averaged
+model delta with ``server_step_size`` and updates its control variate using the
+participation fraction.
 
 Federated aggregation
 ^^^^^^^^^^^^^^^^^^^^^
@@ -152,9 +180,12 @@ and applies the resulting descent step at the server. With the default flags,
 this is the plain no-momentum FedNova variant. Enabling ``use_momentum``,
 ``use_prox``, or ``use_server_momentum`` extends the local and server updates
 to the corresponding FedNova variants controlled by ``beta``, ``mu``, and
-``gamma``. Plain FedNova matches FedAvg only when the participating clients use
-the same number of local steps and FedNova's and FedAvg both use data-proportional aggregation
-weights.
+``gamma``. Plain FedNova matches
+:class:`~decent_bench.algorithms.federated.FedAvg` only when the participating
+clients use the same number of local steps and
+:class:`~decent_bench.algorithms.federated.FedNova` and
+:class:`~decent_bench.algorithms.federated.FedAvg` both use data-proportional
+aggregation weights.
 
 :class:`~decent_bench.algorithms.federated.Scaffold` matches the standard
 SCAFFOLD algorithm and always uses uniform averaging over the selected clients.

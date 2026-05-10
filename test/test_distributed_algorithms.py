@@ -2,7 +2,7 @@ import networkx as nx
 import pytest
 
 from decent_bench.agents import Agent
-from decent_bench.algorithms.federated import FedAdagrad, FedAdam, FedAlgorithm, FedAvg, FedProx, FedNova, FedYogi, Scaffold
+from decent_bench.algorithms.federated import FedAdagrad, FedAdam, FedAlgorithm, FedAvg, FedLT, FedProx, FedNova, FedYogi, Scaffold
 from decent_bench.algorithms.p2p import (
     ADMM,
     ATC,
@@ -64,6 +64,7 @@ all_fed_algs = pytest.mark.parametrize(
     ("algorithm_cls", "kwargs"),
     [
         (FedAvg, {"iterations": 10, "step_size": 0.1}),
+        (FedLT, {"iterations": 10, "step_size": 0.1}),
         (FedProx, {"iterations": 10, "step_size": 0.1}),
         (FedAdagrad, {"iterations": 10, "step_size": 0.1}),
         (FedNova, {"iterations": 10, "step_size": 0.1}),
@@ -82,12 +83,14 @@ def _create_p2p_network(impairments: bool, cost_cls: type) -> P2PNetwork:
         costs, _, _ = create_classification_problem(
             cost_cls=cost_cls,
             n_agents=4,
+            show_progress=False,
         )
     except Exception:
         # Bad solver might fail, will be updated soon...
         costs, _, _ = create_classification_problem(
             cost_cls=cost_cls,
             n_agents=4,
+            show_progress=False,
         )
     agents = [
         Agent(
@@ -114,12 +117,14 @@ def _create_fed_network(impairments: bool, cost_cls: type) -> FedNetwork:
         costs, _, _ = create_classification_problem(
             cost_cls=cost_cls,
             n_agents=4,
+            show_progress=False,
         )
     except Exception:
         # Bad solver might fail, will be updated soon...
         costs, _, _ = create_classification_problem(
             cost_cls=cost_cls,
             n_agents=4,
+            show_progress=False,
         )
     agents = [
         Agent(

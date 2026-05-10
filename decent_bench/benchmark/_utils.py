@@ -23,6 +23,7 @@ def create_classification_problem(
     device: SupportedDevices = SupportedDevices.CPU,
     n_agents: int = 100,
     batch_size: EmpiricalRiskBatchSize = "all",
+    show_progress: bool = True,
 ) -> tuple[Sequence[Cost], Array | None, Dataset]:
     """
     Create out-of-the-box classification problems.
@@ -32,6 +33,7 @@ def create_classification_problem(
         device: device to create the problem on (only relevant for PyTorchCost)
         n_agents: number of agents
         batch_size: size of mini-batches for stochastic methods, or "all" for full-batch
+        show_progress: whether to display a progress bar while computing ``x_optimal``. Defaults to ``True``.
 
     Note:
         If cost_cls is :class:`~decent_bench.costs.PyTorchCost`, x_optimal is not computed and set to None.
@@ -106,7 +108,13 @@ def create_classification_problem(
         sum_cost = reduce(add, classification_costs)
         if sum_cost.batch_size < sum_cost.n_samples:
             sum_cost._batch_size = sum_cost.n_samples  # noqa: SLF001
-        x_optimal = ca.solve(sum_cost, max_iter=SOLVE_MAX_ITER, stop_tol=SOLVE_STOP_TOL, max_tol=SOLVE_MAX_TOL)
+        x_optimal = ca.solve(
+            sum_cost,
+            max_iter=SOLVE_MAX_ITER,
+            stop_tol=SOLVE_STOP_TOL,
+            max_tol=SOLVE_MAX_TOL,
+            show_progress=show_progress,
+        )
         costs = classification_costs
     else:
         raise ValueError(f"Unsupported cost class: {cost_cls}")
@@ -119,6 +127,7 @@ def create_regression_problem(
     device: SupportedDevices = SupportedDevices.CPU,
     n_agents: int = 100,
     batch_size: EmpiricalRiskBatchSize = "all",
+    show_progress: bool = True,
 ) -> tuple[Sequence[Cost], Array | None, Dataset]:
     """
     Create out-of-the-box regression problems.
@@ -128,6 +137,7 @@ def create_regression_problem(
         device: device to create the problem on (only relevant for PyTorchCost)
         n_agents: number of agents
         batch_size: size of mini-batches for stochastic methods, or "all" for full-batch
+        show_progress: whether to display a progress bar while computing ``x_optimal``. Defaults to ``True``.
 
     Note:
         If cost_cls is :class:`~decent_bench.costs.PyTorchCost`, x_optimal is not computed and set to None.
@@ -193,7 +203,13 @@ def create_regression_problem(
         sum_cost = reduce(add, regression_costs)
         if sum_cost.batch_size < sum_cost.n_samples:
             sum_cost._batch_size = sum_cost.n_samples  # noqa: SLF001
-        x_optimal = ca.solve(sum_cost, max_iter=SOLVE_MAX_ITER, stop_tol=SOLVE_STOP_TOL, max_tol=SOLVE_MAX_TOL)
+        x_optimal = ca.solve(
+            sum_cost,
+            max_iter=SOLVE_MAX_ITER,
+            stop_tol=SOLVE_STOP_TOL,
+            max_tol=SOLVE_MAX_TOL,
+            show_progress=show_progress,
+        )
         costs = regression_costs
     else:
         raise ValueError(f"Unsupported cost class: {cost_cls}")
@@ -204,6 +220,7 @@ def create_regression_problem(
 def create_quadratic_problem(
     size: int = 10,
     n_agents: int = 100,
+    show_progress: bool = True,
 ) -> tuple[Sequence[Cost], Array]:
     """
     Create out-of-the-box quadratic problems.
@@ -211,6 +228,7 @@ def create_quadratic_problem(
     Args:
         size: number of dimensions
         n_agents: number of agents
+        show_progress: whether to display a progress bar while computing ``x_optimal``. Defaults to ``True``.
 
     """
     if not LOGGER.handlers:
@@ -226,6 +244,12 @@ def create_quadratic_problem(
     LOGGER.info("... done!")
 
     sum_cost = reduce(add, costs)
-    x_optimal = ca.solve(sum_cost, max_iter=SOLVE_MAX_ITER, stop_tol=SOLVE_STOP_TOL, max_tol=SOLVE_MAX_TOL)
+    x_optimal = ca.solve(
+        sum_cost,
+        max_iter=SOLVE_MAX_ITER,
+        stop_tol=SOLVE_STOP_TOL,
+        max_tol=SOLVE_MAX_TOL,
+        show_progress=show_progress,
+    )
 
     return costs, x_optimal
