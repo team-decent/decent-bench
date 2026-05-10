@@ -70,6 +70,7 @@ intersphinx_mapping = {
     "rich": ("https://rich.readthedocs.io/en/latest/", None),
     "sklearn": ("https://scikit-learn.org/stable/", None),
     "zstandard": ("https://python-zstandard.readthedocs.io/en/latest/", None),
+    "pandas": ("https://pandas.pydata.org/docs/", None),
 }
 
 

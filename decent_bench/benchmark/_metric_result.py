@@ -10,7 +10,7 @@ from decent_bench.metrics import Metric
 from decent_bench.networks import Network
 
 if TYPE_CHECKING:
-    from pandas import DataFrame
+    import pandas
 
 
 def _import_pandas() -> ModuleType:
@@ -75,7 +75,7 @@ class MetricResult:
         """Return ``description`` of available plot metrics, which can be used for filtering in :func:`~decent_bench.benchmark.display_metrics`."""  # noqa: E501
         return sorted({metric.description for metric in (self.plot_metrics or [])})
 
-    def to_dataframe(self) -> tuple["DataFrame | None", "DataFrame | None"]:
+    def to_dataframe(self) -> tuple["pandas.DataFrame | None", "pandas.DataFrame | None"]:
         """
         Convert the stored metric results into pandas dataframes.
 
@@ -104,18 +104,16 @@ class MetricResult:
         table_frame = None
         if self.table_results is not None:
             table_rows: list[dict[str, object]] = []
-            for algorithm, metric_results in self.table_results.items():
-                for metric, statistics in metric_results.items():
+            for algorithm, table_metric_results in self.table_results.items():
+                for metric, statistics in table_metric_results.items():
                     for statistic_name, (mean, margin_of_error) in statistics.items():
-                        table_rows.append(
-                            {
-                                "algorithm": algorithm.name,
-                                "metric": metric.description,
-                                "statistic": statistic_name,
-                                "mean": mean,
-                                "margin_of_error": margin_of_error,
-                            }
-                        )
+                        table_rows.append({
+                            "algorithm": algorithm.name,
+                            "metric": metric.description,
+                            "statistic": statistic_name,
+                            "mean": mean,
+                            "margin_of_error": margin_of_error,
+                        })
 
             table_frame = pd.DataFrame.from_records(
                 table_rows,
@@ -125,8 +123,8 @@ class MetricResult:
         plot_frame = None
         if self.plot_results is not None:
             plot_rows: list[dict[str, object]] = []
-            for algorithm, metric_results in self.plot_results.items():
-                for metric, (x_values, y_mean_values, y_min_values, y_max_values) in metric_results.items():
+            for algorithm, plot_metric_results in self.plot_results.items():
+                for metric, (x_values, y_mean_values, y_min_values, y_max_values) in plot_metric_results.items():
                     for x_value, y_mean, y_min, y_max in zip(
                         x_values,
                         y_mean_values,
@@ -134,16 +132,14 @@ class MetricResult:
                         y_max_values,
                         strict=True,
                     ):
-                        plot_rows.append(
-                            {
-                                "algorithm": algorithm.name,
-                                "metric": metric.description,
-                                "x": x_value,
-                                "y_mean": y_mean,
-                                "y_min": y_min,
-                                "y_max": y_max,
-                            }
-                        )
+                        plot_rows.append({
+                            "algorithm": algorithm.name,
+                            "metric": metric.description,
+                            "x": x_value,
+                            "y_mean": y_mean,
+                            "y_min": y_min,
+                            "y_max": y_max,
+                        })
 
             plot_frame = pd.DataFrame.from_records(
                 plot_rows,

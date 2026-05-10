@@ -628,8 +628,8 @@ class Loss(Metric):
 
 
 DEFAULT_TABLE_METRICS: list[Metric] = [
-    Regret([utils.single]),
-    GradientNorm([utils.single]),
+    Regret(),
+    GradientNorm(),
     XError([min, np.average, max]),
     ConsensusError([min, np.average, max]),
     Loss([min, np.average, max]),
@@ -643,8 +643,8 @@ DEFAULT_TABLE_METRICS: list[Metric] = [
     SentMessagesDropped([np.average, sum]),
 ]
 """
-- :class:`Regret` - :func:`~.metric_utils.single`
-- :class:`GradientNorm` - :func:`~.metric_utils.single`
+- :class:`Regret` (no statistics)
+- :class:`GradientNorm` (no statistics)
 - :class:`XError` - :func:`min`, :func:`~numpy.average`, :func:`max`
 - :class:`ConsensusError` - :func:`min`, :func:`~numpy.average`, :func:`max`
 - :class:`Loss` - :func:`min`, :func:`~numpy.average`, :func:`max`

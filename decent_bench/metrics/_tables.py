@@ -71,12 +71,12 @@ def display_tables(
 
     table_results = metrics_result.table_results
     algs = list(table_results.keys())
-    headers = ["Metric (statistic)"] + [alg.name for alg in algs]
+    headers = ["Metric (statistic across agents)"] + [alg.name for alg in algs]
     rows: list[list[str]] = []
 
     for metric in metrics_result.table_metrics:
         for statistic_name in table_results[algs[0]][metric]:
-            row = [f"{metric.description} ({statistic_name})"]
+            row = [f"{metric.description} ({statistic_name})"] if statistic_name else [f"{metric.description}"]
             for alg in algs:
                 mean, margin_of_error = table_results[alg][metric][statistic_name]
 
@@ -148,6 +148,8 @@ def compute_tables(
 
             for statistic in metric.statistics:
                 statistic_name = STATISTICS_ABBR.get(statistic.__name__) or statistic.__name__
+                if statistic_name == "default_statistic":
+                    statistic_name = ""
                 for i, alg in enumerate(algs):
                     agg_data_per_trial = [statistic(trial) for trial in data_per_trial[i]]
                     mean, margin_of_error = _calculate_mean_and_margin_of_error(agg_data_per_trial, confidence_level)

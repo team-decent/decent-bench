@@ -249,7 +249,7 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
     from decent_bench.metrics.runtime_library import RuntimeLoss, RuntimeRegret
 
     if __name__ == "__main__":
-        regret = Regret([utils.single], x_log=False, y_log=True)
+        regret = Regret(x_log=False, y_log=True)
         gradient_calls = GradientCalls([min, np.average, max, sum])
 
         benchmark_result = benchmark.benchmark(

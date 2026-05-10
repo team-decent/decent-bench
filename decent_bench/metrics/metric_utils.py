@@ -48,17 +48,11 @@ def _clear_caches() -> None:
     _predict_agent.cache_clear()
 
 
-def single(values: Sequence[float]) -> float:
-    """
-    Assert that *values* contain exactly one element and return it.
-
-    Raises:
-        ValueError: if there isn't exactly one element in *values*
-
-    """
-    if len(values) != 1:
-        raise ValueError("Argument `values` must have exactly 1 element")
-    return values[0]
+def default_statistic(values: Sequence[float]) -> float:
+    """Return *values[0]* if it contains exactly one element, *mean(values)* otherwise."""
+    if len(values) == 1:
+        return values[0]
+    return np.average(values)
 
 
 @cache
