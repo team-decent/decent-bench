@@ -129,120 +129,100 @@ class PoissonActivation(AgentActivationScheme):
         return False
 
 
-class TraceActivation(AgentActivationScheme):
-    """
-    Scheme where agent availability follows a fixed activation trace.
-
-    The trace is indexed by iteration. If ``repeat`` is ``False``, the agent is inactive after the trace ends.
-    If ``repeat`` is ``True``, the trace is repeated periodically.
-
-    Args:
-        activation_trace: sequence whose truth values define activation at each trace index.
-        repeat: whether to repeat the trace after its final entry.
-
-    Raises:
-        ValueError: if ``activation_trace`` is empty or ``iteration`` is negative.
-
-    """
-
-    def __init__(self, activation_trace: Sequence[bool], repeat: bool = False):
-        if not activation_trace:
-            raise ValueError("activation_trace must be non-empty")
-        self.activation_trace = tuple(bool(active) for active in activation_trace)
-        self.repeat = repeat
-
-    def is_active(self, iteration: int) -> bool:  # noqa: D102
-        if iteration < 0:
-            raise ValueError("iteration must be non-negative")
-        if iteration >= len(self.activation_trace):
-            if not self.repeat:
-                return False
-            iteration %= len(self.activation_trace)
-        return self.activation_trace[iteration]
-
-
 class CyclicActivation(AgentActivationScheme):
     """
     Scheme where an agent cycles through active and inactive intervals.
 
     The agent is active for ``active_for`` iterations and inactive for ``inactive_for`` iterations in each cycle.
-    The first interval is active by default, but ``start_active=False`` starts each cycle with the inactive interval.
+    If ``inactive_for`` is not provided, it defaults to ``active_for``. ``offset`` shifts the phase of the cycle,
+    allowing agents to follow the same cycle with staggered active windows.
 
     Args:
         active_for: number of active iterations in each cycle.
-        inactive_for: number of inactive iterations in each cycle.
-        start_active: whether each cycle starts with the active interval.
+        inactive_for: number of inactive iterations in each cycle. If ``None``, it defaults to ``active_for``.
+        offset: phase offset applied to the cycle.
 
     Raises:
-        ValueError: if ``active_for`` or ``inactive_for`` is negative, both are zero, or ``iteration`` is negative.
+        ValueError: if ``active_for``, ``inactive_for``, or ``offset`` is negative, both intervals are zero, or
+            ``iteration`` is negative.
 
     """
 
-    def __init__(self, active_for: int, inactive_for: int, start_active: bool = True):
+    def __init__(self, active_for: int, inactive_for: int | None = None, offset: int = 0):
+        inactive_for = active_for if inactive_for is None else inactive_for
         if active_for < 0 or inactive_for < 0:
             raise ValueError("active_for and inactive_for must be non-negative")
+        if offset < 0:
+            raise ValueError("offset must be non-negative")
         if active_for == 0 and inactive_for == 0:
             raise ValueError("At least one of active_for or inactive_for must be positive")
         self.active_for = active_for
         self.inactive_for = inactive_for
-        self.start_active = start_active
+        self.offset = offset
 
     def is_active(self, iteration: int) -> bool:  # noqa: D102
         if iteration < 0:
             raise ValueError("iteration must be non-negative")
         period = self.active_for + self.inactive_for
-        phase = iteration % period
-        if self.start_active:
-            return phase < self.active_for
-        return phase >= self.inactive_for
+        phase = (iteration + self.offset) % period
+        return phase < self.active_for
 
 
 class ClientSelectionScheme(ABC):
     """
     Scheme defining how to select a subset of available clients.
 
-    Federated algorithms call :meth:`select` once per round with the currently active clients. Implementations may be
-    stateful, but they should not mutate the client sequence they receive.
+    Federated algorithms call :meth:`select` once per round with the currently active clients. Implementations
+    should return a subset without modifying the input sequence.
     """
 
     @staticmethod
     def _validate_selection_size(
-        clients_per_round: int | None,
-        client_fraction: float | None,
+        num_selected_clients: int | None,
+        fraction_selected_clients: float | None,
     ) -> None:
-        if clients_per_round is None and client_fraction is None:
-            raise ValueError("Provide clients_per_round or client_fraction")
-        if clients_per_round is not None and client_fraction is not None:
-            raise ValueError("Provide only one of clients_per_round or client_fraction")
-        if clients_per_round is not None and clients_per_round <= 0:
-            raise ValueError("clients_per_round must be positive")
-        if client_fraction is not None and not (0 < client_fraction <= 1):
-            raise ValueError("client_fraction must be in (0, 1]")
+        """
+        Validate that exactly one selection-size parameter is provided.
+
+        Raises:
+            ValueError: if neither or both size parameters are provided, or if the provided value is outside the
+                accepted range.
+
+        """
+        if num_selected_clients is None and fraction_selected_clients is None:
+            raise ValueError("Provide num_selected_clients or fraction_selected_clients")
+        if num_selected_clients is not None and fraction_selected_clients is not None:
+            raise ValueError("Provide only one of num_selected_clients or fraction_selected_clients")
+        if num_selected_clients is not None and num_selected_clients <= 0:
+            raise ValueError("num_selected_clients must be positive")
+        if fraction_selected_clients is not None and not (0 < fraction_selected_clients <= 1):
+            raise ValueError("fraction_selected_clients must be in (0, 1]")
 
     @staticmethod
-    def _num_selected_clients(
+    def _resolve_num_selected_clients(
         clients: Sequence[Agent],
-        clients_per_round: int | None,
-        client_fraction: float | None,
+        num_selected_clients: int | None,
+        fraction_selected_clients: float | None,
     ) -> int:
-        if clients_per_round is not None:
-            return min(clients_per_round, len(clients))
-        k = max(1, int(client_fraction * len(clients)))  # type: ignore[operator]
+        """
+        Resolve the number of selected clients for a given input client pool.
+
+        If ``num_selected_clients`` is provided, it is capped at ``len(clients)``. If
+        ``fraction_selected_clients`` is provided, at least one client is selected from a non-empty input.
+        """
+        if num_selected_clients is not None:
+            return min(num_selected_clients, len(clients))
+        k = max(1, int(fraction_selected_clients * len(clients)))  # type: ignore[operator]
         return min(k, len(clients))
 
     @staticmethod
-    def _normalized_scores(values: Sequence[float]) -> list[float]:
-        value_list = list(values)
-        if not value_list:
-            return []
-        min_value = min(value_list)
-        value_range = max(value_list) - min_value
-        if value_range == 0:
-            return [0.0 for _ in value_list]
-        return [(value - min_value) / value_range for value in value_list]
-
-    @staticmethod
     def _client_loss(client: Agent) -> float:
+        """
+        Evaluate a client's current local loss for selection.
+
+        Empirical-risk costs are evaluated on all local samples to avoid consuming a stochastic mini-batch during
+        client selection.
+        """
         if isinstance(client.cost, EmpiricalRiskCost):
             return client.cost.function(client.x, indices="all")
         return client.cost.function(client.x)
@@ -263,7 +243,7 @@ class ClientSelectionScheme(ABC):
         """
 
 
-class UniformClientSelection(ClientSelectionScheme):
+class UniformSelection(ClientSelectionScheme):
     """
     Uniform client selection.
 
@@ -271,8 +251,8 @@ class UniformClientSelection(ClientSelectionScheme):
     of the clients passed to :meth:`select`.
 
     Args:
-        clients_per_round: number of clients to sample per round.
-        client_fraction: fraction of provided clients to sample per round.
+        num_selected_clients: number of provided clients to sample.
+        fraction_selected_clients: fraction of provided clients to sample.
 
     Raises:
         ValueError: if the selection size is invalid.
@@ -282,37 +262,43 @@ class UniformClientSelection(ClientSelectionScheme):
     def __init__(
         self,
         *,
-        clients_per_round: int | None = None,
-        client_fraction: float | None = None,
+        num_selected_clients: int | None = None,
+        fraction_selected_clients: float | None = None,
     ) -> None:
-        self._validate_selection_size(clients_per_round, client_fraction)
-        self.clients_per_round = clients_per_round
-        self.client_fraction = client_fraction
+        self._validate_selection_size(num_selected_clients, fraction_selected_clients)
+        self.num_selected_clients = num_selected_clients
+        self.fraction_selected_clients = fraction_selected_clients
 
     def select(  # noqa: D102
         self,
         clients: Sequence[Agent],
-        iteration: int,
+        iteration: int,  # noqa: ARG002
     ) -> list[Agent]:
-        del iteration
         if not clients:
             return []
-        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
-        if k >= len(clients):
+        k = self._resolve_num_selected_clients(clients, self.num_selected_clients, self.fraction_selected_clients)
+        if k == len(clients):
             return list(clients)
         return random.sample(list(clients), k)
 
 
-class DataSizeClientSelection(ClientSelectionScheme):
-    """
+class DataSizeSelection(ClientSelectionScheme):
+    r"""
     Data-size weighted client selection :footcite:p:`Scheme_FedSampling`.
 
     The scheme samples clients without replacement with probability proportional to each client's local data size.
+    The sampling probability for client :math:`i` is
+
+    .. math::
+
+        p_i = \frac{n_i}{\sum_{j \in \mathcal{C}} n_j},
+
+    where :math:`n_i` is the client's inferred local data size and :math:`\mathcal{C}` is the client pool passed to
+    :meth:`select`.
 
     Args:
-        clients_per_round: number of clients to sample per round.
-        client_fraction: fraction of provided clients to sample per round.
-        data_size_key: key used to read explicit data sizes from ``Agent.data``.
+        num_selected_clients: number of provided clients to sample.
+        fraction_selected_clients: fraction of provided clients to sample.
 
     Raises:
         ValueError: if the selection size is invalid or any client's data size cannot be inferred.
@@ -324,30 +310,27 @@ class DataSizeClientSelection(ClientSelectionScheme):
     def __init__(
         self,
         *,
-        clients_per_round: int | None = None,
-        client_fraction: float | None = None,
-        data_size_key: str = "n_samples",
+        num_selected_clients: int | None = None,
+        fraction_selected_clients: float | None = None,
     ) -> None:
-        self._validate_selection_size(clients_per_round, client_fraction)
-        self.clients_per_round = clients_per_round
-        self.client_fraction = client_fraction
-        self.data_size_key = data_size_key
+        self._validate_selection_size(num_selected_clients, fraction_selected_clients)
+        self.num_selected_clients = num_selected_clients
+        self.fraction_selected_clients = fraction_selected_clients
 
     def select(  # noqa: D102
         self,
         clients: Sequence[Agent],
-        iteration: int,
+        iteration: int,  # noqa: ARG002
     ) -> list[Agent]:
-        del iteration
         if not clients:
             return []
-        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
-        clients_list = list(clients)
-        if k >= len(clients_list):
-            return clients_list
+        k = self._resolve_num_selected_clients(clients, self.num_selected_clients, self.fraction_selected_clients)
+        if k == len(clients):
+            return list(clients)
 
+        clients_list = list(clients)
         data_sizes = np.array(
-            [infer_client_data_size(client, self.data_size_key) for client in clients_list],
+            [infer_client_data_size(client) for client in clients_list],
             dtype=np.float64,
         )
         probabilities = data_sizes / data_sizes.sum()
@@ -355,15 +338,31 @@ class DataSizeClientSelection(ClientSelectionScheme):
         return [clients_list[int(index)] for index in selected_indices]
 
 
-class ParticipationFairClientSelection(ClientSelectionScheme):
-    """
-    Participation-fair client selection :footcite:p:`Scheme_FairFedCS`.
+class FairSelection(ClientSelectionScheme):
+    r"""
+    Fair client selection inspired by fairness-aware client selection :footcite:p:`Scheme_FairFedCS`.
 
-    The scheme prioritizes clients with fewer past selections, breaking ties at random.
+    The scheme is a simplified count-based fairness rule that prioritizes clients with fewer past selections. It acts
+    as a participation-balancing exploration rule: clients selected fewer times are prioritized so that the algorithm
+    keeps exploring under-represented clients instead of repeatedly selecting the same ones.
+    At round :math:`t`, let :math:`c_i(t)` be the number of previous rounds in which client :math:`i` was selected.
+    For the client pool :math:`\mathcal{C}_t` passed to :meth:`select`, the selected set is
+
+    .. math::
+
+        S_t \in \operatorname{arg\,min}_{S \subseteq \mathcal{C}_t,\ |S| = m}
+        \sum_{i \in S} c_i(t),
+
+    where :math:`m` is the resolved number of selected clients. Clients with the same count keep the order in which
+    they were provided to :meth:`select`. After selecting :math:`S_t`, the counts are updated as
+
+    .. math::
+
+        c_i(t+1) = c_i(t) + \mathbf{1}\{i \in S_t\}.
 
     Args:
-        clients_per_round: number of clients to sample per round.
-        client_fraction: fraction of provided clients to sample per round.
+        num_selected_clients: number of provided clients to sample.
+        fraction_selected_clients: fraction of provided clients to sample.
 
     Raises:
         ValueError: if the selection size is invalid.
@@ -375,108 +374,54 @@ class ParticipationFairClientSelection(ClientSelectionScheme):
     def __init__(
         self,
         *,
-        clients_per_round: int | None = None,
-        client_fraction: float | None = None,
+        num_selected_clients: int | None = None,
+        fraction_selected_clients: float | None = None,
     ) -> None:
-        self._validate_selection_size(clients_per_round, client_fraction)
-        self.clients_per_round = clients_per_round
-        self.client_fraction = client_fraction
+        self._validate_selection_size(num_selected_clients, fraction_selected_clients)
+        self.num_selected_clients = num_selected_clients
+        self.fraction_selected_clients = fraction_selected_clients
         self._selection_counts: dict[Agent, int] = {}
 
     def select(  # noqa: D102
         self,
         clients: Sequence[Agent],
-        iteration: int,
+        iteration: int,  # noqa: ARG002
     ) -> list[Agent]:
-        del iteration
         if not clients:
             return []
-        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
-        clients_list = list(clients)
-        if k >= len(clients_list):
-            selected_clients = clients_list
+        k = self._resolve_num_selected_clients(clients, self.num_selected_clients, self.fraction_selected_clients)
+        if k == len(clients):
+            selected_clients = list(clients)
         else:
-            tie_breakers = iop.rng_numpy().permutation(len(clients_list))
-            ranked_indices = sorted(
-                range(len(clients_list)),
-                key=lambda index: (self._selection_counts.get(clients_list[index], 0), int(tie_breakers[index])),
-            )
-            selected_clients = [clients_list[index] for index in ranked_indices[:k]]
+            clients_list = list(clients)
+            selected_clients = sorted(clients_list, key=lambda client: self._selection_counts.get(client, 0))[:k]
 
         for client in selected_clients:
             self._selection_counts[client] = self._selection_counts.get(client, 0) + 1
         return selected_clients
 
 
-class StaleClientSelection(ClientSelectionScheme):
-    """
-    Staleness-aware client selection :footcite:p:`Scheme_FairFedCS`.
+class HighLossSelection(ClientSelectionScheme):
+    r"""
+    High-loss client selection inspired by Power-of-Choice :footcite:p:`Scheme_PowerOfChoice`.
 
-    The scheme prioritizes clients that have never been selected or have waited longest since their last selection,
-    breaking ties at random.
+    The scheme evaluates each client's local loss at its current local state ``x`` and selects the clients with
+    highest loss, breaking ties at random. Unlike the Power-of-Choice strategy, this scheme does not trigger extra
+    communication to evaluate losses at the current server model.
 
-    Args:
-        clients_per_round: number of clients to sample per round.
-        client_fraction: fraction of provided clients to sample per round.
+    At round :math:`t`, for the client pool :math:`\mathcal{C}_t` passed to :meth:`select`, the selected set is
 
-    Raises:
-        ValueError: if the selection size is invalid.
+    .. math::
 
-    .. footbibliography::
+        S_t \in \operatorname{arg\,max}_{S \subseteq \mathcal{C}_t,\ |S| = m}
+        \sum_{i \in S} F_i(x_i),
 
-    """
-
-    def __init__(
-        self,
-        *,
-        clients_per_round: int | None = None,
-        client_fraction: float | None = None,
-    ) -> None:
-        self._validate_selection_size(clients_per_round, client_fraction)
-        self.clients_per_round = clients_per_round
-        self.client_fraction = client_fraction
-        self._last_selected_iterations: dict[Agent, int] = {}
-
-    def _staleness(self, client: Agent, iteration: int) -> float:
-        last_selected_iteration = self._last_selected_iterations.get(client)
-        if last_selected_iteration is None:
-            return float("inf")
-        return float(iteration - last_selected_iteration)
-
-    def select(  # noqa: D102
-        self,
-        clients: Sequence[Agent],
-        iteration: int,
-    ) -> list[Agent]:
-        if not clients:
-            return []
-        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
-        clients_list = list(clients)
-        if k >= len(clients_list):
-            selected_clients = clients_list
-        else:
-            tie_breakers = iop.rng_numpy().permutation(len(clients_list))
-            ranked_indices = sorted(
-                range(len(clients_list)),
-                key=lambda index: (-self._staleness(clients_list[index], iteration), int(tie_breakers[index])),
-            )
-            selected_clients = [clients_list[index] for index in ranked_indices[:k]]
-
-        for client in selected_clients:
-            self._last_selected_iterations[client] = iteration
-        return selected_clients
-
-
-class HighLossClientSelection(ClientSelectionScheme):
-    """
-    High-loss client selection :footcite:p:`Scheme_PowerOfChoice`.
-
-    The scheme evaluates each client's local loss at its current ``x`` and selects the clients with highest loss,
-    breaking ties at random.
+    where :math:`m` is the resolved number of selected clients, :math:`F_i` is client :math:`i`'s local cost, and
+    :math:`x_i` is its current local state.
 
     Args:
-        clients_per_round: number of clients to sample per round.
-        client_fraction: fraction of provided clients to sample per round.
+        num_selected_clients: number of provided clients to sample.
+        fraction_selected_clients: fraction of provided clients to sample.
 
     Raises:
         ValueError: if the selection size is invalid.
@@ -489,27 +434,28 @@ class HighLossClientSelection(ClientSelectionScheme):
     def __init__(
         self,
         *,
-        clients_per_round: int | None = None,
-        client_fraction: float | None = None,
+        num_selected_clients: int | None = None,
+        fraction_selected_clients: float | None = None,
     ) -> None:
-        self._validate_selection_size(clients_per_round, client_fraction)
-        self.clients_per_round = clients_per_round
-        self.client_fraction = client_fraction
+        self._validate_selection_size(num_selected_clients, fraction_selected_clients)
+        self.num_selected_clients = num_selected_clients
+        self.fraction_selected_clients = fraction_selected_clients
 
     def select(  # noqa: D102
         self,
         clients: Sequence[Agent],
-        iteration: int,
+        iteration: int,  # noqa: ARG002
     ) -> list[Agent]:
-        del iteration
         if not clients:
             return []
 
-        n_selected_clients = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
-        clients_list = list(clients)
-        if n_selected_clients >= len(clients_list):
-            return clients_list
+        n_selected_clients = self._resolve_num_selected_clients(
+            clients, self.num_selected_clients, self.fraction_selected_clients
+        )
+        if n_selected_clients == len(clients):
+            return list(clients)
 
+        clients_list = list(clients)
         losses = [self._client_loss(client) for client in clients_list]
         tie_breakers = iop.rng_numpy().permutation(len(clients_list))
         ranked_indices = sorted(
@@ -517,224 +463,6 @@ class HighLossClientSelection(ClientSelectionScheme):
             key=lambda index: (-losses[index], int(tie_breakers[index])),
         )
         return [clients_list[index] for index in ranked_indices[:n_selected_clients]]
-
-
-class HybridFairHighLossClientSelection(ClientSelectionScheme):
-    """
-    Hybrid fair high-loss client selection.
-
-    The scheme combines each client's current local loss with its selection staleness and selects the clients with
-    highest combined score, breaking ties at random.
-
-    Args:
-        clients_per_round: number of clients to sample per round.
-        client_fraction: fraction of provided clients to sample per round.
-        loss_weight: weight assigned to normalized loss in the combined score. The staleness weight is
-            ``1 - loss_weight``.
-
-    Raises:
-        ValueError: if the selection size is invalid or ``loss_weight`` is not in :math:`[0, 1]`.
-        RuntimeError: if ``loss_weight`` is positive and any evaluated client's ``x`` has not been initialized.
-
-    .. footbibliography::
-
-    """
-
-    def __init__(
-        self,
-        *,
-        clients_per_round: int | None = None,
-        client_fraction: float | None = None,
-        loss_weight: float = 0.5,
-    ) -> None:
-        self._validate_selection_size(clients_per_round, client_fraction)
-        if loss_weight < 0 or loss_weight > 1:
-            raise ValueError("loss_weight must be in [0, 1]")
-        self.clients_per_round = clients_per_round
-        self.client_fraction = client_fraction
-        self.loss_weight = loss_weight
-        self._last_selected_iterations: dict[Agent, int] = {}
-
-    def _staleness(self, client: Agent, iteration: int) -> float:
-        last_selected_iteration = self._last_selected_iterations.get(client)
-        if last_selected_iteration is None:
-            return float(iteration + 1)
-        return float(iteration - last_selected_iteration)
-
-    def select(  # noqa: D102
-        self,
-        clients: Sequence[Agent],
-        iteration: int,
-    ) -> list[Agent]:
-        if not clients:
-            return []
-        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
-        clients_list = list(clients)
-        if k >= len(clients_list):
-            selected_clients = clients_list
-        else:
-            staleness_weight = 1.0 - self.loss_weight
-            loss_scores = [0.0 for _ in clients_list]
-            staleness_scores = [0.0 for _ in clients_list]
-            if self.loss_weight > 0:
-                loss_scores = self._normalized_scores([self._client_loss(client) for client in clients_list])
-            if staleness_weight > 0:
-                staleness_scores = self._normalized_scores(
-                    [self._staleness(client, iteration) for client in clients_list],
-                )
-            scores = [
-                self.loss_weight * loss_scores[index] + staleness_weight * staleness_scores[index]
-                for index in range(len(clients_list))
-            ]
-            tie_breakers = iop.rng_numpy().permutation(len(clients_list))
-            ranked_indices = sorted(
-                range(len(clients_list)),
-                key=lambda index: (-scores[index], int(tie_breakers[index])),
-            )
-            selected_clients = [clients_list[index] for index in ranked_indices[:k]]
-
-        for client in selected_clients:
-            self._last_selected_iterations[client] = iteration
-        return selected_clients
-
-
-class CountFairHighLossClientSelection(ClientSelectionScheme):
-    """
-    Count-fair high-loss client selection.
-
-    The scheme combines each client's current local loss with a bonus for clients selected fewer times, breaking ties
-    at random.
-
-    Args:
-        clients_per_round: number of clients to sample per round.
-        client_fraction: fraction of provided clients to sample per round.
-        loss_weight: weight assigned to normalized loss in the combined score. The count-fairness weight is
-            ``1 - loss_weight``.
-
-    Raises:
-        ValueError: if the selection size is invalid or ``loss_weight`` is not in :math:`[0, 1]`.
-        RuntimeError: if ``loss_weight`` is positive and any evaluated client's ``x`` has not been initialized.
-
-    """
-
-    def __init__(
-        self,
-        *,
-        clients_per_round: int | None = None,
-        client_fraction: float | None = None,
-        loss_weight: float = 0.5,
-    ) -> None:
-        self._validate_selection_size(clients_per_round, client_fraction)
-        if loss_weight < 0 or loss_weight > 1:
-            raise ValueError("loss_weight must be in [0, 1]")
-        self.clients_per_round = clients_per_round
-        self.client_fraction = client_fraction
-        self.loss_weight = loss_weight
-        self._selection_counts: dict[Agent, int] = {}
-
-    def select(  # noqa: D102
-        self,
-        clients: Sequence[Agent],
-        iteration: int,
-    ) -> list[Agent]:
-        del iteration
-        if not clients:
-            return []
-        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
-        clients_list = list(clients)
-        if k >= len(clients_list):
-            selected_clients = clients_list
-        else:
-            count_weight = 1.0 - self.loss_weight
-            loss_scores = [0.0 for _ in clients_list]
-            count_scores = [0.0 for _ in clients_list]
-            if self.loss_weight > 0:
-                loss_scores = self._normalized_scores([self._client_loss(client) for client in clients_list])
-            if count_weight > 0:
-                counts = [self._selection_counts.get(client, 0) for client in clients_list]
-                max_count = max(counts)
-                count_scores = self._normalized_scores([float(max_count - count) for count in counts])
-            scores = [
-                self.loss_weight * loss_scores[index] + count_weight * count_scores[index]
-                for index in range(len(clients_list))
-            ]
-            tie_breakers = iop.rng_numpy().permutation(len(clients_list))
-            ranked_indices = sorted(
-                range(len(clients_list)),
-                key=lambda index: (-scores[index], int(tie_breakers[index])),
-            )
-            selected_clients = [clients_list[index] for index in ranked_indices[:k]]
-
-        for client in selected_clients:
-            self._selection_counts[client] = self._selection_counts.get(client, 0) + 1
-        return selected_clients
-
-
-class DataSizeHighLossClientSelection(ClientSelectionScheme):
-    """
-    Data-size high-loss client selection.
-
-    The scheme combines each client's current local loss with its local data size, breaking ties at random.
-
-    Args:
-        clients_per_round: number of clients to sample per round.
-        client_fraction: fraction of provided clients to sample per round.
-        loss_weight: weight assigned to normalized loss in the combined score. The data-size weight is
-            ``1 - loss_weight``.
-
-    Raises:
-        ValueError: if the selection size is invalid, ``loss_weight`` is not in :math:`[0, 1]`, or any client's data
-            size cannot be inferred.
-        RuntimeError: if ``loss_weight`` is positive and any evaluated client's ``x`` has not been initialized.
-
-    """
-
-    def __init__(
-        self,
-        *,
-        clients_per_round: int | None = None,
-        client_fraction: float | None = None,
-        loss_weight: float = 0.5,
-    ) -> None:
-        self._validate_selection_size(clients_per_round, client_fraction)
-        if loss_weight < 0 or loss_weight > 1:
-            raise ValueError("loss_weight must be in [0, 1]")
-        self.clients_per_round = clients_per_round
-        self.client_fraction = client_fraction
-        self.loss_weight = loss_weight
-
-    def select(  # noqa: D102
-        self,
-        clients: Sequence[Agent],
-        iteration: int,
-    ) -> list[Agent]:
-        del iteration
-        if not clients:
-            return []
-        k = self._num_selected_clients(clients, self.clients_per_round, self.client_fraction)
-        clients_list = list(clients)
-        if k >= len(clients_list):
-            return clients_list
-
-        data_size_weight = 1.0 - self.loss_weight
-        loss_scores = [0.0 for _ in clients_list]
-        data_size_scores = [0.0 for _ in clients_list]
-        if self.loss_weight > 0:
-            loss_scores = self._normalized_scores([self._client_loss(client) for client in clients_list])
-        if data_size_weight > 0:
-            data_size_scores = self._normalized_scores(
-                [float(infer_client_data_size(client)) for client in clients_list],
-            )
-        scores = [
-            self.loss_weight * loss_scores[index] + data_size_weight * data_size_scores[index]
-            for index in range(len(clients_list))
-        ]
-        tie_breakers = iop.rng_numpy().permutation(len(clients_list))
-        ranked_indices = sorted(
-            range(len(clients_list)),
-            key=lambda index: (-scores[index], int(tie_breakers[index])),
-        )
-        return [clients_list[index] for index in ranked_indices[:k]]
 
 
 class CompressionScheme(ABC):
@@ -750,44 +478,6 @@ class NoCompression(CompressionScheme):
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
         return msg
-
-
-class ErrorFeedbackCompression(CompressionScheme):
-    r"""
-    Error-feedback compression wrapper :footcite:p:`Scheme_ErrorFeedbackCompression`.
-
-    The scheme keeps a residual equal to the previous compression error. On each call, the residual is added to the new
-    message before applying the wrapped compression scheme. The new residual is then updated to the part of the
-    corrected message that was not transmitted:
-
-    .. math::
-
-        u_k = x_k + e_k, \qquad c_k = C(u_k), \qquad e_{k+1} = u_k - c_k.
-
-    Args:
-        compression: compression scheme to apply to residual-corrected messages.
-
-    Note:
-        The residual is stored in the scheme instance. When using this scheme for messages from multiple senders,
-        pass a dictionary with one ``ErrorFeedbackCompression`` instance per sender. Residuals are cached by message
-        shape to avoid mixing residuals between same-sender messages with incompatible shapes.
-
-    .. footbibliography::
-
-    """
-
-    def __init__(self, compression: CompressionScheme):
-        self.compression = compression
-        self._residuals: dict[tuple[int, ...], Array] = {}
-
-    def compress(self, msg: Array) -> Array:  # noqa: D102
-        msg_shape = iop.shape(msg)
-        residual = self._residuals.get(msg_shape)
-        corrected_msg = msg if residual is None else msg + residual
-
-        compressed_msg = self.compression.compress(iop.copy(corrected_msg))
-        self._residuals[msg_shape] = corrected_msg - compressed_msg
-        return compressed_msg
 
 
 class Quantization(CompressionScheme):
@@ -823,13 +513,13 @@ class Quantization(CompressionScheme):
         return iop.to_array_like(msg_np, msg)
 
 
-class QSGDCompression(CompressionScheme):
+class StochasticQuantization(CompressionScheme):
     r"""
-    QSGD stochastic quantization :footcite:p:`Scheme_QSGD`.
+    Stochastic quantization used in QSGD :footcite:p:`Scheme_QSGD`.
 
     The scheme quantizes each coordinate using ``n_levels`` stochastic levels scaled by the message norm. This keeps the
-    compressed message unbiased in expectation while preserving the original message shape.
-    Given a message :math:`x` and :math:`s=\texttt{n\_levels}`, QSGD computes
+    compressed message unbiased in expectation while preserving the original message shape. Given a message
+    :math:`x` and :math:`s=\texttt{n\_levels}`, the quantizer computes
 
     .. math::
 
@@ -854,10 +544,15 @@ class QSGDCompression(CompressionScheme):
         Q_s(x_i) = \lVert x \rVert_2 \operatorname{sign}(x_i) \frac{\xi_i}{s}.
 
     Args:
-        n_levels: number of quantization levels.
+        n_levels: number of stochastic quantization levels. Larger values give a finer quantization grid and usually
+            lower quantization error. Smaller values give coarser quantization and stronger compression noise.
 
     Raises:
         ValueError: if ``n_levels`` is not positive.
+
+    Warning:
+        This scheme computes the :math:`\ell_2` norm of each message. This can be computationally expensive for large
+        messages or when messages live on accelerator devices.
 
     .. footbibliography::
 

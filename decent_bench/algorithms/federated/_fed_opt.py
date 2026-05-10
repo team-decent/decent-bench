@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
+from decent_bench.schemes import ClientSelectionScheme, UniformSelection
 from decent_bench.utils.types import InitialStates
 
 from ._fed_algorithm import FedAlgorithm
@@ -68,7 +68,7 @@ class FedOpt(FedAlgorithm, ABC):
     beta_1: float = 0.9
     tau: float = 1e-6
     selection_scheme: ClientSelectionScheme | None = field(
-        default_factory=lambda: UniformClientSelection(client_fraction=1.0)
+        default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
     )
     x0: InitialStates = None
     name: str = "FedOpt"

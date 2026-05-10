@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
+from decent_bench.schemes import ClientSelectionScheme, UniformSelection
 from decent_bench.utils._tags import tags
 from decent_bench.utils.types import InitialStates
 
@@ -46,7 +46,7 @@ class FedAvg(FedAlgorithm):
     step_size: float = 0.001
     num_local_epochs: int = 1
     selection_scheme: ClientSelectionScheme | None = field(
-        default_factory=lambda: UniformClientSelection(client_fraction=1.0)
+        default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
     )
     x0: InitialStates = None
     name: str = "FedAvg"

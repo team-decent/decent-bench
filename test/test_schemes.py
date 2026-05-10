@@ -8,37 +8,32 @@ from decent_bench.schemes import (
     AlwaysActive,
     ClientSelectionScheme,
     CompressionScheme,
-    CountFairHighLossClientSelection,
     CyclicActivation,
-    DataSizeClientSelection,
-    DataSizeHighLossClientSelection,
+    DataSizeSelection,
     DropScheme,
-    ErrorFeedbackCompression,
     GaussianNoise,
     GilbertElliott,
-    HighLossClientSelection,
-    HybridFairHighLossClientSelection,
+    HighLossSelection,
     MarkovChainActivation,
     NoCompression,
     NoDrops,
     NoiseScheme,
     NoNoise,
+    FairSelection,
     PoissonActivation,
-    ParticipationFairClientSelection,
-    QSGDCompression,
+    StochasticQuantization,
     Quantization,
     RandK,
-    StaleClientSelection,
     TopK,
-    TraceActivation,
     UniformActivationRate,
-    UniformClientSelection,
     UniformDropRate,
+    UniformSelection,
 )
 from decent_bench.utils import interoperability as iop
 from decent_bench.utils.array import Array
 
 ## AgentActivationScheme
+
 
 # test when agents always activate
 @pytest.mark.parametrize(
@@ -48,7 +43,6 @@ from decent_bench.utils.array import Array
         UniformActivationRate(activation_probability=1),
         MarkovChainActivation(inactive_to_active=1.0, active_to_inactive=0.0),
         PoissonActivation(mean_interval=0),
-        TraceActivation([True], repeat=True),
         CyclicActivation(active_for=1, inactive_for=0),
     ],
 )
@@ -68,7 +62,6 @@ def test_always_active(
         UniformActivationRate(activation_probability=0),
         MarkovChainActivation(inactive_to_active=0, active_to_inactive=1),
         PoissonActivation(mean_interval=1e10),
-        TraceActivation([False], repeat=True),
         CyclicActivation(active_for=0, inactive_for=1),
     ],
 )
@@ -104,27 +97,6 @@ def test_uniform_activation_rate_requires_probability() -> None:
         UniformActivationRate(activation_probability=1.1)
 
 
-def test_trace_activation_follows_trace_and_then_deactivates() -> None:
-    scheme = TraceActivation([True, False, True])
-
-    activations = [scheme.is_active(iteration) for iteration in range(5)]
-
-    assert activations == [True, False, True, False, False]
-
-
-def test_trace_activation_repeats_trace() -> None:
-    scheme = TraceActivation([True, False, False], repeat=True)
-
-    activations = [scheme.is_active(iteration) for iteration in range(7)]
-
-    assert activations == [True, False, False, True, False, False, True]
-
-
-def test_trace_activation_requires_non_empty_trace() -> None:
-    with pytest.raises(ValueError, match="activation_trace"):
-        TraceActivation([])
-
-
 def test_cyclic_activation_follows_active_then_inactive_cycle() -> None:
     scheme = CyclicActivation(active_for=2, inactive_for=3)
 
@@ -133,12 +105,20 @@ def test_cyclic_activation_follows_active_then_inactive_cycle() -> None:
     assert activations == [True, True, False, False, False, True, True, False]
 
 
-def test_cyclic_activation_can_start_inactive() -> None:
-    scheme = CyclicActivation(active_for=2, inactive_for=3, start_active=False)
+def test_cyclic_activation_defaults_inactive_period_to_active_period() -> None:
+    scheme = CyclicActivation(active_for=2)
 
-    activations = [scheme.is_active(iteration) for iteration in range(8)]
+    activations = [scheme.is_active(iteration) for iteration in range(6)]
 
-    assert activations == [False, False, False, True, True, False, False, False]
+    assert activations == [True, True, False, False, True, True]
+
+
+def test_cyclic_activation_applies_phase_offset() -> None:
+    scheme = CyclicActivation(active_for=2, inactive_for=3, offset=4)
+
+    activations = [scheme.is_active(iteration) for iteration in range(7)]
+
+    assert activations == [False, True, True, False, False, False, True]
 
 
 def test_cyclic_activation_requires_non_empty_cycle() -> None:
@@ -146,34 +126,34 @@ def test_cyclic_activation_requires_non_empty_cycle() -> None:
         CyclicActivation(active_for=0, inactive_for=0)
 
 
+def test_cyclic_activation_requires_non_negative_offset() -> None:
+    with pytest.raises(ValueError, match="offset"):
+        CyclicActivation(active_for=1, offset=-1)
+
+
 ## ClientSelectionScheme
+
 
 # test client selection
 def make_clients(n_clients: int) -> list[Agent]:
-    return [
-        Agent(agent_id, L2RegularizerCost((2,)), data={"n_samples": agent_id + 1})
-        for agent_id in range(n_clients)
-    ]
+    return [_make_linear_regression_client(agent_id, agent_id + 1) for agent_id in range(n_clients)]
+
+
+def _make_linear_regression_client(agent_id: int, n_samples: int, scale: float = 1.0) -> Agent:
+    dataset = [(np.array([1.0, 1.0]), np.array([0.0])) for _ in range(n_samples)]
+    return Agent(agent_id, scale * LinearRegressionCost(dataset))
 
 
 @pytest.mark.parametrize(
     ("scheme", "n_clients", "expected_selected"),
     [
-        (UniformClientSelection(clients_per_round=3), 5, 3),
-        (UniformClientSelection(client_fraction=0.4), 5, 2),
-        (UniformClientSelection(clients_per_round=5), 5, 5),
-        (DataSizeClientSelection(clients_per_round=3), 5, 3),
-        (DataSizeClientSelection(client_fraction=0.4), 5, 2),
-        (ParticipationFairClientSelection(clients_per_round=3), 5, 3),
-        (ParticipationFairClientSelection(client_fraction=0.4), 5, 2),
-        (StaleClientSelection(clients_per_round=3), 5, 3),
-        (StaleClientSelection(client_fraction=0.4), 5, 2),
-        (HybridFairHighLossClientSelection(clients_per_round=3, loss_weight=0.0), 5, 3),
-        (HybridFairHighLossClientSelection(client_fraction=0.4, loss_weight=0.0), 5, 2),
-        (CountFairHighLossClientSelection(clients_per_round=3, loss_weight=0.0), 5, 3),
-        (CountFairHighLossClientSelection(client_fraction=0.4, loss_weight=0.0), 5, 2),
-        (DataSizeHighLossClientSelection(clients_per_round=3, loss_weight=0.0), 5, 3),
-        (DataSizeHighLossClientSelection(client_fraction=0.4, loss_weight=0.0), 5, 2),
+        (UniformSelection(num_selected_clients=3), 5, 3),
+        (UniformSelection(fraction_selected_clients=0.4), 5, 2),
+        (UniformSelection(num_selected_clients=5), 5, 5),
+        (DataSizeSelection(num_selected_clients=3), 5, 3),
+        (DataSizeSelection(fraction_selected_clients=0.4), 5, 2),
+        (FairSelection(num_selected_clients=3), 5, 3),
+        (FairSelection(fraction_selected_clients=0.4), 5, 2),
     ],
 )
 def test_client_selection(
@@ -189,59 +169,38 @@ def test_client_selection(
 def test_data_size_client_selection_prefers_larger_clients() -> None:
     iop.set_seed(0)
     clients = [
-        Agent(0, L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(1, L2RegularizerCost((2,)), data={"n_samples": 1000}),
+        _make_linear_regression_client(0, 1),
+        _make_linear_regression_client(1, 1000),
     ]
-    scheme = DataSizeClientSelection(clients_per_round=1)
+    scheme = DataSizeSelection(num_selected_clients=1)
 
     selected_client_ids = [scheme.select(clients, iteration=i)[0].id for i in range(200)]
 
     assert selected_client_ids.count(1) > 190
 
 
-def test_data_size_client_selection_requires_positive_data_size() -> None:
-    clients = [
-        Agent(0, L2RegularizerCost((2,)), data={"n_samples": 0}),
-        Agent(1, L2RegularizerCost((2,)), data={"n_samples": 1}),
-    ]
-    scheme = DataSizeClientSelection(clients_per_round=1)
+def test_data_size_client_selection_requires_empirical_risk_cost() -> None:
+    clients = [Agent(0, L2RegularizerCost((2,))), Agent(1, L2RegularizerCost((2,)))]
+    scheme = DataSizeSelection(num_selected_clients=1)
 
-    with pytest.raises(ValueError, match="must be positive"):
+    with pytest.raises(ValueError, match="EmpiricalRiskCost"):
         scheme.select(clients, iteration=0)
 
 
-def test_participation_fair_client_selection_prioritizes_under_selected_clients() -> None:
+def test_fair_selection_prioritizes_under_selected_clients() -> None:
     clients = make_clients(2)
-    scheme = ParticipationFairClientSelection(clients_per_round=1)
+    scheme = FairSelection(num_selected_clients=1)
 
     assert scheme.select([clients[0]], iteration=0) == [clients[0]]
     assert scheme.select(clients, iteration=1) == [clients[1]]
 
 
-def test_participation_fair_client_selection_updates_counts_when_all_selected() -> None:
+def test_fair_selection_updates_counts_when_all_selected() -> None:
     clients = make_clients(3)
-    scheme = ParticipationFairClientSelection(clients_per_round=2)
+    scheme = FairSelection(num_selected_clients=2)
 
     assert scheme.select(clients[:2], iteration=0) == clients[:2]
     assert clients[2] in scheme.select(clients, iteration=1)
-
-
-def test_stale_client_selection_prioritizes_never_selected_clients() -> None:
-    clients = make_clients(2)
-    scheme = StaleClientSelection(clients_per_round=1)
-
-    assert scheme.select([clients[0]], iteration=0) == [clients[0]]
-    assert scheme.select(clients, iteration=1) == [clients[1]]
-
-
-def test_stale_client_selection_prioritizes_least_recently_selected_clients() -> None:
-    clients = make_clients(3)
-    scheme = StaleClientSelection(clients_per_round=1)
-
-    assert scheme.select([clients[0]], iteration=0) == [clients[0]]
-    assert scheme.select([clients[1]], iteration=1) == [clients[1]]
-    assert scheme.select([clients[2]], iteration=2) == [clients[2]]
-    assert scheme.select(clients, iteration=3) == [clients[0]]
 
 
 def test_high_loss_client_selection_selects_largest_loss() -> None:
@@ -252,7 +211,7 @@ def test_high_loss_client_selection_selects_largest_loss() -> None:
     ]
     for client in clients:
         client.x = Array(np.ones(2))
-    scheme = HighLossClientSelection(clients_per_round=1)
+    scheme = HighLossSelection(num_selected_clients=1)
 
     selected_clients = scheme.select(clients, iteration=0)
 
@@ -269,7 +228,7 @@ def test_high_loss_client_selection_selects_fraction() -> None:
     ]
     for client in clients:
         client.x = Array(np.ones(2))
-    scheme = HighLossClientSelection(client_fraction=0.4)
+    scheme = HighLossSelection(fraction_selected_clients=0.4)
 
     selected_clients = scheme.select(clients, iteration=0)
 
@@ -299,147 +258,14 @@ def test_high_loss_client_selection_does_not_consume_empirical_risk_batch() -> N
     for client in clients:
         client.x = x
 
-    HighLossClientSelection(clients_per_round=1).select(clients, iteration=0)
+    HighLossSelection(num_selected_clients=1).select(clients, iteration=0)
     selected_cost.gradient(x)
 
     assert selected_cost.batch_used == expected_batch
 
 
-def test_hybrid_fair_high_loss_client_selection_can_prioritize_loss() -> None:
-    clients = [
-        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-    ]
-    for client in clients:
-        client.x = Array(np.ones(2))
-    scheme = HybridFairHighLossClientSelection(clients_per_round=1, loss_weight=1.0)
-
-    selected_clients = scheme.select(clients, iteration=0)
-
-    assert selected_clients == [clients[1]]
-
-
-def test_hybrid_fair_high_loss_client_selection_can_prioritize_staleness() -> None:
-    clients = [
-        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(2, 2.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-    ]
-    scheme = HybridFairHighLossClientSelection(clients_per_round=1, loss_weight=0.0)
-
-    assert scheme.select([clients[0]], iteration=0) == [clients[0]]
-    assert scheme.select([clients[1]], iteration=1) == [clients[1]]
-    assert scheme.select([clients[2]], iteration=2) == [clients[2]]
-    assert scheme.select(clients, iteration=3) == [clients[0]]
-
-
-def test_hybrid_fair_high_loss_client_selection_combines_loss_and_staleness() -> None:
-    clients = [
-        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-    ]
-    for client in clients:
-        client.x = Array(np.ones(2))
-    scheme = HybridFairHighLossClientSelection(clients_per_round=1, loss_weight=0.25)
-
-    assert scheme.select([clients[0]], iteration=0) == [clients[0]]
-    assert scheme.select(clients, iteration=1) == [clients[1]]
-    assert scheme.select(clients, iteration=10) == [clients[0]]
-
-
-def test_hybrid_fair_high_loss_client_selection_requires_loss_weight_in_range() -> None:
-    with pytest.raises(ValueError, match="loss_weight"):
-        HybridFairHighLossClientSelection(clients_per_round=1, loss_weight=1.1)
-
-
-def test_count_fair_high_loss_client_selection_can_prioritize_loss() -> None:
-    clients = [
-        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-    ]
-    for client in clients:
-        client.x = Array(np.ones(2))
-    scheme = CountFairHighLossClientSelection(clients_per_round=1, loss_weight=1.0)
-
-    selected_clients = scheme.select(clients, iteration=0)
-
-    assert selected_clients == [clients[1]]
-
-
-def test_count_fair_high_loss_client_selection_can_prioritize_under_selected_clients() -> None:
-    clients = make_clients(3)
-    scheme = CountFairHighLossClientSelection(clients_per_round=1, loss_weight=0.0)
-
-    assert scheme.select([clients[0]], iteration=0) == [clients[0]]
-    assert scheme.select([clients[1]], iteration=1) == [clients[1]]
-    assert scheme.select(clients, iteration=2) == [clients[2]]
-
-
-def test_count_fair_high_loss_client_selection_combines_loss_and_selection_counts() -> None:
-    clients = [
-        Agent(0, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(1, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-    ]
-    for client in clients:
-        client.x = Array(np.ones(2))
-    scheme = CountFairHighLossClientSelection(clients_per_round=1, loss_weight=0.25)
-
-    assert scheme.select([clients[0]], iteration=0) == [clients[0]]
-    assert scheme.select([clients[0]], iteration=1) == [clients[0]]
-    assert scheme.select(clients, iteration=2) == [clients[1]]
-
-
-def test_count_fair_high_loss_client_selection_requires_loss_weight_in_range() -> None:
-    with pytest.raises(ValueError, match="loss_weight"):
-        CountFairHighLossClientSelection(clients_per_round=1, loss_weight=-0.1)
-
-
-def test_data_size_high_loss_client_selection_can_prioritize_loss() -> None:
-    clients = [
-        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 100}),
-        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-    ]
-    for client in clients:
-        client.x = Array(np.ones(2))
-    scheme = DataSizeHighLossClientSelection(clients_per_round=1, loss_weight=1.0)
-
-    selected_clients = scheme.select(clients, iteration=0)
-
-    assert selected_clients == [clients[1]]
-
-
-def test_data_size_high_loss_client_selection_can_prioritize_data_size() -> None:
-    clients = [
-        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 100}),
-        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-    ]
-    scheme = DataSizeHighLossClientSelection(clients_per_round=1, loss_weight=0.0)
-
-    selected_clients = scheme.select(clients, iteration=0)
-
-    assert selected_clients == [clients[0]]
-
-
-def test_data_size_high_loss_client_selection_combines_loss_and_data_size() -> None:
-    clients = [
-        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 100}),
-        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-    ]
-    for client in clients:
-        client.x = Array(np.ones(2))
-    scheme = DataSizeHighLossClientSelection(clients_per_round=1, loss_weight=0.25)
-
-    selected_clients = scheme.select(clients, iteration=0)
-
-    assert selected_clients == [clients[0]]
-
-
-def test_data_size_high_loss_client_selection_requires_loss_weight_in_range() -> None:
-    with pytest.raises(ValueError, match="loss_weight"):
-        DataSizeHighLossClientSelection(clients_per_round=1, loss_weight=1.1)
-
-
 ## CompressionScheme
+
 
 # test no compression
 @pytest.mark.parametrize(
@@ -447,18 +273,14 @@ def test_data_size_high_loss_client_selection_requires_loss_weight_in_range() ->
     [
         (NoCompression(), Array(np.array([3.0, -4.0, 1.0]))),
         (Quantization(n_significant_digits=5), Array(np.array([1.2345, -2.3456]))),
-        (QSGDCompression(n_levels=4), Array(np.array([0.0, 0.0, 0.0]))),
-        (ErrorFeedbackCompression(NoCompression()), Array(np.array([3.0, -4.0, 1.0]))),
+        (StochasticQuantization(n_levels=4), Array(np.array([0.0, 0.0, 0.0]))),
         (TopK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
         (RandK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
         (TopK(k=3), Array(np.array([3.0, -4.0, 1.0]))),
         (RandK(k=3), Array(np.array([3.0, -4.0, 1.0]))),
     ],
 )
-def test_no_compression(
-    scheme: CompressionScheme,
-    message: Array
-) -> None:
+def test_no_compression(scheme: CompressionScheme, message: Array) -> None:
     original_message = Array(np.copy(iop.to_numpy(message)))
     compression_error = float(iop.norm(original_message - scheme.compress(message)))
 
@@ -510,76 +332,34 @@ def test_randk_compression(k) -> None:
     assert observed_norms == {1.0, 3.0, 4.0}
 
 
-def test_qsgd_compression_preserves_shape_and_signs() -> None:
+def test_stochastic_quantization_preserves_shape_and_signs() -> None:
     message = Array(np.array([[3.0, -4.0], [0.0, 1.0]]))
-    compressed_message = QSGDCompression(n_levels=4).compress(message)
+    compressed_message = StochasticQuantization(n_levels=4).compress(message)
 
     assert iop.to_numpy(compressed_message).shape == iop.to_numpy(message).shape
     assert np.all(np.sign(iop.to_numpy(compressed_message)) == np.sign(iop.to_numpy(message)))
 
 
-def test_qsgd_compression_uses_norm_scaled_levels() -> None:
+def test_stochastic_quantization_uses_norm_scaled_levels() -> None:
     iop.set_seed(0)
     message = Array(np.array([3.0, 4.0]))
-    compressed_message = QSGDCompression(n_levels=4).compress(message)
+    compressed_message = StochasticQuantization(n_levels=4).compress(message)
     quantized_levels = 4 * np.abs(iop.to_numpy(compressed_message)) / float(iop.norm(message))
 
     assert set(quantized_levels).issubset({0.0, 1.0, 2.0, 3.0, 4.0})
 
 
-def test_qsgd_compression_is_stochastic() -> None:
+def test_stochastic_quantization_is_stochastic() -> None:
     message = Array(np.array([3.0, 4.0]))
-    scheme = QSGDCompression(n_levels=4)
-    observed_messages = {
-        tuple(iop.to_numpy(scheme.compress(message)))
-        for _ in range(100)
-    }
+    scheme = StochasticQuantization(n_levels=4)
+    observed_messages = {tuple(iop.to_numpy(scheme.compress(message))) for _ in range(100)}
 
     assert len(observed_messages) > 1
 
 
-def test_qsgd_compression_requires_positive_levels() -> None:
+def test_stochastic_quantization_requires_positive_levels() -> None:
     with pytest.raises(ValueError, match="n_levels"):
-        QSGDCompression(n_levels=0)
-
-
-def test_error_feedback_compression_accumulates_residual() -> None:
-    scheme = ErrorFeedbackCompression(TopK(k=1))
-
-    first_message = scheme.compress(Array(np.array([1.0, 2.0, 3.0])))
-    second_message = scheme.compress(Array(np.array([0.0, 0.0, 0.0])))
-    third_message = scheme.compress(Array(np.array([0.0, 0.0, 0.0])))
-
-    np.testing.assert_array_equal(first_message, Array(np.array([0.0, 0.0, 3.0])))
-    np.testing.assert_array_equal(second_message, Array(np.array([0.0, 2.0, 0.0])))
-    np.testing.assert_array_equal(third_message, Array(np.array([1.0, 0.0, 0.0])))
-
-
-def test_error_feedback_compression_keeps_separate_residuals_by_shape() -> None:
-    class HalfCompression(CompressionScheme):
-        def compress(self, msg: Array) -> Array:
-            return msg / 2
-
-    scheme = ErrorFeedbackCompression(HalfCompression())
-
-    scalar_message = scheme.compress(Array(np.array([2.0])))
-    vector_message = scheme.compress(Array(np.array([0.0, 0.0, 0.0])))
-    next_scalar_message = scheme.compress(Array(np.array([0.0])))
-
-    np.testing.assert_array_equal(scalar_message, Array(np.array([1.0])))
-    np.testing.assert_array_equal(vector_message, Array(np.array([0.0, 0.0, 0.0])))
-    np.testing.assert_array_equal(next_scalar_message, Array(np.array([0.5])))
-
-
-def test_error_feedback_compression_leaves_no_residual_with_no_compression() -> None:
-    scheme = ErrorFeedbackCompression(NoCompression())
-    message = Array(np.array([1.0, 2.0, 3.0]))
-
-    compressed_message = scheme.compress(message)
-    zero_message = scheme.compress(Array(np.zeros(3)))
-
-    np.testing.assert_array_equal(compressed_message, message)
-    np.testing.assert_array_equal(zero_message, Array(np.zeros(3)))
+        StochasticQuantization(n_levels=0)
 
 
 # test RandK and TopK
@@ -609,10 +389,10 @@ def test_k_compression(scheme: CompressionScheme) -> None:
     ],
 )
 def test_k_compression_mismatched(scheme: CompressionScheme) -> None:
-    for k in range(5, 15+1):
+    for k in range(5, 15 + 1):
         s = scheme(k=k)
-        compressed_msg = s.compress(Array(np.ones(k-2)))
-        assert np.count_nonzero(compressed_msg) == k-2
+        compressed_msg = s.compress(Array(np.ones(k - 2)))
+        assert np.count_nonzero(compressed_msg) == k - 2
 
 
 # test RandK and TopK with mismatched k and message size
@@ -628,11 +408,11 @@ def test_k_compression_mismatched_k_msg_size(scheme: CompressionScheme) -> None:
     compressed_msg = s.compress(Array(np.ones(8)))
     assert np.count_nonzero(compressed_msg) == 8
 
-    for k in range(5, 15+1):
+    for k in range(5, 15 + 1):
         s = scheme(k=k)
-        compressed_msg = s.compress(Array(np.ones(k-2)))
+        compressed_msg = s.compress(Array(np.ones(k - 2)))
 
-        assert np.count_nonzero(compressed_msg) == k-2
+        assert np.count_nonzero(compressed_msg) == k - 2
 
 
 # test RandK and TopK to check message shape is preserved
@@ -656,6 +436,7 @@ def test_k_compression_preserved_shape(scheme: CompressionScheme) -> None:
 
 
 ## DropScheme
+
 
 # test no drops
 @pytest.mark.parametrize(
@@ -693,6 +474,7 @@ def test_drops(
 
 
 ## NoiseScheme
+
 
 # test no noise
 @pytest.mark.parametrize(

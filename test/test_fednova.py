@@ -5,16 +5,17 @@ import pytest
 
 from decent_bench.agents import Agent
 from decent_bench.algorithms.federated import FedAvg, FedNova
-from decent_bench.costs import Cost
+from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import DropScheme, NoDrops
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
-class TrackingCost(Cost):
+class TrackingCost(EmpiricalRiskCost):
     def __init__(self, gradient_value: float = 1.0, *, n_samples: int = 1):
         self._gradient = np.array([gradient_value], dtype=float)
-        self.n_samples = n_samples
+        self._n_samples = n_samples
+        self._dataset = [(np.array([0.0]), np.array([0.0])) for _ in range(n_samples)]
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -36,16 +37,39 @@ class TrackingCost(Cost):
     def m_cvx(self) -> float:
         return 0.0
 
-    def function(self, x: np.ndarray, **kwargs: Any) -> float:
+    @property
+    def n_samples(self) -> int:
+        return self._n_samples
+
+    @property
+    def batch_size(self) -> int:
+        return self._n_samples
+
+    @property
+    def dataset(self) -> list[tuple[np.ndarray, np.ndarray]]:
+        return self._dataset
+
+    def predict(self, x: np.ndarray, data: list[np.ndarray]) -> np.ndarray:
+        del x
+        return np.zeros(len(data), dtype=float)
+
+    def function(self, x: np.ndarray, indices: Any = "batch", **kwargs: Any) -> float:  # noqa: ANN401
         del x, kwargs
+        self._sample_batch_indices(indices)
         return 0.0
 
-    def gradient(self, x: np.ndarray, **kwargs: Any) -> np.ndarray:
+    def _get_batch_data(self, indices: Any = "batch") -> list[tuple[np.ndarray, np.ndarray]]:  # noqa: ANN401
+        batch_indices = self._sample_batch_indices(indices)
+        return [self._dataset[index] for index in batch_indices]
+
+    def gradient(self, x: np.ndarray, indices: Any = "batch", **kwargs: Any) -> np.ndarray:  # noqa: ANN401
         del x, kwargs
+        self._sample_batch_indices(indices)
         return self._gradient.copy()
 
-    def hessian(self, x: np.ndarray, **kwargs: Any) -> np.ndarray:
+    def hessian(self, x: np.ndarray, indices: Any = "batch", **kwargs: Any) -> np.ndarray:  # noqa: ANN401
         del x, kwargs
+        self._sample_batch_indices(indices)
         return np.zeros((1, 1), dtype=float)
 
     def proximal(self, x: np.ndarray, rho: float, **kwargs: Any) -> np.ndarray:
@@ -391,7 +415,10 @@ def test_fednova_aggregate_rejects_non_positive_normalizer() -> None:
 
 
 def test_fednova_collect_received_normalizers_raises_when_all_are_dropped() -> None:
-    clients = [Agent(0, TrackingCost(1.0, n_samples=1)), Agent(1, TrackingCost(10.0, n_samples=3))]
+    clients = [
+        Agent(0, TrackingCost(1.0, n_samples=1)),
+        Agent(1, TrackingCost(10.0, n_samples=3)),
+    ]
     server = Agent(2, TrackingCost(0.0))
     network = FedNetwork(
         clients=clients,
@@ -414,7 +441,10 @@ def test_fednova_collect_received_normalizers_raises_when_all_are_dropped() -> N
 
 @pytest.mark.parametrize("dropped_calls", [{1}, {2}])
 def test_fednova_uses_only_clients_with_both_uploads(dropped_calls: set[int]) -> None:
-    clients = [Agent(0, TrackingCost(1.0, n_samples=1)), Agent(1, TrackingCost(10.0, n_samples=3))]
+    clients = [
+        Agent(0, TrackingCost(1.0, n_samples=1)),
+        Agent(1, TrackingCost(10.0, n_samples=3)),
+    ]
     server = Agent(2, TrackingCost(0.0))
     network = FedNetwork(
         clients=clients,

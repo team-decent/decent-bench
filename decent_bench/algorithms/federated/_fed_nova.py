@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
+from decent_bench.schemes import ClientSelectionScheme, UniformSelection
 from decent_bench.utils._tags import tags
 from decent_bench.utils.agent_utils import infer_client_data_size
 from decent_bench.utils.types import InitialStates, LocalSteps
@@ -113,7 +113,7 @@ class FedNova(FedAlgorithm):
     use_server_momentum: bool = False
     gamma: float = 0.9
     selection_scheme: ClientSelectionScheme | None = field(
-        default_factory=lambda: UniformClientSelection(client_fraction=1.0)
+        default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
     )
     x0: InitialStates = None
     name: str = "FedNova"

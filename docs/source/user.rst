@@ -165,51 +165,34 @@ Federated algorithms accept a ``selection_scheme`` argument. The scheme receives
 the active clients for the current round and returns the subset that should
 receive the server broadcast.
 
-:class:`~decent_bench.schemes.UniformClientSelection` samples active clients
+:class:`~decent_bench.schemes.UniformSelection` samples active clients
 uniformly without replacement. This is the default for the built-in federated
 algorithms.
 
-:class:`~decent_bench.schemes.DataSizeClientSelection` samples active clients
+:class:`~decent_bench.schemes.DataSizeSelection` samples active clients
 without replacement with probabilities proportional to client data size. This is
 useful when local dataset sizes are imbalanced and you want larger clients to
 have more participation opportunities. The scheme reads data size from
-``client.data["n_samples"]`` when present, then falls back to common cost
-attributes such as ``n_samples``, ``A``, or ``b``.
+``EmpiricalRiskCost.n_samples``, so it requires clients to use empirical-risk
+costs.
 
-:class:`~decent_bench.schemes.ParticipationFairClientSelection` prioritizes
+:class:`~decent_bench.schemes.FairSelection` prioritizes
 clients with fewer past selections. This is useful when availability or random
 sampling can repeatedly skip some clients and you want selection opportunities
 to remain balanced across rounds.
 
-:class:`~decent_bench.schemes.StaleClientSelection` prioritizes clients that
-have never been selected or have waited longest since their last selection.
-
-:class:`~decent_bench.schemes.HighLossClientSelection` evaluates client losses
+:class:`~decent_bench.schemes.HighLossSelection` evaluates client losses
 at each client's current ``x`` and selects the clients with highest loss.
-
-:class:`~decent_bench.schemes.HybridFairHighLossClientSelection` combines
-normalized client loss and selection staleness with a configurable
-``loss_weight``.
-
-:class:`~decent_bench.schemes.CountFairHighLossClientSelection` combines
-normalized client loss and lifetime selection counts with a configurable
-``loss_weight``. Clients selected fewer times receive a larger exploration
-bonus.
-
-:class:`~decent_bench.schemes.DataSizeHighLossClientSelection` combines
-normalized client loss and local data size with a configurable ``loss_weight``.
-This is useful to balance high-loss clients with clients that
-represent more samples in the global objective.
 
 .. code-block:: python
 
     from decent_bench.algorithms.federated import FedAvg
-    from decent_bench.schemes import DataSizeClientSelection
+    from decent_bench.schemes import DataSizeSelection
 
     algorithm = FedAvg(
         iterations=100,
         step_size=0.01,
-        selection_scheme=DataSizeClientSelection(client_fraction=0.1),
+        selection_scheme=DataSizeSelection(fraction_selected_clients=0.1),
     )
 
 
@@ -507,9 +490,9 @@ The built-in options are :class:`~decent_bench.schemes.AlwaysActive`,
 :class:`~decent_bench.schemes.UniformActivationRate`,
 :class:`~decent_bench.schemes.MarkovChainActivation`, and
 :class:`~decent_bench.schemes.PoissonActivation`.
-:class:`~decent_bench.schemes.TraceActivation` follows a fixed availability
-trace, while :class:`~decent_bench.schemes.CyclicActivation` alternates between
-active and inactive intervals. 
+:class:`~decent_bench.schemes.CyclicActivation` alternates between active and
+inactive intervals, with an optional phase offset to model staggered recurring
+availability windows.
 Implemented federated algorithms in decent-bench first ask the network for
 active clients and then apply the client-selection scheme to that active set.
 
@@ -518,55 +501,9 @@ Compression schemes transform messages before they are sent. The default
 :class:`~decent_bench.schemes.Quantization` rounds message entries to a fixed
 number of significant digits. :class:`~decent_bench.schemes.TopK` and
 :class:`~decent_bench.schemes.RandK` keep only a subset of coordinates and set
-the rest to zero. :class:`~decent_bench.schemes.QSGDCompression` implements the
-stochastic norm-scaled quantization step from QSGD
+the rest to zero. :class:`~decent_bench.schemes.StochasticQuantization`
+implements stochastic norm-scaled quantization used in QSGD
 :footcite:p:`Scheme_QSGD`.
-:class:`~decent_bench.schemes.ErrorFeedbackCompression` wraps another
-compression scheme and keeps a residual of the previous compression error
-:footcite:p:`Scheme_ErrorFeedbackCompression`. Before each transmission from
-that sender, the residual is added to the outgoing message; after compression,
-the new residual is updated to the difference between the residual-corrected
-message and the compressed message.
-
-Error feedback is stateful. When using
-:class:`~decent_bench.schemes.ErrorFeedbackCompression`, pass one instance per
-sender so each sender keeps its own residual. This is usually done by passing a
-dictionary from sender agents to compression schemes. The current network-level
-error-feedback scheme stores one residual per compression instance. It is best
-suited to senders that repeatedly transmit the same kind of message with the
-same shape, such as FedAvg client model uploads. Algorithms where the same
-sender transmits multiple logical message types, such as a scalar normalizer
-followed by a vector update, should either avoid network-level error feedback
-for those mixed messages or implement algorithm-specific residuals for each
-message type.
-
-For example, a federated setup that applies error feedback to client uploads can
-be configured by building the network directly:
-
-.. code-block:: python
-
-    from decent_bench.agents import Agent
-    from decent_bench.benchmark import BenchmarkProblem
-    from decent_bench.networks import FedNetwork
-    from decent_bench.schemes import ErrorFeedbackCompression, TopK
-
-    clients = [Agent(i, cost) for i, cost in enumerate(costs)]
-    message_compression = {
-        client: ErrorFeedbackCompression(TopK(k=0.2))
-        for client in clients
-    }
-    network = FedNetwork(
-        clients=clients,
-        message_compression=message_compression,
-    )
-    problem = BenchmarkProblem(
-        network=network,
-        x_optimal=x_optimal,
-    )
-
-The current compression API preserves message shape; it simulates the numerical
-effect of compression but does not yet encode messages or count transmitted
-bits.
 
 Noise schemes perturb delivered messages. The default
 :class:`~decent_bench.schemes.NoNoise` leaves messages unchanged, while
@@ -588,7 +525,7 @@ across all senders.
 
     from decent_bench.schemes import (
         GaussianNoise,
-        QSGDCompression,
+        StochasticQuantization,
         UniformActivationRate,
         UniformDropRate,
     )
@@ -598,7 +535,7 @@ across all senders.
         costs=costs,
         x_optimal=x_optimal,
         agent_activations=[UniformActivationRate(0.8) for _ in costs],
-        message_compression=QSGDCompression(n_levels=8),
+        message_compression=StochasticQuantization(n_levels=8),
         message_noise=GaussianNoise(mean=0, std=0.001),
         message_drop=UniformDropRate(drop_rate=0.1),
     )
