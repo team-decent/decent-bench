@@ -86,19 +86,18 @@ class XError(Metric):
     Distance to optimal solution.
 
     Table:
-        Distance to optimal solution using the agents' final x.
+        Distance to optimal solution using the mean of the agents' final x.
 
     Plot:
         Distance to optimal solution (y-axis) per iteration (x-axis).
 
-    X error per agent is defined as:
+    X error is defined as:
 
     .. math::
-        \{ \|\mathbf{x}_i - \mathbf{x}^\star\|, \|\mathbf{x}_j - \mathbf{x}^\star\|, ... \}
+        \|\mathbf{\bar{x}} - \mathbf{x}^\star\|
 
-    where :math:`\mathbf{x}_i` is agent i's final x,
-    :math:`\mathbf{x}_j` is agent j's final x,
-    and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
+    where  :math:`\mathbf{\bar{x}}` is the mean x across all *agents*, and
+    :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
 
     Note:
         Available only when ``problem.x_optimal`` is provided.
@@ -120,8 +119,8 @@ class XError(Metric):
         agents: Sequence[AgentMetricsView],
         problem: "BenchmarkProblem",
         iteration: int,
-    ) -> list[float]:
-        return [utils._x_error(a, problem, iteration) for a in agents]  # noqa: SLF001
+    ) -> tuple[float]:
+        return (utils._x_error(agents, problem, iteration),)  # noqa: SLF001
 
 
 class ConsensusError(Metric):
@@ -630,7 +629,7 @@ class Loss(Metric):
 DEFAULT_TABLE_METRICS: list[Metric] = [
     Regret(),
     GradientNorm(),
-    XError([min, np.average, max]),
+    XError(),
     ConsensusError([min, np.average, max]),
     Loss([min, np.average, max]),
     XUpdates([np.average, sum]),
@@ -645,7 +644,7 @@ DEFAULT_TABLE_METRICS: list[Metric] = [
 """
 - :class:`Regret` (no statistics)
 - :class:`GradientNorm` (no statistics)
-- :class:`XError` - :func:`min`, :func:`~numpy.average`, :func:`max`
+- :class:`XError` (no statistics)
 - :class:`ConsensusError` - :func:`min`, :func:`~numpy.average`, :func:`max`
 - :class:`Loss` - :func:`min`, :func:`~numpy.average`, :func:`max`
 - :class:`XUpdates` - :func:`~numpy.average`, :func:`sum`
