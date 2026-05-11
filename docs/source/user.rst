@@ -140,7 +140,9 @@ counts.
 :class:`~decent_bench.algorithms.federated.FedLT` implements Federated Local
 Training with cost-driven local gradients. Its ``local_solver`` option supports
 ``"gd"``, ``"nesterov"``, and ``"adam"`` local updates. Solver-specific
-hyperparameters are passed through ``solver_args``.
+hyperparameters are passed through ``solver_args``. If ``solver_args`` is omitted 
+or left empty, solver-specific defaults are used: ``"nesterov"`` uses ``momentum=0.9``, 
+``"adam"`` uses ``beta1=0.9``, ``beta2=0.999``, and ``epsilon=1e-8``, and ``"gd"`` uses no additional solver arguments.
 :class:`~decent_bench.costs.EmpiricalRiskCost` objects use their default
 mini-batch gradient behavior, so gradient-based local solvers use mini-batches,
 while generic :class:`~decent_bench.costs.Cost` objects use full gradients.
