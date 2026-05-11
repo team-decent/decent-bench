@@ -170,7 +170,7 @@ def test_fedpd_dual_update_uses_previous_center() -> None:
     np.testing.assert_allclose(client.aux_vars["center"], np.array([1.0]))
 
 
-def test_fedpd_aggregate_and_synchronize_uses_only_received_center_candidates() -> None:
+def test_fedpd_aggregate_uses_only_received_center_candidates() -> None:
     clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(2.0))]
     network = FedNetwork(clients=clients)
     algorithm = FedPD(iterations=1)
@@ -179,19 +179,9 @@ def test_fedpd_aggregate_and_synchronize_uses_only_received_center_candidates() 
 
     network.send(sender=clients[0], receiver=network.server(), msg=np.array([2.0]))
 
-    algorithm.aggregate_and_synchronize(network, clients)
+    algorithm.aggregate(network, clients)
 
     np.testing.assert_allclose(network.server().x, np.array([2.0]))
-
-
-def test_fedpd_aggregate_direct_call_is_not_supported() -> None:
-    clients = [Agent(0, TrackingCost(1.0))]
-    network = FedNetwork(clients=clients)
-    algorithm = FedPD(iterations=1)
-    algorithm.initialize(network)
-
-    with pytest.raises(NotImplementedError, match="aggregate_and_synchronize"):
-        algorithm.aggregate(network, clients)
 
 
 def test_fedpd_synchronizes_all_active_clients_after_aggregating_received_candidates() -> None:

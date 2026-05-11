@@ -41,25 +41,34 @@ class FedLT(FedAlgorithm):
     by the server cost's proximal operator; with the default :class:`~decent_bench.costs.ZeroCost` server, this is the
     documented :math:`h=0` case and the server step is plain averaging.
 
-    A selected client :math:`i` sets :math:`w^0_{i,k}=x_{i,k}` and :math:`v_{i,k}=2y_{k+1}-z_{i,k}`, then performs
-    ``num_local_epochs`` local steps. The default local update uses
+    **Local solvers.**
+    A selected client :math:`i` sets :math:`w^0_{i,k}=x_{i,k}` and
+    :math:`v_{i,k}=2y_{k+1}-z_{i,k}`, then uses ``local_solver`` to approximately minimize the regularized local
+    objective
+
+    .. math::
+        f_i(w) + \frac{1}{2\rho}\|w - v_{i,k}\|^2.
+
+    The local gradient of this subproblem is
+
+    .. math::
+        \nabla f_i(w^\ell_{i,k}) + \frac{1}{\rho}(w^\ell_{i,k} - v_{i,k}).
+
+    Costs preserving the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use its default mini-batch
+    sampling, so gradient-based local solvers use mini-batches. Generic :class:`~decent_bench.costs.Cost` objects use
+    their normal full-gradient behavior. Solver-specific hyperparameters are passed through ``solver_args``.
+
+    **Gradient descent.**
+    The default ``local_solver="gd"`` uses ``step_size`` as the local step size and expects empty ``solver_args``:
 
     .. math::
         w^{\ell+1}_{i,k} = w^\ell_{i,k} - \gamma\left(\nabla f_i(w^\ell_{i,k})
         + \frac{1}{\rho}(w^\ell_{i,k} - v_{i,k})\right).
 
-    The extra term :math:`(w^\ell_{i,k} - v_{i,k}) / \rho` is the quadratic local-training penalty from the Fed-LT
-    update. Costs preserving the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use its default
-    mini-batch sampling, so this behaves as local SGD. Generic :class:`~decent_bench.costs.Cost` objects use their
-    normal full-gradient behavior, so this behaves as local GD.
-
-    Local solvers
-        The ``local_solver`` argument selects the method used for these local steps. The default ``"gd"`` uses the
-        gradient update above. Solver-specific hyperparameters are passed through ``solver_args``.
-
-    Nesterov
-        The ``"nesterov"`` option applies a Nesterov-style update to the same local gradient. It initializes
-        :math:`u_i^0=w^0_{i,k}` and uses ``step_size`` as the local step size:
+    **Nesterov.**
+    The ``local_solver="nesterov"`` option applies a Nesterov-style update to the same local gradient. It initializes
+    :math:`u_i^0=w^0_{i,k}` and uses ``step_size`` as the local step size. Its ``solver_args`` may contain
+    ``"momentum"``; the default is ``0.9``:
 
     .. math::
         u_i^{\ell+1} = w^\ell_{i,k} - \gamma\left(\nabla f_i(w^\ell_{i,k})
@@ -69,18 +78,16 @@ class FedLT(FedAlgorithm):
         w^{\ell+1}_{i,k} = u_i^{\ell+1}
         + \beta\left(u_i^{\ell+1} - u_i^\ell\right).
 
-        The momentum coefficient :math:`\beta` is ``solver_args["momentum"]`` and defaults to ``0.9``. One possible
-        centralized strongly-convex choice is
-        :math:`(\sqrt{L_i + 1/\rho} - \sqrt{\mu_i + 1/\rho}) / (\sqrt{L_i + 1/\rho} + \sqrt{\mu_i + 1/\rho})`,
-        with local step size :math:`1/(L_i + 1/\rho)`, where :math:`L_i=\texttt{m_smooth}` and
-        :math:`\mu_i=\texttt{m_cvx}`.
+    One possible centralized strongly-convex choice is
+    :math:`\beta=(\sqrt{L_i + 1/\rho} - \sqrt{\mu_i + 1/\rho}) / (\sqrt{L_i + 1/\rho}
+    + \sqrt{\mu_i + 1/\rho})`, with local step size :math:`1/(L_i + 1/\rho)`, where
+    :math:`L_i=\texttt{m_smooth}` and :math:`\mu_i=\texttt{m_cvx}`.
 
-    Adam
-        The ``"adam"`` option applies Adam to the same local gradient
-        :math:`\nabla f_i(w^\ell_{i,k}) + (w^\ell_{i,k} - v_{i,k})/\rho`. Adam moments are reset at the start of every
-        local solve because Fed-LT locally trains the current round's subproblem rather than maintaining a persistent
-        optimizer state across rounds. ``solver_args`` may set ``beta1``, ``beta2``, and ``epsilon``; the defaults are
-        ``0.9``, ``0.999``, and ``1e-8``.
+    **Adam.**
+    The ``local_solver="adam"`` option applies Adam to the same local gradient. Adam moments are reset at the start
+    of every local solve because Fed-LT locally trains the current round's subproblem rather than maintaining a
+    persistent optimizer state across rounds. Its ``solver_args`` may contain ``"beta1"``, ``"beta2"``, and
+    ``"epsilon"``; the defaults are ``0.9``, ``0.999``, and ``1e-8``:
 
     .. math::
         g^\ell_{i,k} =
@@ -97,6 +104,7 @@ class FedLT(FedAlgorithm):
 
     for :math:`\ell=1,\ldots,N_e`, with :math:`m^0_{i,k}=s^0_{i,k}=0`. The terms
     :math:`\hat m^\ell_{i,k}` and :math:`\hat s^\ell_{i,k}` are the Adam bias-corrected moments.
+
 
     After local training, the client sets
 
@@ -144,31 +152,39 @@ class FedLT(FedAlgorithm):
         self._validate_solver_args()
 
     def _validate_solver_args(self) -> None:
+        user_args = self.solver_args
         if self.local_solver == "adam":
-            allowed_args = {"beta1", "beta2", "epsilon"}
-            self.solver_args = {"beta1": 0.9, "beta2": 0.999, "epsilon": 1e-8, **self.solver_args}
-            beta1 = self.solver_args["beta1"]
-            beta2 = self.solver_args["beta2"]
-            epsilon = self.solver_args["epsilon"]
-            if not (0 <= beta1 < 1):
+            default_args = {"beta1": 0.9, "beta2": 0.999, "epsilon": 1e-8}
+            self.solver_args = {
+                "beta1": user_args.get("beta1", default_args["beta1"]),
+                "beta2": user_args.get("beta2", default_args["beta2"]),
+                "epsilon": user_args.get("epsilon", default_args["epsilon"]),
+            }
+            unknown_args = set(user_args) - set(default_args)
+            if unknown_args:
+                names = ", ".join(sorted(unknown_args))
+                raise ValueError(f"Unsupported solver_args for local_solver='{self.local_solver}': {names}")
+            if not (0 <= self.solver_args["beta1"] < 1):
                 raise ValueError("`solver_args['beta1']` must satisfy 0 <= beta1 < 1")
-            if not (0 <= beta2 < 1):
+            if not (0 <= self.solver_args["beta2"] < 1):
                 raise ValueError("`solver_args['beta2']` must satisfy 0 <= beta2 < 1")
-            if epsilon <= 0:
+            if self.solver_args["epsilon"] <= 0:
                 raise ValueError("`solver_args['epsilon']` must be positive")
         elif self.local_solver == "nesterov":
-            allowed_args = {"momentum"}
-            self.solver_args = {"momentum": 0.9, **self.solver_args}
-            momentum = self.solver_args["momentum"]
-            if not (0 <= momentum < 1):
+            default_args = {"momentum": 0.9}
+            self.solver_args = {"momentum": user_args.get("momentum", default_args["momentum"])}
+            unknown_args = set(user_args) - set(default_args)
+            if unknown_args:
+                names = ", ".join(sorted(unknown_args))
+                raise ValueError(f"Unsupported solver_args for local_solver='{self.local_solver}': {names}")
+            if not (0 <= self.solver_args["momentum"] < 1):
                 raise ValueError("`solver_args['momentum']` must satisfy 0 <= momentum < 1")
         else:
-            allowed_args = set()
-
-        unknown_args = set(self.solver_args) - allowed_args
-        if unknown_args:
-            names = ", ".join(sorted(unknown_args))
-            raise ValueError(f"Unsupported solver_args for local_solver='{self.local_solver}': {names}")
+            self.solver_args = {}
+            unknown_args = set(user_args)
+            if unknown_args:
+                names = ", ".join(sorted(unknown_args))
+                raise ValueError(f"Unsupported solver_args for local_solver='{self.local_solver}': {names}")
 
     def initialize(self, network: FedNetwork) -> None:
         self.x0 = initial_states(self.x0, network)

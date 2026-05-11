@@ -107,7 +107,7 @@ class FedPD(FedAlgorithm):
         self._run_local_updates(participating_clients)
         if random.random() >= self.skip_probability:
             self._communicate_center_candidates(network, participating_clients)
-            self.aggregate_and_synchronize(network, participating_clients)
+            self.aggregate(network, participating_clients)
 
     def _run_local_updates(self, participating_clients: Sequence["Agent"]) -> None:
         for client in participating_clients:
@@ -148,22 +148,11 @@ class FedPD(FedAlgorithm):
         participating_clients: Sequence["Agent"],
     ) -> None:
         """
-        FedPD aggregates centre candidates through :meth:`aggregate_and_synchronize`.
+        Aggregate received FedPD centre candidates and broadcast the synchronized centre.
 
-        Raises:
-            NotImplementedError: always, because FedPD aggregation also synchronizes the updated centre.
-
-        """
-        del network, participating_clients
-        raise NotImplementedError("FedPD uses `aggregate_and_synchronize` instead of `aggregate`")
-
-    def aggregate_and_synchronize(
-        self,
-        network: FedNetwork,
-        participating_clients: Sequence["Agent"],
-    ) -> None:
-        """
-        Aggregate received FedPD centre candidates and synchronize the updated centre.
+        Unlike most federated algorithms, a FedPD communication round couples aggregation with centre
+        synchronization: after the server averages the received centre candidates, it immediately broadcasts the
+        updated centre back to all participating clients.
 
         If no centre candidates are received, the server state is left unchanged and no synchronization is sent.
         """
