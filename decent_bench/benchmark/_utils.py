@@ -18,8 +18,9 @@ SOLVE_STOP_TOL = 1e-20
 SOLVE_MAX_TOL = 1e-16
 
 
-def create_classification_problem(  # noqa: PLR0917
+def create_classification_problem(
     cost_cls: type[LogisticRegressionCost | PyTorchCost] = LogisticRegressionCost,
+    *,
     device: SupportedDevices = SupportedDevices.CPU,
     n_agents: int = 100,
     batch_size: EmpiricalRiskBatchSize = "all",
@@ -108,10 +109,9 @@ def create_classification_problem(  # noqa: PLR0917
             LogisticRegressionCost(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()
         ]
         LOGGER.info("... done!")
-        sum_cost = reduce(add, classification_costs)
-        if sum_cost.batch_size < sum_cost.n_samples:
-            sum_cost._batch_size = sum_cost.n_samples  # noqa: SLF001
         if compute_x_optimal:
+            # agents have the same n_samples, so minimizing a single logistic cost with all data is equivalent
+            sum_cost = LogisticRegressionCost(dataset=dataset.get_datapoints(), batch_size="all")
             x_optimal = ca.solve(
                 sum_cost,
                 max_iter=SOLVE_MAX_ITER,
@@ -126,13 +126,13 @@ def create_classification_problem(  # noqa: PLR0917
     return costs, x_optimal, test_data.get_datapoints()
 
 
-def create_regression_problem(  # noqa: PLR0917
+def create_regression_problem(
     cost_cls: type[LinearRegressionCost | PyTorchCost] = LinearRegressionCost,
+    *,
     device: SupportedDevices = SupportedDevices.CPU,
     n_agents: int = 100,
     batch_size: EmpiricalRiskBatchSize = "all",
     compute_x_optimal: bool = True,
-    show_progress: bool = True,
 ) -> tuple[Sequence[Cost], Array | None, Dataset]:
     """
     Create out-of-the-box regression problems.
@@ -143,8 +143,7 @@ def create_regression_problem(  # noqa: PLR0917
         n_agents: number of agents
         batch_size: size of mini-batches for stochastic methods, or "all" for full-batch
         compute_x_optimal: if the optimal solution should be computed
-            (using :func:`~decent_bench.centralized_algorithms.solve`). It is ignored when PyTorchCost is selected.
-        show_progress: whether to display a progress bar while computing ``x_optimal``. Defaults to ``True``.
+            (by solving the linear system of equations). It is ignored when PyTorchCost is selected.
 
     Note:
         If cost_cls is :class:`~decent_bench.costs.PyTorchCost`, x_optimal is not computed and set to None.
@@ -208,16 +207,14 @@ def create_regression_problem(  # noqa: PLR0917
             LinearRegressionCost(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()
         ]
         LOGGER.info("... done!")
-        sum_cost = reduce(add, regression_costs)
-        if sum_cost.batch_size < sum_cost.n_samples:
-            sum_cost._batch_size = sum_cost.n_samples  # noqa: SLF001
+
         if compute_x_optimal:
             x_optimal = ca.solve(
-                sum_cost,
+                reduce(add, regression_costs),
                 max_iter=SOLVE_MAX_ITER,
                 stop_tol=SOLVE_STOP_TOL,
                 max_tol=SOLVE_MAX_TOL,
-                show_progress=show_progress,
+                show_progress=False,
             )
         costs = regression_costs
     else:
@@ -250,9 +247,8 @@ def create_quadratic_problem(
     costs = [QuadraticCost(A[i], b[i]) for i in range(n_agents)]
     LOGGER.info("... done!")
 
-    sum_cost = reduce(add, costs)
     x_optimal = ca.solve(
-        sum_cost,
+        reduce(add, costs),
         max_iter=SOLVE_MAX_ITER,
         stop_tol=SOLVE_STOP_TOL,
         max_tol=SOLVE_MAX_TOL,
