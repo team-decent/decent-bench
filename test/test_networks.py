@@ -308,21 +308,11 @@ def test_send_rejects_inactive_receiver() -> None:
         net.send(sender=sender, receiver=inactive_receiver, msg=msg)
 
 
-@pytest.mark.parametrize(
-    ("buffer_messages", "expect_message_after_step"),
-    [
-        (False, False),
-        (True, True),
-    ],
-)
-def test_step_clears_or_preserves_messages_based_on_buffer_setting(
-    buffer_messages: bool, expect_message_after_step: bool
-) -> None:
+def test_step_clears_messages() -> None:
     sender = Agent(0, L2RegularizerCost((2,)))
     receiver = Agent(1, L2RegularizerCost((2,)))
     net = P2PNetwork(
         graph=nx.Graph([(sender, receiver)]),
-        buffer_messages=buffer_messages,
     )
     msg = iop.to_array([1.0, -1.0], framework=sender.cost.framework, device=sender.cost.device)
 
@@ -331,7 +321,7 @@ def test_step_clears_or_preserves_messages_based_on_buffer_setting(
 
     net._step(1)  # noqa: SLF001
 
-    assert (sender in receiver.messages) is expect_message_after_step
+    assert sender not in receiver.messages
 
 
 def test_send_applies_drop_compression_and_noise_schemes() -> None:

@@ -345,14 +345,13 @@ def test_fednova_uploads_normalizer_then_cumulative_gradient() -> None:
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
 
     np.testing.assert_allclose(network.server().messages[clients[0]], np.array([2.0]))
     np.testing.assert_allclose(network.server().messages[clients[1]], np.array([1.0]))
 
     algorithm._collect_received_normalizers(network, participating_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
+    network._clear_received_messages(receivers=[network.server()], senders=participating_clients)  # noqa: SLF001
     algorithm._communicate_cumulative_gradients(network, participating_clients)
 
     np.testing.assert_allclose(network.server().messages[clients[0]], np.array([4.0]))
@@ -381,10 +380,9 @@ def test_fednova_renormalizes_client_weights_over_received_subset() -> None:
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
     algorithm._collect_received_normalizers(network, participating_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
+    network._clear_received_messages(receivers=[network.server()], senders=participating_clients)  # noqa: SLF001
     algorithm._communicate_cumulative_gradients(network, participating_clients)
     network.server()._received_messages.pop(clients[1])  # noqa: SLF001
 
@@ -403,10 +401,9 @@ def test_fednova_aggregate_rejects_non_positive_normalizer() -> None:
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
     algorithm._collect_received_normalizers(network, participating_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
+    network._clear_received_messages(receivers=[network.server()], senders=participating_clients)  # noqa: SLF001
     algorithm._communicate_cumulative_gradients(network, participating_clients)
     network.server().aux_vars["received_a_i"][clients[0]] = 0.0
 
@@ -429,7 +426,6 @@ def test_fednova_collect_received_normalizers_stores_empty_dict_when_all_are_dro
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
 
     algorithm._collect_received_normalizers(network, participating_clients)
@@ -539,6 +535,12 @@ def test_fednova_rejects_invalid_scalar_num_local_steps(num_local_steps: int) ->
         FedNova(iterations=1, step_size=1.0, num_local_steps=num_local_steps)
 
 
+@pytest.mark.parametrize("num_local_steps", [1.5])
+def test_fednova_rejects_non_integer_scalar_num_local_steps(num_local_steps: object) -> None:
+    with pytest.raises(TypeError, match="`num_local_steps` must be an int or a mapping from Agent"):
+        FedNova(iterations=1, step_size=1.0, num_local_steps=num_local_steps)
+
+
 @pytest.mark.parametrize("num_local_steps", [{}, {"not-an-agent": 1}, {1: 1}])
 def test_fednova_rejects_local_step_mappings_missing_network_clients(num_local_steps: object) -> None:
     network = _make_fed_network(1.0, 3.0)
@@ -552,6 +554,13 @@ def test_fednova_rejects_local_step_mappings_missing_network_clients(num_local_s
 def test_fednova_rejects_invalid_local_step_mapping_values(step_value: float) -> None:
     client = Agent(0, TrackingCost())
     with pytest.raises(ValueError, match="`num_local_steps` must have positive values"):
+        FedNova(iterations=1, step_size=1.0, num_local_steps={client: step_value})
+
+
+@pytest.mark.parametrize("step_value", [2.0])
+def test_fednova_rejects_non_integer_local_step_mapping_values(step_value: object) -> None:
+    client = Agent(0, TrackingCost())
+    with pytest.raises(TypeError, match="`num_local_steps` mapping values must be integers"):
         FedNova(iterations=1, step_size=1.0, num_local_steps={client: step_value})
 
 

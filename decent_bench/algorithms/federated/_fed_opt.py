@@ -112,7 +112,6 @@ class FedOpt(FedAlgorithm, ABC):
         participating_clients = self._clients_with_server_broadcast(network, selected_clients)
         if not participating_clients:
             return
-        self._clear_buffered_server_messages(network, participating_clients)
         self._run_local_updates(network, participating_clients)
         self.aggregate(network, participating_clients)
 
@@ -144,9 +143,7 @@ class FedOpt(FedAlgorithm, ABC):
         """
         Aggregate client model deltas uniformly, then apply the server adaptive optimizer.
 
-        This method assumes clients upload final local model deltas. When used with
-        :class:`~decent_bench.networks.Network` ``buffer_messages=True``, the caller must already have removed stale
-        buffered client-to-server messages for the participating clients, so only current-round uploads are used.
+        This method assumes clients upload final local model deltas.
         """
         server = network.server()
         received_clients = [client for client in participating_clients if client in server.messages]

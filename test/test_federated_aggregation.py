@@ -164,35 +164,6 @@ def test_clients_without_server_broadcast_do_not_participate(
 @pytest.mark.parametrize(
     ("algorithm_cls", "kwargs"),
     [
-        pytest.param(FedAvg, {"iterations": 2, "step_size": 1.0}, id="fedavg"),
-        pytest.param(FedProx, {"iterations": 2, "step_size": 1.0}, id="fedprox"),
-    ],
-)
-def test_buffered_stale_client_messages_are_not_aggregated(algorithm_cls: type, kwargs: dict[str, float | int]) -> None:
-    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))]
-    server = Agent(2, TrackingCost(0.0))
-    network = FedNetwork(
-        clients=clients,
-        server=server,
-        buffer_messages=True,
-        message_drop={server: NoDrops(), clients[0]: DropOnCalls({2}), clients[1]: NoDrops()},
-    )
-    algorithm = algorithm_cls(**kwargs)
-    algorithm.initialize(network)
-
-    network._step(0)  # noqa: SLF001
-    algorithm.step(network, 0)
-    np.testing.assert_allclose(network.server().x, np.array([-2.0]))
-
-    network._step(1)  # noqa: SLF001
-    algorithm.step(network, 1)
-
-    np.testing.assert_allclose(network.server().x, np.array([-5.0]))
-
-
-@pytest.mark.parametrize(
-    ("algorithm_cls", "kwargs"),
-    [
         pytest.param(
             FedAdagrad,
             {"iterations": 1, "step_size": 1.0, "server_step_size": 1.0, "beta_1": 0.0, "tau": 1.0},
@@ -477,66 +448,6 @@ def test_fedopt_clients_without_server_broadcast_do_not_participate(
 
 
 @pytest.mark.parametrize(
-    ("algorithm_cls", "kwargs", "expected_x"),
-    [
-        pytest.param(
-            FedAdagrad,
-            {"iterations": 2, "step_size": 1.0, "server_step_size": 1.0, "beta_1": 0.0, "tau": 1.0},
-            -0.6666666666666666 + (-3.0 / (np.sqrt(13.0) + 1.0)),
-            id="fedadagrad",
-        ),
-        pytest.param(
-            FedYogi,
-            {
-                "iterations": 2,
-                "step_size": 1.0,
-                "server_step_size": 1.0,
-                "beta_1": 0.0,
-                "beta_2": 0.25,
-                "tau": 1.0,
-            },
-            (-2.0 / (np.sqrt(3.0) + 1.0)) + (-3.0 / (np.sqrt(9.75) + 1.0)),
-            id="fedyogi",
-        ),
-        pytest.param(
-            FedAdam,
-            {
-                "iterations": 2,
-                "step_size": 1.0,
-                "server_step_size": 1.0,
-                "beta_1": 0.0,
-                "beta_2": 0.25,
-                "tau": 1.0,
-            },
-            (-2.0 / (np.sqrt(3.0) + 1.0)) + (-3.0 / (np.sqrt(7.5) + 1.0)),
-            id="fedadam",
-        ),
-    ],
-)
-def test_fedopt_buffered_stale_client_messages_are_not_aggregated(
-    algorithm_cls: type, kwargs: dict[str, float | int], expected_x: float
-) -> None:
-    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))]
-    server = Agent(2, TrackingCost(0.0))
-    network = FedNetwork(
-        clients=clients,
-        server=server,
-        buffer_messages=True,
-        message_drop={server: NoDrops(), clients[0]: DropOnCalls({2}), clients[1]: NoDrops()},
-    )
-    algorithm = algorithm_cls(**kwargs)
-    algorithm.initialize(network)
-
-    network._step(0)  # noqa: SLF001
-    algorithm.step(network, 0)
-
-    network._step(1)  # noqa: SLF001
-    algorithm.step(network, 1)
-
-    np.testing.assert_allclose(network.server().x, np.array([expected_x]))
-
-
-@pytest.mark.parametrize(
     ("algorithm_cls", "kwargs"),
     [
         pytest.param(FedAdagrad, {"iterations": 1, "step_size": 1.0}, id="fedadagrad"),
@@ -553,7 +464,6 @@ def test_fedopt_local_uploads_are_model_deltas(algorithm_cls: type, kwargs: dict
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
 
     np.testing.assert_allclose(network.server().messages[clients[0]], np.array([-1.0]))
