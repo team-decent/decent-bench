@@ -7,8 +7,8 @@ import numpy as np
 
 import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
-from decent_bench import costs
 from decent_bench.agents import AgentMetricsView
+from decent_bench.costs import Cost, EmpiricalRiskCost
 from decent_bench.metrics._metric import Metric
 from decent_bench.networks import FedNetwork
 
@@ -446,7 +446,7 @@ class Accuracy(Metric):
     ) -> tuple[bool, str | None]:
         if getattr(problem, "test_data", None) is None:
             return False, "requires problem.test_data"
-        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
             return False, "accuracy only applies if all agents have EmpiricalRiskCost"
         _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type] # noqa: SLF001
         if test_y.dtype.kind not in {"i", "u"}:
@@ -506,7 +506,7 @@ class MSE(Metric):
     ) -> tuple[bool, str | None]:
         if getattr(problem, "test_data", None) is None:
             return False, "requires problem.test_data"
-        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
             return False, "MSE only applies if all agents have EmpiricalRiskCost"
         return True, None
 
@@ -565,7 +565,7 @@ class Precision(Metric):
     ) -> tuple[bool, str | None]:
         if getattr(problem, "test_data", None) is None:
             return False, "requires problem.test_data"
-        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
             return False, "precision only applies if all agents have EmpiricalRiskCost"
         _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type] # noqa: SLF001
         if test_y.dtype.kind not in {"i", "u"}:
@@ -627,7 +627,7 @@ class Recall(Metric):
     ) -> tuple[bool, str | None]:
         if getattr(problem, "test_data", None) is None:
             return False, "requires problem.test_data"
-        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
             return False, "recall only applies if all agents have EmpiricalRiskCost"
         _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type]  # noqa: SLF001
         if test_y.dtype.kind not in {"i", "u"}:
@@ -681,7 +681,7 @@ def _requires_fednetwork(problem: "BenchmarkProblem", metric_name: str) -> tuple
     return True, None
 
 
-def _server_metric_cost(agents: Sequence[AgentMetricsView], metric_name: str) -> costs.Cost:
+def _server_metric_cost(agents: Sequence[AgentMetricsView], metric_name: str) -> Cost:
     if not agents:
         raise ValueError(f"{metric_name} requires at least one client metrics view")
     return agents[0].cost
@@ -750,40 +750,6 @@ class ClientDriftFromServer(Metric):
         return [float(iop.norm(agent.x_history[iteration] - server_x)) for agent in agents]
 
 
-class ClientLossGap(Metric):
-    r"""
-    Gap between the worst and best client local-model loss.
-
-    Table:
-        Difference between the maximum and minimum client loss using the clients' final x.
-
-    Plot:
-        Client loss gap (y-axis) per iteration (x-axis).
-
-    Note:
-        Available only for :class:`~decent_bench.networks.FedNetwork`.
-
-    """
-
-    table_description: str = "client loss gap"
-    plot_description: str = "client loss gap"
-
-    def is_available(  # noqa: D102
-        self,
-        problem: "BenchmarkProblem",
-    ) -> tuple[bool, str | None]:
-        return _requires_fednetwork(problem, self.table_description)
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        _: "BenchmarkProblem",
-        iteration: int,
-    ) -> tuple[float]:
-        losses = utils._losses(agents, iteration)  # noqa: SLF001
-        return (max(losses) - min(losses),)
-
-
 class SelectedParticipationFraction(Metric):
     r"""
     Fraction of client-rounds selected by the federated algorithm.
@@ -816,40 +782,6 @@ class SelectedParticipationFraction(Metric):
         if n_rounds == 0 or not agents:
             return (np.nan,)
         return (sum(agent.n_times_selected for agent in agents) / (n_rounds * len(agents)),)
-
-
-class EffectiveParticipationFraction(Metric):
-    r"""
-    Fraction of client-rounds whose update was included in server aggregation.
-
-    Table:
-        Average effective participation fraction over observed rounds.
-
-    Note:
-        Available only for :class:`~decent_bench.networks.FedNetwork`.
-
-    """
-
-    table_description: str = "effective participation fraction"
-    plot_description: str = "effective participation fraction"
-    can_diverge: bool = False
-
-    def is_available(  # noqa: D102
-        self,
-        problem: "BenchmarkProblem",
-    ) -> tuple[bool, str | None]:
-        return _requires_fednetwork(problem, self.table_description)
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        _: "BenchmarkProblem",
-        __: int,
-    ) -> tuple[float]:
-        n_rounds = utils._observed_rounds(agents)  # noqa: SLF001
-        if n_rounds == 0 or not agents:
-            return (np.nan,)
-        return (sum(agent.n_times_update_received_by_server for agent in agents) / (n_rounds * len(agents)),)
 
 
 class TotalCommunication(Metric):
@@ -1041,7 +973,7 @@ class ServerMSE(Metric):
             return False, reason
         if getattr(problem, "test_data", None) is None:
             return False, "requires problem.test_data"
-        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
             return False, "server MSE only applies if all clients have EmpiricalRiskCost"
         return True, None
 
@@ -1111,7 +1043,7 @@ class ServerAccuracy(Metric):
             return False, reason
         if getattr(problem, "test_data", None) is None:
             return False, "requires problem.test_data"
-        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
             return False, "server accuracy only applies if all clients have EmpiricalRiskCost"
         _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type] # noqa: SLF001
         if test_y.dtype.kind not in {"i", "u"}:
@@ -1153,52 +1085,6 @@ class ServerAccuracy(Metric):
             (i, utils._accuracy_at_x(cost, server.x_history[i], problem))  # noqa: SLF001
             for i in utils.all_sorted_iterations([server])
         ]
-
-
-class ClientAccuracyGap(Metric):
-    r"""
-    Gap between the best and worst client local-model accuracy.
-
-    Table:
-        Difference between the maximum and minimum client accuracy using the clients' final x.
-
-    Plot:
-        Client accuracy gap (y-axis) per iteration (x-axis).
-
-    Note:
-        Available only for :class:`~decent_bench.networks.FedNetwork` with ``problem.test_data``, empirical-risk
-        client costs, and integer-valued targets.
-
-    """
-
-    table_description: str = "client accuracy gap"
-    plot_description: str = "client accuracy gap"
-    can_diverge: bool = False
-
-    def is_available(  # noqa: D102
-        self,
-        problem: "BenchmarkProblem",
-    ) -> tuple[bool, str | None]:
-        available, reason = _requires_fednetwork(problem, self.table_description)
-        if not available:
-            return False, reason
-        if getattr(problem, "test_data", None) is None:
-            return False, "requires problem.test_data"
-        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
-            return False, "client accuracy gap only applies if all clients have EmpiricalRiskCost"
-        _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type] # noqa: SLF001
-        if test_y.dtype.kind not in {"i", "u"}:
-            return False, f"client accuracy gap only applies for integer targets, dtype {test_y.dtype} found"
-        return True, None
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        problem: "BenchmarkProblem",
-        iteration: int,
-    ) -> tuple[float]:
-        accuracies = utils._accuracy(agents, problem, iteration)  # noqa: SLF001
-        return (max(accuracies) - min(accuracies),)
 
 
 DEFAULT_TABLE_METRICS: list[Metric] = [
@@ -1294,9 +1180,7 @@ CLASSIFICATION_PLOT_METRICS: list[Metric] = CLASSIFICATION_TABLE_METRICS
 FEDERATED_TABLE_METRICS: list[Metric] = [
     *DEFAULT_TABLE_METRICS,
     ClientDriftFromServer([min, np.average, max]),
-    ClientLossGap([utils.single], x_log=False, y_log=False),
     SelectedParticipationFraction([utils.single], fmt=".2%", x_log=False, y_log=False),
-    EffectiveParticipationFraction([utils.single], fmt=".2%", x_log=False, y_log=False),
     TotalCommunication([utils.single]),
     UplinkMessages([utils.single]),
     DownlinkMessages([utils.single]),
@@ -1305,9 +1189,7 @@ FEDERATED_TABLE_METRICS: list[Metric] = [
 """
 - :const:`DEFAULT_TABLE_METRICS`
 - :class:`ClientDriftFromServer` - min, average, max
-- :class:`ClientLossGap` - single value
 - :class:`SelectedParticipationFraction` - single value with percentage format
-- :class:`EffectiveParticipationFraction` - single value with percentage format
 - :class:`TotalCommunication` - single value
 - :class:`UplinkMessages` - single value
 - :class:`DownlinkMessages` - single value
@@ -1319,12 +1201,10 @@ FEDERATED_TABLE_METRICS: list[Metric] = [
 FEDERATED_PLOT_METRICS: list[Metric] = [
     *DEFAULT_PLOT_METRICS,
     ClientDriftFromServer([], x_log=False, y_log=True),
-    ClientLossGap([], x_log=False, y_log=False),
 ]
 """
 - :const:`DEFAULT_PLOT_METRICS`
 - :class:`ClientDriftFromServer` (semi-log)
-- :class:`ClientLossGap` (linear)
 
 :meta hide-value:
 """
@@ -1354,12 +1234,10 @@ FEDERATED_REGRESSION_PLOT_METRICS: list[Metric] = [
 FEDERATED_CLASSIFICATION_TABLE_METRICS: list[Metric] = [
     *CLASSIFICATION_TABLE_METRICS,
     ServerAccuracy([utils.single], fmt=".2%", x_log=False, y_log=False),
-    ClientAccuracyGap([utils.single], fmt=".2%", x_log=False, y_log=False),
 ]
 """
 - :const:`CLASSIFICATION_TABLE_METRICS`
 - :class:`ServerAccuracy` - single value with percentage format
-- :class:`ClientAccuracyGap` - single value with percentage format
 
 :meta hide-value:
 """
@@ -1367,12 +1245,10 @@ FEDERATED_CLASSIFICATION_TABLE_METRICS: list[Metric] = [
 FEDERATED_CLASSIFICATION_PLOT_METRICS: list[Metric] = [
     *CLASSIFICATION_PLOT_METRICS,
     ServerAccuracy([], fmt=".2%", x_log=False, y_log=False),
-    ClientAccuracyGap([], fmt=".2%", x_log=False, y_log=False),
 ]
 """
 - :const:`CLASSIFICATION_PLOT_METRICS`
 - :class:`ServerAccuracy` (linear)
-- :class:`ClientAccuracyGap` (linear)
 
 :meta hide-value:
 """

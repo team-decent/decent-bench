@@ -172,8 +172,6 @@ class Scaffold(FedAlgorithm):
         received_clients = [client for client in participating_clients if client in server.messages]
         if not received_clients:
             return
-        self._record_updates_received_by_server(received_clients)
-
         uploads = [server.messages[client] for client in received_clients]
         model_deltas = [upload[0] for upload in uploads]
         weights = [1.0] * len(received_clients)

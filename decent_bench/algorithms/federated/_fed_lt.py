@@ -290,4 +290,3 @@ class FedLT(FedAlgorithm):
             if client in network.server().messages:
                 received_clients.append(client)
                 z_by_client[client] = network.server().messages[client]
-        self._record_updates_received_by_server(received_clients)

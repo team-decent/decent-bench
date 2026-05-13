@@ -270,8 +270,6 @@ class FedNova(FedAlgorithm):
         received_clients = [client for client in received_gradient_clients if client in received_normalizers]
         if not received_clients:
             return
-        self._record_updates_received_by_server(received_clients)
-
         server_sample_counts = server.aux_vars["client_sample_counts"]
         server_x = iop.copy(server.x)
         cumulative_gradients = [server.messages[client] for client in received_clients]

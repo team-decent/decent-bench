@@ -161,7 +161,6 @@ class FedPD(FedAlgorithm):
         received_clients = [client for client in participating_clients if client in network.server().messages]
         if not received_clients:
             return
-        self._record_updates_received_by_server(received_clients)
         center_candidates = [server.messages[client] for client in received_clients]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))

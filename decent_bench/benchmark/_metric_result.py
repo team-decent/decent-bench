@@ -21,6 +21,7 @@ class MetricResult:
     * `agent_metrics`: contains the raw agent-level metrics for each algorithm, organized by algorithm where
       each algorithm maps to a sequence of trials, with each trial containing metrics for all agents.
     * `server_metrics`: contains one server metric view per trial for federated algorithms, organized by algorithm.
+      It is ``None`` when the result does not include a :class:`~decent_bench.networks.FedNetwork`.
     * `table_metrics`: contains the list of metrics that were tabulated as confidence intervals.
     * `plot_metrics`: contains the list of metrics that were plotted.
     * `table_results`: contains the computed table statistics for each algorithm and metric, organized by

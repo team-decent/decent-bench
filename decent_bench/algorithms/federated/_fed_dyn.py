@@ -140,8 +140,6 @@ class FedDyn(FedAlgorithm):
         received_clients = [client for client in participating_clients if client in server.messages]
         if not received_clients:
             return
-        self._record_updates_received_by_server(received_clients)
-
         reference_x = iop.copy(server.x)
         client_models = [server.messages[client] for client in received_clients]
         average_model = self._weighted_average(
