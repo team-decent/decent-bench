@@ -565,8 +565,7 @@ Compression schemes transform messages before they are sent. The default
 number of significant digits. :class:`~decent_bench.schemes.TopK` and
 :class:`~decent_bench.schemes.RandK` keep only a subset of coordinates and set
 the rest to zero. :class:`~decent_bench.schemes.StochasticQuantization`
-implements stochastic norm-scaled quantization used in QSGD
-:footcite:p:`Scheme_QSGD`.
+implements stochastic norm-scaled quantization used in QSGD.
 
 Noise schemes perturb delivered messages. The default
 :class:`~decent_bench.schemes.NoNoise` leaves messages unchanged, while
@@ -602,9 +601,6 @@ across all senders.
         message_noise=GaussianNoise(mean=0, std=0.001),
         message_drop=UniformDropRate(drop_rate=0.1),
     )
-
-.. footbibliography::
-
 
 Create problems from scratch
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
