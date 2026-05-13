@@ -20,6 +20,7 @@ class MetricResult:
 
     * `agent_metrics`: contains the raw agent-level metrics for each algorithm, organized by algorithm where
       each algorithm maps to a sequence of trials, with each trial containing metrics for all agents.
+    * `server_metrics`: contains one server metric view per trial for federated algorithms, organized by algorithm.
     * `table_metrics`: contains the list of metrics that were tabulated as confidence intervals.
     * `plot_metrics`: contains the list of metrics that were plotted.
     * `table_results`: contains the computed table statistics for each algorithm and metric, organized by
@@ -42,13 +43,19 @@ class MetricResult:
         ]
         | None
     )
+    server_metrics: Mapping[Algorithm[Network], Sequence[AgentMetricsView]] | None = None
 
     @property
     def available_algorithms(self) -> list[str]:
         """Return ``name`` of available algorithms, which can be used for filtering in :func:`~decent_bench.benchmark.display_metrics`."""  # noqa: E501
         return sorted({
             algorithm.name
-            for mapping in (self.agent_metrics, self.table_results, self.plot_results)
+            for mapping in (
+                self.agent_metrics,
+                getattr(self, "server_metrics", None),
+                self.table_results,
+                self.plot_results,
+            )
             if mapping is not None
             for algorithm in mapping
         })

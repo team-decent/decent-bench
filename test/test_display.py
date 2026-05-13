@@ -8,12 +8,14 @@ from matplotlib.lines import Line2D
 from pathlib import Path
 from types import SimpleNamespace
 
-from decent_bench.agents import AgentHistory, AgentMetricsView
+from decent_bench.agents import Agent, AgentHistory, AgentMetricsView
+from decent_bench.algorithms.federated import FedAvg
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, compute_metrics
 from decent_bench.benchmark._display import display_metrics
 from decent_bench.benchmark._metric_result import MetricResult
-from decent_bench.costs import LinearRegressionCost
+from decent_bench.costs import LinearRegressionCost, QuadraticCost
 from decent_bench.metrics._metric import Metric
+from decent_bench.metrics import metric_library as ml
 from decent_bench.metrics._plots import (
     MAX_Y_PLOT_VALUE,
     _add_legend_and_save,
@@ -23,6 +25,7 @@ from decent_bench.metrics._plots import (
     compute_plots,
 )
 from decent_bench.metrics.metric_library import Accuracy, MSE, Precision, Recall, Regret, XError
+from decent_bench.networks import FedNetwork
 
 
 # -----------------------------------------------------------------------------
@@ -71,6 +74,8 @@ def _agent_metrics_view(x_value: float) -> AgentMetricsView:
         n_sent_messages=0,
         n_received_messages=0,
         n_sent_messages_dropped=0,
+        n_times_selected=0,
+        n_times_update_received_by_server=0,
     )
 
 
@@ -132,6 +137,8 @@ def _build_minimal_benchmark_result() -> BenchmarkResult:
         _n_sent_messages=0,
         _n_received_messages=0,
         _n_sent_messages_dropped=0,
+        _n_times_selected=0,
+        _n_times_update_received_by_server=0,
     )
     fake_network = SimpleNamespace(agents=lambda: [fake_agent])
     algorithm = _AlgorithmStub("A")
@@ -139,6 +146,17 @@ def _build_minimal_benchmark_result() -> BenchmarkResult:
         problem=BenchmarkProblem(network=fake_network),
         states={algorithm: [fake_network]},
     )
+
+
+def _build_federated_benchmark_result(iterations: int = 2) -> tuple[BenchmarkResult, FedAvg]:
+    clients = [
+        Agent(0, QuadraticCost(np.eye(1), np.array([0.0]))),
+        Agent(1, QuadraticCost(np.eye(1), np.array([0.0]))),
+    ]
+    network = FedNetwork(clients=clients)
+    algorithm = FedAvg(iterations=iterations, step_size=0.1)
+    algorithm.run(network)
+    return BenchmarkResult(problem=BenchmarkProblem(network=network), states={algorithm: [network]}), algorithm
 
 
 def _build_display_metric_result(
@@ -449,6 +467,72 @@ def test_compute_metrics_rejects_duplicate_plot_metric_descriptions(monkeypatch)
 
     with pytest.raises(ValueError, match="Plot metric descriptions must be unique"):
         compute_metrics(benchmark_result=benchmark_result, table_metrics=[], plot_metrics=[[metric_1], [metric_2]])
+
+
+def test_compute_metrics_uses_federated_defaults_and_server_metrics() -> None:  # noqa: D103
+    benchmark_result, algorithm = _build_federated_benchmark_result(iterations=2)
+
+    metrics_result = compute_metrics(benchmark_result=benchmark_result, log_level=40)
+
+    assert metrics_result.server_metrics is not None
+    assert metrics_result.server_metrics[algorithm][0].x_history.max() == 2
+    table_metric_types = {type(metric) for metric in metrics_result.table_metrics or []}
+    plot_metric_types = {type(metric) for metric in metrics_result.plot_metrics or []}
+    assert ml.ClientDriftFromServer in table_metric_types
+    assert ml.SelectedParticipationFraction in table_metric_types
+    assert ml.EffectiveParticipationFraction in table_metric_types
+    assert ml.TotalCommunication in table_metric_types
+    assert ml.ClientDriftFromServer in plot_metric_types
+    assert ml.ClientLossGap in plot_metric_types
+
+    selected_metric = next(
+        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.SelectedParticipationFraction)
+    )
+    effective_metric = next(
+        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.EffectiveParticipationFraction)
+    )
+    total_communication_metric = next(
+        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.TotalCommunication)
+    )
+    uplink_metric = next(
+        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.UplinkMessages)
+    )
+    downlink_metric = next(
+        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.DownlinkMessages)
+    )
+    downlink_dropped_metric = next(
+        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.DownlinkMessagesDropped)
+    )
+
+    assert metrics_result.table_results is not None
+    assert metrics_result.table_results[algorithm][selected_metric]["single"] == (1.0, 0.0)
+    assert metrics_result.table_results[algorithm][effective_metric]["single"] == (1.0, 0.0)
+    assert metrics_result.table_results[algorithm][total_communication_metric]["single"] == (8.0, 0.0)
+    assert metrics_result.table_results[algorithm][uplink_metric]["single"] == (4.0, 0.0)
+    assert metrics_result.table_results[algorithm][downlink_metric]["single"] == (4.0, 0.0)
+    assert metrics_result.table_results[algorithm][downlink_dropped_metric]["single"] == (0.0, 0.0)
+
+
+def test_compute_metrics_custom_metrics_do_not_append_federated_defaults(monkeypatch) -> None:  # noqa: D103
+    benchmark_result, _ = _build_federated_benchmark_result(iterations=1)
+    metric = _MetricStub("custom table", "custom plot")
+    captured: dict[str, object] = {}
+
+    def _capture_tables(*args, **kwargs):
+        captured["table_metrics"] = args[2]
+        return {}
+
+    def _capture_plots(*args, **kwargs):
+        captured["plot_metrics"] = args[2]
+        return {}
+
+    monkeypatch.setattr("decent_bench.benchmark._compute.compute_tables", _capture_tables)
+    monkeypatch.setattr("decent_bench.benchmark._compute.compute_plots", _capture_plots)
+
+    compute_metrics(benchmark_result=benchmark_result, table_metrics=[metric], plot_metrics=[])
+
+    assert [m.table_description for m in captured["table_metrics"]] == [metric.table_description]
+    assert captured["plot_metrics"] == []
 
 
 # -----------------------------------------------------------------------------

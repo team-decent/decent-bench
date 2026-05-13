@@ -180,6 +180,10 @@ class Network(ABC):  # noqa: B024
         """
         return self._agents_cache
 
+    def snapshot_agents(self) -> list[Agent]:
+        """Get agents whose state should be snapshotted during algorithm execution."""
+        return self.agents()
+
     @cached_property
     def _agents_cache(self) -> list[Agent]:
         """Cached list of agents; assumes the underlying graph is not mutated after construction."""
@@ -560,6 +564,10 @@ class FedNetwork(Network):
 
         """
         return self._clients_cache
+
+    def snapshot_agents(self) -> list[Agent]:
+        """Get the server and clients whose state should be snapshotted."""
+        return [self.server(), *self.clients()]
 
     @cached_property
     def _clients_cache(self) -> list[Agent]:

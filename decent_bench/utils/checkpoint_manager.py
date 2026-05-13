@@ -14,7 +14,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
 from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, MetricResult
-from decent_bench.networks import Network
+from decent_bench.networks import FedNetwork, Network
 from decent_bench.utils.logger import LOGGER
 
 # NOTE: On some platforms (notably Windows), the Python binding can expose the 32-bit
@@ -704,6 +704,7 @@ class CheckpointManager:  # noqa: PLR0904
             try:
                 benchmark_result = self.load_benchmark_result()
                 resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
+                resulting_server_states: dict[Algorithm[Network], list[AgentMetricsView]] = {}
                 for alg, networks in benchmark_result.states.items():
                     algorithms = list(metrics_result.table_results or metrics_result.plot_results or [])
                     original_alg = next((a for a in algorithms if a.name == alg.name), None)
@@ -716,7 +717,14 @@ class CheckpointManager:  # noqa: PLR0904
                     resulting_agent_states[original_alg] = [
                         [AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks
                     ]
+                    fed_networks = [nw for nw in networks if isinstance(nw, FedNetwork)]
+                    if len(fed_networks) == len(networks):
+                        resulting_server_states[original_alg] = [
+                            AgentMetricsView.from_agent(nw.server()) for nw in fed_networks
+                        ]
                 metrics_result.agent_metrics = resulting_agent_states
+                if getattr(metrics_result, "server_metrics", None) is None and resulting_server_states:
+                    metrics_result.server_metrics = resulting_server_states
             except Exception as e:
                 LOGGER.warning(
                     f"Failed to load benchmark result to reconstruct agent metrics: {e}"

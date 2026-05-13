@@ -376,6 +376,8 @@ Some metrics require additional problem information.
 - ``accuracy``, ``mse``, ``precision``, and ``recall`` require ``problem.test_data`` and
     agents with :class:`~decent_bench.costs.EmpiricalRiskCost`.
 - ``accuracy``, ``precision``, and ``recall`` additionally require integer-valued targets.
+- Federated server metrics such as ``server accuracy`` and ``server mse`` require
+    :class:`~decent_bench.networks.FedNetwork` and use the explicit server model history.
 
 If these requirements are not met, the metric marks itself unavailable, a warning is given, and is omitted from the final
 metric lists returned by :func:`~decent_bench.benchmark.compute_metrics`.

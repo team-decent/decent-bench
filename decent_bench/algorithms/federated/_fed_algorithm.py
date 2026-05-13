@@ -72,8 +72,17 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         if not active_clients:
             return []
         if self.selection_scheme is None:
-            return list(active_clients)
-        return self.selection_scheme.select(active_clients, iteration)
+            selected_clients = list(active_clients)
+        else:
+            selected_clients = self.selection_scheme.select(active_clients, iteration)
+        self._record_selected_clients(selected_clients)
+        return selected_clients
+
+    @staticmethod
+    def _record_selected_clients(selected_clients: Sequence["Agent"]) -> None:
+        """Record clients selected by a federated round."""
+        for client in selected_clients:
+            client._n_times_selected += 1  # noqa: SLF001
 
     def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
         """Send the current server model to the selected clients."""
@@ -115,7 +124,14 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         received_clients = [client for client in participating_clients if client in network.server().messages]
         if not received_clients:
             return
+        self._record_updates_received_by_server(received_clients)
         updates = [network.server().messages[client] for client in received_clients]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))
         network.server().x = self._weighted_average(updates, weights, total_weight)
+
+    @staticmethod
+    def _record_updates_received_by_server(received_clients: Sequence["Agent"]) -> None:
+        """Record clients whose update contributed to a server aggregation."""
+        for client in received_clients:
+            client._n_times_update_received_by_server += 1  # noqa: SLF001

@@ -16,7 +16,7 @@ from decent_bench.metrics import (
     metric_utils,
 )
 from decent_bench.metrics import metric_library as ml
-from decent_bench.networks import Network
+from decent_bench.networks import FedNetwork, Network
 from decent_bench.utils._metric_helpers import _find_duplicates, _flatten_plot_metrics
 from decent_bench.utils.logger import LOGGER, start_logger
 
@@ -29,8 +29,8 @@ def compute_metrics(
     benchmark_result: BenchmarkResult | None = None,
     checkpoint_manager: "CheckpointManager | None" = None,
     *,
-    table_metrics: list[Metric] = ml.DEFAULT_TABLE_METRICS,
-    plot_metrics: list[Metric] | list[list[Metric]] = ml.DEFAULT_PLOT_METRICS,
+    table_metrics: list[Metric] | None = None,
+    plot_metrics: list[Metric] | list[list[Metric]] | None = None,
     confidence_level: float = 0.95,
     log_level: int = logging.INFO,
 ) -> MetricResult:
@@ -42,10 +42,12 @@ def compute_metrics(
             checkpoint manager
         checkpoint_manager: if provided, will be used to save results of metrics computation and/or load benchmark
             result.
-        table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_library.DEFAULT_TABLE_METRICS`
-        plot_metrics: metrics to plot after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_library.DEFAULT_PLOT_METRICS`.
+        table_metrics: metrics to tabulate as confidence intervals after the execution. Defaults to
+            :const:`~decent_bench.metrics.metric_library.DEFAULT_TABLE_METRICS` for non-federated problems and
+            :const:`~decent_bench.metrics.metric_library.FEDERATED_TABLE_METRICS` for federated problems.
+        plot_metrics: metrics to plot after the execution. Defaults to
+            :const:`~decent_bench.metrics.metric_library.DEFAULT_PLOT_METRICS` for non-federated problems and
+            :const:`~decent_bench.metrics.metric_library.FEDERATED_PLOT_METRICS` for federated problems.
             If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
             metrics will be grouped and plotted in their own figure with subplots.
         confidence_level: confidence level for computing confidence intervals of the table metrics, expressed as a value
@@ -96,6 +98,8 @@ def compute_metrics(
         if len(benchmark_result.states) == 0:
             raise ValueError("No benchmark result found in checkpoint manager to compute metrics")
 
+    table_metrics, plot_metrics = _resolve_default_metrics(table_metrics, plot_metrics, benchmark_result.problem)
+
     # work on independent metric instances
     table_metrics = deepcopy(table_metrics)
     plot_metrics = deepcopy(plot_metrics)
@@ -116,10 +120,26 @@ def compute_metrics(
 
     # compute table and plot results
     resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
+    resulting_server_states: dict[Algorithm[Network], list[AgentMetricsView]] = {}
     for alg, networks in benchmark_result.states.items():
         resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
-    table_results = compute_tables(resulting_agent_states, benchmark_result.problem, table_metrics, confidence_level)
-    plot_results = compute_plots(resulting_agent_states, benchmark_result.problem, plot_metrics)
+        fed_networks = [nw for nw in networks if isinstance(nw, FedNetwork)]
+        if len(fed_networks) == len(networks):
+            resulting_server_states[alg] = [AgentMetricsView.from_agent(nw.server()) for nw in fed_networks]
+    server_states = resulting_server_states or None
+    table_results = compute_tables(
+        resulting_agent_states,
+        benchmark_result.problem,
+        table_metrics,
+        confidence_level,
+        resulting_server_states=server_states,
+    )
+    plot_results = compute_plots(
+        resulting_agent_states,
+        benchmark_result.problem,
+        plot_metrics,
+        resulting_server_states=server_states,
+    )
 
     result = MetricResult(
         agent_metrics=resulting_agent_states,
@@ -127,6 +147,7 @@ def compute_metrics(
         plot_metrics=plot_metrics,
         table_results=table_results,
         plot_results=plot_results,
+        server_metrics=server_states,
     )
 
     if checkpoint_manager is not None:
@@ -142,6 +163,20 @@ def compute_metrics(
     metric_utils._clear_caches()  # noqa: SLF001
 
     return result
+
+
+def _resolve_default_metrics(
+    table_metrics: list[Metric] | None,
+    plot_metrics: list[Metric] | list[list[Metric]] | None,
+    problem: "BenchmarkProblem",
+) -> tuple[list[Metric], list[Metric] | list[list[Metric]]]:
+    if table_metrics is None:
+        table_metrics = (
+            ml.FEDERATED_TABLE_METRICS if isinstance(problem.network, FedNetwork) else ml.DEFAULT_TABLE_METRICS
+        )
+    if plot_metrics is None:
+        plot_metrics = ml.FEDERATED_PLOT_METRICS if isinstance(problem.network, FedNetwork) else ml.DEFAULT_PLOT_METRICS
+    return table_metrics, plot_metrics
 
 
 def _validate_unique_metric_descriptions(

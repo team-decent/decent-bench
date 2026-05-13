@@ -112,6 +112,8 @@ def compute_tables(
     problem: "BenchmarkProblem",
     metrics: list[Metric],
     confidence_level: float,
+    *,
+    resulting_server_states: Mapping[Algorithm[Network], Sequence[AgentMetricsView]] | None = None,
 ) -> Mapping[Algorithm[Network], Mapping[Metric, Mapping[str, tuple[float, float]]]]:
     """
     Compute table metrics with confidence intervals.
@@ -123,6 +125,7 @@ def compute_tables(
         confidence_level: confidence level for computing confidence intervals of the metrics, expressed as a value
             between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
             wider confidence intervals.
+        resulting_server_states: optional federated server states from the trial executions, grouped by algorithm
 
     Returns:
         A nested dictionary containing the mean and margin of error for each metric and statistic, structured as
@@ -144,7 +147,15 @@ def compute_tables(
         for metric in metrics:
             progress.update(table_task, status=f"Task: {metric.table_description}")
 
-            data_per_trial = [_table_data_per_trial(resulting_agent_states[a], problem, metric) for a in algs]
+            data_per_trial = [
+                _table_data_per_trial(
+                    resulting_agent_states[a],
+                    problem,
+                    metric,
+                    None if resulting_server_states is None else resulting_server_states.get(a),
+                )
+                for a in algs
+            ]
 
             for statistic in metric.statistics:
                 statistic_name = STATISTICS_ABBR.get(statistic.__name__) or statistic.__name__
@@ -166,10 +177,14 @@ def _table_data_per_trial(
     agents_per_trial: list[list[AgentMetricsView]],
     problem: "BenchmarkProblem",
     metric: Metric,
+    server_per_trial: Sequence[AgentMetricsView] | None = None,
 ) -> list[Sequence[float]]:
     data_per_trial: list[Sequence[float]] = []
-    for agents in agents_per_trial:
-        trial_data = metric.get_table_data(agents, problem)
+    for trial_idx, agents in enumerate(agents_per_trial):
+        if server_per_trial is None:
+            trial_data = metric.get_table_data(agents, problem)
+        else:
+            trial_data = metric.get_federated_table_data(agents, server_per_trial[trial_idx], problem)
         data_per_trial.append(trial_data)
 
     return data_per_trial
