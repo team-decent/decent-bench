@@ -97,7 +97,7 @@ def _run_scaffold_local_update(
 
 
 def test_scaffold_initializes_control_variates_from_c0() -> None:
-    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))]
+    clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))]
     network = FedNetwork(clients=clients)
     algorithm = Scaffold(
         iterations=1,
@@ -116,7 +116,7 @@ def test_scaffold_initializes_control_variates_from_c0() -> None:
 
 
 def test_scaffold_infers_server_control_from_client_c0() -> None:
-    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))]
+    clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))]
     network = FedNetwork(clients=clients)
     algorithm = Scaffold(
         iterations=1,

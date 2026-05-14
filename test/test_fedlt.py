@@ -268,8 +268,8 @@ def test_fedlt_initializes_auxiliary_variables_from_z0() -> None:
 
 
 def test_fedlt_nesterov_update_uses_step_size_and_momentum() -> None:
-    client = Agent(0, ConstantGradientCost(gradient_value=2.0))
-    server = Agent(1, ZeroCost((1,)))
+    client = Agent(ConstantGradientCost(gradient_value=2.0))
+    server = Agent(ZeroCost((1,)))
     algorithm = FedLT(
         iterations=1,
         step_size=0.25,
@@ -289,8 +289,8 @@ def test_fedlt_nesterov_update_uses_step_size_and_momentum() -> None:
 
 
 def test_fedlt_nesterov_default_momentum_is_used() -> None:
-    client = Agent(0, ConstantGradientCost(gradient_value=2.0))
-    server = Agent(1, ZeroCost((1,)))
+    client = Agent(ConstantGradientCost(gradient_value=2.0))
+    server = Agent(ZeroCost((1,)))
     algorithm = FedLT(
         iterations=1,
         step_size=0.25,
@@ -323,8 +323,8 @@ def test_fedlt_local_gradient_step_uses_penalty_term() -> None:
 
 
 def test_fedlt_adam_one_step_matches_formula() -> None:
-    client = Agent(0, ConstantGradientCost(gradient_value=2.0))
-    server = Agent(1, ZeroCost((1,)))
+    client = Agent(ConstantGradientCost(gradient_value=2.0))
+    server = Agent(ZeroCost((1,)))
     algorithm = FedLT(iterations=1, step_size=0.5, num_local_epochs=1, rho=1.0, local_solver="adam")
     client.initialize(x=np.array([0.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
@@ -360,8 +360,8 @@ def _manual_adam_steps(
 
 
 def test_fedlt_adam_multi_step_matches_formula_on_quadratic() -> None:
-    client = Agent(0, QuadraticCost(A=np.array([[1.0]]), b=np.array([0.0])))
-    server = Agent(1, ZeroCost((1,)))
+    client = Agent(QuadraticCost(A=np.array([[1.0]]), b=np.array([0.0])))
+    server = Agent(ZeroCost((1,)))
     algorithm = FedLT(
         iterations=1,
         step_size=0.1,
@@ -389,8 +389,8 @@ def test_fedlt_adam_multi_step_matches_formula_on_quadratic() -> None:
 
 
 def test_fedlt_adam_moments_reset_each_local_solve() -> None:
-    client = Agent(0, QuadraticCost(A=np.array([[1.0]]), b=np.array([0.0])))
-    server = Agent(1, ZeroCost((1,)))
+    client = Agent(QuadraticCost(A=np.array([[1.0]]), b=np.array([0.0])))
+    server = Agent(ZeroCost((1,)))
     algorithm = FedLT(iterations=1, step_size=0.1, num_local_epochs=2, rho=1.0, local_solver="adam")
     server.initialize(x=np.array([0.0]))
 
@@ -487,7 +487,7 @@ def test_fedlt_supports_partial_participation_and_keeps_stale_server_z() -> None
 
 
 def test_fedlt_keeps_stale_server_z_when_client_upload_is_dropped() -> None:
-    clients = [Agent(0, ConstantGradientCost(1.0)), Agent(1, ConstantGradientCost(3.0))]
+    clients = [Agent(ConstantGradientCost(1.0)), Agent(ConstantGradientCost(3.0))]
     network = FedNetwork(
         clients=clients,
         message_drop={clients[0]: DropOnCalls({1}), clients[1]: NoDrops()},

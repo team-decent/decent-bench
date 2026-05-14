@@ -169,18 +169,19 @@ def test_client_selection(
 def test_data_size_client_selection_prefers_larger_clients() -> None:
     iop.set_seed(0)
     clients = [
-        _make_linear_regression_client(0, 1),
-        _make_linear_regression_client(1, 1000),
+        _make_linear_regression_client(1),
+        _make_linear_regression_client(1000),
     ]
     scheme = DataSizeSelection(num_selected_clients=1)
 
     selected_client_ids = [scheme.select(clients, iteration=i)[0].id for i in range(200)]
+    larger_client_id = clients[1].id
 
-    assert selected_client_ids.count(1) > 190
+    assert selected_client_ids.count(larger_client_id) > 190
 
 
 def test_data_size_client_selection_requires_empirical_risk_cost() -> None:
-    clients = [Agent(0, L2RegularizerCost((2,))), Agent(1, L2RegularizerCost((2,)))]
+    clients = [Agent(L2RegularizerCost((2,))), Agent(L2RegularizerCost((2,)))]
     scheme = DataSizeSelection(num_selected_clients=1)
 
     with pytest.raises(ValueError, match="EmpiricalRiskCost"):
@@ -205,9 +206,9 @@ def test_fair_selection_updates_counts_when_all_selected() -> None:
 
 def test_high_loss_client_selection_selects_largest_loss() -> None:
     clients = [
-        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(2, 2.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(2.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
     ]
     for client in clients:
         client.x = Array(np.ones(2))
@@ -220,11 +221,11 @@ def test_high_loss_client_selection_selects_largest_loss() -> None:
 
 def test_high_loss_client_selection_selects_fraction() -> None:
     clients = [
-        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(2, 2.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(3, 5.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(4, 3.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(2.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(5.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(3.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
     ]
     for client in clients:
         client.x = Array(np.ones(2))
@@ -252,8 +253,8 @@ def test_high_loss_client_selection_does_not_consume_empirical_risk_batch() -> N
     iop.set_seed(0)
     selected_cost = LinearRegressionCost(dataset, batch_size=2)
     clients = [
-        Agent(0, selected_cost),
-        Agent(1, LinearRegressionCost(dataset, batch_size=2)),
+        Agent(selected_cost),
+        Agent(LinearRegressionCost(dataset, batch_size=2)),
     ]
     for client in clients:
         client.x = x

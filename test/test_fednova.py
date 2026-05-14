@@ -556,7 +556,7 @@ def test_fednova_rejects_invalid_local_step_mapping_values(step_value: float) ->
 
 @pytest.mark.parametrize("step_value", [2.0])
 def test_fednova_rejects_non_integer_local_step_mapping_values(step_value: object) -> None:
-    client = Agent(0, TrackingCost())
+    client = Agent(TrackingCost())
     with pytest.raises(TypeError, match="`num_local_steps` mapping values must be integers"):
         FedNova(iterations=1, step_size=1.0, num_local_steps={client: step_value})
 
