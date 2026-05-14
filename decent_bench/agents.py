@@ -415,5 +415,5 @@ class AgentMetricsView:
             n_sent_messages=agent._n_sent_messages,  # noqa: SLF001
             n_received_messages=agent._n_received_messages,  # noqa: SLF001
             n_sent_messages_dropped=agent._n_sent_messages_dropped,  # noqa: SLF001
-            n_times_selected=agent._n_times_selected,  # noqa: SLF001
+            n_times_selected=getattr(agent, "_n_times_selected", 0),
         )

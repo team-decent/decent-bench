@@ -82,7 +82,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     def _record_selected_clients(selected_clients: Sequence["Agent"]) -> None:
         """Record clients selected by a federated round."""
         for client in selected_clients:
-            client._n_times_selected += 1  # noqa: SLF001
+            client._n_times_selected = getattr(client, "_n_times_selected", 0) + 1  # noqa: SLF001
 
     def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
         """Send the current server model to the selected clients."""

@@ -285,8 +285,6 @@ class FedLT(FedAlgorithm):
         aggregation in partial participation and lossy communication settings.
         """
         z_by_client = network.server().aux_vars["z_by_client"]
-        received_clients = []
         for client in participating_clients:
             if client in network.server().messages:
-                received_clients.append(client)
                 z_by_client[client] = network.server().messages[client]

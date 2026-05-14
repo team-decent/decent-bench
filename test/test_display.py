@@ -13,7 +13,7 @@ from decent_bench.algorithms.federated import FedAvg
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, compute_metrics
 from decent_bench.benchmark._display import display_metrics
 from decent_bench.benchmark._metric_result import MetricResult
-from decent_bench.costs import LinearRegressionCost, QuadraticCost
+from decent_bench.costs import LinearRegressionCost, LogisticRegressionCost, QuadraticCost
 from decent_bench.metrics._metric import Metric
 from decent_bench.metrics import metric_library as ml
 from decent_bench.metrics._plots import (
@@ -798,6 +798,74 @@ def test_classification_metrics_unavailable_with_float_targets() -> None:  # noq
         available, reason = metric.is_available(problem)
         assert not available
         assert "integer targets" in reason
+
+
+def test_server_mse_availability_and_values() -> None:  # noqa: D103
+    test_data = [(np.array([1.0]), np.array([1.0]))]
+    cost = LinearRegressionCost(test_data)
+    client = Agent(0, cost)
+    client.initialize(x=np.array([0.0]))
+
+    unavailable_problem = SimpleNamespace(
+        test_data=test_data,
+        network=SimpleNamespace(agents=lambda: [client]),
+    )
+    available, reason = ml.ServerMSE([np.average]).is_available(unavailable_problem)
+    assert not available
+    assert "FedNetwork" in reason
+
+    fed_problem_without_test_data = BenchmarkProblem(network=FedNetwork([client]))
+    available, reason = ml.ServerMSE([np.average]).is_available(fed_problem_without_test_data)
+    assert not available
+    assert reason == "requires problem.test_data"
+
+    problem = BenchmarkProblem(network=FedNetwork([client]), test_data=test_data)
+    metric = ml.ServerMSE([np.average])
+    available, reason = metric.is_available(problem)
+    assert available
+    assert reason is None
+
+    server = Agent(1, cost)
+    server.initialize(x=np.array([0.0]))
+    server.x = np.array([1.0])
+    server._snapshot(1)
+    client_view = AgentMetricsView.from_agent(client)
+    server_view = AgentMetricsView.from_agent(server)
+
+    assert metric.get_federated_table_data([client_view], server_view, problem) == (0.0,)
+    assert metric.get_federated_plot_data([client_view], server_view, problem) == [(0, 1.0), (1, 0.0)]
+
+
+def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
+    train_data = [(np.array([1.0]), np.array([1])), (np.array([-1.0]), np.array([0]))]
+    test_data = [(np.array([1.0]), 1), (np.array([-1.0]), 0)]
+    cost = LogisticRegressionCost(train_data)
+    client = Agent(0, cost)
+    client.initialize(x=np.array([0.0]))
+    problem = BenchmarkProblem(network=FedNetwork([client]), test_data=test_data)
+
+    float_target_problem = BenchmarkProblem(
+        network=FedNetwork([client]),
+        test_data=[(np.array([1.0]), 1.0), (np.array([-1.0]), 0.0)],
+    )
+    metric = ml.ServerAccuracy([np.average])
+    available, reason = metric.is_available(float_target_problem)
+    assert not available
+    assert "integer targets" in reason
+
+    available, reason = metric.is_available(problem)
+    assert available
+    assert reason is None
+
+    server = Agent(1, cost)
+    server.initialize(x=np.array([0.0]))
+    server.x = np.array([10.0])
+    server._snapshot(1)
+    client_view = AgentMetricsView.from_agent(client)
+    server_view = AgentMetricsView.from_agent(server)
+
+    assert metric.get_federated_table_data([client_view], server_view, problem) == (1.0,)
+    assert metric.get_federated_plot_data([client_view], server_view, problem) == [(0, 0.5), (1, 1.0)]
 
 
 def test_is_available_default_returns_true() -> None:  # noqa: D103
