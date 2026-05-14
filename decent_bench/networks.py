@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from functools import cached_property
 from typing import Any
 
@@ -29,20 +30,28 @@ class Network(ABC):  # noqa: B024
 
     Args:
         graph: NetworkX graph defining the network topology, with :class:`~decent_bench.agents.Agent` nodes.
-        buffer_messages: whether to keep stored messages at the end of each iteration. If ``True``, messages
-            persist on the receiver until they are overwritten by a newer message from the same sender to the same
-            receiver. If ``False``, messages delivered to a receiver during iteration *k* are dropped when
-            the algorithm advances to iteration *k + 1*, so agents only see messages from the most recent
-            iteration.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
-            mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
+            :class:`~decent_bench.schemes.NoiseScheme` instance when all agents use the same kind of noise scheme, a
+            dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
+            noise to any agent.
         message_compression: compression scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.CompressionScheme` instance to apply the same scheme to all agents, a
-            dictionary mapping each agent to its scheme, or ``None`` to apply no compression to any agent.
+            :class:`~decent_bench.schemes.CompressionScheme` instance when all agents use the same kind of compression
+            scheme, a dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to
+            apply no compression to any agent.
         message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.DropScheme` instance to apply the same scheme to all agents, a dictionary
-            mapping each agent to its scheme, or ``None`` to apply no message drop to any agent.
+            :class:`~decent_bench.schemes.DropScheme` instance when all agents use the same kind of drop scheme, a
+            dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
+            message drop to any agent.
+
+    Raises:
+        ValueError: if the graph is not connected, if it is directed, if it is a multi-graph, if its nodes are
+            not of type :class:`~decent_bench.agents.Agent`, if any two agents have incompatible costs, or if
+            any agent is already assigned to another network (i.e. it has index != -1).
+
+    Raises:
+        ValueError: if the graph is not connected, if it is directed, if it is a multi-graph, if its nodes are
+            not of type :class:`~decent_bench.agents.Agent`, if any two agents have incompatible costs, or if
+            any agent is already assigned to another network (i.e. it has index != -1).
 
     Raises:
         ValueError: if the graph is not connected, if it is directed, if it is a multi-graph, if its nodes are
@@ -54,7 +63,6 @@ class Network(ABC):  # noqa: B024
     def __init__(
         self,
         graph: nx.Graph[Agent],
-        buffer_messages: bool = False,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
         message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
@@ -82,7 +90,6 @@ class Network(ABC):  # noqa: B024
         self._message_drop = self._initialize_message_schemes(message_drop, "drop", DropScheme, NoDrops)
         self._active_agents_cache: list[Agent] | None = None
         self._active_connected_agents_cache: dict[Agent, list[Agent]] = {}
-        self._buffer_messages = buffer_messages
         self._iteration = 0  # Current iteration, updated by the algorithm
 
     @staticmethod
@@ -146,7 +153,7 @@ class Network(ABC):  # noqa: B024
 
         Given the value of `scheme`, the method creates the dictionary as follows:
         - `None`: use `default_factory()` for every agent
-        - a single `scheme_class` instance: apply it to every agent
+        - a single `scheme_class` instance: apply an independent copy to every agent
         - uses the given dictionary (provided it contains a value for each agent)
 
         Args:
@@ -166,8 +173,8 @@ class Network(ABC):  # noqa: B024
             if default_factory is None:
                 raise ValueError(f"default_factory must be provided for {scheme_name}")
             return {agent: default_factory() for agent in self.graph}
-        if isinstance(scheme, scheme_class):  # one scheme, use for all agents
-            return dict.fromkeys(self.graph, scheme)
+        if isinstance(scheme, scheme_class):  # one scheme, copy for all agents
+            return {agent: deepcopy(scheme) for agent in self.graph}
         if isinstance(scheme, dict):  # one scheme per agent
             for agent in self.graph:
                 if agent not in scheme:
@@ -328,12 +335,22 @@ class Network(ABC):  # noqa: B024
         self._active_agents_cache = None
         self._active_connected_agents_cache = {}
 
-        if self._buffer_messages:
-            return
+        self._clear_received_messages()
 
+    def _clear_received_messages(
+        self,
+        receivers: Sequence[Agent] | None = None,
+        senders: Sequence[Agent] | None = None,
+    ) -> None:
+        """Clear received messages, optionally scoped to specific receivers and senders."""
         # Use the _agents_cache to avoid overridden agents() in subclasses like FedNetwork
-        for agent in self._agents_cache:
-            agent._received_messages.clear()  # noqa: SLF001
+        receivers = self._agents_cache if receivers is None else receivers
+        for receiver in receivers:
+            if senders is None:
+                receiver._received_messages.clear()  # noqa: SLF001
+            else:
+                for sender in senders:
+                    receiver._received_messages.pop(sender, None)  # noqa: SLF001
 
 
 class P2PNetwork(Network):
@@ -344,11 +361,6 @@ class P2PNetwork(Network):
         graph: NetworkX graph defining the network topology.
         agents: list of agents corresponding to the nodes in ``graph``. The agents in the list are assigned
             in order to each node of the graph. Agents must have unique ids.
-        buffer_messages: whether to keep stored messages at the end of each iteration. If ``True``, messages
-            persist on the receiver until they are overwritten by a newer message from the same sender to the same
-            receiver. If ``False``, messages delivered to a receiver during iteration *k* are dropped when
-            the algorithm advances to iteration *k + 1*, so agents only see messages from the most recent
-            iteration.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
             :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
             mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
@@ -370,7 +382,6 @@ class P2PNetwork(Network):
         graph: nx.Graph[Any],
         agents: Sequence[Agent],
         *,
-        buffer_messages: bool = False,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
         message_drop: DropScheme | dict[Agent, DropScheme] | None = None,
@@ -383,7 +394,6 @@ class P2PNetwork(Network):
         graph = nx.relabel_nodes(graph, agent_node_map)
         super().__init__(
             graph=graph,
-            buffer_messages=buffer_messages,
             message_noise=message_noise,
             message_compression=message_compression,
             message_drop=message_drop,
@@ -489,20 +499,18 @@ class FedNetwork(Network):
         clients: list of client agents in the network.
         server: server agent in the network. If ``None``, a default server with zero cost and always active scheme will
             be created. Custom servers must use :class:`~decent_bench.schemes.AlwaysActive`.
-        buffer_messages: whether to keep stored messages at the end of each iteration. If ``True``, messages
-            persist on the receiver until they are overwritten by a newer message from the same sender to the same
-            receiver. If ``False``, messages delivered to a receiver during iteration *k* are dropped when
-            the algorithm advances to iteration *k + 1*, so agents only see messages from the most recent
-            iteration.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
-            mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
+            :class:`~decent_bench.schemes.NoiseScheme` instance when all agents use the same kind of noise scheme, a
+            dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
+            noise to any agent.
         message_compression: compression scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.CompressionScheme` instance to apply the same scheme to all agents,
-            a dictionary mapping each agent to its scheme, or ``None`` to apply no compression to any agent.
+            :class:`~decent_bench.schemes.CompressionScheme` instance when all agents use the same kind of compression
+            scheme, a dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to
+            apply no compression to any agent.
         message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.DropScheme` instance to apply the same scheme to all agents, a dictionary
-            mapping each agent to its scheme, or ``None`` to apply no message drop to any agent.
+            :class:`~decent_bench.schemes.DropScheme` instance when all agents use the same kind of drop scheme, a
+            dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
+            message drop to any agent.
 
     Raises:
         ValueError: if ``clients`` is empty or if a custom ``server`` does not use
@@ -514,7 +522,6 @@ class FedNetwork(Network):
         self,
         clients: Sequence[Agent],
         server: Agent | None = None,
-        buffer_messages: bool = False,
         *,
         message_noise: NoiseScheme | dict[Agent, NoiseScheme] | None = None,
         message_compression: CompressionScheme | dict[Agent, CompressionScheme] | None = None,
@@ -546,7 +553,6 @@ class FedNetwork(Network):
 
         super().__init__(
             graph=graph,
-            buffer_messages=buffer_messages,
             message_noise=message_noise,
             message_compression=message_compression,
             message_drop=message_drop,

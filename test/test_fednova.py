@@ -5,16 +5,17 @@ import pytest
 
 from decent_bench.agents import Agent
 from decent_bench.algorithms.federated import FedAvg, FedNova
-from decent_bench.costs import Cost
+from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import DropScheme, NoDrops
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
-class TrackingCost(Cost):
+class TrackingCost(EmpiricalRiskCost):
     def __init__(self, gradient_value: float = 1.0, *, n_samples: int = 1):
         self._gradient = np.array([gradient_value], dtype=float)
-        self.n_samples = n_samples
+        self._n_samples = n_samples
+        self._dataset = [(np.array([0.0]), np.array([0.0])) for _ in range(n_samples)]
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -36,16 +37,39 @@ class TrackingCost(Cost):
     def m_cvx(self) -> float:
         return 0.0
 
-    def function(self, x: np.ndarray, **kwargs: Any) -> float:
+    @property
+    def n_samples(self) -> int:
+        return self._n_samples
+
+    @property
+    def batch_size(self) -> int:
+        return self._n_samples
+
+    @property
+    def dataset(self) -> list[tuple[np.ndarray, np.ndarray]]:
+        return self._dataset
+
+    def predict(self, x: np.ndarray, data: list[np.ndarray]) -> np.ndarray:
+        del x
+        return np.zeros(len(data), dtype=float)
+
+    def function(self, x: np.ndarray, indices: Any = "batch", **kwargs: Any) -> float:  # noqa: ANN401
         del x, kwargs
+        self._sample_batch_indices(indices)
         return 0.0
 
-    def gradient(self, x: np.ndarray, **kwargs: Any) -> np.ndarray:
+    def _get_batch_data(self, indices: Any = "batch") -> list[tuple[np.ndarray, np.ndarray]]:  # noqa: ANN401
+        batch_indices = self._sample_batch_indices(indices)
+        return [self._dataset[index] for index in batch_indices]
+
+    def gradient(self, x: np.ndarray, indices: Any = "batch", **kwargs: Any) -> np.ndarray:  # noqa: ANN401
         del x, kwargs
+        self._sample_batch_indices(indices)
         return self._gradient.copy()
 
-    def hessian(self, x: np.ndarray, **kwargs: Any) -> np.ndarray:
+    def hessian(self, x: np.ndarray, indices: Any = "batch", **kwargs: Any) -> np.ndarray:  # noqa: ANN401
         del x, kwargs
+        self._sample_batch_indices(indices)
         return np.zeros((1, 1), dtype=float)
 
     def proximal(self, x: np.ndarray, rho: float, **kwargs: Any) -> np.ndarray:
@@ -190,25 +214,25 @@ def test_fednova_normalizes_scalar_local_steps_to_client_mapping_on_initialize()
 def test_fednova_resolves_client_sample_counts_once_on_initialize(monkeypatch: pytest.MonkeyPatch) -> None:
     network = _make_fed_network((1.0, 1), (3.0, 3))
     algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps=1)
-    infer_client_weight_calls = 0
+    infer_client_data_size_calls = 0
 
-    def _tracking_infer_client_weight(client: Agent) -> float:
-        nonlocal infer_client_weight_calls
-        infer_client_weight_calls += 1
+    def _tracking_infer_client_data_size(client: Agent) -> float:
+        nonlocal infer_client_data_size_calls
+        infer_client_data_size_calls += 1
         return float(client.cost.n_samples)  # type: ignore[attr-defined]
 
     monkeypatch.setattr(
-        "decent_bench.algorithms.federated._fed_nova.infer_client_weight",
-        _tracking_infer_client_weight,
+        "decent_bench.algorithms.federated._fed_nova.infer_client_data_size",
+        _tracking_infer_client_data_size,
     )
 
     algorithm.initialize(network)
-    assert infer_client_weight_calls == len(network.clients())
+    assert infer_client_data_size_calls == len(network.clients())
 
     network._step(0)  # noqa: SLF001
     algorithm.step(network, 0)
 
-    assert infer_client_weight_calls == len(network.clients())
+    assert infer_client_data_size_calls == len(network.clients())
 
 
 @pytest.mark.parametrize(
@@ -321,14 +345,13 @@ def test_fednova_uploads_normalizer_then_cumulative_gradient() -> None:
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
 
     np.testing.assert_allclose(network.server().messages[clients[0]], np.array([2.0]))
     np.testing.assert_allclose(network.server().messages[clients[1]], np.array([1.0]))
 
     algorithm._collect_received_normalizers(network, participating_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
+    network._clear_received_messages(receivers=[network.server()], senders=participating_clients)  # noqa: SLF001
     algorithm._communicate_cumulative_gradients(network, participating_clients)
 
     np.testing.assert_allclose(network.server().messages[clients[0]], np.array([4.0]))
@@ -357,10 +380,9 @@ def test_fednova_renormalizes_client_weights_over_received_subset() -> None:
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
     algorithm._collect_received_normalizers(network, participating_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
+    network._clear_received_messages(receivers=[network.server()], senders=participating_clients)  # noqa: SLF001
     algorithm._communicate_cumulative_gradients(network, participating_clients)
     network.server()._received_messages.pop(clients[1])  # noqa: SLF001
 
@@ -379,10 +401,9 @@ def test_fednova_aggregate_rejects_non_positive_normalizer() -> None:
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
     algorithm._collect_received_normalizers(network, participating_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
+    network._clear_received_messages(receivers=[network.server()], senders=participating_clients)  # noqa: SLF001
     algorithm._communicate_cumulative_gradients(network, participating_clients)
     network.server().aux_vars["received_a_i"][clients[0]] = 0.0
 
@@ -405,7 +426,6 @@ def test_fednova_collect_received_normalizers_stores_empty_dict_when_all_are_dro
     selected_clients = network.clients()
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._clear_buffered_server_messages(network, participating_clients)
     algorithm._run_local_updates(network, participating_clients)
 
     algorithm._collect_received_normalizers(network, participating_clients)
@@ -512,6 +532,12 @@ def test_fednova_rejects_invalid_scalar_num_local_steps(num_local_steps: int) ->
         FedNova(iterations=1, step_size=1.0, num_local_steps=num_local_steps)
 
 
+@pytest.mark.parametrize("num_local_steps", [1.5])
+def test_fednova_rejects_non_integer_scalar_num_local_steps(num_local_steps: object) -> None:
+    with pytest.raises(TypeError, match="`num_local_steps` must be an int or a mapping from Agent"):
+        FedNova(iterations=1, step_size=1.0, num_local_steps=num_local_steps)
+
+
 @pytest.mark.parametrize("num_local_steps", [{}, {"not-an-agent": 1}, {1: 1}])
 def test_fednova_rejects_local_step_mappings_missing_network_clients(num_local_steps: object) -> None:
     network = _make_fed_network(1.0, 3.0)
@@ -525,6 +551,13 @@ def test_fednova_rejects_local_step_mappings_missing_network_clients(num_local_s
 def test_fednova_rejects_invalid_local_step_mapping_values(step_value: float) -> None:
     client = Agent(TrackingCost())
     with pytest.raises(ValueError, match="`num_local_steps` must have positive values"):
+        FedNova(iterations=1, step_size=1.0, num_local_steps={client: step_value})
+
+
+@pytest.mark.parametrize("step_value", [2.0])
+def test_fednova_rejects_non_integer_local_step_mapping_values(step_value: object) -> None:
+    client = Agent(0, TrackingCost())
+    with pytest.raises(TypeError, match="`num_local_steps` mapping values must be integers"):
         FedNova(iterations=1, step_size=1.0, num_local_steps={client: step_value})
 
 

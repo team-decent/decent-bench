@@ -221,6 +221,21 @@ def test_initialize_message_schemes_with_dict_extra_keys() -> None:
         assert agent in result
 
 
+def test_initialize_message_schemes_copies_single_scheme_per_agent() -> None:
+    """Test that a single scheme instance is copied independently for every agent."""
+    n_agents = 3
+    agents = [Agent(i, L2RegularizerCost((10,))) for i in range(n_agents)]
+    net = P2PNetwork(graph=nx.complete_graph(n_agents), agents=agents)
+    scheme = AddNoise(offset=1.0)
+
+    result = net._initialize_message_schemes(scheme, "noise", NoiseScheme)
+
+    assert all(result[agent] is not scheme for agent in agents)
+    assert len({id(result[agent]) for agent in agents}) == n_agents
+    result[agents[0]].offset = 2.0
+    assert result[agents[1]].offset == 1.0
+
+
 def test_initialize_message_schemes_dict_used_in_send() -> None:
     """Test that per-agent schemes in dict are actually used during send operations."""
 
@@ -292,22 +307,12 @@ def test_send_rejects_inactive_receiver() -> None:
         net.send(sender=sender, receiver=inactive_receiver, msg=msg)
 
 
-@pytest.mark.parametrize(
-    ("buffer_messages", "expect_message_after_step"),
-    [
-        (False, False),
-        (True, True),
-    ],
-)
-def test_step_clears_or_preserves_messages_based_on_buffer_setting(
-    buffer_messages: bool, expect_message_after_step: bool
-) -> None:
+def test_step_clears_messages() -> None:
     sender = Agent(L2RegularizerCost((2,)))
     receiver = Agent(L2RegularizerCost((2,)))
     net = P2PNetwork(
         graph=nx.Graph([(0, 1)]),
         agents=[sender, receiver],
-        buffer_messages=buffer_messages,
     )
     msg = iop.to_array([1.0, -1.0], framework=sender.cost.framework, device=sender.cost.device)
 
@@ -316,7 +321,7 @@ def test_step_clears_or_preserves_messages_based_on_buffer_setting(
 
     net._step(1)  # noqa: SLF001
 
-    assert (sender in receiver.messages) is expect_message_after_step
+    assert sender not in receiver.messages
 
 
 def test_send_applies_drop_compression_and_noise_schemes() -> None:

@@ -138,12 +138,16 @@ homogeneous local work or a per-client mapping for heterogeneous local step
 counts.
 
 :class:`~decent_bench.algorithms.federated.FedLT` implements Federated Local
-Training with cost-driven local gradients and optional acceleration through
-``use_acceleration``. :class:`~decent_bench.costs.EmpiricalRiskCost` objects use
-their default mini-batch gradient behavior, so they behave as local SGD, while
-generic :class:`~decent_bench.costs.Cost` objects use full gradients and behave
-as local GD. Fed-LT compression and Fed-PLT-style noisy-message experiments are
-configured through :class:`~decent_bench.networks.FedNetwork`
+Training with cost-driven local gradients. Its ``local_solver`` option supports
+``"gd"``, ``"nesterov"``, and ``"adam"`` local updates. Solver-specific
+hyperparameters are passed through ``solver_args``. If ``solver_args`` is omitted 
+or left empty, solver-specific defaults are used: ``"nesterov"`` uses ``momentum=0.9``, 
+``"adam"`` uses ``beta1=0.9``, ``beta2=0.999``, and ``epsilon=1e-8``, and ``"gd"`` uses no additional solver arguments.
+:class:`~decent_bench.costs.EmpiricalRiskCost` objects use their default
+mini-batch gradient behavior, so gradient-based local solvers use mini-batches,
+while generic :class:`~decent_bench.costs.Cost` objects use full gradients.
+Fed-LT compression and Fed-PLT-style noisy-message experiments are configured
+through :class:`~decent_bench.networks.FedNetwork`
 ``message_compression`` and ``message_noise`` schemes rather than algorithm
 arguments.
 
@@ -154,6 +158,24 @@ difference between the server and client control variates, then upload both
 their model delta and control-variate delta. The server applies the averaged
 model delta with ``server_step_size`` and updates its control variate using the
 participation fraction.
+
+:class:`~decent_bench.algorithms.federated.FedPD` implements the FedPD
+primal-dual update. Clients keep persistent local primal variables, dual
+variables, and centre candidates. Each round uses ``num_local_steps`` local
+gradient steps on the augmented Lagrangian, with ``step_size`` controlling the
+local learning rate and ``eta`` controlling the FedPD quadratic
+penalty/dual-update parameter. The ``skip_probability`` argument controls the
+paper's optional communication skipping: ``0`` aggregates every round and ``1``
+always keeps local centre candidates without server aggregation. Like
+``FedNova``, ``num_local_steps`` can be either a single integer or a per-client
+mapping. FedPD always uses all active clients; partial participation is not
+supported.
+
+:class:`~decent_bench.algorithms.federated.FedDyn` implements Federated Dynamic
+Regularization. Clients keep a persistent dynamic state ``g`` and the server
+keeps an auxiliary vector ``h``. Selected clients run ``num_local_epochs`` local
+gradient steps on the dynamic-regularized local objective using ``step_size`` as
+the local learning rate and ``alpha`` as the regularization coefficient.
 
 Federated aggregation
 ^^^^^^^^^^^^^^^^^^^^^
@@ -187,8 +209,54 @@ clients use the same number of local steps and
 :class:`~decent_bench.algorithms.federated.FedAvg` both use data-proportional
 aggregation weights.
 
+:class:`~decent_bench.algorithms.federated.FedPD` aggregates received centre
+candidates uniformly when communication is not skipped.
+
+:class:`~decent_bench.algorithms.federated.FedDyn` averages the received
+selected-client models uniformly, so the local-model average is scaled by the
+number of received selected clients. The next server model also includes the
+FedDyn dynamic correction from the server auxiliary vector ``h``. The ``h``
+update uses only received client models and scales their model deltas by the
+total number of clients.
+
 :class:`~decent_bench.algorithms.federated.Scaffold` matches the standard
 SCAFFOLD algorithm and always uses uniform averaging over the selected clients.
+
+Client selection
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+Federated algorithms accept a ``selection_scheme`` argument. The scheme receives
+the active clients for the current round and returns the subset that should
+receive the server broadcast.
+
+:class:`~decent_bench.schemes.UniformSelection` samples active clients
+uniformly without replacement. This is the default for the built-in federated
+algorithms.
+
+:class:`~decent_bench.schemes.DataSizeSelection` samples active clients
+without replacement with probabilities proportional to client data size. This is
+useful when local dataset sizes are imbalanced and you want larger clients to
+have more participation opportunities. The scheme reads data size from
+``EmpiricalRiskCost.n_samples``, so it requires clients to use empirical-risk
+costs.
+
+:class:`~decent_bench.schemes.FairSelection` prioritizes
+clients with fewer past selections. This is useful when availability or random
+sampling can repeatedly skip some clients and you want selection opportunities
+to remain balanced across rounds.
+
+:class:`~decent_bench.schemes.HighLossSelection` evaluates client losses
+at each client's current ``x`` and selects the clients with highest loss.
+
+.. code-block:: python
+
+    from decent_bench.algorithms.federated import FedAvg
+    from decent_bench.schemes import DataSizeSelection
+
+    algorithm = FedAvg(
+        iterations=100,
+        step_size=0.01,
+        selection_scheme=DataSizeSelection(fraction_selected_clients=0.1),
+    )
 
 
 Available costs
@@ -471,6 +539,71 @@ Create a custom benchmark problem using existing resources.
         )
         metrics_result = benchmark.compute_metrics(benchmark_result)
         benchmark.display_metrics(metrics_result)
+
+
+Network constraints
+^^^^^^^^^^^^^^^^^^^
+Networks can model constrained communication through activation, compression,
+noise, and message-drop schemes. These schemes are configured when creating a
+network or benchmark problem and are applied automatically during
+:meth:`~decent_bench.networks.Network.send`.
+
+Activation schemes control whether an agent is available at a given iteration.
+The built-in options are :class:`~decent_bench.schemes.AlwaysActive`,
+:class:`~decent_bench.schemes.UniformActivationRate`,
+:class:`~decent_bench.schemes.MarkovChainActivation`, and
+:class:`~decent_bench.schemes.PoissonActivation`.
+:class:`~decent_bench.schemes.CyclicActivation` alternates between active and
+inactive intervals, with an optional phase offset to model staggered recurring
+availability windows.
+Implemented federated algorithms in decent-bench first ask the network for
+active clients and then apply the client-selection scheme to that active set.
+
+Compression schemes transform messages before they are sent. The default
+:class:`~decent_bench.schemes.NoCompression` leaves messages unchanged.
+:class:`~decent_bench.schemes.Quantization` rounds message entries to a fixed
+number of significant digits. :class:`~decent_bench.schemes.TopK` and
+:class:`~decent_bench.schemes.RandK` keep only a subset of coordinates and set
+the rest to zero. :class:`~decent_bench.schemes.StochasticQuantization`
+implements stochastic norm-scaled quantization used in QSGD
+:footcite:p:`Scheme_QSGD`.
+
+Noise schemes perturb delivered messages. The default
+:class:`~decent_bench.schemes.NoNoise` leaves messages unchanged, while
+:class:`~decent_bench.schemes.GaussianNoise` adds independent Gaussian noise to
+each message entry.
+
+Drop schemes decide whether a message is lost before delivery. The default
+:class:`~decent_bench.schemes.NoDrops` delivers every message.
+:class:`~decent_bench.schemes.UniformDropRate` drops messages independently
+with fixed probability, and :class:`~decent_bench.schemes.GilbertElliott`
+models bursty drops with a two-state channel.
+
+Message schemes can be provided as one shared instance or as a dictionary
+mapping each sender agent to its own scheme. Use one instance per sender for
+stateful schemes, since sharing a stateful scheme shares its internal state
+across all senders.
+
+.. code-block:: python
+
+    from decent_bench.schemes import (
+        GaussianNoise,
+        StochasticQuantization,
+        UniformActivationRate,
+        UniformDropRate,
+    )
+
+    problem = BenchmarkProblem(
+        network_structure=network_structure,
+        costs=costs,
+        x_optimal=x_optimal,
+        agent_activations=[UniformActivationRate(0.8) for _ in costs],
+        message_compression=StochasticQuantization(n_levels=8),
+        message_noise=GaussianNoise(mean=0, std=0.001),
+        message_drop=UniformDropRate(drop_rate=0.1),
+    )
+
+.. footbibliography::
 
 
 Create problems from scratch

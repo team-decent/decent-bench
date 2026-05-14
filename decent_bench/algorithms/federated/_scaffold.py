@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import ClientSelectionScheme, UniformClientSelection
+from decent_bench.schemes import ClientSelectionScheme, UniformSelection
 from decent_bench.utils._tags import tags
 from decent_bench.utils.types import InitialStates
 
@@ -58,6 +58,14 @@ class Scaffold(FedAlgorithm):
     where both aggregated deltas are averaged uniformly over the selected clients.
 
     .. footbibliography::
+
+    Note:
+        ``x0`` and ``c0`` follow the :obj:`~decent_bench.utils.types.InitialStates` convention and are resolved
+        per agent during ``initialize`` via
+        :func:`~decent_bench.algorithms.utils.initial_states`. For federated networks, ``c0`` dictionaries can
+        include both client control variates and the server control variate. If the server entry is missing, it is
+        inferred as the average of the client control variates.
+
     """
 
     iterations: int = 100
@@ -65,9 +73,10 @@ class Scaffold(FedAlgorithm):
     num_local_epochs: int = 1
     server_step_size: float = 1.0
     selection_scheme: ClientSelectionScheme | None = field(
-        default_factory=lambda: UniformClientSelection(client_fraction=1.0)
+        default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
     )
     x0: InitialStates = None
+    c0: InitialStates = None
     name: str = "Scaffold"
 
     def __post_init__(self) -> None:
@@ -87,17 +96,18 @@ class Scaffold(FedAlgorithm):
 
     def initialize(self, network: FedNetwork) -> None:
         self.x0 = initial_states(self.x0, network)
+        self.c0 = initial_states(self.c0, network)
         server = network.server()
         server_x0 = self.x0[server]
         server.initialize(
             x=server_x0,
-            aux_vars={"c": iop.zeros_like(server_x0)},
+            aux_vars={"c": self.c0[server]},
         )
         for client in network.clients():
             client_x0 = self.x0[client]
             client.initialize(
                 x=client_x0,
-                aux_vars={"c_i": iop.zeros_like(client_x0)},
+                aux_vars={"c_i": self.c0[client]},
             )
 
     def step(self, network: FedNetwork, iteration: int) -> None:
@@ -109,12 +119,11 @@ class Scaffold(FedAlgorithm):
         participating_clients = self._clients_with_server_broadcast(network, selected_clients)
         if not participating_clients:
             return
-        self._clear_buffered_server_messages(network, participating_clients)
         self._run_local_updates(network, participating_clients)
         self.aggregate(network, participating_clients)
 
     def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        """Send the current server model and server control variate to the selected clients."""
+        """Send the current server model and control variate."""
         payload = iop.stack([network.server().x, network.server().aux_vars["c"]], dim=0)
         network.send(sender=network.server(), receiver=selected_clients, msg=payload)
 
@@ -157,9 +166,7 @@ class Scaffold(FedAlgorithm):
         """
         Aggregate received SCAFFOLD client deltas using uniform averaging.
 
-        When used with :class:`~decent_bench.networks.Network` ``buffer_messages=True``, this method assumes the
-        caller has already removed stale buffered client-to-server messages for the participating clients, so only
-        current-round updates are aggregated.
+        Only current-round client deltas received by the server are aggregated.
         """
         server = network.server()
         received_clients = [client for client in participating_clients if client in server.messages]
