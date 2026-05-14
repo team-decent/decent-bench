@@ -48,16 +48,6 @@ class Network(ABC):  # noqa: B024
             not of type :class:`~decent_bench.agents.Agent`, if any two agents have incompatible costs, or if
             any agent is already assigned to another network (i.e. it has index != -1).
 
-    Raises:
-        ValueError: if the graph is not connected, if it is directed, if it is a multi-graph, if its nodes are
-            not of type :class:`~decent_bench.agents.Agent`, if any two agents have incompatible costs, or if
-            any agent is already assigned to another network (i.e. it has index != -1).
-
-    Raises:
-        ValueError: if the graph is not connected, if it is directed, if it is a multi-graph, if its nodes are
-            not of type :class:`~decent_bench.agents.Agent`, if any two agents have incompatible costs, or if
-            any agent is already assigned to another network (i.e. it has index != -1).
-
     """
 
     def __init__(
@@ -79,7 +69,7 @@ class Network(ABC):  # noqa: B024
         self._validate_agent_cost_compatibility(graph)
         for idx, agent in enumerate(graph.nodes()):  # assign agent index within the network
             if agent.index != -1:
-                raise ValueError("Agents can only be asigned to one network at a time")
+                raise ValueError("Agents can only be assigned to one network at a time")
             agent.index = idx
 
         self._graph = graph
