@@ -487,22 +487,10 @@ def test_compute_metrics_uses_federated_defaults_and_server_metrics() -> None:  
     total_communication_metric = next(
         metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.TotalCommunication)
     )
-    uplink_metric = next(
-        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.UplinkMessages)
-    )
-    downlink_metric = next(
-        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.DownlinkMessages)
-    )
-    downlink_dropped_metric = next(
-        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.DownlinkMessagesDropped)
-    )
 
     assert metrics_result.table_results is not None
     assert metrics_result.table_results[algorithm][selected_metric]["single"] == (1.0, 0.0)
     assert metrics_result.table_results[algorithm][total_communication_metric]["single"] == (8.0, 0.0)
-    assert metrics_result.table_results[algorithm][uplink_metric]["single"] == (4.0, 0.0)
-    assert metrics_result.table_results[algorithm][downlink_metric]["single"] == (4.0, 0.0)
-    assert metrics_result.table_results[algorithm][downlink_dropped_metric]["single"] == (0.0, 0.0)
 
 
 def test_compute_metrics_custom_metrics_do_not_append_federated_defaults(monkeypatch) -> None:  # noqa: D103

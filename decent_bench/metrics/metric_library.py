@@ -21,7 +21,7 @@ class Regret(Metric):
     Global regret.
 
     Table:
-        Global regret using the agents' final x.
+        Global regret using the agents'/clients' final x.
 
     Plot:
         Global regret (y-axis) per iteration (x-axis).
@@ -32,10 +32,6 @@ class Regret(Metric):
 
     Note:
         Available only when ``problem.x_optimal`` is provided.
-
-    Note:
-        For :class:`~decent_bench.networks.FedNetwork`, this metric is evaluated at the mean client model, not at the
-        server model.
 
     """
 
@@ -64,7 +60,7 @@ class GradientNorm(Metric):
     Global gradient norm.
 
     Table:
-        Gradient norm using the agents' final x.
+        Gradient norm using the agents'/clients' final x.
 
     Plot:
         Gradient norm (y-axis) per iteration (x-axis).
@@ -72,10 +68,6 @@ class GradientNorm(Metric):
     Gradient norm is defined as:
 
     .. include:: snippets/global_gradient_optimality.rst
-
-    Note:
-        For :class:`~decent_bench.networks.FedNetwork`, this metric is evaluated at the mean client model, not at the
-        server model.
 
     """
 
@@ -96,26 +88,22 @@ class XError(Metric):
     Distance to optimal solution.
 
     Table:
-        Distance to optimal solution using the agents' final x.
+        Distance to optimal solution using the agents'/clients' final x.
 
     Plot:
         Distance to optimal solution (y-axis) per iteration (x-axis).
 
-    X error per agent is defined as:
+    X error per agent/client is defined as:
 
     .. math::
         \{ \|\mathbf{x}_i - \mathbf{x}^\star\|, \|\mathbf{x}_j - \mathbf{x}^\star\|, ... \}
 
-    where :math:`\mathbf{x}_i` is agent i's final x,
-    :math:`\mathbf{x}_j` is agent j's final x,
+    where :math:`\mathbf{x}_i` is agent/client i's final x,
+    :math:`\mathbf{x}_j` is agent/client j's final x,
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
 
     Note:
         Available only when ``problem.x_optimal`` is provided.
-
-    Note:
-        For :class:`~decent_bench.networks.FedNetwork`, this metric measures the error of client local models, not the
-        server model.
 
     """
 
@@ -144,25 +132,21 @@ class ConsensusError(Metric):
     Distance to consensus.
 
     Table:
-        Distance of the agents states from their current average.
+        Distance of the agents'/clients' states from their current average.
 
     Plot:
         Distance to consensus (y-axis) per iteration (x-axis).
 
-    The consensus error per agent is defined as:
+    The consensus error per agent/client is defined as:
 
     .. math::
         \{ \|\mathbf{x}_i - \bar{\mathbf{x}}\|, \|\mathbf{x}_j - \bar{\mathbf{x}}\|, ... \}
 
-    where :math:`\mathbf{x}_i` is agent i's current state,
-    :math:`\bar{\mathbf{x}}` is the average of all agents' states, and :math:`\| \cdot \|` is the 2-norm.
+    where :math:`\mathbf{x}_i` is agent/client i's current state,
+    :math:`\bar{\mathbf{x}}` is the average of all agents'/clients' states, and :math:`\| \cdot \|` is the 2-norm.
 
     .. seealso::
         :class:`~decent_bench.metrics.runtime_library.RuntimeConsensusError` for the runtime version.
-
-    Note:
-        For :class:`~decent_bench.networks.FedNetwork`, this metric measures client spread around the client mean. It
-        is not client drift from the server model.
 
     """
 
@@ -402,16 +386,16 @@ class SentMessagesDropped(Metric):
 
 class Accuracy(Metric):
     r"""
-    Accuracy of the agents' predictions.
+    Accuracy of the agents'/clients' predictions.
 
     Table:
-        Accuracy of the agents' final x.
+        Accuracy of the agents'/clients' final x.
 
     Plot:
         Accuracy (y-axis) per iteration (x-axis).
 
-        Accuracy is calculated as the mean accuracy across agents, where each agent's accuracy is calculated using its
-        recorded x at that iteration.
+        Accuracy is calculated as the mean accuracy across agents/clients, where each agent's/client's accuracy is
+        calculated using its recorded x at that iteration.
 
     Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
 
@@ -429,10 +413,6 @@ class Accuracy(Metric):
         - ``problem.test_data`` is provided,
         - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`,
         - target labels are integer-valued.
-
-    Note:
-        For :class:`~decent_bench.networks.FedNetwork`, this metric evaluates client local models, not the server
-        model.
 
     """
 
@@ -464,16 +444,16 @@ class Accuracy(Metric):
 
 class MSE(Metric):
     r"""
-    Mean squared error of the agents' predictions.
+    Mean squared error of the agents'/clients' predictions.
 
     Table:
-        Mean squared error of the agents' final x.
+        Mean squared error of the agents'/clients' final x.
 
     Plot:
         Mean Squared Error (MSE) (y-axis) per iteration (x-axis).
 
-        MSE is calculated as the mean MSE across agents, where each agent's MSE is calculated using its
-        recorded x at that iteration.
+        MSE is calculated as the mean MSE across agents/clients, where each agent's/client's MSE is calculated using
+        its recorded x at that iteration.
 
     Only available for :class:`~decent_bench.costs.EmpiricalRiskCost`.
 
@@ -489,10 +469,6 @@ class MSE(Metric):
     Note:
         Available only when ``problem.test_data`` is provided and all agent costs are
         :class:`~decent_bench.costs.EmpiricalRiskCost`.
-
-    Note:
-        For :class:`~decent_bench.networks.FedNetwork`, this metric evaluates client local models, not the server
-        model.
 
     """
 
@@ -521,16 +497,16 @@ class MSE(Metric):
 
 class Precision(Metric):
     r"""
-    Precision of the agents' predictions.
+    Precision of the agents'/clients' predictions.
 
     Table:
-        Precision of the agents' final x.
+        Precision of the agents'/clients' final x.
 
     Plot:
         Precision (y-axis) per iteration (x-axis).
 
-        Precision is calculated as the mean precision across agents, where each agent's precision is calculated using
-        its recorded x at that iteration.
+        Precision is calculated as the mean precision across agents/clients, where each agent's/client's precision is
+        calculated using its recorded x at that iteration.
 
     Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
 
@@ -548,10 +524,6 @@ class Precision(Metric):
         - ``problem.test_data`` is provided,
         - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`,
         - target labels are integer-valued.
-
-    Note:
-        For :class:`~decent_bench.networks.FedNetwork`, this metric evaluates client local models, not the server
-        model.
 
     """
 
@@ -583,16 +555,16 @@ class Precision(Metric):
 
 class Recall(Metric):
     r"""
-    Recall of the agents' predictions.
+    Recall of the agents'/clients' predictions.
 
     Table:
-        Recall of the agents' final x.
+        Recall of the agents'/clients' final x.
 
     Plot:
         Recall (y-axis) per iteration (x-axis).
 
-        Recall is calculated as the mean recall across agents, where each agent's recall is calculated using its
-        recorded x at that iteration.
+        Recall is calculated as the mean recall across agents/clients, where each agent's/client's recall is calculated
+        using its recorded x at that iteration.
 
     Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
 
@@ -610,10 +582,6 @@ class Recall(Metric):
         - ``problem.test_data`` is provided,
         - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`,
         - target labels are integer-valued.
-
-    Note:
-        For :class:`~decent_bench.networks.FedNetwork`, this metric evaluates client local models, not the server
-        model.
 
     """
 
@@ -645,20 +613,16 @@ class Recall(Metric):
 
 class Loss(Metric):
     r"""
-    Loss of the agents' predictions.
+    Loss of the agents'/clients' predictions.
 
     Table:
-        Loss of the agents' final x.
+        Loss of the agents'/clients' final x.
 
     Plot:
         Loss (y-axis) per iteration (x-axis).
 
-        Loss is calculated as the mean loss across agents, where each agent's loss is calculated using its
-        recorded x at that iteration.
-
-    Note:
-        For :class:`~decent_bench.networks.FedNetwork`, this metric evaluates client local models, not the server
-        model.
+        Loss is calculated as the mean loss across agents/clients, where each agent's/client's loss is calculated using
+        its recorded x at that iteration.
 
     """
 
@@ -789,10 +753,11 @@ class TotalCommunication(Metric):
     Total sent message attempts by clients and the server.
 
     Table:
-        Sum of client sent messages and server sent messages.
+        Sum of client sent messages and server sent messages, including messages dropped by the communication scheme.
 
     Note:
-        Available only for :class:`~decent_bench.networks.FedNetwork`.
+        Available only for :class:`~decent_bench.networks.FedNetwork`. For peer-to-peer networks, use the ``sum``
+        statistic of :class:`SentMessages`.
 
     """
 
@@ -811,7 +776,7 @@ class TotalCommunication(Metric):
         agents: Sequence[AgentMetricsView],  # noqa: ARG002
         problem: "BenchmarkProblem",  # noqa: ARG002
         iteration: int,  # noqa: ARG002
-    ) -> tuple[float]:
+    ) -> tuple[int]:
         raise ValueError(f"{self.table_description} requires a FedNetwork server metrics view")
 
     def get_federated_table_data(  # noqa: D102
@@ -819,129 +784,9 @@ class TotalCommunication(Metric):
         agents: Sequence[AgentMetricsView],
         server: AgentMetricsView,
         problem: "BenchmarkProblem",  # noqa: ARG002
-    ) -> tuple[float]:
+    ) -> tuple[int]:
         server = utils._require_server_view(server, self.table_description)  # noqa: SLF001
         return (sum(agent.n_sent_messages for agent in agents) + server.n_sent_messages,)
-
-
-class UplinkMessages(Metric):
-    r"""
-    Number of client-to-server messages received by the server.
-
-    Table:
-        Server received messages.
-
-    Note:
-        Available only for :class:`~decent_bench.networks.FedNetwork`.
-
-    """
-
-    table_description: str = "uplink messages"
-    plot_description: str = "uplink messages"
-    can_diverge: bool = False
-
-    def is_available(  # noqa: D102
-        self,
-        problem: "BenchmarkProblem",
-    ) -> tuple[bool, str | None]:
-        return _requires_fednetwork(problem, self.table_description)
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],  # noqa: ARG002
-        problem: "BenchmarkProblem",  # noqa: ARG002
-        iteration: int,  # noqa: ARG002
-    ) -> tuple[int]:
-        raise ValueError(f"{self.table_description} requires a FedNetwork server metrics view")
-
-    def get_federated_table_data(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],  # noqa: ARG002
-        server: AgentMetricsView,
-        problem: "BenchmarkProblem",  # noqa: ARG002
-    ) -> tuple[int]:
-        server = utils._require_server_view(server, self.table_description)  # noqa: SLF001
-        return (server.n_received_messages,)
-
-
-class DownlinkMessages(Metric):
-    r"""
-    Number of server-to-client message attempts sent by the server.
-
-    Table:
-        Server sent messages.
-
-    Note:
-        Available only for :class:`~decent_bench.networks.FedNetwork`.
-
-    """
-
-    table_description: str = "downlink messages"
-    plot_description: str = "downlink messages"
-    can_diverge: bool = False
-
-    def is_available(  # noqa: D102
-        self,
-        problem: "BenchmarkProblem",
-    ) -> tuple[bool, str | None]:
-        return _requires_fednetwork(problem, self.table_description)
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],  # noqa: ARG002
-        problem: "BenchmarkProblem",  # noqa: ARG002
-        iteration: int,  # noqa: ARG002
-    ) -> tuple[int]:
-        raise ValueError(f"{self.table_description} requires a FedNetwork server metrics view")
-
-    def get_federated_table_data(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],  # noqa: ARG002
-        server: AgentMetricsView,
-        problem: "BenchmarkProblem",  # noqa: ARG002
-    ) -> tuple[int]:
-        server = utils._require_server_view(server, self.table_description)  # noqa: SLF001
-        return (server.n_sent_messages,)
-
-
-class DownlinkMessagesDropped(Metric):
-    r"""
-    Number of server-to-client message attempts dropped.
-
-    Table:
-        Server sent messages dropped.
-
-    Note:
-        Available only for :class:`~decent_bench.networks.FedNetwork`.
-
-    """
-
-    table_description: str = "downlink messages dropped"
-    plot_description: str = "downlink messages dropped"
-    can_diverge: bool = False
-
-    def is_available(  # noqa: D102
-        self,
-        problem: "BenchmarkProblem",
-    ) -> tuple[bool, str | None]:
-        return _requires_fednetwork(problem, self.table_description)
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],  # noqa: ARG002
-        problem: "BenchmarkProblem",  # noqa: ARG002
-        iteration: int,  # noqa: ARG002
-    ) -> tuple[int]:
-        raise ValueError(f"{self.table_description} requires a FedNetwork server metrics view")
-
-    def get_federated_table_data(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],  # noqa: ARG002
-        server: AgentMetricsView,
-        problem: "BenchmarkProblem",  # noqa: ARG002
-    ) -> tuple[int]:
-        server = utils._require_server_view(server, self.table_description)  # noqa: SLF001
-        return (server.n_sent_messages_dropped,)
 
 
 class ServerMSE(Metric):
@@ -1087,7 +932,7 @@ class ServerAccuracy(Metric):
         ]
 
 
-DEFAULT_TABLE_METRICS: list[Metric] = [
+_BASE_TABLE_METRICS: list[Metric] = [
     Regret([utils.single]),
     GradientNorm([utils.single]),
     XError([min, np.average, max]),
@@ -1120,7 +965,7 @@ DEFAULT_TABLE_METRICS: list[Metric] = [
 :meta hide-value:
 """
 
-REGRESSION_TABLE_METRICS: list[Metric] = [
+_REGRESSION_TABLE_METRICS: list[Metric] = [
     MSE([min, np.average, max], x_log=False, y_log=True),
 ]
 """
@@ -1129,7 +974,7 @@ REGRESSION_TABLE_METRICS: list[Metric] = [
 :meta hide-value:
 """
 
-CLASSIFICATION_TABLE_METRICS: list[Metric] = [
+_CLASSIFICATION_TABLE_METRICS: list[Metric] = [
     Accuracy([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
     Precision([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
     Recall([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
@@ -1145,7 +990,7 @@ CLASSIFICATION_TABLE_METRICS: list[Metric] = [
 # No need to specify statistics for plot metrics as they are only
 # used for table metrics, if you were to use the same Metric object
 # for both, you would need to specify statistics
-DEFAULT_PLOT_METRICS: list[Metric] = [
+_BASE_PLOT_METRICS: list[Metric] = [
     Regret([], x_log=False, y_log=True),
     GradientNorm([], x_log=False, y_log=True),
     ConsensusError([], x_log=False, y_log=True),
@@ -1161,14 +1006,14 @@ DEFAULT_PLOT_METRICS: list[Metric] = [
 """
 
 
-REGRESSION_PLOT_METRICS: list[Metric] = REGRESSION_TABLE_METRICS
+_REGRESSION_PLOT_METRICS: list[Metric] = _REGRESSION_TABLE_METRICS
 """
 - :class:`MSE` (semi-log)
 
 :meta hide-value:
 """
 
-CLASSIFICATION_PLOT_METRICS: list[Metric] = CLASSIFICATION_TABLE_METRICS
+_CLASSIFICATION_PLOT_METRICS: list[Metric] = _CLASSIFICATION_TABLE_METRICS
 """
 - :class:`Accuracy` (linear)
 - :class:`Precision` (linear)
@@ -1177,78 +1022,78 @@ CLASSIFICATION_PLOT_METRICS: list[Metric] = CLASSIFICATION_TABLE_METRICS
 :meta hide-value:
 """
 
-FEDERATED_TABLE_METRICS: list[Metric] = [
-    *DEFAULT_TABLE_METRICS,
+_FEDERATED_TABLE_METRICS: list[Metric] = [
     ClientDriftFromServer([min, np.average, max]),
     SelectedParticipationFraction([utils.single], fmt=".2%", x_log=False, y_log=False),
     TotalCommunication([utils.single]),
-    UplinkMessages([utils.single]),
-    DownlinkMessages([utils.single]),
-    DownlinkMessagesDropped([utils.single]),
 ]
 """
-- :const:`DEFAULT_TABLE_METRICS`
 - :class:`ClientDriftFromServer` - min, average, max
 - :class:`SelectedParticipationFraction` - single value with percentage format
 - :class:`TotalCommunication` - single value
-- :class:`UplinkMessages` - single value
-- :class:`DownlinkMessages` - single value
-- :class:`DownlinkMessagesDropped` - single value
 
 :meta hide-value:
 """
 
-FEDERATED_PLOT_METRICS: list[Metric] = [
-    *DEFAULT_PLOT_METRICS,
+_FEDERATED_PLOT_METRICS: list[Metric] = [
     ClientDriftFromServer([], x_log=False, y_log=True),
 ]
 """
-- :const:`DEFAULT_PLOT_METRICS`
 - :class:`ClientDriftFromServer` (semi-log)
 
 :meta hide-value:
 """
 
-FEDERATED_REGRESSION_TABLE_METRICS: list[Metric] = [
-    *REGRESSION_TABLE_METRICS,
+_FEDERATED_REGRESSION_TABLE_METRICS: list[Metric] = [
     ServerMSE([utils.single], x_log=False, y_log=True),
 ]
 """
-- :const:`REGRESSION_TABLE_METRICS`
 - :class:`ServerMSE` - single value
 
 :meta hide-value:
 """
 
-FEDERATED_REGRESSION_PLOT_METRICS: list[Metric] = [
-    *REGRESSION_PLOT_METRICS,
+_FEDERATED_REGRESSION_PLOT_METRICS: list[Metric] = [
     ServerMSE([], x_log=False, y_log=True),
 ]
 """
-- :const:`REGRESSION_PLOT_METRICS`
 - :class:`ServerMSE` (semi-log)
 
 :meta hide-value:
 """
 
-FEDERATED_CLASSIFICATION_TABLE_METRICS: list[Metric] = [
-    *CLASSIFICATION_TABLE_METRICS,
+_FEDERATED_CLASSIFICATION_TABLE_METRICS: list[Metric] = [
     ServerAccuracy([utils.single], fmt=".2%", x_log=False, y_log=False),
 ]
 """
-- :const:`CLASSIFICATION_TABLE_METRICS`
 - :class:`ServerAccuracy` - single value with percentage format
 
 :meta hide-value:
 """
 
-FEDERATED_CLASSIFICATION_PLOT_METRICS: list[Metric] = [
-    *CLASSIFICATION_PLOT_METRICS,
+_FEDERATED_CLASSIFICATION_PLOT_METRICS: list[Metric] = [
     ServerAccuracy([], fmt=".2%", x_log=False, y_log=False),
 ]
 """
-- :const:`CLASSIFICATION_PLOT_METRICS`
 - :class:`ServerAccuracy` (linear)
 
 :meta hide-value:
 """
+
+_DEFAULT_TABLE_METRICS: list[Metric] = [
+    *_BASE_TABLE_METRICS,
+    *_REGRESSION_TABLE_METRICS,
+    *_CLASSIFICATION_TABLE_METRICS,
+    *_FEDERATED_TABLE_METRICS,
+    *_FEDERATED_REGRESSION_TABLE_METRICS,
+    *_FEDERATED_CLASSIFICATION_TABLE_METRICS,
+]
+
+_DEFAULT_PLOT_METRICS: list[Metric] = [
+    *_BASE_PLOT_METRICS,
+    *_REGRESSION_PLOT_METRICS,
+    *_CLASSIFICATION_PLOT_METRICS,
+    *_FEDERATED_PLOT_METRICS,
+    *_FEDERATED_REGRESSION_PLOT_METRICS,
+    *_FEDERATED_CLASSIFICATION_PLOT_METRICS,
+]

@@ -42,12 +42,11 @@ def compute_metrics(
             checkpoint manager
         checkpoint_manager: if provided, will be used to save results of metrics computation and/or load benchmark
             result.
-        table_metrics: metrics to tabulate as confidence intervals after the execution. Defaults to
-            :const:`~decent_bench.metrics.metric_library.DEFAULT_TABLE_METRICS` for non-federated problems and
-            :const:`~decent_bench.metrics.metric_library.FEDERATED_TABLE_METRICS` for federated problems.
-        plot_metrics: metrics to plot after the execution. Defaults to
-            :const:`~decent_bench.metrics.metric_library.DEFAULT_PLOT_METRICS` for non-federated problems and
-            :const:`~decent_bench.metrics.metric_library.FEDERATED_PLOT_METRICS` for federated problems.
+        table_metrics: metrics to tabulate as confidence intervals after the execution. If ``None``, all table metrics
+            available for the benchmark problem will be used. For example, federated-only metrics are removed when a
+            non-federated network is passed.
+        plot_metrics: metrics to plot after the execution. If ``None``, all plot metrics available for the benchmark
+            problem will be used.
             If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
             metrics will be grouped and plotted in their own figure with subplots.
         confidence_level: confidence level for computing confidence intervals of the table metrics, expressed as a value
@@ -98,7 +97,7 @@ def compute_metrics(
         if len(benchmark_result.states) == 0:
             raise ValueError("No benchmark result found in checkpoint manager to compute metrics")
 
-    table_metrics, plot_metrics = _resolve_default_metrics(table_metrics, plot_metrics, benchmark_result.problem)
+    table_metrics, plot_metrics = _resolve_default_metrics(table_metrics, plot_metrics)
 
     # work on independent metric instances
     table_metrics = deepcopy(table_metrics)
@@ -168,14 +167,11 @@ def compute_metrics(
 def _resolve_default_metrics(
     table_metrics: list[Metric] | None,
     plot_metrics: list[Metric] | list[list[Metric]] | None,
-    problem: "BenchmarkProblem",
 ) -> tuple[list[Metric], list[Metric] | list[list[Metric]]]:
     if table_metrics is None:
-        table_metrics = (
-            ml.FEDERATED_TABLE_METRICS if isinstance(problem.network, FedNetwork) else ml.DEFAULT_TABLE_METRICS
-        )
+        table_metrics = ml._DEFAULT_TABLE_METRICS  # noqa: SLF001
     if plot_metrics is None:
-        plot_metrics = ml.FEDERATED_PLOT_METRICS if isinstance(problem.network, FedNetwork) else ml.DEFAULT_PLOT_METRICS
+        plot_metrics = ml._DEFAULT_PLOT_METRICS  # noqa: SLF001
     return table_metrics, plot_metrics
 
 
