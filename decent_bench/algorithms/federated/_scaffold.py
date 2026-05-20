@@ -111,7 +111,7 @@ class Scaffold(FedAlgorithm):
             )
 
     def step(self, network: FedNetwork, iteration: int) -> None:
-        selected_clients = self._selected_clients_for_round(network, iteration)
+        selected_clients = self.selected_clients_for_round(network, iteration)
         if not selected_clients:
             return
 

@@ -62,14 +62,16 @@ class FedAlgorithm(Algorithm[FedNetwork]):
             )
         return {client: self.num_local_steps[client] for client in clients}
 
-    def _selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
+    def selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
         """
-        Select participating clients for the current round from the currently active clients and record them.
+        Select participating clients for the current round and record participation.
+
+        Use this method once per federated round when selecting participating clients in the round. It applies
+        ``self.selection_scheme`` to the currently active clients and updates the selection counters used by
+        participation metrics. Calling it more than once in the same round will increment the selected-client counters
+        more than once.
 
         If ``self.selection_scheme`` is ``None``, all active clients are selected.
-
-        Federated algorithms should use this helper for round-level client selection so participation counters remain
-        consistent with the executed training path.
         """
         active_clients = network.active_clients()
         if not active_clients:

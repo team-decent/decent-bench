@@ -200,7 +200,7 @@ class FedLT(FedAlgorithm):
         y = self._compute_server_y(network)
         network.server().x = y
 
-        selected_clients = self._selected_clients_for_round(network, iteration)
+        selected_clients = self.selected_clients_for_round(network, iteration)
         if not selected_clients:
             return
 

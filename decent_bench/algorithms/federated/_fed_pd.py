@@ -102,7 +102,7 @@ class FedPD(FedAlgorithm):
     def step(self, network: FedNetwork, iteration: int) -> None:
         if self.selection_scheme is not None:
             raise ValueError("FedPD does not support client selection")
-        participating_clients = self._selected_clients_for_round(network, iteration)
+        participating_clients = self.selected_clients_for_round(network, iteration)
         if not participating_clients:
             return
 
