@@ -67,6 +67,9 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         Select participating clients for the current round from the currently active clients and record them.
 
         If ``self.selection_scheme`` is ``None``, all active clients are selected.
+
+        Federated algorithms should use this helper for round-level client selection so participation counters remain
+        consistent with the executed training path.
         """
         active_clients = network.active_clients()
         if not active_clients:
