@@ -16,7 +16,7 @@ from decent_bench.metrics import (
     metric_utils,
 )
 from decent_bench.metrics import metric_library as ml
-from decent_bench.networks import FedNetwork, Network
+from decent_bench.networks import Network
 from decent_bench.utils._metric_helpers import _find_duplicates, _flatten_plot_metrics
 from decent_bench.utils.logger import LOGGER, start_logger
 
@@ -119,25 +119,20 @@ def compute_metrics(
 
     # compute table and plot results
     resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
-    resulting_server_states: dict[Algorithm[Network], list[AgentMetricsView]] = {}
     for alg, networks in benchmark_result.states.items():
-        resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
-        fed_networks = [nw for nw in networks if isinstance(nw, FedNetwork)]
-        if len(fed_networks) == len(networks):
-            resulting_server_states[alg] = [AgentMetricsView.from_agent(nw.server()) for nw in fed_networks]
-    server_states = resulting_server_states or None
+        resulting_agent_states[alg] = [
+            [AgentMetricsView.from_agent(a) for a in nw.snapshot_agents()] for nw in networks
+        ]
     table_results = compute_tables(
         resulting_agent_states,
         benchmark_result.problem,
         table_metrics,
         confidence_level,
-        resulting_server_states=server_states,
     )
     plot_results = compute_plots(
         resulting_agent_states,
         benchmark_result.problem,
         plot_metrics,
-        resulting_server_states=server_states,
     )
 
     result = MetricResult(
@@ -146,7 +141,6 @@ def compute_metrics(
         plot_metrics=plot_metrics,
         table_results=table_results,
         plot_results=plot_results,
-        server_metrics=server_states,
     )
 
     if checkpoint_manager is not None:

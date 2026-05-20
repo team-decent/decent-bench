@@ -19,9 +19,8 @@ class MetricResult:
     and plot data for visualization.
 
     * `agent_metrics`: contains the raw agent-level metrics for each algorithm, organized by algorithm where
-      each algorithm maps to a sequence of trials, with each trial containing metrics for all agents.
-    * `server_metrics`: contains one server metric view per trial for federated algorithms, organized by algorithm.
-      It is ``None`` when the result does not include a :class:`~decent_bench.networks.FedNetwork`.
+      each algorithm maps to a sequence of trials, with each trial containing metrics for all snapshotted agents.
+      For federated networks, this includes the server.
     * `table_metrics`: contains the list of metrics that were tabulated as confidence intervals.
     * `plot_metrics`: contains the list of metrics that were plotted.
     * `table_results`: contains the computed table statistics for each algorithm and metric, organized by
@@ -44,7 +43,6 @@ class MetricResult:
         ]
         | None
     )
-    server_metrics: Mapping[Algorithm[Network], Sequence[AgentMetricsView]] | None = None
 
     @property
     def available_algorithms(self) -> list[str]:
@@ -53,7 +51,6 @@ class MetricResult:
             algorithm.name
             for mapping in (
                 self.agent_metrics,
-                getattr(self, "server_metrics", None),
                 self.table_results,
                 self.plot_results,
             )

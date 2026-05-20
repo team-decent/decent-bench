@@ -115,12 +115,12 @@ class Metric(ABC):
         Get the data for this metric from a trial.
 
         Args:
-            agents: the agents being evaluated
+            agents: the snapshotted agent views being evaluated. For federated networks, this may include the server.
             problem: the benchmark problem being evaluated
             iteration: the iteration at which to evaluate the metric, or -1 to use the agents' final x
 
         Returns:
-            a list of floats, one for each agent
+            a sequence of metric values
 
         """
 
@@ -134,20 +134,6 @@ class Metric(ABC):
         """
         return self.get_data_from_trial(agents, problem, -1)
 
-    def get_federated_table_data(
-        self,
-        agents: Sequence[AgentMetricsView],
-        server: AgentMetricsView,  # noqa: ARG002
-        problem: "BenchmarkProblem",
-    ) -> Sequence[float]:
-        """
-        Extract trial data to be used in the table when a federated server view is available.
-
-        The default preserves the existing client-only metric semantics. Federated metrics can override this method
-        to use the server view explicitly.
-        """
-        return self.get_table_data(agents, problem)
-
     def get_plot_data(self, agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem") -> Sequence[tuple[X, Y]]:
         """
         Extract trial data to be used in plots for this metric.
@@ -160,17 +146,3 @@ class Metric(ABC):
             (i, float(np.mean(self.get_data_from_trial(agents, problem, i))))
             for i in utils.all_sorted_iterations(agents)
         ]
-
-    def get_federated_plot_data(
-        self,
-        agents: Sequence[AgentMetricsView],
-        server: AgentMetricsView,  # noqa: ARG002
-        problem: "BenchmarkProblem",
-    ) -> Sequence[tuple[X, Y]]:
-        """
-        Extract trial data to be used in plots when a federated server view is available.
-
-        The default preserves the existing client-only metric semantics. Federated metrics can override this method
-        to use the server view explicitly.
-        """
-        return self.get_plot_data(agents, problem)

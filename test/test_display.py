@@ -75,6 +75,7 @@ def _agent_metrics_view(x_value: float) -> AgentMetricsView:
         n_received_messages=0,
         n_sent_messages_dropped=0,
         n_times_selected=0,
+        is_server=False,
     )
 
 
@@ -467,13 +468,15 @@ def test_compute_metrics_rejects_duplicate_plot_metric_descriptions(monkeypatch)
         compute_metrics(benchmark_result=benchmark_result, table_metrics=[], plot_metrics=[[metric_1], [metric_2]])
 
 
-def test_compute_metrics_uses_federated_defaults_and_server_metrics() -> None:  # noqa: D103
+def test_compute_metrics_uses_federated_defaults_and_server_view() -> None:  # noqa: D103
     benchmark_result, algorithm = _build_federated_benchmark_result(iterations=2)
 
     metrics_result = compute_metrics(benchmark_result=benchmark_result, log_level=40)
 
-    assert metrics_result.server_metrics is not None
-    assert metrics_result.server_metrics[algorithm][0].x_history.max() == 2
+    assert metrics_result.agent_metrics is not None
+    server_views = [view for view in metrics_result.agent_metrics[algorithm][0] if view.is_server]
+    assert len(server_views) == 1
+    assert server_views[0].x_history.max() == 2
     table_metric_types = {type(metric) for metric in metrics_result.table_metrics or []}
     plot_metric_types = {type(metric) for metric in metrics_result.plot_metrics or []}
     assert ml.ClientDriftFromServer in table_metric_types
@@ -813,15 +816,27 @@ def test_server_mse_availability_and_values() -> None:  # noqa: D103
     assert available
     assert reason is None
 
-    server = Agent(1, cost)
-    server.initialize(x=np.array([0.0]))
-    server.x = np.array([1.0])
-    server._snapshot(1)
     client_view = AgentMetricsView.from_agent(client)
-    server_view = AgentMetricsView.from_agent(server)
+    server_history = AgentHistory()
+    server_history[0] = np.array([0.0])
+    server_history[1] = np.array([1.0])
+    server_view = AgentMetricsView(
+        cost=cost,
+        x_history=server_history,
+        n_x_updates=0,
+        n_function_calls=0.0,
+        n_gradient_calls=0.0,
+        n_hessian_calls=0.0,
+        n_proximal_calls=0.0,
+        n_sent_messages=0,
+        n_received_messages=0,
+        n_sent_messages_dropped=0,
+        n_times_selected=0,
+        is_server=True,
+    )
 
-    assert metric.get_federated_table_data([client_view], server_view, problem) == (0.0,)
-    assert metric.get_federated_plot_data([client_view], server_view, problem) == [(0, 1.0), (1, 0.0)]
+    assert metric.get_table_data([client_view, server_view], problem) == (0.0,)
+    assert metric.get_plot_data([client_view, server_view], problem) == [(0, 1.0), (1, 0.0)]
 
 
 def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
@@ -845,15 +860,27 @@ def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
     assert available
     assert reason is None
 
-    server = Agent(1, cost)
-    server.initialize(x=np.array([0.0]))
-    server.x = np.array([10.0])
-    server._snapshot(1)
     client_view = AgentMetricsView.from_agent(client)
-    server_view = AgentMetricsView.from_agent(server)
+    server_history = AgentHistory()
+    server_history[0] = np.array([0.0])
+    server_history[1] = np.array([10.0])
+    server_view = AgentMetricsView(
+        cost=cost,
+        x_history=server_history,
+        n_x_updates=0,
+        n_function_calls=0.0,
+        n_gradient_calls=0.0,
+        n_hessian_calls=0.0,
+        n_proximal_calls=0.0,
+        n_sent_messages=0,
+        n_received_messages=0,
+        n_sent_messages_dropped=0,
+        n_times_selected=0,
+        is_server=True,
+    )
 
-    assert metric.get_federated_table_data([client_view], server_view, problem) == (1.0,)
-    assert metric.get_federated_plot_data([client_view], server_view, problem) == [(0, 0.5), (1, 1.0)]
+    assert metric.get_table_data([client_view, server_view], problem) == (1.0,)
+    assert metric.get_plot_data([client_view, server_view], problem) == [(0, 0.5), (1, 1.0)]
 
 
 def test_is_available_default_returns_true() -> None:  # noqa: D103

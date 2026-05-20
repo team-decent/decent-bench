@@ -64,7 +64,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
 
     def _selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
         """
-        Select participating clients for the current round from the currently active clients.
+        Select participating clients for the current round from the currently active clients and record them.
 
         If ``self.selection_scheme`` is ``None``, all active clients are selected.
         """

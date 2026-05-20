@@ -52,7 +52,8 @@ class Regret(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        return (utils._regret(agents, problem, iteration),)  # noqa: SLF001
+        clients = [agent for agent in agents if not agent.is_server]
+        return (utils._regret(clients, problem, iteration),)  # noqa: SLF001
 
 
 class GradientNorm(Metric):
@@ -80,7 +81,8 @@ class GradientNorm(Metric):
         _: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        return (utils._gradient_norm(agents, iteration),)  # noqa: SLF001
+        clients = [agent for agent in agents if not agent.is_server]
+        return (utils._gradient_norm(clients, iteration),)  # noqa: SLF001
 
 
 class XError(Metric):
@@ -124,7 +126,7 @@ class XError(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return [utils._x_error(a, problem, iteration) for a in agents]  # noqa: SLF001
+        return [utils._x_error(a, problem, iteration) for a in agents if not a.is_server]  # noqa: SLF001
 
 
 class ConsensusError(Metric):
@@ -160,8 +162,9 @@ class ConsensusError(Metric):
         iteration: int,
     ) -> list[float]:
 
-        x_mean = utils.x_mean(tuple(agents), iteration)
-        return [float(iop.norm(x_mean - a.x_history[iteration])) for a in agents]
+        clients = [agent for agent in agents if not agent.is_server]
+        x_mean = utils.x_mean(tuple(clients), iteration)
+        return [float(iop.norm(x_mean - a.x_history[iteration])) for a in clients]
 
 
 class XUpdates(Metric):
@@ -187,7 +190,7 @@ class XUpdates(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
-        return [a.n_x_updates for a in agents]
+        return [a.n_x_updates for a in agents if not a.is_server]
 
 
 class FunctionCalls(Metric):
@@ -217,7 +220,7 @@ class FunctionCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_function_calls for a in agents]
+        return [a.n_function_calls for a in agents if not a.is_server]
 
 
 class GradientCalls(Metric):
@@ -247,7 +250,7 @@ class GradientCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_gradient_calls for a in agents]
+        return [a.n_gradient_calls for a in agents if not a.is_server]
 
 
 class HessianCalls(Metric):
@@ -277,7 +280,7 @@ class HessianCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_hessian_calls for a in agents]
+        return [a.n_hessian_calls for a in agents if not a.is_server]
 
 
 class ProximalCalls(Metric):
@@ -303,7 +306,7 @@ class ProximalCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_proximal_calls for a in agents]
+        return [a.n_proximal_calls for a in agents if not a.is_server]
 
 
 class SentMessages(Metric):
@@ -329,7 +332,7 @@ class SentMessages(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
-        return [a.n_sent_messages for a in agents]
+        return [a.n_sent_messages for a in agents if not a.is_server]
 
 
 class ReceivedMessages(Metric):
@@ -355,7 +358,7 @@ class ReceivedMessages(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
-        return [a.n_received_messages for a in agents]
+        return [a.n_received_messages for a in agents if not a.is_server]
 
 
 class SentMessagesDropped(Metric):
@@ -381,7 +384,7 @@ class SentMessagesDropped(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
-        return [a.n_sent_messages_dropped for a in agents]
+        return [a.n_sent_messages_dropped for a in agents if not a.is_server]
 
 
 class Accuracy(Metric):
@@ -439,7 +442,8 @@ class Accuracy(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils._accuracy(agents, problem, iteration)  # noqa: SLF001
+        clients = [agent for agent in agents if not agent.is_server]
+        return utils._accuracy(clients, problem, iteration)  # noqa: SLF001
 
 
 class MSE(Metric):
@@ -492,7 +496,8 @@ class MSE(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils._mse(agents, problem, iteration)  # noqa: SLF001
+        clients = [agent for agent in agents if not agent.is_server]
+        return utils._mse(clients, problem, iteration)  # noqa: SLF001
 
 
 class Precision(Metric):
@@ -550,7 +555,8 @@ class Precision(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils._precision(agents, problem, iteration)  # noqa: SLF001
+        clients = [agent for agent in agents if not agent.is_server]
+        return utils._precision(clients, problem, iteration)  # noqa: SLF001
 
 
 class Recall(Metric):
@@ -608,7 +614,8 @@ class Recall(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils._recall(agents, problem, iteration)  # noqa: SLF001
+        clients = [agent for agent in agents if not agent.is_server]
+        return utils._recall(clients, problem, iteration)  # noqa: SLF001
 
 
 class Loss(Metric):
@@ -636,7 +643,8 @@ class Loss(Metric):
         _: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils._losses(agents, iteration)  # noqa: SLF001
+        clients = [agent for agent in agents if not agent.is_server]
+        return utils._losses(clients, iteration)  # noqa: SLF001
 
 
 def _requires_fednetwork(problem: "BenchmarkProblem", metric_name: str) -> tuple[bool, str | None]:
@@ -646,9 +654,10 @@ def _requires_fednetwork(problem: "BenchmarkProblem", metric_name: str) -> tuple
 
 
 def _server_metric_cost(agents: Sequence[AgentMetricsView], metric_name: str) -> Cost:
-    if not agents:
+    clients = [agent for agent in agents if not agent.is_server]
+    if not clients:
         raise ValueError(f"{metric_name} requires at least one client metrics view")
-    return agents[0].cost
+    return clients[0].cost
 
 
 class ClientDriftFromServer(Metric):
@@ -684,29 +693,15 @@ class ClientDriftFromServer(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],  # noqa: ARG002
-        problem: "BenchmarkProblem",  # noqa: ARG002
-        iteration: int,  # noqa: ARG002
-    ) -> list[float]:
-        raise ValueError(f"{self.table_description} requires a FedNetwork server metrics view")
-
-    def get_federated_table_data(  # noqa: D102
-        self,
         agents: Sequence[AgentMetricsView],
-        server: AgentMetricsView,
         problem: "BenchmarkProblem",  # noqa: ARG002
+        iteration: int,
     ) -> list[float]:
-        server = utils._require_server_view(server, self.table_description)  # noqa: SLF001
-        return self._drifts(agents, server, -1)
-
-    def get_federated_plot_data(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        server: AgentMetricsView,
-        problem: "BenchmarkProblem",  # noqa: ARG002
-    ) -> list[tuple[float, float]]:
-        server = utils._require_server_view(server, self.table_description)  # noqa: SLF001
-        return [(i, float(np.mean(self._drifts(agents, server, i)))) for i in utils.all_sorted_iterations(agents)]
+        servers = [agent for agent in agents if agent.is_server]
+        if len(servers) != 1:
+            raise ValueError(f"{self.table_description} requires exactly one FedNetwork server metrics view")
+        clients = [agent for agent in agents if not agent.is_server]
+        return self._drifts(clients, servers[0], iteration)
 
     @staticmethod
     def _drifts(agents: Sequence[AgentMetricsView], server: AgentMetricsView, iteration: int) -> list[float]:
@@ -742,10 +737,11 @@ class SelectedParticipationFraction(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> tuple[float]:
-        n_rounds = utils._observed_rounds(agents)  # noqa: SLF001
-        if n_rounds == 0 or not agents:
+        clients = [agent for agent in agents if not agent.is_server]
+        n_rounds = utils._observed_rounds(clients)  # noqa: SLF001
+        if n_rounds == 0 or not clients:
             return (np.nan,)
-        return (sum(agent.n_times_selected for agent in agents) / (n_rounds * len(agents)),)
+        return (sum(agent.n_times_selected for agent in clients) / (n_rounds * len(clients)),)
 
 
 class TotalCommunication(Metric):
@@ -773,20 +769,13 @@ class TotalCommunication(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],  # noqa: ARG002
+        agents: Sequence[AgentMetricsView],
         problem: "BenchmarkProblem",  # noqa: ARG002
         iteration: int,  # noqa: ARG002
     ) -> tuple[int]:
-        raise ValueError(f"{self.table_description} requires a FedNetwork server metrics view")
-
-    def get_federated_table_data(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        server: AgentMetricsView,
-        problem: "BenchmarkProblem",  # noqa: ARG002
-    ) -> tuple[int]:
-        server = utils._require_server_view(server, self.table_description)  # noqa: SLF001
-        return (sum(agent.n_sent_messages for agent in agents) + server.n_sent_messages,)
+        if not any(agent.is_server for agent in agents):
+            raise ValueError(f"{self.table_description} requires a FedNetwork server metrics view")
+        return (sum(agent.n_sent_messages for agent in agents),)
 
 
 class ServerMSE(Metric):
@@ -824,39 +813,32 @@ class ServerMSE(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],  # noqa: ARG002
-        problem: "BenchmarkProblem",  # noqa: ARG002
-        iteration: int,  # noqa: ARG002
-    ) -> tuple[float]:
-        raise ValueError(f"{self.table_description} requires a FedNetwork server metrics view")
-
-    def get_federated_table_data(  # noqa: D102
-        self,
         agents: Sequence[AgentMetricsView],
-        server: AgentMetricsView,
         problem: "BenchmarkProblem",
+        iteration: int,
     ) -> tuple[float]:
-        server = utils._require_server_view(server, self.table_description)  # noqa: SLF001
-        return (
-            utils._mse_at_x(  # noqa: SLF001
-                _server_metric_cost(agents, self.table_description),
-                server.x_history[-1],
-                problem,
-            ),
-        )
+        servers = [agent for agent in agents if agent.is_server]
+        if len(servers) != 1:
+            raise ValueError(f"{self.table_description} requires exactly one FedNetwork server metrics view")
+        cost = _server_metric_cost(agents, self.table_description)
+        return (utils._mse_at_x(cost, servers[0].x_history[iteration], problem),)  # noqa: SLF001
 
-    def get_federated_plot_data(  # noqa: D102
+    def get_plot_data(
         self,
         agents: Sequence[AgentMetricsView],
-        server: AgentMetricsView,
         problem: "BenchmarkProblem",
     ) -> list[tuple[float, float]]:
-        server = utils._require_server_view(server, self.table_description)  # noqa: SLF001
-        cost = _server_metric_cost(agents, self.table_description)
-        return [
-            (i, utils._mse_at_x(cost, server.x_history[i], problem))  # noqa: SLF001
-            for i in utils.all_sorted_iterations([server])
-        ]
+        """
+        Extract server MSE trajectory.
+
+        Raises:
+            ValueError: if there is not exactly one server metrics view.
+
+        """
+        servers = [agent for agent in agents if agent.is_server]
+        if len(servers) != 1:
+            raise ValueError(f"{self.table_description} requires exactly one FedNetwork server metrics view")
+        return [(i, self.get_data_from_trial(agents, problem, i)[0]) for i in utils.all_sorted_iterations([servers[0]])]
 
 
 class ServerAccuracy(Metric):
@@ -897,39 +879,32 @@ class ServerAccuracy(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],  # noqa: ARG002
-        problem: "BenchmarkProblem",  # noqa: ARG002
-        iteration: int,  # noqa: ARG002
-    ) -> tuple[float]:
-        raise ValueError(f"{self.table_description} requires a FedNetwork server metrics view")
-
-    def get_federated_table_data(  # noqa: D102
-        self,
         agents: Sequence[AgentMetricsView],
-        server: AgentMetricsView,
         problem: "BenchmarkProblem",
+        iteration: int,
     ) -> tuple[float]:
-        server = utils._require_server_view(server, self.table_description)  # noqa: SLF001
-        return (
-            utils._accuracy_at_x(  # noqa: SLF001
-                _server_metric_cost(agents, self.table_description),
-                server.x_history[-1],
-                problem,
-            ),
-        )
+        servers = [agent for agent in agents if agent.is_server]
+        if len(servers) != 1:
+            raise ValueError(f"{self.table_description} requires exactly one FedNetwork server metrics view")
+        cost = _server_metric_cost(agents, self.table_description)
+        return (utils._accuracy_at_x(cost, servers[0].x_history[iteration], problem),)  # noqa: SLF001
 
-    def get_federated_plot_data(  # noqa: D102
+    def get_plot_data(
         self,
         agents: Sequence[AgentMetricsView],
-        server: AgentMetricsView,
         problem: "BenchmarkProblem",
     ) -> list[tuple[float, float]]:
-        server = utils._require_server_view(server, self.table_description)  # noqa: SLF001
-        cost = _server_metric_cost(agents, self.table_description)
-        return [
-            (i, utils._accuracy_at_x(cost, server.x_history[i], problem))  # noqa: SLF001
-            for i in utils.all_sorted_iterations([server])
-        ]
+        """
+        Extract server accuracy trajectory.
+
+        Raises:
+            ValueError: if there is not exactly one server metrics view.
+
+        """
+        servers = [agent for agent in agents if agent.is_server]
+        if len(servers) != 1:
+            raise ValueError(f"{self.table_description} requires exactly one FedNetwork server metrics view")
+        return [(i, self.get_data_from_trial(agents, problem, i)[0]) for i in utils.all_sorted_iterations([servers[0]])]
 
 
 _BASE_TABLE_METRICS: list[Metric] = [

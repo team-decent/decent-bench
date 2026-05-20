@@ -130,7 +130,6 @@ def display_metrics(  # noqa: PLR0912
     # filter `metrics_result` based on `plot_metrics`, `table_metrics`, and `algorithms` (if provided)
     prev_values = {
         "agent_metrics": metrics_result.agent_metrics,
-        "server_metrics": getattr(metrics_result, "server_metrics", None),
         "table_results": metrics_result.table_results,
         "plot_results": metrics_result.plot_results,
         "table_metrics": metrics_result.table_metrics,
@@ -204,7 +203,7 @@ def _filter_algorithms(
             f"{', '.join(missing_names)}. Available algorithms: {', '.join(metrics_result.available_algorithms)}"
         )
 
-    for attribute in ("agent_metrics", "server_metrics", "table_results", "plot_results"):
+    for attribute in ("agent_metrics", "table_results", "plot_results"):
         mapping = getattr(metrics_result, attribute, None)
         if mapping is not None:
             setattr(

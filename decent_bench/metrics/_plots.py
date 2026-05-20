@@ -142,8 +142,6 @@ def compute_plots(  # noqa: PLR0914
     resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]],
     problem: "BenchmarkProblem",
     metrics: list[Metric] | list[list[Metric]],
-    *,
-    resulting_server_states: Mapping[Algorithm[Network], Sequence[AgentMetricsView]] | None = None,
 ) -> Mapping[
     Algorithm[Network], Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]
 ]:
@@ -157,7 +155,6 @@ def compute_plots(  # noqa: PLR0914
         problem: benchmark problem whose properties are used for metric calculations
         metrics: metrics to calculate and plot. If a list of lists is provided, each inner list will be plotted in a
             separate figure. Otherwise groups of 3 metrics will be plotted together in subplots of the same figure
-        resulting_server_states: optional federated server states from the trial executions, grouped by algorithm
 
     Returns:
         A nested dictionary containing plot data for each algorithm and metric, structured as
@@ -201,7 +198,6 @@ def compute_plots(  # noqa: PLR0914
                     agent_states,
                     problem,
                     metric,
-                    None if resulting_server_states is None else resulting_server_states.get(alg),
                 )
 
                 truncated_data_per_trial, had_non_finite = _truncate_to_common_finite_prefix(data_per_trial)
@@ -637,11 +633,12 @@ def _get_marker_style_color(
 
 
 def _calc_total_cost(agent_states: list[list[AgentMetricsView]], computational_cost: ComputationalCost) -> float:
-    mean_function_calls = np.mean([a.n_function_calls for agents in agent_states for a in agents])
-    mean_gradient_calls = np.mean([a.n_gradient_calls for agents in agent_states for a in agents])
-    mean_hessian_calls = np.mean([a.n_hessian_calls for agents in agent_states for a in agents])
-    mean_proximal_calls = np.mean([a.n_proximal_calls for agents in agent_states for a in agents])
-    mean_communication_calls = np.mean([a.n_sent_messages for agents in agent_states for a in agents])
+    client_states = [a for agents in agent_states for a in agents if not a.is_server]
+    mean_function_calls = np.mean([a.n_function_calls for a in client_states])
+    mean_gradient_calls = np.mean([a.n_gradient_calls for a in client_states])
+    mean_hessian_calls = np.mean([a.n_hessian_calls for a in client_states])
+    mean_proximal_calls = np.mean([a.n_proximal_calls for a in client_states])
+    mean_communication_calls = np.mean([a.n_sent_messages for a in client_states])
 
     return float(
         computational_cost.function * mean_function_calls
@@ -656,15 +653,11 @@ def _plot_data_per_trial(
     agents_per_trial: list[list[AgentMetricsView]],
     problem: "BenchmarkProblem",
     metric: Metric,
-    server_per_trial: Sequence[AgentMetricsView] | None = None,
 ) -> list[Sequence[tuple[X, Y]]]:
     data_per_trial: list[Sequence[tuple[X, Y]]] = []
-    for trial_idx, agents in enumerate(agents_per_trial):
+    for agents in agents_per_trial:
         with warnings.catch_warnings(action="ignore"):
-            if server_per_trial is None:
-                trial_data = metric.get_plot_data(agents, problem)
-            else:
-                trial_data = metric.get_federated_plot_data(agents, server_per_trial[trial_idx], problem)
+            trial_data = metric.get_plot_data(agents, problem)
         data_per_trial.append(trial_data)
     return data_per_trial
 

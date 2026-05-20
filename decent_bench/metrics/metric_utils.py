@@ -140,19 +140,6 @@ def _observed_rounds(agents: Sequence[AgentMetricsView]) -> int:
     return max(agent.x_history.max() for agent in agents)
 
 
-def _require_server_view(server: AgentMetricsView | None, metric_name: str) -> AgentMetricsView:
-    """
-    Return a server view or raise a clear error for federated-only metrics.
-
-    Raises:
-        ValueError: if *server* is ``None``
-
-    """
-    if server is None:
-        raise ValueError(f"{metric_name} requires a FedNetwork server metrics view")
-    return server
-
-
 def _losses(agents: Sequence[AgentMetricsView], iteration: int) -> list[float]:
     """Calculate each agent's loss at *iteration*."""
     return [
