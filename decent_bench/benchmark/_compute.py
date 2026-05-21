@@ -178,9 +178,9 @@ def _validate_unique_metric_descriptions(
         duplicates = ", ".join(duplicate_table_descriptions)
         raise ValueError(f"Table metric descriptions must be unique, duplicates found: {duplicates}")
 
-    duplicate_plot_descriptions = _find_duplicates([
-        metric.plot_description for metric in _flatten_plot_metrics(plot_metrics)
-    ])
+    duplicate_plot_descriptions = _find_duplicates(
+        [metric.plot_description for metric in _flatten_plot_metrics(plot_metrics)]
+    )
     if duplicate_plot_descriptions:
         duplicates = ", ".join(duplicate_plot_descriptions)
         raise ValueError(f"Plot metric descriptions must be unique, duplicates found: {duplicates}")

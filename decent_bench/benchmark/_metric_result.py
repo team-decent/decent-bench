@@ -47,16 +47,18 @@ class MetricResult:
     @property
     def available_algorithms(self) -> list[str]:
         """Return ``name`` of available algorithms, which can be used for filtering in :func:`~decent_bench.benchmark.display_metrics`."""  # noqa: E501
-        return sorted({
-            algorithm.name
-            for mapping in (
-                self.agent_metrics,
-                self.table_results,
-                self.plot_results,
-            )
-            if mapping is not None
-            for algorithm in mapping
-        })
+        return sorted(
+            {
+                algorithm.name
+                for mapping in (
+                    self.agent_metrics,
+                    self.table_results,
+                    self.plot_results,
+                )
+                if mapping is not None
+                for algorithm in mapping
+            }
+        )
 
     @property
     def available_table_metrics(self) -> list[str]:

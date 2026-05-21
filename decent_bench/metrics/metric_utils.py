@@ -501,13 +501,17 @@ def _fit_elbow_curve_given_breakpoint(y: NDArray[float64], b: int) -> tuple[NDAr
     m = len(y)  # num. datapoints
 
     # build the regression matrix, assuming the breakpoint is b
-    R: NDArray[float64] = np.hstack((  # noqa: N806
-        np.vstack((
-            np.arange(0, b + 1, 1).reshape((b + 1, 1)),
-            b * np.ones((m - b - 1, 1)),
-        )),
-        np.ones((m, 1)),
-    ))
+    R: NDArray[float64] = np.hstack(  # noqa: N806
+        (
+            np.vstack(
+                (
+                    np.arange(0, b + 1, 1).reshape((b + 1, 1)),
+                    b * np.ones((m - b - 1, 1)),
+                )
+            ),
+            np.ones((m, 1)),
+        )
+    )
 
     # analytical expression for inverse of R.T @ R
     S_00 = b * (b + 1) * (2 * b + 1) / 6.0 + (m - b - 1) * b**2  # noqa: N806
