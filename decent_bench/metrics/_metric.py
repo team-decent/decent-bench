@@ -115,7 +115,7 @@ class Metric(ABC):
         Get the data for this metric from a trial.
 
         Args:
-            agents: the snapshotted agent views being evaluated. For federated networks, this may include the server.
+            agents: the snapshotted agent views being evaluated. For federated networks, this includes the server.
             problem: the benchmark problem being evaluated
             iteration: the iteration at which to evaluate the metric, or -1 to use the agents' final x
 

@@ -62,14 +62,12 @@ class FedAlgorithm(Algorithm[FedNetwork]):
             )
         return {client: self.num_local_steps[client] for client in clients}
 
-    def selected_clients_for_round(self, network: FedNetwork, iteration: int) -> list["Agent"]:
+    def select_clients(self, network: FedNetwork, iteration: int) -> list["Agent"]:
         """
-        Select participating clients for the current round and record participation.
+        Select clients for the current federated round.
 
-        Use this method once per federated round when selecting participating clients in the round. It applies
-        ``self.selection_scheme`` to the currently active clients and updates the selection counters used by
-        participation metrics. Calling it more than once in the same round will increment the selected-client counters
-        more than once.
+        The method selects the subset of active clients that will receive the server broadcast and perform local
+        training. The clients are selected using ``self.selection_scheme``.
 
         If ``self.selection_scheme`` is ``None``, all active clients are selected.
         """
@@ -87,7 +85,7 @@ class FedAlgorithm(Algorithm[FedNetwork]):
     def _record_selected_clients(selected_clients: Sequence["Agent"]) -> None:
         """Record clients selected by a federated round."""
         for client in selected_clients:
-            client._n_times_selected = getattr(client, "_n_times_selected", 0) + 1  # noqa: SLF001
+            client._n_times_selected += 1  # noqa: SLF001
 
     def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
         """Send the current server model to the selected clients."""

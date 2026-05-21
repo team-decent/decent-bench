@@ -93,7 +93,7 @@ class FedDyn(FedAlgorithm):
             client.initialize(x=client_x0, aux_vars={"g": iop.zeros_like(client_x0)})
 
     def step(self, network: FedNetwork, iteration: int) -> None:
-        selected_clients = self.selected_clients_for_round(network, iteration)
+        selected_clients = self.select_clients(network, iteration)
         if not selected_clients:
             return
 

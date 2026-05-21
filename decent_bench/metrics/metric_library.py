@@ -16,16 +16,6 @@ if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
 
 
-def _non_server_views(agents: Sequence[AgentMetricsView]) -> list[AgentMetricsView]:
-    """Return all non-server agent views."""
-    return [agent for agent in agents if not agent.is_server]
-
-
-def _server_view(agents: Sequence[AgentMetricsView]) -> AgentMetricsView:
-    """Return the federated server view."""
-    return next(agent for agent in agents if agent.is_server)
-
-
 class Regret(Metric):
     r"""
     Global regret.
@@ -62,7 +52,7 @@ class Regret(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        agent_views = _non_server_views(agents)
+        agent_views = utils.non_server_views(agents)
         return (utils._regret(agent_views, problem, iteration),)  # noqa: SLF001
 
 
@@ -91,7 +81,7 @@ class GradientNorm(Metric):
         _: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        agent_views = _non_server_views(agents)
+        agent_views = utils.non_server_views(agents)
         return (utils._gradient_norm(agent_views, iteration),)  # noqa: SLF001
 
 
@@ -136,7 +126,7 @@ class XError(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return [utils._x_error(a, problem, iteration) for a in _non_server_views(agents)]  # noqa: SLF001
+        return [utils._x_error(a, problem, iteration) for a in utils.non_server_views(agents)]  # noqa: SLF001
 
 
 class ConsensusError(Metric):
@@ -172,7 +162,7 @@ class ConsensusError(Metric):
         iteration: int,
     ) -> list[float]:
 
-        agent_views = _non_server_views(agents)
+        agent_views = utils.non_server_views(agents)
         x_mean = utils.x_mean(tuple(agent_views), iteration)
         return [float(iop.norm(x_mean - a.x_history[iteration])) for a in agent_views]
 
@@ -200,7 +190,7 @@ class XUpdates(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
-        return [a.n_x_updates for a in _non_server_views(agents)]
+        return [a.n_x_updates for a in utils.non_server_views(agents)]
 
 
 class FunctionCalls(Metric):
@@ -230,7 +220,7 @@ class FunctionCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_function_calls for a in _non_server_views(agents)]
+        return [a.n_function_calls for a in utils.non_server_views(agents)]
 
 
 class GradientCalls(Metric):
@@ -260,7 +250,7 @@ class GradientCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_gradient_calls for a in _non_server_views(agents)]
+        return [a.n_gradient_calls for a in utils.non_server_views(agents)]
 
 
 class HessianCalls(Metric):
@@ -290,7 +280,7 @@ class HessianCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_hessian_calls for a in _non_server_views(agents)]
+        return [a.n_hessian_calls for a in utils.non_server_views(agents)]
 
 
 class ProximalCalls(Metric):
@@ -316,7 +306,7 @@ class ProximalCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_proximal_calls for a in _non_server_views(agents)]
+        return [a.n_proximal_calls for a in utils.non_server_views(agents)]
 
 
 class SentMessages(Metric):
@@ -324,7 +314,7 @@ class SentMessages(Metric):
     Number of sent messages.
 
     Table:
-        Number of sent messages per agent.
+        Number of sent messages per agent. For federated networks, this includes the server.
 
     Plot:
         Number of sent messages (y-axis) per iteration (x-axis).
@@ -342,7 +332,7 @@ class SentMessages(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
-        return [a.n_sent_messages for a in _non_server_views(agents)]
+        return [a.n_sent_messages for a in agents]
 
 
 class ReceivedMessages(Metric):
@@ -350,7 +340,7 @@ class ReceivedMessages(Metric):
     Number of received messages.
 
     Table:
-        Number of received messages per agent.
+        Number of received messages per agent. For federated networks, this includes the server.
 
     Plot:
         Number of received messages (y-axis) per iteration (x-axis).
@@ -368,7 +358,7 @@ class ReceivedMessages(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
-        return [a.n_received_messages for a in _non_server_views(agents)]
+        return [a.n_received_messages for a in agents]
 
 
 class SentMessagesDropped(Metric):
@@ -376,7 +366,7 @@ class SentMessagesDropped(Metric):
     Number of sent messages dropped.
 
     Table:
-        Number of sent messages dropped per agent.
+        Number of sent messages dropped per agent. For federated networks, this includes the server.
 
     Plot:
         Number of sent messages dropped (y-axis) per iteration (x-axis).
@@ -394,7 +384,7 @@ class SentMessagesDropped(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
-        return [a.n_sent_messages_dropped for a in _non_server_views(agents)]
+        return [a.n_sent_messages_dropped for a in agents]
 
 
 class Accuracy(Metric):
@@ -452,7 +442,7 @@ class Accuracy(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = _non_server_views(agents)
+        agent_views = utils.non_server_views(agents)
         return utils._accuracy(agent_views, problem, iteration)  # noqa: SLF001
 
 
@@ -506,7 +496,7 @@ class MSE(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = _non_server_views(agents)
+        agent_views = utils.non_server_views(agents)
         return utils._mse(agent_views, problem, iteration)  # noqa: SLF001
 
 
@@ -565,7 +555,7 @@ class Precision(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = _non_server_views(agents)
+        agent_views = utils.non_server_views(agents)
         return utils._precision(agent_views, problem, iteration)  # noqa: SLF001
 
 
@@ -624,7 +614,7 @@ class Recall(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = _non_server_views(agents)
+        agent_views = utils.non_server_views(agents)
         return utils._recall(agent_views, problem, iteration)  # noqa: SLF001
 
 
@@ -653,7 +643,7 @@ class Loss(Metric):
         _: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = _non_server_views(agents)
+        agent_views = utils.non_server_views(agents)
         return utils._losses(agent_views, iteration)  # noqa: SLF001
 
 
@@ -664,7 +654,7 @@ def _requires_fednetwork(problem: "BenchmarkProblem", metric_name: str) -> tuple
 
 
 def _server_metric_cost(agents: Sequence[AgentMetricsView], metric_name: str) -> Cost:
-    agent_views = _non_server_views(agents)
+    agent_views = utils.non_server_views(agents)
     if not agent_views:
         raise ValueError(f"{metric_name} requires at least one client metrics view")
     return agent_views[0].cost
@@ -707,8 +697,8 @@ class ClientDriftFromServer(Metric):
         problem: "BenchmarkProblem",  # noqa: ARG002
         iteration: int,
     ) -> list[float]:
-        server = _server_view(agents)
-        return self._drifts(_non_server_views(agents), server, iteration)
+        server = utils.server_view(agents)
+        return utils.drifts(utils.non_server_views(agents), server, iteration)
 
     def get_plot_data(
         self,
@@ -716,32 +706,27 @@ class ClientDriftFromServer(Metric):
         _: "BenchmarkProblem",
     ) -> list[tuple[float, float]]:
         """Extract client drift trajectory."""
-        server = _server_view(agents)
-        agent_views = _non_server_views(agents)
+        server = utils.server_view(agents)
+        agent_views = utils.non_server_views(agents)
         return [
-            (i, float(np.mean(self._drifts(agent_views, server, i)))) for i in utils.all_sorted_iterations([server])
+            (i, float(np.mean(utils.drifts(agent_views, server, i)))) for i in utils.all_sorted_iterations([server])
         ]
 
-    @staticmethod
-    def _drifts(agents: Sequence[AgentMetricsView], server: AgentMetricsView, iteration: int) -> list[float]:
-        server_x = server.x_history[iteration]
-        return [float(iop.norm(agent.x_history[iteration] - server_x)) for agent in agents]
 
-
-class SelectedParticipationFraction(Metric):
+class FractionSelectedClients(Metric):
     r"""
-    Fraction of client-rounds selected by the federated algorithm.
+    Fraction of clients selected by the federated algorithm to perform local training.
 
     Table:
-        Average selected participation fraction over observed rounds.
+        Fraction of selected clients over the algorithm run.
 
     Note:
         Available only for :class:`~decent_bench.networks.FedNetwork`.
 
     """
 
-    table_description: str = "selected participation fraction"
-    plot_description: str = "selected participation fraction"
+    table_description: str = "fraction selected clients"
+    plot_description: str = "fraction selected clients"
     can_diverge: bool = False
 
     def is_available(  # noqa: D102
@@ -756,44 +741,11 @@ class SelectedParticipationFraction(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> tuple[float]:
-        agent_views = _non_server_views(agents)
+        agent_views = utils.non_server_views(agents)
         n_rounds = utils._observed_rounds(agent_views)  # noqa: SLF001
         if n_rounds == 0 or not agent_views:
             return (np.nan,)
         return (sum(agent.n_times_selected for agent in agent_views) / (n_rounds * len(agent_views)),)
-
-
-class TotalCommunication(Metric):
-    r"""
-    Total sent message attempts by clients and the server.
-
-    Table:
-        Sum of client sent messages and server sent messages, including messages dropped by the communication scheme.
-
-    Note:
-        Available only for :class:`~decent_bench.networks.FedNetwork`. For peer-to-peer networks, use the ``sum``
-        statistic of :class:`SentMessages`.
-
-    """
-
-    table_description: str = "total communication"
-    plot_description: str = "total communication"
-    can_diverge: bool = False
-
-    def is_available(  # noqa: D102
-        self,
-        problem: "BenchmarkProblem",
-    ) -> tuple[bool, str | None]:
-        return _requires_fednetwork(problem, self.table_description)
-
-    def get_data_from_trial(  # noqa: D102
-        self,
-        agents: Sequence[AgentMetricsView],
-        problem: "BenchmarkProblem",  # noqa: ARG002
-        iteration: int,  # noqa: ARG002
-    ) -> tuple[int]:
-        _server_view(agents)
-        return (sum(agent.n_sent_messages for agent in agents),)
 
 
 class ServerMSE(Metric):
@@ -835,7 +787,7 @@ class ServerMSE(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        server = _server_view(agents)
+        server = utils.server_view(agents)
         cost = _server_metric_cost(agents, self.table_description)
         return (utils._mse_at_x(cost, server.x_history[iteration], problem),)  # noqa: SLF001
 
@@ -845,7 +797,7 @@ class ServerMSE(Metric):
         problem: "BenchmarkProblem",
     ) -> list[tuple[float, float]]:
         """Extract server MSE trajectory."""
-        server = _server_view(agents)
+        server = utils.server_view(agents)
         return [(i, self.get_data_from_trial(agents, problem, i)[0]) for i in utils.all_sorted_iterations([server])]
 
 
@@ -891,7 +843,7 @@ class ServerAccuracy(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        server = _server_view(agents)
+        server = utils.server_view(agents)
         cost = _server_metric_cost(agents, self.table_description)
         return (utils._accuracy_at_x(cost, server.x_history[iteration], problem),)  # noqa: SLF001
 
@@ -901,7 +853,7 @@ class ServerAccuracy(Metric):
         problem: "BenchmarkProblem",
     ) -> list[tuple[float, float]]:
         """Extract server accuracy trajectory."""
-        server = _server_view(agents)
+        server = utils.server_view(agents)
         return [(i, self.get_data_from_trial(agents, problem, i)[0]) for i in utils.all_sorted_iterations([server])]
 
 
@@ -997,13 +949,11 @@ _CLASSIFICATION_PLOT_METRICS: list[Metric] = _CLASSIFICATION_TABLE_METRICS
 
 _FEDERATED_TABLE_METRICS: list[Metric] = [
     ClientDriftFromServer([min, np.average, max]),
-    SelectedParticipationFraction([utils.single], fmt=".2%", x_log=False, y_log=False),
-    TotalCommunication([utils.single]),
+    FractionSelectedClients([utils.single], fmt=".2%", x_log=False, y_log=False),
 ]
 """
 - :class:`ClientDriftFromServer` - min, average, max
-- :class:`SelectedParticipationFraction` - single value with percentage format
-- :class:`TotalCommunication` - single value
+- :class:`FractionSelectedClients` - single value with percentage format
 
 :meta hide-value:
 """

@@ -80,7 +80,7 @@ class FedProx(FedAlgorithm):
             client.initialize(x=self.x0[client])
 
     def step(self, network: FedNetwork, iteration: int) -> None:
-        selected_clients = self.selected_clients_for_round(network, iteration)
+        selected_clients = self.select_clients(network, iteration)
         if not selected_clients:
             return
 

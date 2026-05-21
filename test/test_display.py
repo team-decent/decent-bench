@@ -480,20 +480,19 @@ def test_compute_metrics_uses_federated_defaults_and_server_view() -> None:  # n
     table_metric_types = {type(metric) for metric in metrics_result.table_metrics or []}
     plot_metric_types = {type(metric) for metric in metrics_result.plot_metrics or []}
     assert ml.ClientDriftFromServer in table_metric_types
-    assert ml.SelectedParticipationFraction in table_metric_types
-    assert ml.TotalCommunication in table_metric_types
+    assert ml.FractionSelectedClients in table_metric_types
     assert ml.ClientDriftFromServer in plot_metric_types
 
     selected_metric = next(
-        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.SelectedParticipationFraction)
+        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.FractionSelectedClients)
     )
-    total_communication_metric = next(
-        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.TotalCommunication)
+    sent_messages_metric = next(
+        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.SentMessages)
     )
 
     assert metrics_result.table_results is not None
     assert metrics_result.table_results[algorithm][selected_metric]["single"] == (1.0, 0.0)
-    assert metrics_result.table_results[algorithm][total_communication_metric]["single"] == (8.0, 0.0)
+    assert metrics_result.table_results[algorithm][sent_messages_metric]["sum"] == (8.0, 0.0)
 
 
 def test_compute_metrics_custom_metrics_do_not_append_federated_defaults(monkeypatch) -> None:  # noqa: D103
