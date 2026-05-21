@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import random
-from collections import defaultdict
+from collections.abc import Sequence
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, cast
 
-import decent_bench.utils.interoperability as iop
-from decent_bench.utils.logger import LOGGER
-from decent_bench.utils.types import Dataset, SupportedDevices
+from decent_bench.utils.types import Dataset
 
 from ._dataset_handler import DatasetHandler
+from ._partitioners import IidPartitioner, LabelQuantityPartitioner, Partitioner
 
 if TYPE_CHECKING:
     import torch
@@ -18,7 +16,6 @@ try:
     import torch
     from torch.utils.data import ConcatDataset as TorchConcatDataset
     from torch.utils.data import Subset as TorchSubset
-    from torch.utils.data import random_split as torch_random_split
 
     TORCH_AVAILABLE = True
 except ImportError:
@@ -31,11 +28,12 @@ class PyTorchDatasetHandler(DatasetHandler):
         torch_dataset: torch.utils.data.Dataset[Any],
         n_features: int,
         n_targets: int,
-        n_partitions: int = 1,
+        n_partitions: int | None = None,
         *,
         samples_per_partition: int | None = None,
         heterogeneity: bool = False,
         targets_per_partition: int = 1,
+        partitioner: Partitioner | None = None,
     ) -> None:
         """
         Dataset wrapper for PyTorch datasets which represents datapoints as tuples (features, targets).
@@ -50,10 +48,12 @@ class PyTorchDatasetHandler(DatasetHandler):
             torch_dataset: PyTorch dataset to wrap
             n_features: Number of feature dimensions
             n_targets: Number of target dimensions
-            n_partitions: Number of partitions to split the dataset into
-            samples_per_partition: Number of samples per partition, if None, will split evenly
-            heterogeneity: Whether to create heterogeneous partitions with unique classes
-            targets_per_partition: Number of unique classes per partition (only if heterogeneity is True)
+            n_partitions: Number of partitions for the default partitioner. Do not use together with partitioner.
+            samples_per_partition: Number of samples per partition for the default IID partitioner.
+            heterogeneity: Whether to use the default label-quantity partitioner with unique classes.
+            targets_per_partition: Number of unique classes per partition for the default heterogeneous partitioner.
+            partitioner: Optional partitioner defining the index split. If omitted, an appropriate default
+                partitioner is created from the legacy partitioning arguments.
 
         Raises:
             ImportError: If PyTorch is not installed
@@ -72,23 +72,42 @@ class PyTorchDatasetHandler(DatasetHandler):
         """
         if not TORCH_AVAILABLE:
             raise ImportError("PyTorch is required to use PyTorchWrapper. Install it with: pip install torch")
+
+        if partitioner is not None:
+            if n_partitions is not None or samples_per_partition is not None or heterogeneity:
+                raise ValueError(
+                    "partitioner cannot be combined with n_partitions, samples_per_partition, or heterogeneity"
+                )
+            if targets_per_partition != 1:
+                raise ValueError("targets_per_partition must be configured on the partitioner when partitioner is set")
+        else:
+            n_partitions = 1 if n_partitions is None else n_partitions
+            if heterogeneity:
+                if (n_partitions * targets_per_partition) > n_targets:
+                    raise ValueError(
+                        f"n_partitions ({n_partitions}) * n_targets per partition ({targets_per_partition})"
+                        f" must be <= n_targets ({n_targets})"
+                    )
+                partitioner = LabelQuantityPartitioner(
+                    n_partitions=n_partitions,
+                    classes_per_partition=targets_per_partition,
+                    samples_per_partition=samples_per_partition,
+                )
+            else:
+                partitioner = IidPartitioner(
+                    n_partitions=n_partitions,
+                    samples_per_partition=samples_per_partition,
+                )
+
         self.torch_dataset = torch_dataset
         self._n_targets = n_targets
         self._n_features = n_features
-        self._n_partitions = n_partitions
-        self.samples_per_partition = samples_per_partition
-        self.heterogeneity = heterogeneity
-        self.targets_per_partition = targets_per_partition
+        self.partitioner = partitioner
         self._partitions: list[Dataset] | None = None
 
-        if self.heterogeneity:
-            if (self.n_partitions * self.targets_per_partition) > self.n_targets:
-                raise ValueError(
-                    f"n_partitions ({self.n_partitions}) * n_targets per partition ({self.targets_per_partition})"
-                    f" must be <= n_targets ({self.n_targets})"
-                )
+        if heterogeneity:
             # Set the new number of used targets
-            self._n_targets = self.n_partitions * self.targets_per_partition
+            self._n_targets = self.n_partitions * targets_per_partition
 
     @cached_property
     def n_samples(self) -> int:
@@ -96,7 +115,7 @@ class PyTorchDatasetHandler(DatasetHandler):
 
     @property
     def n_partitions(self) -> int:
-        return self._n_partitions
+        return self.partitioner.n_partitions
 
     @property
     def n_features(self) -> int:
@@ -133,78 +152,24 @@ class PyTorchDatasetHandler(DatasetHandler):
 
         """
         if self._partitions is None:
-            if self.heterogeneity:
-                self._partitions = self._heterogeneous_split()
-            else:
-                self._partitions = self._random_split()
+            self._partitions = self._partitioner_split()
 
         return self._partitions
 
-    def _random_split(self) -> list[Dataset]:
-        torch_dataset_len = len(self.torch_dataset)  # type: ignore[arg-type]
-        if self.samples_per_partition is None:
-            parts = [1 / self.n_partitions] * self.n_partitions
-        elif self.samples_per_partition * self.n_partitions <= torch_dataset_len:
-            parts = [self.samples_per_partition] * self.n_partitions
-            # Add the remaining samples to the last partition and remove it
-            # to ensure the sum is equal to the total number of samples for random_split
-            parts.append(torch_dataset_len - sum(parts))
-        else:
-            raise ValueError(
-                f"samples_per_partition ({self.samples_per_partition}) * n_partitions ({self.n_partitions}) "
-                f"must be <= datapoints in the torch dataset ({torch_dataset_len})"
-            )
-
-        partitions = cast(
-            "list[Dataset]",
-            torch_random_split(self.torch_dataset, parts, generator=iop.rng_torch(SupportedDevices.CPU)),
-        )
-
-        return partitions[: self.n_partitions]
-
-    def _heterogeneous_split(self) -> list[Dataset]:
-        """
-        Split dataset so each partition contains unique classes.
-
-        Requires that partitions * classes_per_partition <= classes.
-        """
-        # Group indices by class in a single pass
-        class_to_indices: dict[int, list[int]] = defaultdict(list)
-        for idx, (_, label) in enumerate(cast("list[tuple[torch.Tensor, int | torch.Tensor]]", self.torch_dataset)):
-            label_key = int(label.item()) if isinstance(label, torch.Tensor) else int(label)
-            if label_key in class_to_indices or len(class_to_indices) < (
-                self.n_partitions * self.targets_per_partition
-            ):
-                class_to_indices[label_key].append(idx)
-
-        # Create partitions from class-grouped indices
-        idx_partitions = []
-        min_n_datapoints = int(1e10)
-        class_idxs = sorted(class_to_indices.keys())
-        # Group classes for each partition
-        class_idxs_groups = [
-            class_idxs[i : i + self.targets_per_partition]
-            for i in range(0, len(class_idxs), self.targets_per_partition)
-        ]
-        for class_idx_group in class_idxs_groups:
-            indices = []
-            for class_idx in class_idx_group:
-                indices.extend(class_to_indices[class_idx])
-
-            # Shuffle and select subset if needed
-            random.shuffle(indices)
-            if self.samples_per_partition is not None:
-                indices = indices[: self.samples_per_partition]
-
-            min_n_datapoints = min(min_n_datapoints, len(indices))
-            idx_partitions.append(indices)
-
-        if self.samples_per_partition is not None and min_n_datapoints < self.samples_per_partition:
-            LOGGER.warning(
-                f"Warning: Some partitions have less datapoints ({min_n_datapoints}) than "
-                f"samples_per_partition ({self.samples_per_partition}) due to class distribution. "
-                f"All partitions will be truncated to {min_n_datapoints} datapoints."
-            )
-        partitions = [TorchSubset(self.torch_dataset, idx[:min_n_datapoints]) for idx in idx_partitions]  # pyright: ignore[reportPossiblyUnboundVariable]
-
+    def _partitioner_split(self) -> list[Dataset]:
+        labels = self._get_labels() if self.partitioner.requires_labels else None
+        idx_partitions = self.partitioner.partition(len(self.torch_dataset), labels=labels)  # type: ignore[arg-type]
+        partitions = [TorchSubset(self.torch_dataset, indices) for indices in idx_partitions]
         return cast("list[Dataset]", partitions)
+
+    def _get_labels(self) -> list[Any]:
+        dataset_labels = getattr(self.torch_dataset, "targets", None)
+        if dataset_labels is None:
+            dataset_labels = getattr(self.torch_dataset, "labels", None)
+        if dataset_labels is not None:
+            if hasattr(dataset_labels, "tolist"):
+                labels = dataset_labels.tolist()
+                return labels if isinstance(labels, list) else [labels]
+            return list(cast("Sequence[Any]", dataset_labels))
+
+        return [label for _, label in cast("Sequence[tuple[Any, Any]]", self.torch_dataset)]
