@@ -51,22 +51,6 @@ def _clear_caches() -> None:
     _server_view.cache_clear()
 
 
-def non_server_views(agents: Sequence[AgentMetricsView]) -> tuple[AgentMetricsView, ...]:
-    """Return all non-server agent views."""
-    return _non_server_views(tuple(agents))
-
-
-def server_view(agents: Sequence[AgentMetricsView]) -> AgentMetricsView:
-    """Return the federated server view."""
-    return _server_view(tuple(agents))
-
-
-def drifts(agents: Sequence[AgentMetricsView], server: AgentMetricsView, iteration: int) -> list[float]:
-    """Calculate each agent's distance from the server state at *iteration*."""
-    server_x = server.x_history[iteration]
-    return [float(iop.norm(agent.x_history[iteration] - server_x)) for agent in agents]
-
-
 @cache
 def _non_server_views(agents: tuple[AgentMetricsView, ...]) -> tuple[AgentMetricsView, ...]:
     """Return all non-server agent views."""
@@ -77,6 +61,12 @@ def _non_server_views(agents: tuple[AgentMetricsView, ...]) -> tuple[AgentMetric
 def _server_view(agents: tuple[AgentMetricsView, ...]) -> AgentMetricsView:
     """Return the federated server view."""
     return next(agent for agent in agents if agent.is_server)
+
+
+def _drifts(agents: Sequence[AgentMetricsView], server: AgentMetricsView, iteration: int) -> list[float]:
+    """Calculate each agent's distance from the server state at *iteration*."""
+    server_x = server.x_history[iteration]
+    return [float(iop.norm(agent.x_history[iteration] - server_x)) for agent in agents]
 
 
 def single(values: Sequence[float]) -> float:

@@ -52,7 +52,7 @@ class Regret(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        agent_views = utils.non_server_views(agents)
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
         return (utils._regret(agent_views, problem, iteration),)  # noqa: SLF001
 
 
@@ -81,7 +81,7 @@ class GradientNorm(Metric):
         _: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        agent_views = utils.non_server_views(agents)
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
         return (utils._gradient_norm(agent_views, iteration),)  # noqa: SLF001
 
 
@@ -126,7 +126,7 @@ class XError(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return [utils._x_error(a, problem, iteration) for a in utils.non_server_views(agents)]  # noqa: SLF001
+        return [utils._x_error(a, problem, iteration) for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
 
 
 class ConsensusError(Metric):
@@ -162,7 +162,7 @@ class ConsensusError(Metric):
         iteration: int,
     ) -> list[float]:
 
-        agent_views = utils.non_server_views(agents)
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
         x_mean = utils.x_mean(tuple(agent_views), iteration)
         return [float(iop.norm(x_mean - a.x_history[iteration])) for a in agent_views]
 
@@ -190,7 +190,7 @@ class XUpdates(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
-        return [a.n_x_updates for a in utils.non_server_views(agents)]
+        return [a.n_x_updates for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
 
 
 class FunctionCalls(Metric):
@@ -220,7 +220,7 @@ class FunctionCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_function_calls for a in utils.non_server_views(agents)]
+        return [a.n_function_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
 
 
 class GradientCalls(Metric):
@@ -250,7 +250,7 @@ class GradientCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_gradient_calls for a in utils.non_server_views(agents)]
+        return [a.n_gradient_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
 
 
 class HessianCalls(Metric):
@@ -280,7 +280,7 @@ class HessianCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_hessian_calls for a in utils.non_server_views(agents)]
+        return [a.n_hessian_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
 
 
 class ProximalCalls(Metric):
@@ -306,7 +306,7 @@ class ProximalCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_proximal_calls for a in utils.non_server_views(agents)]
+        return [a.n_proximal_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
 
 
 class SentMessages(Metric):
@@ -442,7 +442,7 @@ class Accuracy(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils.non_server_views(agents)
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
         return utils._accuracy(agent_views, problem, iteration)  # noqa: SLF001
 
 
@@ -496,7 +496,7 @@ class MSE(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils.non_server_views(agents)
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
         return utils._mse(agent_views, problem, iteration)  # noqa: SLF001
 
 
@@ -555,7 +555,7 @@ class Precision(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils.non_server_views(agents)
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
         return utils._precision(agent_views, problem, iteration)  # noqa: SLF001
 
 
@@ -614,7 +614,7 @@ class Recall(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils.non_server_views(agents)
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
         return utils._recall(agent_views, problem, iteration)  # noqa: SLF001
 
 
@@ -643,7 +643,7 @@ class Loss(Metric):
         _: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils.non_server_views(agents)
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
         return utils._losses(agent_views, iteration)  # noqa: SLF001
 
 
@@ -654,7 +654,7 @@ def _requires_fednetwork(problem: "BenchmarkProblem", metric_name: str) -> tuple
 
 
 def _server_metric_cost(agents: Sequence[AgentMetricsView], metric_name: str) -> Cost:
-    agent_views = utils.non_server_views(agents)
+    agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
     if not agent_views:
         raise ValueError(f"{metric_name} requires at least one client metrics view")
     return agent_views[0].cost
@@ -697,8 +697,8 @@ class ClientDriftFromServer(Metric):
         problem: "BenchmarkProblem",  # noqa: ARG002
         iteration: int,
     ) -> list[float]:
-        server = utils.server_view(agents)
-        return utils.drifts(utils.non_server_views(agents), server, iteration)
+        server = utils._server_view(tuple(agents))  # noqa: SLF001
+        return utils._drifts(utils._non_server_views(tuple(agents)), server, iteration)  # noqa: SLF001
 
     def get_plot_data(
         self,
@@ -706,10 +706,11 @@ class ClientDriftFromServer(Metric):
         _: "BenchmarkProblem",
     ) -> list[tuple[float, float]]:
         """Extract client drift trajectory."""
-        server = utils.server_view(agents)
-        agent_views = utils.non_server_views(agents)
+        server = utils._server_view(tuple(agents))  # noqa: SLF001
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
         return [
-            (i, float(np.mean(utils.drifts(agent_views, server, i)))) for i in utils.all_sorted_iterations([server])
+            (i, float(np.mean(utils._drifts(agent_views, server, i))))  # noqa: SLF001
+            for i in utils.all_sorted_iterations([server])
         ]
 
 
@@ -741,7 +742,7 @@ class FractionSelectedClients(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> tuple[float]:
-        agent_views = utils.non_server_views(agents)
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
         n_rounds = utils._observed_rounds(agent_views)  # noqa: SLF001
         if n_rounds == 0 or not agent_views:
             return (np.nan,)
@@ -787,7 +788,7 @@ class ServerMSE(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        server = utils.server_view(agents)
+        server = utils._server_view(tuple(agents))  # noqa: SLF001
         cost = _server_metric_cost(agents, self.table_description)
         return (utils._mse_at_x(cost, server.x_history[iteration], problem),)  # noqa: SLF001
 
@@ -797,7 +798,7 @@ class ServerMSE(Metric):
         problem: "BenchmarkProblem",
     ) -> list[tuple[float, float]]:
         """Extract server MSE trajectory."""
-        server = utils.server_view(agents)
+        server = utils._server_view(tuple(agents))  # noqa: SLF001
         return [(i, self.get_data_from_trial(agents, problem, i)[0]) for i in utils.all_sorted_iterations([server])]
 
 
@@ -832,7 +833,7 @@ class ServerAccuracy(Metric):
             return False, "requires problem.test_data"
         if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
             return False, "server accuracy only applies if all clients have EmpiricalRiskCost"
-        _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type] # noqa: SLF001
+        _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type]  # noqa: SLF001
         if test_y.dtype.kind not in {"i", "u"}:
             return False, f"server accuracy only applies for integer targets, dtype {test_y.dtype} found"
         return True, None
@@ -843,7 +844,7 @@ class ServerAccuracy(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        server = utils.server_view(agents)
+        server = utils._server_view(tuple(agents))  # noqa: SLF001
         cost = _server_metric_cost(agents, self.table_description)
         return (utils._accuracy_at_x(cost, server.x_history[iteration], problem),)  # noqa: SLF001
 
@@ -853,7 +854,7 @@ class ServerAccuracy(Metric):
         problem: "BenchmarkProblem",
     ) -> list[tuple[float, float]]:
         """Extract server accuracy trajectory."""
-        server = utils.server_view(agents)
+        server = utils._server_view(tuple(agents))  # noqa: SLF001
         return [(i, self.get_data_from_trial(agents, problem, i)[0]) for i in utils.all_sorted_iterations([server])]
 
 
