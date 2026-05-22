@@ -27,12 +27,10 @@ class KaggleDatasetHandler(DatasetHandler):
         path: str,
         feature_columns: list[str],
         target_columns: list[str],
-        n_partitions: int | None = None,
         *,
         framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
         device: SupportedDevices = SupportedDevices.CPU,
         dtype: DTypeLike = np.float64,
-        samples_per_partition: int | None = None,
         partitioner: Partitioner | None = None,
         partition_label_column: str | None = None,
     ) -> None:
@@ -44,20 +42,18 @@ class KaggleDatasetHandler(DatasetHandler):
             path: Path to the dataset file within the Kaggle dataset
             feature_columns: List of feature column names
             target_columns: List of target column names
-            n_partitions: Number of partitions for the default IID partitioner. Do not use together with partitioner.
             framework: Framework to use for data representation
             device: Device to use for data representation
             dtype: Data type of the returned arrays
-            samples_per_partition: Number of samples per partition for the default IID partitioner.
-            partitioner: Optional partitioner defining the row split. If omitted, an IID partitioner is created
-                from n_partitions and samples_per_partition.
+            partitioner: Optional partitioner defining the row split. If omitted, a single IID partition
+                containing all samples is created.
             partition_label_column: Column used by label-based partitioners. Defaults to the only
                 target column when exactly one target column is configured.
 
         Raises:
             ImportError: If kagglehub or pandas is not installed
             RuntimeError: If the dataset fails to load from Kaggle
-            ValueError: If there are not enough samples to create the requested partitions
+            ValueError: If the label column needed by the partitioner cannot be inferred or found.
 
         Note:
             If you need to authenticate with Kaggle, ensure that your Kaggle API credentials
@@ -70,8 +66,6 @@ class KaggleDatasetHandler(DatasetHandler):
                 "kagglehub and pandas are required to use KaggleDataset. "
                 "Install them with: pip install kagglehub pandas"
             )
-        if partitioner is not None and (n_partitions is not None or samples_per_partition is not None):
-            raise ValueError("partitioner cannot be combined with n_partitions or samples_per_partition")
 
         self.kaggle_handle = kaggle_handle
         self.path = path
@@ -91,15 +85,9 @@ class KaggleDatasetHandler(DatasetHandler):
         if self._df is None:
             raise RuntimeError(f"Failed to load dataset from Kaggle handle: {self.kaggle_handle}, path: {self.path}")
 
-        if partitioner is None:
-            n_partitions = 1 if n_partitions is None else n_partitions
-            samples_per_partition = (
-                len(self._df) // n_partitions if samples_per_partition is None else samples_per_partition
-            )
-            partitioner = IidPartitioner(n_partitions=n_partitions, samples_per_partition=samples_per_partition)
-        self.partitioner = partitioner
+        self.partitioner = IidPartitioner(n_partitions=1) if partitioner is None else partitioner
 
-        if self.partitioner is not None and self.partitioner.requires_labels:
+        if self.partitioner.requires_labels:
             if self.partition_label_column is None:
                 if len(self.target_columns) != 1:
                     raise ValueError("partition_label_column is required when using multiple target columns")
@@ -109,7 +97,7 @@ class KaggleDatasetHandler(DatasetHandler):
 
     @property
     def n_samples(self) -> int:
-        return len(self._df)
+        return sum(len(partition) for partition in self.get_partitions())
 
     @property
     def n_partitions(self) -> int:
@@ -124,7 +112,7 @@ class KaggleDatasetHandler(DatasetHandler):
         return len(self.target_columns)
 
     def get_datapoints(self) -> Dataset:
-        return self._create_partition(self._df)
+        return [sample for partition in self.get_partitions() for sample in partition]
 
     def get_partitions(self) -> Sequence[Dataset]:
         """
@@ -134,7 +122,8 @@ class KaggleDatasetHandler(DatasetHandler):
         optimization. Each partition represents the local dataset of an agent in
         the network.
 
-        Each partition is sampled uniformly at random from the dataset without replacement.
+        The exact split is controlled by ``self.partitioner``. By default this is a single
+        IID partition containing all samples.
 
         Returns:
             Sequence[Dataset]: Sequence of Dataset objects, where each partition is a list of

@@ -36,7 +36,7 @@ Note:
     from decent_bench import benchmark
     from decent_bench.metrics import runtime_library
     from decent_bench.utils.checkpoint_manager import CheckpointManager
-    from decent_bench.distributed_algorithms import DGD, ATC
+    from decent_bench.algorithms.p2p import DGD, ATC
     from decent_bench.networks import P2PNetwork
     from decent_bench.benchmark import create_quadratic_problem
 
@@ -90,7 +90,90 @@ Benchmark executions will have outputs like these:
           :height: 350px
 
 
-**The user guide from here on is outdated; it will be updated soon.**
+Datasets and partitioners
+-------------------------
+Dataset handlers expose the same two methods regardless of where the data
+comes from:
+
+- :meth:`~decent_bench.datasets.DatasetHandler.get_partitions` returns one
+  local dataset per agent.
+- :meth:`~decent_bench.datasets.DatasetHandler.get_datapoints` returns the
+  flattened dataset, which is useful for test data or centralized evaluation.
+
+Partitioners decide which datapoint indices belong to each partition. If no
+partitioner is provided, handlers create a single IID partition containing all
+available datapoints.
+
+.. code-block:: python
+
+    from decent_bench.datasets import IidPartitioner, SyntheticClassificationDatasetHandler
+    from decent_bench.utils.types import SupportedFrameworks
+
+    n_agents = 10
+    samples_per_agent = 100
+
+    dataset = SyntheticClassificationDatasetHandler(
+        n_targets=2,
+        n_features=3,
+        n_samples=n_agents * samples_per_agent,
+        partitioner=IidPartitioner(n_partitions=n_agents),
+        framework=SupportedFrameworks.NUMPY,
+    )
+
+    local_datasets = dataset.get_partitions()
+    all_datapoints = dataset.get_datapoints()
+
+``n_samples`` is the number of datapoints generated or loaded before
+partitioning. ``dataset.n_samples`` counts the datapoints returned by the
+partitions, so it can be smaller when a partitioner intentionally drops
+datapoints.
+
+The built-in partitioners cover common decentralized and federated splits:
+
+- :class:`~decent_bench.datasets.IidPartitioner`: random IID split. By default
+  it uses an even split. Pass ``samples_per_partition`` as an integer for equal
+  fixed-size partitions, or as a sequence for explicit per-partition sizes.
+- :class:`~decent_bench.datasets.StratifiedIidPartitioner`: label-balanced IID
+  split. It requires labels and distributes every label as evenly as possible
+  across partitions.
+- :class:`~decent_bench.datasets.SizePartitioner`: quantity skew with explicit
+  partition sizes.
+- :class:`~decent_bench.datasets.DirichletLabelPartitioner`: label skew sampled
+  from a Dirichlet distribution. Smaller ``alpha`` values create stronger label
+  imbalance.
+- :class:`~decent_bench.datasets.ShardPartitioner`: pathological label split
+  that sorts by label, cuts the dataset into shards, and assigns
+  ``shards_per_partition`` shards to each partition.
+- :class:`~decent_bench.datasets.LabelQuantityPartitioner`: restricts every
+  partition to ``classes_per_partition`` labels. ``classes_per_partition=1``
+  creates single-label clients when the data allow it.
+
+For example:
+
+.. code-block:: python
+
+    from decent_bench.datasets import (
+        DirichletLabelPartitioner,
+        IidPartitioner,
+        LabelQuantityPartitioner,
+        ShardPartitioner,
+        SizePartitioner,
+        StratifiedIidPartitioner,
+    )
+
+    iid = IidPartitioner(n_partitions=10)
+    stratified = StratifiedIidPartitioner(n_partitions=10)
+    quantity_skew = SizePartitioner(partition_sizes=[50, 75, 100, 125])
+    label_skew = DirichletLabelPartitioner(n_partitions=10, alpha=0.1, samples_per_partition=100)
+    shard_skew = ShardPartitioner(n_partitions=10, shards_per_partition=2)
+    label_quantity = LabelQuantityPartitioner(
+        n_partitions=10,
+        classes_per_partition=2,
+        samples_per_partition=100,
+    )
+
+
+**Some sections below are older examples and may still be updated further.**
 
 
 Available algorithms
@@ -311,7 +394,7 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
     import decent_bench.metrics.metric_utils as utils
     from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import ADMM, DGD
+    from decent_bench.algorithms.p2p import ADMM, DGD
     from decent_bench.metrics import ComputationalCost
     from decent_bench.metrics.metric_library import GradientCalls, Regret
     from decent_bench.metrics.runtime_library import RuntimeLoss, RuntimeRegret
@@ -417,7 +500,7 @@ This also speeds up metric calulation and plotting, which can be significant for
 
     from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import ADMM, DGD, ED
+    from decent_bench.algorithms.p2p import ADMM, DGD, ED
 
     problem = benchmark.create_regression_problem(
         LinearRegressionCost,
@@ -453,7 +536,7 @@ Change the settings of an already created benchmark problem, for example, the ne
 
     from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import ADMM, DGD, ED
+    from decent_bench.algorithms.p2p import ADMM, DGD, ED
 
     n_agents = 100
     n_neighbors_per_agent = 3
@@ -491,41 +574,58 @@ Create a custom benchmark problem using existing resources.
 
     import networkx as nx
 
+    from functools import reduce
+    from operator import add
+
     from decent_bench import benchmark
     from decent_bench import centralized_algorithms as ca
+    from decent_bench.agents import Agent
+    from decent_bench.algorithms.p2p import ADMM, DGD, ED
     from decent_bench.benchmark import BenchmarkProblem
     from decent_bench.costs import LogisticRegressionCost
-    from decent_bench.datasets import SyntheticClassificationData
-    from decent_bench.distributed_algorithms import ADMM, DGD, ED
+    from decent_bench.datasets import IidPartitioner, SyntheticClassificationDatasetHandler
+    from decent_bench.networks import P2PNetwork
     from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
-    from decent_bench.utils.types import SupportedFrameworks
     from decent_bench.utils.types import SupportedFrameworks
 
     n_agents = 100
+    samples_per_agent = 10
 
-    dataset = SyntheticClassificationData(
-        n_classes=2, 
-        n_partitions=n_agents, 
-        n_samples_per_partition=10, 
-        n_features=3, 
+    dataset = SyntheticClassificationDatasetHandler(
+        n_targets=2,
+        n_features=3,
+        n_samples=n_agents * samples_per_agent,
+        partitioner=IidPartitioner(n_partitions=n_agents),
         framework=SupportedFrameworks.NUMPY,
     )
 
-    costs = [LogisticRegressionCost(*p) for p in dataset.training_partitions()]
+    costs = [LogisticRegressionCost(dataset=partition) for partition in dataset.get_partitions()]
 
-    sum_cost = sum(costs[1:], start=costs[0])
-    x_optimal = ca.accelerated_gradient_descent(
-        sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16
+    sum_cost = reduce(add, costs)
+    x_optimal = ca.solve(
+        sum_cost,
+        max_iter=50000,
+        stop_tol=1e-100,
+        max_tol=1e-16,
+        show_progress=False,
     )
 
-    problem = BenchmarkProblem(
-        network_structure=nx.random_regular_graph(3, n_agents, seed=0),
-        costs=costs,
-        x_optimal=x_optimal,
-        agent_activations=[UniformActivationRate(0.5)] * n_agents,
+    agents = [
+        Agent(i, cost, activation=UniformActivationRate(0.5))
+        for i, cost in enumerate(costs)
+    ]
+    network = P2PNetwork(
+        graph=nx.random_regular_graph(d=3, n=n_agents, seed=0),
+        agents=agents,
         message_compression=Quantization(n_significant_digits=4),
         message_noise=GaussianNoise(mean=0, std=0.001),
         message_drop=UniformDropRate(drop_rate=0.5),
+    )
+
+    problem = BenchmarkProblem(
+        network=network,
+        x_optimal=x_optimal,
+        test_data=dataset.get_datapoints(),
     )
 
     if __name__ == "__main__":
@@ -586,6 +686,9 @@ across all senders.
 
 .. code-block:: python
 
+    from decent_bench.agents import Agent
+    from decent_bench.benchmark import BenchmarkProblem
+    from decent_bench.networks import P2PNetwork
     from decent_bench.schemes import (
         GaussianNoise,
         StochasticQuantization,
@@ -593,15 +696,19 @@ across all senders.
         UniformDropRate,
     )
 
-    problem = BenchmarkProblem(
-        network_structure=network_structure,
-        costs=costs,
-        x_optimal=x_optimal,
-        agent_activations=[UniformActivationRate(0.8) for _ in costs],
+    agents = [
+        Agent(i, cost, activation=UniformActivationRate(0.8))
+        for i, cost in enumerate(costs)
+    ]
+    network = P2PNetwork(
+        graph=network_structure,
+        agents=agents,
         message_compression=StochasticQuantization(n_levels=8),
         message_noise=GaussianNoise(mean=0, std=0.001),
         message_drop=UniformDropRate(drop_rate=0.1),
     )
+
+    problem = BenchmarkProblem(network=network, x_optimal=x_optimal)
 
 .. footbibliography::
 
@@ -617,13 +724,15 @@ corresponding abstracts.
 
     from decent_bench import benchmark
     from decent_bench import centralized_algorithms as ca
+    from decent_bench.agents import Agent
+    from decent_bench.algorithms.p2p import DGD, SimpleGT
     from decent_bench.benchmark import BenchmarkProblem
     from decent_bench.costs import Cost
     from decent_bench.datasets import DatasetHandler
-    from decent_bench.distributed_algorithms import DGD, SimpleGT
+    from decent_bench.networks import P2PNetwork
     from decent_bench.schemes import AgentActivationScheme, CompressionScheme, DropScheme, NoiseScheme
 
-    class MyDataset(DatasetHandler): ... # Optional but convienient to manage partitions
+    class MyDataset(DatasetHandler): ... # Optional but convenient to manage partitions
 
     class MyCost(Cost): ...
 
@@ -637,22 +746,26 @@ corresponding abstracts.
 
     n_agents = 100
 
-    costs = [MyCost(*p) for p in MyDataset().training_partitions()]
+    costs = [MyCost(dataset=partition) for partition in MyDataset().get_partitions()]
 
     sum_cost = sum(costs[1:], start=costs[0])
-    x_optimal = ca.accelerated_gradient_descent(
-        sum_cost, x0=None, max_iter=50000, stop_tol=1e-100, max_tol=1e-16
+    x_optimal = ca.solve(
+        sum_cost, max_iter=50000, stop_tol=1e-100, max_tol=1e-16
     )
 
-    problem = BenchmarkProblem(
-        network_structure=nx.random_regular_graph(3, n_agents, seed=0),
-        costs=costs,
-        x_optimal=x_optimal,
-        agent_activations=[MyAgentActivationScheme()] * n_agents,
+    agents = [
+        Agent(i, cost, activation=MyAgentActivationScheme())
+        for i, cost in enumerate(costs)
+    ]
+    network = P2PNetwork(
+        graph=nx.random_regular_graph(d=3, n=n_agents, seed=0),
+        agents=agents,
         message_compression=MyCompressionScheme(),
         message_noise=MyNoiseScheme(),
         message_drop=MyDropScheme(),
     )
+
+    problem = BenchmarkProblem(network=network, x_optimal=x_optimal)
 
     if __name__ == "__main__":
         benchmark_result = benchmark.benchmark(
@@ -706,7 +819,7 @@ where 3. and 4. are true if ``save_path`` is set to the checkpoint manager's res
 
     from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import ADMM, DGD
+    from decent_bench.algorithms.p2p import ADMM, DGD
     from decent_bench.metrics.runtime_library import RuntimeLoss, RuntimeRegret
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
@@ -777,7 +890,7 @@ Control checkpoint behavior with these parameters:
 
     from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import DGD
+    from decent_bench.algorithms.p2p import DGD
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
     if __name__ == "__main__":
@@ -843,7 +956,7 @@ This is useful when you want to modify plot settings, table formatting or :class
 
     from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import DGD
+    from decent_bench.algorithms.p2p import DGD
     from decent_bench.utils.checkpoint_manager import CheckpointManager
     import platform
 
@@ -980,7 +1093,7 @@ being optimized. If you want to optimize a weighted objective :math:`\min \sum_i
     import decent_bench.utils.interoperability as iop
     from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import ADMM, DGD, P2PAlgorithm
+    from decent_bench.algorithms.p2p import ADMM, DGD, P2PAlgorithm
     from decent_bench.networks import P2PNetwork
     from decent_bench.utils.array import Array
 
@@ -1054,7 +1167,7 @@ Create your own metrics to tabulate and/or plot.
     from decent_bench.agents import AgentMetricsView
     from decent_bench.benchmark import BenchmarkProblem
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import ADMM, DGD
+    from decent_bench.algorithms.p2p import ADMM, DGD
     from decent_bench.metrics import Metric
 
     class XError(Metric):
@@ -1117,7 +1230,7 @@ They are updated at a specified interval and can optionally save plots to disk a
     from decent_bench.agents import Agent
     from decent_bench.benchmark import BenchmarkProblem
     from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import DGD
+    from decent_bench.algorithms.p2p import DGD
     from decent_bench.metrics import RuntimeMetric
 
     class RuntimeConsensusError(RuntimeMetric):
