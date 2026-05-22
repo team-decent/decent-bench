@@ -144,7 +144,14 @@ def compute_tables(
         for metric in metrics:
             progress.update(table_task, status=f"Task: {metric.description}")
 
-            data_per_trial = [_table_data_per_trial(resulting_agent_states[a], problem, metric) for a in algs]
+            data_per_trial = [
+                _table_data_per_trial(
+                    resulting_agent_states[a],
+                    problem,
+                    metric,
+                )
+                for a in algs
+            ]
 
             for statistic in metric.statistics:
                 statistic_name = STATISTICS_ABBR.get(statistic.__name__) or statistic.__name__
@@ -169,12 +176,7 @@ def _table_data_per_trial(
     problem: "BenchmarkProblem",
     metric: Metric,
 ) -> list[Sequence[float]]:
-    data_per_trial: list[Sequence[float]] = []
-    for agents in agents_per_trial:
-        trial_data = metric.get_table_data(agents, problem)
-        data_per_trial.append(trial_data)
-
-    return data_per_trial
+    return [metric.get_table_data(agents, problem) for agents in agents_per_trial]
 
 
 def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: float) -> tuple[float, float]:

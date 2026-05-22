@@ -14,7 +14,7 @@ class BenchmarkResult:
     This class is used to store the results and metadata of a benchmark execution.
     It is returned by the :func:`~decent_bench.benchmark.benchmark` function and contains
     all the information about the benchmark run, including the problem definition,
-    algorithm states, table results, and plot results.
+    and final algorithm states.
 
     * `problem`: contains the definition of the benchmark problem that was executed.
     * `states`: contains the final states of the algorithms after execution, organized by algorithm where

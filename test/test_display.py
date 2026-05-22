@@ -8,12 +8,14 @@ from matplotlib.lines import Line2D
 from pathlib import Path
 from types import SimpleNamespace
 
-from decent_bench.agents import AgentHistory, AgentMetricsView
+from decent_bench.agents import Agent, AgentHistory, AgentMetricsView
+from decent_bench.algorithms.federated import FedAvg
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, compute_metrics
 from decent_bench.benchmark._display import display_metrics
 from decent_bench.benchmark._metric_result import MetricResult
-from decent_bench.costs import LinearRegressionCost
+from decent_bench.costs import LinearRegressionCost, LogisticRegressionCost, QuadraticCost
 from decent_bench.metrics._metric import Metric
+from decent_bench.metrics import metric_library as ml
 from decent_bench.metrics._plots import (
     MAX_Y_PLOT_VALUE,
     _add_legend_and_save,
@@ -23,6 +25,7 @@ from decent_bench.metrics._plots import (
     compute_plots,
 )
 from decent_bench.metrics.metric_library import Accuracy, MSE, Precision, Recall, Regret, XError
+from decent_bench.networks import FedNetwork
 
 
 # -----------------------------------------------------------------------------
@@ -65,6 +68,8 @@ def _agent_metrics_view(x_value: float) -> AgentMetricsView:
         n_sent_messages=0,
         n_received_messages=0,
         n_sent_messages_dropped=0,
+        n_times_selected=0,
+        is_server=False,
     )
 
 
@@ -126,6 +131,7 @@ def _build_minimal_benchmark_result() -> BenchmarkResult:
         _n_sent_messages=0,
         _n_received_messages=0,
         _n_sent_messages_dropped=0,
+        _n_times_selected=0,
     )
     fake_network = SimpleNamespace(agents=lambda: [fake_agent])
     algorithm = _AlgorithmStub("A")
@@ -133,6 +139,17 @@ def _build_minimal_benchmark_result() -> BenchmarkResult:
         problem=BenchmarkProblem(network=fake_network),
         states={algorithm: [fake_network]},
     )
+
+
+def _build_federated_benchmark_result(iterations: int = 2) -> tuple[BenchmarkResult, FedAvg]:
+    clients = [
+        Agent(0, QuadraticCost(np.eye(1), np.array([0.0]))),
+        Agent(1, QuadraticCost(np.eye(1), np.array([0.0]))),
+    ]
+    network = FedNetwork(clients=clients)
+    algorithm = FedAvg(iterations=iterations, step_size=0.1)
+    algorithm.run(network)
+    return BenchmarkResult(problem=BenchmarkProblem(network=network), states={algorithm: [network]}), algorithm
 
 
 def _build_display_metric_result(
@@ -417,6 +434,55 @@ def test_compute_metrics_rejects_duplicate_metric_descriptions(
         compute_metrics(benchmark_result=benchmark_result, table_metrics=table_metrics, plot_metrics=plot_metrics)
 
 
+def test_compute_metrics_uses_federated_defaults_and_server_view() -> None:  # noqa: D103
+    benchmark_result, algorithm = _build_federated_benchmark_result(iterations=2)
+
+    metrics_result = compute_metrics(benchmark_result=benchmark_result, log_level=40)
+
+    assert metrics_result.agent_metrics is not None
+    server_views = [view for view in metrics_result.agent_metrics[algorithm][0] if view.is_server]
+    assert len(server_views) == 1
+    assert server_views[0].x_history.max() == 2
+    table_metric_types = {type(metric) for metric in metrics_result.table_metrics or []}
+    plot_metric_types = {type(metric) for metric in metrics_result.plot_metrics or []}
+    assert ml.ClientDriftFromServer in table_metric_types
+    assert ml.FractionSelectedClients in table_metric_types
+    assert ml.ClientDriftFromServer in plot_metric_types
+
+    selected_metric = next(
+        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.FractionSelectedClients)
+    )
+    sent_messages_metric = next(
+        metric for metric in metrics_result.table_metrics or [] if isinstance(metric, ml.SentMessages)
+    )
+
+    assert metrics_result.table_results is not None
+    assert metrics_result.table_results[algorithm][selected_metric]["single"] == (1.0, 0.0)
+    assert metrics_result.table_results[algorithm][sent_messages_metric]["sum"] == (8.0, 0.0)
+
+
+def test_compute_metrics_custom_metrics_do_not_append_federated_defaults(monkeypatch) -> None:  # noqa: D103
+    benchmark_result, _ = _build_federated_benchmark_result(iterations=1)
+    metric = _MetricStub("custom table", "custom plot")
+    captured: dict[str, object] = {}
+
+    def _capture_tables(*args, **kwargs):
+        captured["table_metrics"] = args[2]
+        return {}
+
+    def _capture_plots(*args, **kwargs):
+        captured["plot_metrics"] = args[2]
+        return {}
+
+    monkeypatch.setattr("decent_bench.benchmark._compute.compute_tables", _capture_tables)
+    monkeypatch.setattr("decent_bench.benchmark._compute.compute_plots", _capture_plots)
+
+    compute_metrics(benchmark_result=benchmark_result, table_metrics=[metric], plot_metrics=[])
+
+    assert [m.table_description for m in captured["table_metrics"]] == [metric.table_description]
+    assert captured["plot_metrics"] == []
+
+
 # -----------------------------------------------------------------------------
 # compute_plots Truncation Tests
 # -----------------------------------------------------------------------------
@@ -688,6 +754,98 @@ def test_classification_metrics_unavailable_with_float_targets() -> None:  # noq
         available, reason = metric.is_available(problem)
         assert not available
         assert "integer targets" in reason
+
+
+def test_server_mse_availability_and_values() -> None:  # noqa: D103
+    test_data = [(np.array([1.0]), np.array([1.0]))]
+    cost = LinearRegressionCost(test_data)
+    client = Agent(0, cost)
+    client.initialize(x=np.array([0.0]))
+
+    unavailable_problem = SimpleNamespace(
+        test_data=test_data,
+        network=SimpleNamespace(agents=lambda: [client]),
+    )
+    available, reason = ml.ServerMSE([np.average]).is_available(unavailable_problem)
+    assert not available
+    assert "FedNetwork" in reason
+
+    fed_problem_without_test_data = BenchmarkProblem(network=FedNetwork([client]))
+    available, reason = ml.ServerMSE([np.average]).is_available(fed_problem_without_test_data)
+    assert not available
+    assert reason == "requires problem.test_data"
+
+    problem = BenchmarkProblem(network=FedNetwork([client]), test_data=test_data)
+    metric = ml.ServerMSE([np.average])
+    available, reason = metric.is_available(problem)
+    assert available
+    assert reason is None
+
+    client_view = AgentMetricsView.from_agent(client)
+    server_history = AgentHistory()
+    server_history[0] = np.array([0.0])
+    server_history[1] = np.array([1.0])
+    server_view = AgentMetricsView(
+        cost=cost,
+        x_history=server_history,
+        n_x_updates=0,
+        n_function_calls=0.0,
+        n_gradient_calls=0.0,
+        n_hessian_calls=0.0,
+        n_proximal_calls=0.0,
+        n_sent_messages=0,
+        n_received_messages=0,
+        n_sent_messages_dropped=0,
+        n_times_selected=0,
+        is_server=True,
+    )
+
+    assert metric.get_table_data([client_view, server_view], problem) == (0.0,)
+    assert metric.get_plot_data([client_view, server_view], problem) == [(0, 1.0), (1, 0.0)]
+
+
+def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
+    train_data = [(np.array([1.0]), np.array([1])), (np.array([-1.0]), np.array([0]))]
+    test_data = [(np.array([1.0]), 1), (np.array([-1.0]), 0)]
+    cost = LogisticRegressionCost(train_data)
+    client = Agent(0, cost)
+    client.initialize(x=np.array([0.0]))
+    problem = BenchmarkProblem(network=FedNetwork([client]), test_data=test_data)
+
+    float_target_problem = BenchmarkProblem(
+        network=FedNetwork([client]),
+        test_data=[(np.array([1.0]), 1.0), (np.array([-1.0]), 0.0)],
+    )
+    metric = ml.ServerAccuracy([np.average])
+    available, reason = metric.is_available(float_target_problem)
+    assert not available
+    assert "integer targets" in reason
+
+    available, reason = metric.is_available(problem)
+    assert available
+    assert reason is None
+
+    client_view = AgentMetricsView.from_agent(client)
+    server_history = AgentHistory()
+    server_history[0] = np.array([0.0])
+    server_history[1] = np.array([10.0])
+    server_view = AgentMetricsView(
+        cost=cost,
+        x_history=server_history,
+        n_x_updates=0,
+        n_function_calls=0.0,
+        n_gradient_calls=0.0,
+        n_hessian_calls=0.0,
+        n_proximal_calls=0.0,
+        n_sent_messages=0,
+        n_received_messages=0,
+        n_sent_messages_dropped=0,
+        n_times_selected=0,
+        is_server=True,
+    )
+
+    assert metric.get_table_data([client_view, server_view], problem) == (1.0,)
+    assert metric.get_plot_data([client_view, server_view], problem) == [(0, 0.5), (1, 1.0)]
 
 
 def test_is_available_default_returns_true() -> None:  # noqa: D103

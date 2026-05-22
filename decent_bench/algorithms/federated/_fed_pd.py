@@ -99,8 +99,8 @@ class FedPD(FedAlgorithm):
         self._num_local_steps_by_client = self._settle_num_local_steps(network)
         self.num_local_steps = self._num_local_steps_by_client
 
-    def step(self, network: FedNetwork, _: int) -> None:
-        participating_clients = network.active_clients()
+    def step(self, network: FedNetwork, iteration: int) -> None:
+        participating_clients = self.select_clients(network, iteration)
         if not participating_clients:
             return
 

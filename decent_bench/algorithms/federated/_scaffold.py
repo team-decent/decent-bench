@@ -111,7 +111,7 @@ class Scaffold(FedAlgorithm):
             )
 
     def step(self, network: FedNetwork, iteration: int) -> None:
-        selected_clients = self._selected_clients_for_round(network, iteration)
+        selected_clients = self.select_clients(network, iteration)
         if not selected_clients:
             return
 
@@ -172,7 +172,6 @@ class Scaffold(FedAlgorithm):
         received_clients = [client for client in participating_clients if client in server.messages]
         if not received_clients:
             return
-
         uploads = [server.messages[client] for client in received_clients]
         model_deltas = [upload[0] for upload in uploads]
         weights = [1.0] * len(received_clients)

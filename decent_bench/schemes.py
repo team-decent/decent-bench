@@ -87,10 +87,12 @@ class MarkovChainActivation(AgentActivationScheme):
         self.inactive_to_active = inactive_to_active
         self.active_to_inactive = active_to_inactive
         self._states = np.array([0, 1])  # inactive = 0, active = 1
-        self._P = np.array([
-            [1 - inactive_to_active, inactive_to_active],
-            [active_to_inactive, 1 - active_to_inactive],
-        ])  # transition matrix
+        self._P = np.array(
+            [
+                [1 - inactive_to_active, inactive_to_active],
+                [active_to_inactive, 1 - active_to_inactive],
+            ]
+        )  # transition matrix
         self._current_state = iop.rng_numpy().choice(self._states, p=[0, 1])
 
     def is_active(self, iteration: int) -> bool:  # noqa: D102, ARG002

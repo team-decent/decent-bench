@@ -29,8 +29,8 @@ def compute_metrics(
     benchmark_result: BenchmarkResult | None = None,
     checkpoint_manager: "CheckpointManager | None" = None,
     *,
-    table_metrics: list[Metric] = ml.DEFAULT_TABLE_METRICS,
-    plot_metrics: list[Metric] = ml.DEFAULT_PLOT_METRICS,
+    table_metrics: list[Metric] | None = None,
+    plot_metrics: list[Metric] | None = None,
     confidence_level: float = 0.95,
     log_level: int = logging.INFO,
 ) -> MetricResult:
@@ -42,10 +42,11 @@ def compute_metrics(
             checkpoint manager
         checkpoint_manager: if provided, will be used to save results of metrics computation and/or load benchmark
             result.
-        table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_library.DEFAULT_TABLE_METRICS`
-        plot_metrics: metrics to plot after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_library.DEFAULT_PLOT_METRICS`.
+        table_metrics: metrics to tabulate as confidence intervals after the execution. If ``None``, all table metrics
+            available for the benchmark problem will be used. For example, federated-only metrics are removed when a
+            non-federated network is passed.
+        plot_metrics: metrics to plot after the execution. If ``None``, all plot metrics available for the benchmark
+            problem will be used.
         confidence_level: confidence level for computing confidence intervals of the table metrics, expressed as a value
             between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
             wider confidence intervals.
@@ -95,6 +96,8 @@ def compute_metrics(
         if len(benchmark_result.states) == 0:
             raise ValueError("No benchmark result found in checkpoint manager to compute metrics")
 
+    table_metrics, plot_metrics = _resolve_default_metrics(table_metrics, plot_metrics)
+
     # work on independent metric instances
     table_metrics = deepcopy(table_metrics)
     plot_metrics = deepcopy(plot_metrics)
@@ -134,6 +137,17 @@ def compute_metrics(
     metric_utils._clear_caches()  # noqa: SLF001
 
     return result
+
+
+def _resolve_default_metrics(
+    table_metrics: list[Metric] | None,
+    plot_metrics: list[Metric] | list[list[Metric]] | None,
+) -> tuple[list[Metric], list[Metric] | list[list[Metric]]]:
+    if table_metrics is None:
+        table_metrics = ml._DEFAULT_TABLE_METRICS  # noqa: SLF001
+    if plot_metrics is None:
+        plot_metrics = ml._DEFAULT_PLOT_METRICS  # noqa: SLF001
+    return table_metrics, plot_metrics
 
 
 def _validate_unique_descriptions(metrics: list[Metric], type_: Literal["table", "plot"]) -> None:

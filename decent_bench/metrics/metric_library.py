@@ -7,10 +7,10 @@ import numpy as np
 
 import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
-from decent_bench import costs
 from decent_bench.agents import AgentMetricsView
-from decent_bench.costs import EmpiricalRiskCost
+from decent_bench.costs import Cost, EmpiricalRiskCost
 from decent_bench.metrics._metric import Metric
+from decent_bench.networks import FedNetwork
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
@@ -21,7 +21,7 @@ class Regret(Metric):
     Global regret.
 
     Table:
-        Global regret using the agents' final x.
+        Global regret using the agents'/clients' final x.
 
     Plot:
         Global regret (y-axis) per iteration (x-axis).
@@ -51,7 +51,8 @@ class Regret(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        return (utils._regret(agents, problem, iteration),)  # noqa: SLF001
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        return (utils._regret(agent_views, problem, iteration),)  # noqa: SLF001
 
 
 class GradientNorm(Metric):
@@ -59,7 +60,7 @@ class GradientNorm(Metric):
     Global gradient norm.
 
     Table:
-        Gradient norm using the agents' final x.
+        Gradient norm using the agents'/clients' final x.
 
     Plot:
         Gradient norm (y-axis) per iteration (x-axis).
@@ -78,7 +79,8 @@ class GradientNorm(Metric):
         _: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        return (utils._gradient_norm(agents, iteration),)  # noqa: SLF001
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        return (utils._gradient_norm(agent_views, iteration),)  # noqa: SLF001
 
 
 class XError(Metric):
@@ -86,7 +88,7 @@ class XError(Metric):
     Distance to optimal solution.
 
     Table:
-        Distance to optimal solution using the mean of the agents' final x.
+        Distance to optimal solution using the mean of the agents'/clients' final x.
 
     Plot:
         Distance to optimal solution (y-axis) per iteration (x-axis).
@@ -96,8 +98,9 @@ class XError(Metric):
     .. math::
         \|\mathbf{\bar{x}} - \mathbf{x}^\star\|
 
-    where  :math:`\mathbf{\bar{x}}` is the mean x across all *agents*, and
+    where  :math:`\mathbf{\bar{x}}` is the mean x across all agents/clients, and
     :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
+
 
     Note:
         Available only when ``problem.x_optimal`` is provided.
@@ -128,18 +131,18 @@ class ConsensusError(Metric):
     Distance to consensus.
 
     Table:
-        Distance of the agents states from their current average.
+        Distance of the agents'/clients' states from their current average.
 
     Plot:
         Distance to consensus (y-axis) per iteration (x-axis).
 
-    The consensus error per agent is defined as:
+    The consensus error per agent/client is defined as:
 
     .. math::
         \{ \|\mathbf{x}_i - \bar{\mathbf{x}}\|, \|\mathbf{x}_j - \bar{\mathbf{x}}\|, ... \}
 
-    where :math:`\mathbf{x}_i` is agent i's current state,
-    :math:`\bar{\mathbf{x}}` is the average of all agents' states, and :math:`\| \cdot \|` is the 2-norm.
+    where :math:`\mathbf{x}_i` is agent/client i's current state,
+    :math:`\bar{\mathbf{x}}` is the average of all agents'/clients' states, and :math:`\| \cdot \|` is the 2-norm.
 
     .. seealso::
         :class:`~decent_bench.metrics.runtime_library.RuntimeConsensusError` for the runtime version.
@@ -155,8 +158,9 @@ class ConsensusError(Metric):
         iteration: int,
     ) -> list[float]:
 
-        x_mean = utils.x_mean(tuple(agents), iteration)
-        return [float(iop.norm(x_mean - a.x_history[iteration])) for a in agents]
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        x_mean = utils.x_mean(tuple(agent_views), iteration)
+        return [float(iop.norm(x_mean - a.x_history[iteration])) for a in agent_views]
 
 
 class XUpdates(Metric):
@@ -181,7 +185,7 @@ class XUpdates(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
-        return [a.n_x_updates for a in agents]
+        return [a.n_x_updates for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
 
 
 class FunctionCalls(Metric):
@@ -210,7 +214,7 @@ class FunctionCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_function_calls for a in agents]
+        return [a.n_function_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
 
 
 class GradientCalls(Metric):
@@ -239,7 +243,7 @@ class GradientCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_gradient_calls for a in agents]
+        return [a.n_gradient_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
 
 
 class HessianCalls(Metric):
@@ -268,7 +272,7 @@ class HessianCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_hessian_calls for a in agents]
+        return [a.n_hessian_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
 
 
 class ProximalCalls(Metric):
@@ -293,7 +297,7 @@ class ProximalCalls(Metric):
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_proximal_calls for a in agents]
+        return [a.n_proximal_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
 
 
 class SentMessages(Metric):
@@ -301,7 +305,7 @@ class SentMessages(Metric):
     Number of sent messages.
 
     Table:
-        Number of sent messages per agent.
+        Number of sent messages per agent. For federated networks, this includes the server.
 
     Plot:
         Number of sent messages (y-axis) per iteration (x-axis).
@@ -326,7 +330,7 @@ class ReceivedMessages(Metric):
     Number of received messages.
 
     Table:
-        Number of received messages per agent.
+        Number of received messages per agent. For federated networks, this includes the server.
 
     Plot:
         Number of received messages (y-axis) per iteration (x-axis).
@@ -351,7 +355,7 @@ class SentMessagesDropped(Metric):
     Number of sent messages dropped.
 
     Table:
-        Number of sent messages dropped per agent.
+        Number of sent messages dropped per agent. For federated networks, this includes the server.
 
     Plot:
         Number of sent messages dropped (y-axis) per iteration (x-axis).
@@ -373,16 +377,16 @@ class SentMessagesDropped(Metric):
 
 class Accuracy(Metric):
     r"""
-    Accuracy of the agents' predictions.
+    Accuracy of the agents'/clients' predictions.
 
     Table:
-        Accuracy of the agents' final x.
+        Accuracy of the agents'/clients' final x.
 
     Plot:
         Accuracy (y-axis) per iteration (x-axis).
 
-        Accuracy is calculated as the mean accuracy across agents, where each agent's accuracy is calculated using its
-        recorded x at that iteration.
+        Accuracy is calculated as the mean accuracy across agents/clients, where each agent's/client's accuracy is
+        calculated using its recorded x at that iteration.
 
     Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
 
@@ -412,7 +416,7 @@ class Accuracy(Metric):
     ) -> tuple[bool, str | None]:
         if getattr(problem, "test_data", None) is None:
             return False, "requires problem.test_data"
-        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
             return False, "accuracy only applies if all agents have EmpiricalRiskCost"
         _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type] # noqa: SLF001
         if test_y.dtype.kind not in {"i", "u"}:
@@ -425,21 +429,22 @@ class Accuracy(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils._accuracy(agents, problem, iteration)  # noqa: SLF001
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        return utils._accuracy(agent_views, problem, iteration)  # noqa: SLF001
 
 
 class MSE(Metric):
     r"""
-    Mean squared error of the agents' predictions.
+    Mean squared error of the agents'/clients' predictions.
 
     Table:
-        Mean squared error of the agents' final x.
+        Mean squared error of the agents'/clients' final x.
 
     Plot:
         Mean Squared Error (MSE) (y-axis) per iteration (x-axis).
 
-        MSE is calculated as the mean MSE across agents, where each agent's MSE is calculated using its
-        recorded x at that iteration.
+        MSE is calculated as the mean MSE across agents/clients, where each agent's/client's MSE is calculated using
+        its recorded x at that iteration.
 
     Only available for :class:`~decent_bench.costs.EmpiricalRiskCost`.
 
@@ -467,7 +472,7 @@ class MSE(Metric):
     ) -> tuple[bool, str | None]:
         if getattr(problem, "test_data", None) is None:
             return False, "requires problem.test_data"
-        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
             return False, "MSE only applies if all agents have EmpiricalRiskCost"
         return True, None
 
@@ -477,21 +482,22 @@ class MSE(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils._mse(agents, problem, iteration)  # noqa: SLF001
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        return utils._mse(agent_views, problem, iteration)  # noqa: SLF001
 
 
 class Precision(Metric):
     r"""
-    Precision of the agents' predictions.
+    Precision of the agents'/clients' predictions.
 
     Table:
-        Precision of the agents' final x.
+        Precision of the agents'/clients' final x.
 
     Plot:
         Precision (y-axis) per iteration (x-axis).
 
-        Precision is calculated as the mean precision across agents, where each agent's precision is calculated using
-        its recorded x at that iteration.
+        Precision is calculated as the mean precision across agents/clients, where each agent's/client's precision is
+        calculated using its recorded x at that iteration.
 
     Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
 
@@ -521,7 +527,7 @@ class Precision(Metric):
     ) -> tuple[bool, str | None]:
         if getattr(problem, "test_data", None) is None:
             return False, "requires problem.test_data"
-        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
             return False, "precision only applies if all agents have EmpiricalRiskCost"
         _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type] # noqa: SLF001
         if test_y.dtype.kind not in {"i", "u"}:
@@ -534,21 +540,22 @@ class Precision(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils._precision(agents, problem, iteration)  # noqa: SLF001
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        return utils._precision(agent_views, problem, iteration)  # noqa: SLF001
 
 
 class Recall(Metric):
     r"""
-    Recall of the agents' predictions.
+    Recall of the agents'/clients' predictions.
 
     Table:
-        Recall of the agents' final x.
+        Recall of the agents'/clients' final x.
 
     Plot:
         Recall (y-axis) per iteration (x-axis).
 
-        Recall is calculated as the mean recall across agents, where each agent's recall is calculated using its
-        recorded x at that iteration.
+        Recall is calculated as the mean recall across agents/clients, where each agent's/client's recall is calculated
+        using its recorded x at that iteration.
 
     Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
 
@@ -578,7 +585,7 @@ class Recall(Metric):
     ) -> tuple[bool, str | None]:
         if getattr(problem, "test_data", None) is None:
             return False, "requires problem.test_data"
-        if not all(isinstance(a.cost, costs.EmpiricalRiskCost) for a in problem.network.agents()):
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
             return False, "recall only applies if all agents have EmpiricalRiskCost"
         _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type]  # noqa: SLF001
         if test_y.dtype.kind not in {"i", "u"}:
@@ -591,21 +598,22 @@ class Recall(Metric):
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return utils._recall(agents, problem, iteration)  # noqa: SLF001
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        return utils._recall(agent_views, problem, iteration)  # noqa: SLF001
 
 
 class Loss(Metric):
     r"""
-    Loss of the agents' predictions.
+    Loss of the agents'/clients' predictions.
 
     Table:
-        Loss of the agents' final x.
+        Loss of the agents'/clients' final x.
 
     Plot:
         Loss (y-axis) per iteration (x-axis).
 
-        Loss is calculated as the mean loss across agents, where each agent's loss is calculated using its
-        recorded x at that iteration.
+        Loss is calculated as the mean loss across agents/clients, where each agent's/client's loss is calculated using
+        its recorded x at that iteration.
 
     """
 
@@ -618,15 +626,218 @@ class Loss(Metric):
         _: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        return utils._losses(agent_views, iteration)  # noqa: SLF001
+
+
+def _requires_fednetwork(problem: "BenchmarkProblem", metric_name: str) -> tuple[bool, str | None]:
+    if not isinstance(problem.network, FedNetwork):
+        return False, f"{metric_name} only applies to FedNetwork"
+    return True, None
+
+
+def _server_metric_cost(agents: Sequence[AgentMetricsView], metric_name: str) -> Cost:
+    agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+    if not agent_views:
+        raise ValueError(f"{metric_name} requires at least one client metrics view")
+    return agent_views[0].cost
+
+
+class ClientDriftFromServer(Metric):
+    r"""
+    Distance between client local models and the server model.
+
+    Table:
+        Distance of the clients' final states from the final server state.
+
+    Plot:
+        Client drift from server (y-axis) per iteration (x-axis).
+
+    The client drift per client is defined as:
+
+    .. math::
+        \{ \|\mathbf{x}_i - \mathbf{x}_s\|, \|\mathbf{x}_j - \mathbf{x}_s\|, ... \}
+
+    where :math:`\mathbf{x}_s` is the current server state.
+
+    Note:
+        Available only for :class:`~decent_bench.networks.FedNetwork`.
+
+    """
+
+    description: str = "client drift from server"
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        return _requires_fednetwork(problem, self.description)
+
+    def get_data_from_trial(  # noqa: D102
+        self,
+        agents: Sequence[AgentMetricsView],
+        problem: "BenchmarkProblem",  # noqa: ARG002
+        iteration: int,
+    ) -> list[float]:
+        server = utils._server_view(tuple(agents))  # noqa: SLF001
+        return utils._drifts(utils._non_server_views(tuple(agents)), server, iteration)  # noqa: SLF001
+
+    def get_plot_data(
+        self,
+        agents: Sequence[AgentMetricsView],
+        _: "BenchmarkProblem",
+    ) -> list[tuple[float, float]]:
+        """Extract client drift trajectory."""
+        server = utils._server_view(tuple(agents))  # noqa: SLF001
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
         return [
-            a.cost.function(a.x_history[iteration], indices="all")
-            if isinstance(a.cost, EmpiricalRiskCost)
-            else a.cost.function(a.x_history[iteration])
-            for a in agents
+            (i, float(np.mean(utils._drifts(agent_views, server, i))))  # noqa: SLF001
+            for i in utils.all_sorted_iterations([server])
         ]
 
 
-DEFAULT_TABLE_METRICS: list[Metric] = [
+class FractionSelectedClients(Metric):
+    r"""
+    Fraction of clients selected by the federated algorithm to perform local training.
+
+    Table:
+        Fraction of selected clients over the algorithm run.
+
+    Note:
+        Available only for :class:`~decent_bench.networks.FedNetwork`.
+
+    """
+
+    description: str = "fraction selected clients"
+    can_diverge: bool = False
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        return _requires_fednetwork(problem, self.table_description)
+
+    def get_data_from_trial(  # noqa: D102
+        self,
+        agents: Sequence[AgentMetricsView],
+        _: "BenchmarkProblem",
+        __: int,
+    ) -> tuple[float]:
+        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        n_rounds = utils._observed_rounds(agent_views)  # noqa: SLF001
+        if n_rounds == 0 or not agent_views:
+            return (np.nan,)
+        return (sum(agent.n_times_selected for agent in agent_views) / (n_rounds * len(agent_views)),)
+
+
+class ServerMSE(Metric):
+    r"""
+    Mean squared error of the server model's predictions.
+
+    Table:
+        Mean squared error of the final server x.
+
+    Plot:
+        Server MSE (y-axis) per iteration (x-axis).
+
+    Note:
+        Available only for :class:`~decent_bench.networks.FedNetwork` with ``problem.test_data`` and empirical-risk
+        client costs.
+
+    """
+
+    description: str = "server mse"
+    can_diverge: bool = False
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        available, reason = _requires_fednetwork(problem, self.description)
+        if not available:
+            return False, reason
+        if getattr(problem, "test_data", None) is None:
+            return False, "requires problem.test_data"
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
+            return False, "server MSE only applies if all clients have EmpiricalRiskCost"
+        return True, None
+
+    def get_data_from_trial(  # noqa: D102
+        self,
+        agents: Sequence[AgentMetricsView],
+        problem: "BenchmarkProblem",
+        iteration: int,
+    ) -> tuple[float]:
+        server = utils._server_view(tuple(agents))  # noqa: SLF001
+        cost = _server_metric_cost(agents, self.description)
+        return (utils._mse_at_x(cost, server.x_history[iteration], problem),)  # noqa: SLF001
+
+    def get_plot_data(
+        self,
+        agents: Sequence[AgentMetricsView],
+        problem: "BenchmarkProblem",
+    ) -> list[tuple[float, float]]:
+        """Extract server MSE trajectory."""
+        server = utils._server_view(tuple(agents))  # noqa: SLF001
+        return [(i, self.get_data_from_trial(agents, problem, i)[0]) for i in utils.all_sorted_iterations([server])]
+
+
+class ServerAccuracy(Metric):
+    r"""
+    Accuracy of the server model's predictions.
+
+    Table:
+        Accuracy of the final server x.
+
+    Plot:
+        Server accuracy (y-axis) per iteration (x-axis).
+
+    Note:
+        Available only for :class:`~decent_bench.networks.FedNetwork` with ``problem.test_data``, empirical-risk
+        client costs, and integer-valued targets.
+
+    """
+
+    description: str = "server accuracy"
+    can_diverge: bool = False
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        available, reason = _requires_fednetwork(problem, self.description)
+        if not available:
+            return False, reason
+        if getattr(problem, "test_data", None) is None:
+            return False, "requires problem.test_data"
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
+            return False, "server accuracy only applies if all clients have EmpiricalRiskCost"
+        _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type]  # noqa: SLF001
+        if test_y.dtype.kind not in {"i", "u"}:
+            return False, f"server accuracy only applies for integer targets, dtype {test_y.dtype} found"
+        return True, None
+
+    def get_data_from_trial(  # noqa: D102
+        self,
+        agents: Sequence[AgentMetricsView],
+        problem: "BenchmarkProblem",
+        iteration: int,
+    ) -> tuple[float]:
+        server = utils._server_view(tuple(agents))  # noqa: SLF001
+        cost = _server_metric_cost(agents, self.description)
+        return (utils._accuracy_at_x(cost, server.x_history[iteration], problem),)  # noqa: SLF001
+
+    def get_plot_data(
+        self,
+        agents: Sequence[AgentMetricsView],
+        problem: "BenchmarkProblem",
+    ) -> list[tuple[float, float]]:
+        """Extract server accuracy trajectory."""
+        server = utils._server_view(tuple(agents))  # noqa: SLF001
+        return [(i, self.get_data_from_trial(agents, problem, i)[0]) for i in utils.all_sorted_iterations([server])]
+
+
+_BASE_TABLE_METRICS: list[Metric] = [
     Regret(),
     GradientNorm(),
     XError(),
@@ -659,7 +870,7 @@ DEFAULT_TABLE_METRICS: list[Metric] = [
 :meta hide-value:
 """
 
-REGRESSION_TABLE_METRICS: list[Metric] = [
+_REGRESSION_TABLE_METRICS: list[Metric] = [
     MSE([min, np.average, max], x_log=False, y_log=True),
 ]
 """
@@ -668,7 +879,7 @@ REGRESSION_TABLE_METRICS: list[Metric] = [
 :meta hide-value:
 """
 
-CLASSIFICATION_TABLE_METRICS: list[Metric] = [
+_CLASSIFICATION_TABLE_METRICS: list[Metric] = [
     Accuracy([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
     Precision([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
     Recall([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
@@ -684,7 +895,7 @@ CLASSIFICATION_TABLE_METRICS: list[Metric] = [
 # No need to specify statistics for plot metrics as they are only
 # used for table metrics, if you were to use the same Metric object
 # for both, you would need to specify statistics
-DEFAULT_PLOT_METRICS: list[Metric] = [
+_BASE_PLOT_METRICS: list[Metric] = [
     Regret([], x_log=False, y_log=True),
     GradientNorm([], x_log=False, y_log=True),
     ConsensusError([], x_log=False, y_log=True),
@@ -700,14 +911,14 @@ DEFAULT_PLOT_METRICS: list[Metric] = [
 """
 
 
-REGRESSION_PLOT_METRICS: list[Metric] = REGRESSION_TABLE_METRICS
+_REGRESSION_PLOT_METRICS: list[Metric] = _REGRESSION_TABLE_METRICS
 """
 - :class:`MSE` (semi-log)
 
 :meta hide-value:
 """
 
-CLASSIFICATION_PLOT_METRICS: list[Metric] = CLASSIFICATION_TABLE_METRICS
+_CLASSIFICATION_PLOT_METRICS: list[Metric] = _CLASSIFICATION_TABLE_METRICS
 """
 - :class:`Accuracy` (linear)
 - :class:`Precision` (linear)
@@ -715,3 +926,77 @@ CLASSIFICATION_PLOT_METRICS: list[Metric] = CLASSIFICATION_TABLE_METRICS
 
 :meta hide-value:
 """
+
+_FEDERATED_TABLE_METRICS: list[Metric] = [
+    ClientDriftFromServer([min, np.average, max]),
+    FractionSelectedClients([utils.single], fmt=".2%", x_log=False, y_log=False),
+]
+"""
+- :class:`ClientDriftFromServer` - min, average, max
+- :class:`FractionSelectedClients` - single value with percentage format
+
+:meta hide-value:
+"""
+
+_FEDERATED_PLOT_METRICS: list[Metric] = [
+    ClientDriftFromServer([], x_log=False, y_log=True),
+]
+"""
+- :class:`ClientDriftFromServer` (semi-log)
+
+:meta hide-value:
+"""
+
+_FEDERATED_REGRESSION_TABLE_METRICS: list[Metric] = [
+    ServerMSE([utils.single], x_log=False, y_log=True),
+]
+"""
+- :class:`ServerMSE` - single value
+
+:meta hide-value:
+"""
+
+_FEDERATED_REGRESSION_PLOT_METRICS: list[Metric] = [
+    ServerMSE([], x_log=False, y_log=True),
+]
+"""
+- :class:`ServerMSE` (semi-log)
+
+:meta hide-value:
+"""
+
+_FEDERATED_CLASSIFICATION_TABLE_METRICS: list[Metric] = [
+    ServerAccuracy([utils.single], fmt=".2%", x_log=False, y_log=False),
+]
+"""
+- :class:`ServerAccuracy` - single value with percentage format
+
+:meta hide-value:
+"""
+
+_FEDERATED_CLASSIFICATION_PLOT_METRICS: list[Metric] = [
+    ServerAccuracy([], fmt=".2%", x_log=False, y_log=False),
+]
+"""
+- :class:`ServerAccuracy` (linear)
+
+:meta hide-value:
+"""
+
+_DEFAULT_TABLE_METRICS: list[Metric] = [
+    *_BASE_TABLE_METRICS,
+    *_REGRESSION_TABLE_METRICS,
+    *_CLASSIFICATION_TABLE_METRICS,
+    *_FEDERATED_TABLE_METRICS,
+    *_FEDERATED_REGRESSION_TABLE_METRICS,
+    *_FEDERATED_CLASSIFICATION_TABLE_METRICS,
+]
+
+_DEFAULT_PLOT_METRICS: list[Metric] = [
+    *_BASE_PLOT_METRICS,
+    *_REGRESSION_PLOT_METRICS,
+    *_CLASSIFICATION_PLOT_METRICS,
+    *_FEDERATED_PLOT_METRICS,
+    *_FEDERATED_REGRESSION_PLOT_METRICS,
+    *_FEDERATED_CLASSIFICATION_PLOT_METRICS,
+]
