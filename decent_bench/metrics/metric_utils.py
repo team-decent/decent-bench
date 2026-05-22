@@ -12,6 +12,7 @@ from sklearn import metrics as sk_metrics
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.agents import AgentMetricsView
+from decent_bench.costs import Cost, EmpiricalRiskCost
 from decent_bench.utils.array import Array
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import Dataset
@@ -46,6 +47,26 @@ def _clear_caches() -> None:
     x_mean.cache_clear()
     _x_error.cache_clear()
     _predict_agent.cache_clear()
+    _non_server_views.cache_clear()
+    _server_view.cache_clear()
+
+
+@cache
+def _non_server_views(agents: tuple[AgentMetricsView, ...]) -> tuple[AgentMetricsView, ...]:
+    """Return all non-server agent views."""
+    return tuple(agent for agent in agents if not agent.is_server)
+
+
+@cache
+def _server_view(agents: tuple[AgentMetricsView, ...]) -> AgentMetricsView:
+    """Return the federated server view."""
+    return next(agent for agent in agents if agent.is_server)
+
+
+def _drifts(agents: Sequence[AgentMetricsView], server: AgentMetricsView, iteration: int) -> list[float]:
+    """Calculate each agent's distance from the server state at *iteration*."""
+    server_x = server.x_history[iteration]
+    return [float(iop.norm(agent.x_history[iteration] - server_x)) for agent in agents]
 
 
 def single(values: Sequence[float]) -> float:
@@ -127,6 +148,28 @@ def _x_error(agent: AgentMetricsView, problem: "BenchmarkProblem", iteration: in
     return float(la.norm(x_at_iteration - opt_x))
 
 
+def _observed_rounds(agents: Sequence[AgentMetricsView]) -> int:
+    """
+    Get the number of completed rounds observed in the agents' histories.
+
+    The initial snapshot is stored at iteration 0, so the maximum recorded iteration corresponds to the number of
+    completed algorithm rounds when the final snapshot is present.
+    """
+    if not agents:
+        return 0
+    return max(agent.x_history.max() for agent in agents)
+
+
+def _losses(agents: Sequence[AgentMetricsView], iteration: int) -> list[float]:
+    """Calculate each agent's loss at *iteration*."""
+    return [
+        agent.cost.function(agent.x_history[iteration], indices="all")
+        if isinstance(agent.cost, EmpiricalRiskCost)
+        else agent.cost.function(agent.x_history[iteration])
+        for agent in agents
+    ]
+
+
 def _accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the accuracy per agent.
@@ -182,6 +225,37 @@ def _mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iterat
             return [np.nan for _ in agents]
         ret.append(sk_metrics.mean_squared_error(test_y, preds))
     return ret
+
+
+def _predict_cost_at_x(cost: Cost, x: Array, problem: "BenchmarkProblem") -> NDArray[float64]:
+    """Get predictions from *cost* at an arbitrary model state *x*."""
+    test_x, _ = _split_dataset(problem.test_data)  # type: ignore[arg-type]
+    return iop.to_numpy(cost.predict(x, list(test_x)))  # type: ignore[attr-defined]
+
+
+def _accuracy_at_x(cost: Cost, x: Array, problem: "BenchmarkProblem") -> float:
+    """Calculate accuracy from *cost* predictions at an arbitrary model state *x*."""
+    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
+    preds = _predict_cost_at_x(cost, x, problem)
+    if np.any(~np.isfinite(preds)):
+        LOGGER.warning(
+            "Predictions contain NaN or Inf values, which are not valid for Accuracy calculation, "
+            "returning NaN for Accuracy"
+        )
+        return np.nan
+    return float(sk_metrics.accuracy_score(test_y, preds))
+
+
+def _mse_at_x(cost: Cost, x: Array, problem: "BenchmarkProblem") -> float:
+    """Calculate MSE from *cost* predictions at an arbitrary model state *x*."""
+    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
+    preds = _predict_cost_at_x(cost, x, problem)
+    if np.any(~np.isfinite(preds)):
+        LOGGER.warning(
+            "Predictions contain NaN or Inf values, which are not valid for MSE calculation, returning NaN for MSE"
+        )
+        return np.nan
+    return float(sk_metrics.mean_squared_error(test_y, preds))
 
 
 def _precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
@@ -427,13 +501,17 @@ def _fit_elbow_curve_given_breakpoint(y: NDArray[float64], b: int) -> tuple[NDAr
     m = len(y)  # num. datapoints
 
     # build the regression matrix, assuming the breakpoint is b
-    R: NDArray[float64] = np.hstack((  # noqa: N806
-        np.vstack((
-            np.arange(0, b + 1, 1).reshape((b + 1, 1)),
-            b * np.ones((m - b - 1, 1)),
-        )),
-        np.ones((m, 1)),
-    ))
+    R: NDArray[float64] = np.hstack(  # noqa: N806
+        (
+            np.vstack(
+                (
+                    np.arange(0, b + 1, 1).reshape((b + 1, 1)),
+                    b * np.ones((m - b - 1, 1)),
+                )
+            ),
+            np.ones((m, 1)),
+        )
+    )
 
     # analytical expression for inverse of R.T @ R
     S_00 = b * (b + 1) * (2 * b + 1) / 6.0 + (m - b - 1) * b**2  # noqa: N806

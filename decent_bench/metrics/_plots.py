@@ -633,11 +633,12 @@ def _get_marker_style_color(
 
 
 def _calc_total_cost(agent_states: list[list[AgentMetricsView]], computational_cost: ComputationalCost) -> float:
-    mean_function_calls = np.mean([a.n_function_calls for agents in agent_states for a in agents])
-    mean_gradient_calls = np.mean([a.n_gradient_calls for agents in agent_states for a in agents])
-    mean_hessian_calls = np.mean([a.n_hessian_calls for agents in agent_states for a in agents])
-    mean_proximal_calls = np.mean([a.n_proximal_calls for agents in agent_states for a in agents])
-    mean_communication_calls = np.mean([a.n_sent_messages for agents in agent_states for a in agents])
+    non_server_states = [a for agents in agent_states for a in agents if not a.is_server]
+    mean_function_calls = np.mean([a.n_function_calls for a in non_server_states])
+    mean_gradient_calls = np.mean([a.n_gradient_calls for a in non_server_states])
+    mean_hessian_calls = np.mean([a.n_hessian_calls for a in non_server_states])
+    mean_proximal_calls = np.mean([a.n_proximal_calls for a in non_server_states])
+    mean_communication_calls = np.mean([a.n_sent_messages for a in non_server_states])
 
     return float(
         computational_cost.function * mean_function_calls

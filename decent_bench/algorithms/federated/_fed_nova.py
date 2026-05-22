@@ -162,7 +162,7 @@ class FedNova(FedAlgorithm):
         self.num_local_steps = self._num_local_steps_by_client
 
     def step(self, network: FedNetwork, iteration: int) -> None:
-        selected_clients = self._selected_clients_for_round(network, iteration)
+        selected_clients = self.select_clients(network, iteration)
         if not selected_clients:
             return
 
@@ -270,7 +270,6 @@ class FedNova(FedAlgorithm):
         received_clients = [client for client in received_gradient_clients if client in received_normalizers]
         if not received_clients:
             return
-
         server_sample_counts = server.aux_vars["client_sample_counts"]
         server_x = iop.copy(server.x)
         cumulative_gradients = [server.messages[client] for client in received_clients]

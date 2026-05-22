@@ -104,7 +104,7 @@ class FedOpt(FedAlgorithm, ABC):
             client.initialize(x=self.x0[client])
 
     def step(self, network: FedNetwork, iteration: int) -> None:
-        selected_clients = self._selected_clients_for_round(network, iteration)
+        selected_clients = self.select_clients(network, iteration)
         if not selected_clients:
             return
 
@@ -149,7 +149,6 @@ class FedOpt(FedAlgorithm, ABC):
         received_clients = [client for client in participating_clients if client in server.messages]
         if not received_clients:
             return
-
         server_x = iop.copy(server.x)
         model_deltas = [server.messages[client] for client in received_clients]
         weights = [1.0] * len(received_clients)

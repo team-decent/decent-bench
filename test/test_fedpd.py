@@ -135,7 +135,7 @@ def test_fedpd_always_selects_all_active_clients() -> None:
 
 
 def test_fedpd_rejects_selection_scheme_argument() -> None:
-    with pytest.raises(TypeError, match="selection_scheme"):
+    with pytest.raises(TypeError, match="unexpected keyword argument 'selection_scheme'"):
         FedPD(selection_scheme=object())
 
 

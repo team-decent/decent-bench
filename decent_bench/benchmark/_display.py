@@ -204,7 +204,7 @@ def _filter_algorithms(
         )
 
     for attribute in ("agent_metrics", "table_results", "plot_results"):
-        mapping = getattr(metrics_result, attribute)
+        mapping = getattr(metrics_result, attribute, None)
         if mapping is not None:
             setattr(
                 metrics_result,

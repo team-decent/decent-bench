@@ -93,7 +93,7 @@ class FedDyn(FedAlgorithm):
             client.initialize(x=client_x0, aux_vars={"g": iop.zeros_like(client_x0)})
 
     def step(self, network: FedNetwork, iteration: int) -> None:
-        selected_clients = self._selected_clients_for_round(network, iteration)
+        selected_clients = self.select_clients(network, iteration)
         if not selected_clients:
             return
 
@@ -140,7 +140,6 @@ class FedDyn(FedAlgorithm):
         received_clients = [client for client in participating_clients if client in server.messages]
         if not received_clients:
             return
-
         reference_x = iop.copy(server.x)
         client_models = [server.messages[client] for client in received_clients]
         average_model = self._weighted_average(

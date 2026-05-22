@@ -714,7 +714,7 @@ class CheckpointManager:  # noqa: PLR0904
                         )
                         continue
                     resulting_agent_states[original_alg] = [
-                        [AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks
+                        [AgentMetricsView.from_agent(a) for a in nw.snapshot_agents()] for nw in networks
                     ]
                 metrics_result.agent_metrics = resulting_agent_states
             except Exception as e:
