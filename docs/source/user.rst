@@ -48,7 +48,7 @@ Note:
 
         costs, x_optimal = create_quadratic_problem(10, n_agents)
 
-        agents = [Agent(i, cost) for i, cost in enumerate(costs)]
+        agents = [Agent(cost) for i, cost in enumerate(costs)]
         graph = nx.complete_graph(n_agents)
         
         net = P2PNetwork(
@@ -359,8 +359,6 @@ If you set ``individual_plots = True`` then each plot metric will be displayed i
 otherwise groups of up to 3 plot metrics will be displayed together in the same figure as subplots.
 If you set ``compare_iterations_and_computational_cost = True``, then an additional column of subplots will be added to each figure comparing iterations and computational cost, 
 which can be useful to understand the trade-off between faster convergence and higher computational cost for different algorithms.
-If you set ``plot_metrics`` to a list of lists of :class:`~decent_bench.metrics.Metric` objects (`list[list[Metric]]`), then each inner list will be plotted together in the same figure as subplots,
-allowing you to control which metrics are plotted together.
 
 
 Interpreting Metric Warnings
@@ -525,7 +523,7 @@ Create a custom benchmark problem using existing resources.
         costs=costs,
         x_optimal=x_optimal,
         agent_activations=[UniformActivationRate(0.5)] * n_agents,
-        message_compression=Quantization(n_significant_digits=4),
+        message_compression=Quantization(quantization_step=0.01),
         message_noise=GaussianNoise(mean=0, std=0.001),
         message_drop=UniformDropRate(drop_rate=0.5),
     )
@@ -1057,8 +1055,7 @@ Create your own metrics to tabulate and/or plot.
 
     class XError(Metric):
 
-        table_description: str = "x error"
-        plot_description: str = "x error"
+        description: str = "x error"
 
         def get_data_from_trial(  # noqa: D102
             self,
