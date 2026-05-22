@@ -114,13 +114,15 @@ class MetricResult:
             for algorithm, table_metric_results in self.table_results.items():
                 for metric, statistics in table_metric_results.items():
                     for statistic_name, (mean, margin_of_error) in statistics.items():
-                        table_rows.append({
-                            "algorithm": algorithm.name,
-                            "metric": metric.description,
-                            "statistic": statistic_name,
-                            "mean": mean,
-                            "margin_of_error": margin_of_error,
-                        })
+                        table_rows.append(
+                            {
+                                "algorithm": algorithm.name,
+                                "metric": metric.description,
+                                "statistic": statistic_name,
+                                "mean": mean,
+                                "margin_of_error": margin_of_error,
+                            }
+                        )
 
             table_frame = pd.DataFrame.from_records(
                 table_rows,
@@ -139,14 +141,16 @@ class MetricResult:
                         y_max_values,
                         strict=True,
                     ):
-                        plot_rows.append({
-                            "algorithm": algorithm.name,
-                            "metric": metric.description,
-                            "x": x_value,
-                            "y_mean": y_mean,
-                            "y_min": y_min,
-                            "y_max": y_max,
-                        })
+                        plot_rows.append(
+                            {
+                                "algorithm": algorithm.name,
+                                "metric": metric.description,
+                                "x": x_value,
+                                "y_mean": y_mean,
+                                "y_min": y_min,
+                                "y_max": y_max,
+                            }
+                        )
 
             plot_frame = pd.DataFrame.from_records(
                 plot_rows,

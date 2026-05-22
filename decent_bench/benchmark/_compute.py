@@ -113,7 +113,9 @@ def compute_metrics(
     # compute table and plot results
     resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
     for alg, networks in benchmark_result.states.items():
-        resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
+        resulting_agent_states[alg] = [
+            [AgentMetricsView.from_agent(a) for a in nw.snapshot_agents()] for nw in networks
+        ]
     table_results = compute_tables(resulting_agent_states, benchmark_result.problem, table_metrics, confidence_level)
     plot_results = compute_plots(resulting_agent_states, benchmark_result.problem, plot_metrics)
 
@@ -141,8 +143,8 @@ def compute_metrics(
 
 def _resolve_default_metrics(
     table_metrics: list[Metric] | None,
-    plot_metrics: list[Metric] | list[list[Metric]] | None,
-) -> tuple[list[Metric], list[Metric] | list[list[Metric]]]:
+    plot_metrics: list[Metric] | None,
+) -> tuple[list[Metric], list[Metric]]:
     if table_metrics is None:
         table_metrics = ml._DEFAULT_TABLE_METRICS  # noqa: SLF001
     if plot_metrics is None:

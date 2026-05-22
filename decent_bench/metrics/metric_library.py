@@ -715,7 +715,7 @@ class FractionSelectedClients(Metric):
         self,
         problem: "BenchmarkProblem",
     ) -> tuple[bool, str | None]:
-        return _requires_fednetwork(problem, self.table_description)
+        return _requires_fednetwork(problem, self.description)
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -929,7 +929,7 @@ _CLASSIFICATION_PLOT_METRICS: list[Metric] = _CLASSIFICATION_TABLE_METRICS
 
 _FEDERATED_TABLE_METRICS: list[Metric] = [
     ClientDriftFromServer([min, np.average, max]),
-    FractionSelectedClients([utils.single], fmt=".2%", x_log=False, y_log=False),
+    FractionSelectedClients(fmt=".2%", x_log=False, y_log=False),
 ]
 """
 - :class:`ClientDriftFromServer` - min, average, max
@@ -948,7 +948,7 @@ _FEDERATED_PLOT_METRICS: list[Metric] = [
 """
 
 _FEDERATED_REGRESSION_TABLE_METRICS: list[Metric] = [
-    ServerMSE([utils.single], x_log=False, y_log=True),
+    ServerMSE(x_log=False, y_log=True),
 ]
 """
 - :class:`ServerMSE` - single value
@@ -966,7 +966,7 @@ _FEDERATED_REGRESSION_PLOT_METRICS: list[Metric] = [
 """
 
 _FEDERATED_CLASSIFICATION_TABLE_METRICS: list[Metric] = [
-    ServerAccuracy([utils.single], fmt=".2%", x_log=False, y_log=False),
+    ServerAccuracy(fmt=".2%", x_log=False, y_log=False),
 ]
 """
 - :class:`ServerAccuracy` - single value with percentage format

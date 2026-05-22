@@ -143,8 +143,8 @@ def _build_minimal_benchmark_result() -> BenchmarkResult:
 
 def _build_federated_benchmark_result(iterations: int = 2) -> tuple[BenchmarkResult, FedAvg]:
     clients = [
-        Agent(0, QuadraticCost(np.eye(1), np.array([0.0]))),
-        Agent(1, QuadraticCost(np.eye(1), np.array([0.0]))),
+        Agent(QuadraticCost(np.eye(1), np.array([0.0]))),
+        Agent(QuadraticCost(np.eye(1), np.array([0.0]))),
     ]
     network = FedNetwork(clients=clients)
     algorithm = FedAvg(iterations=iterations, step_size=0.1)
@@ -457,13 +457,13 @@ def test_compute_metrics_uses_federated_defaults_and_server_view() -> None:  # n
     )
 
     assert metrics_result.table_results is not None
-    assert metrics_result.table_results[algorithm][selected_metric]["single"] == (1.0, 0.0)
+    assert metrics_result.table_results[algorithm][selected_metric][""] == (1.0, 0.0)
     assert metrics_result.table_results[algorithm][sent_messages_metric]["sum"] == (8.0, 0.0)
 
 
 def test_compute_metrics_custom_metrics_do_not_append_federated_defaults(monkeypatch) -> None:  # noqa: D103
     benchmark_result, _ = _build_federated_benchmark_result(iterations=1)
-    metric = _MetricStub("custom table", "custom plot")
+    metric = _MetricStub("custom table")
     captured: dict[str, object] = {}
 
     def _capture_tables(*args, **kwargs):
@@ -479,7 +479,7 @@ def test_compute_metrics_custom_metrics_do_not_append_federated_defaults(monkeyp
 
     compute_metrics(benchmark_result=benchmark_result, table_metrics=[metric], plot_metrics=[])
 
-    assert [m.table_description for m in captured["table_metrics"]] == [metric.table_description]
+    assert [m.description for m in captured["table_metrics"]] == [metric.description]
     assert captured["plot_metrics"] == []
 
 
@@ -759,7 +759,7 @@ def test_classification_metrics_unavailable_with_float_targets() -> None:  # noq
 def test_server_mse_availability_and_values() -> None:  # noqa: D103
     test_data = [(np.array([1.0]), np.array([1.0]))]
     cost = LinearRegressionCost(test_data)
-    client = Agent(0, cost)
+    client = Agent(cost)
     client.initialize(x=np.array([0.0]))
 
     unavailable_problem = SimpleNamespace(
@@ -770,10 +770,16 @@ def test_server_mse_availability_and_values() -> None:  # noqa: D103
     assert not available
     assert "FedNetwork" in reason
 
+    client = Agent(cost)
+    client.initialize(x=np.array([0.0]))
+
     fed_problem_without_test_data = BenchmarkProblem(network=FedNetwork([client]))
     available, reason = ml.ServerMSE([np.average]).is_available(fed_problem_without_test_data)
     assert not available
     assert reason == "requires problem.test_data"
+
+    client = Agent(cost)
+    client.initialize(x=np.array([0.0]))
 
     problem = BenchmarkProblem(network=FedNetwork([client]), test_data=test_data)
     metric = ml.ServerMSE([np.average])
@@ -808,12 +814,15 @@ def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
     train_data = [(np.array([1.0]), np.array([1])), (np.array([-1.0]), np.array([0]))]
     test_data = [(np.array([1.0]), 1), (np.array([-1.0]), 0)]
     cost = LogisticRegressionCost(train_data)
-    client = Agent(0, cost)
+    client = Agent(cost)
     client.initialize(x=np.array([0.0]))
     problem = BenchmarkProblem(network=FedNetwork([client]), test_data=test_data)
 
+    client_for_float_targets = Agent(cost)
+    client_for_float_targets.initialize(x=np.array([0.0]))
+
     float_target_problem = BenchmarkProblem(
-        network=FedNetwork([client]),
+        network=FedNetwork([client_for_float_targets]),
         test_data=[(np.array([1.0]), 1.0), (np.array([-1.0]), 0.0)],
     )
     metric = ml.ServerAccuracy([np.average])
