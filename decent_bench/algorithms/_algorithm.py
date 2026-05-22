@@ -93,7 +93,7 @@ class Algorithm[NetworkT: Network](ABC):
 
     @final
     def _snapshot_agents(self, network: NetworkT, iteration: int) -> None:
-        for i in network.agents():
+        for i in network.snapshot_agents():
             # Forcefully save a snapshot on the final iteration
             i._snapshot(iteration=iteration, force=iteration == self.iterations)  # noqa: SLF001
 

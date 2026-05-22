@@ -81,7 +81,7 @@ class FedLT(FedAlgorithm):
     One possible centralized strongly-convex choice is
     :math:`\beta=(\sqrt{L_i + 1/\rho} - \sqrt{\mu_i + 1/\rho}) / (\sqrt{L_i + 1/\rho}
     + \sqrt{\mu_i + 1/\rho})`, with local step size :math:`1/(L_i + 1/\rho)`, where
-    :math:`L_i=\texttt{m_smooth}` and :math:`\mu_i=\texttt{m_cvx}`.
+    ``m_smooth`` supplies :math:`L_i` and ``m_cvx`` supplies :math:`\mu_i`.
 
     **Adam.**
     The ``local_solver="adam"`` option applies Adam to the same local gradient. Adam moments are reset at the start
@@ -200,7 +200,7 @@ class FedLT(FedAlgorithm):
         y = self._compute_server_y(network)
         network.server().x = y
 
-        selected_clients = self._selected_clients_for_round(network, iteration)
+        selected_clients = self.select_clients(network, iteration)
         if not selected_clients:
             return
 

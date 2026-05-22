@@ -53,6 +53,8 @@ class Agent:
         self._n_sent_messages = 0
         self._n_received_messages = 0
         self._n_sent_messages_dropped = 0
+        self._n_times_selected = 0
+        self._is_server = False
         self._n_function_calls: float = 0
         self._n_gradient_calls: float = 0
         self._n_hessian_calls: float = 0
@@ -138,6 +140,7 @@ class Agent:
         self._n_sent_messages = 0
         self._n_received_messages = 0
         self._n_sent_messages_dropped = 0
+        self._n_times_selected = 0
         self._n_function_calls = 0
         self._n_gradient_calls = 0
         self._n_hessian_calls = 0
@@ -397,6 +400,8 @@ class AgentMetricsView:
     n_sent_messages: int
     n_received_messages: int
     n_sent_messages_dropped: int
+    n_times_selected: int
+    is_server: bool
 
     @staticmethod
     def from_agent(agent: Agent) -> AgentMetricsView:
@@ -412,4 +417,6 @@ class AgentMetricsView:
             n_sent_messages=agent._n_sent_messages,  # noqa: SLF001
             n_received_messages=agent._n_received_messages,  # noqa: SLF001
             n_sent_messages_dropped=agent._n_sent_messages_dropped,  # noqa: SLF001
+            n_times_selected=agent._n_times_selected,  # noqa: SLF001
+            is_server=agent._is_server,  # noqa: SLF001
         )

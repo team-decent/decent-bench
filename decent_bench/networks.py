@@ -180,6 +180,10 @@ class Network(ABC):  # noqa: B024
         """
         return self._agents_cache
 
+    def snapshot_agents(self) -> list[Agent]:
+        """Get agents whose state should be snapshotted during algorithm execution."""
+        return list(self.graph.nodes())
+
     @cached_property
     def _agents_cache(self) -> list[Agent]:
         """Cached list of agents; assumes the underlying graph is not mutated after construction."""
@@ -522,6 +526,9 @@ class FedNetwork(Network):
             )
         elif not isinstance(server._activation, AlwaysActive):  # noqa: SLF001
             raise ValueError("FedNetwork server must use AlwaysActive activation")
+        for client in clients:
+            client._is_server = False  # noqa: SLF001
+        server._is_server = True  # noqa: SLF001
         graph = nx.star_graph([server, *list(clients)])  # create AgentGraph
 
         # specify the server's message schemes if not provided

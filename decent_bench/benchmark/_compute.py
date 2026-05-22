@@ -29,8 +29,8 @@ def compute_metrics(
     benchmark_result: BenchmarkResult | None = None,
     checkpoint_manager: "CheckpointManager | None" = None,
     *,
-    table_metrics: list[Metric] = ml.DEFAULT_TABLE_METRICS,
-    plot_metrics: list[Metric] | list[list[Metric]] = ml.DEFAULT_PLOT_METRICS,
+    table_metrics: list[Metric] | None = None,
+    plot_metrics: list[Metric] | list[list[Metric]] | None = None,
     confidence_level: float = 0.95,
     log_level: int = logging.INFO,
 ) -> MetricResult:
@@ -42,10 +42,11 @@ def compute_metrics(
             checkpoint manager
         checkpoint_manager: if provided, will be used to save results of metrics computation and/or load benchmark
             result.
-        table_metrics: metrics to tabulate as confidence intervals after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_library.DEFAULT_TABLE_METRICS`
-        plot_metrics: metrics to plot after the execution, defaults to
-            :const:`~decent_bench.metrics.metric_library.DEFAULT_PLOT_METRICS`.
+        table_metrics: metrics to tabulate as confidence intervals after the execution. If ``None``, all table metrics
+            available for the benchmark problem will be used. For example, federated-only metrics are removed when a
+            non-federated network is passed.
+        plot_metrics: metrics to plot after the execution. If ``None``, all plot metrics available for the benchmark
+            problem will be used.
             If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
             metrics will be grouped and plotted in their own figure with subplots.
         confidence_level: confidence level for computing confidence intervals of the table metrics, expressed as a value
@@ -96,6 +97,8 @@ def compute_metrics(
         if len(benchmark_result.states) == 0:
             raise ValueError("No benchmark result found in checkpoint manager to compute metrics")
 
+    table_metrics, plot_metrics = _resolve_default_metrics(table_metrics, plot_metrics)
+
     # work on independent metric instances
     table_metrics = deepcopy(table_metrics)
     plot_metrics = deepcopy(plot_metrics)
@@ -117,9 +120,20 @@ def compute_metrics(
     # compute table and plot results
     resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
     for alg, networks in benchmark_result.states.items():
-        resulting_agent_states[alg] = [[AgentMetricsView.from_agent(a) for a in nw.agents()] for nw in networks]
-    table_results = compute_tables(resulting_agent_states, benchmark_result.problem, table_metrics, confidence_level)
-    plot_results = compute_plots(resulting_agent_states, benchmark_result.problem, plot_metrics)
+        resulting_agent_states[alg] = [
+            [AgentMetricsView.from_agent(a) for a in nw.snapshot_agents()] for nw in networks
+        ]
+    table_results = compute_tables(
+        resulting_agent_states,
+        benchmark_result.problem,
+        table_metrics,
+        confidence_level,
+    )
+    plot_results = compute_plots(
+        resulting_agent_states,
+        benchmark_result.problem,
+        plot_metrics,
+    )
 
     result = MetricResult(
         agent_metrics=resulting_agent_states,
@@ -144,6 +158,17 @@ def compute_metrics(
     return result
 
 
+def _resolve_default_metrics(
+    table_metrics: list[Metric] | None,
+    plot_metrics: list[Metric] | list[list[Metric]] | None,
+) -> tuple[list[Metric], list[Metric] | list[list[Metric]]]:
+    if table_metrics is None:
+        table_metrics = ml._DEFAULT_TABLE_METRICS  # noqa: SLF001
+    if plot_metrics is None:
+        plot_metrics = ml._DEFAULT_PLOT_METRICS  # noqa: SLF001
+    return table_metrics, plot_metrics
+
+
 def _validate_unique_metric_descriptions(
     table_metrics: list[Metric],
     plot_metrics: list[Metric] | list[list[Metric]],
@@ -153,9 +178,9 @@ def _validate_unique_metric_descriptions(
         duplicates = ", ".join(duplicate_table_descriptions)
         raise ValueError(f"Table metric descriptions must be unique, duplicates found: {duplicates}")
 
-    duplicate_plot_descriptions = _find_duplicates([
-        metric.plot_description for metric in _flatten_plot_metrics(plot_metrics)
-    ])
+    duplicate_plot_descriptions = _find_duplicates(
+        [metric.plot_description for metric in _flatten_plot_metrics(plot_metrics)]
+    )
     if duplicate_plot_descriptions:
         duplicates = ", ".join(duplicate_plot_descriptions)
         raise ValueError(f"Plot metric descriptions must be unique, duplicates found: {duplicates}")
