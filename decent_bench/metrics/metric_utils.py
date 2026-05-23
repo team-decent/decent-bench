@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
 
 
-CACHE_MAX_SIZE = 50
+CACHE_MAX_SIZE = 50_000
 
 
 class MetricProgressBar(Progress):
