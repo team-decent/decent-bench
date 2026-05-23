@@ -15,6 +15,7 @@ dependencies = [
   "matplotlib",
   "networkx",
   "numpy",
+  "pandas",
   "rich",
   "scipy",
   "scikit-learn",
@@ -39,7 +40,6 @@ dev = [
   "torch",
   "torchvision",
   "types-tensorflow",
-  "pandas",
   "pandas-stubs",
   "kagglehub",
 ]
@@ -138,7 +138,6 @@ lint.ignore = [
   "PLR0913",  # too-many-arguments, complains when there are more than 5 arguments
   "PLR2004",  # magic-value-comparison, complains about dimension checks in cost functions
   "PLR6301",  # no-self-use, complains when self is unused even when implementing an abstract method
-  "RUF100",   # unused-noqa, noisy when preview-only rules are disabled
   "S311",     # suspicious-non-cryptographic-random-usage, complains about `random.random()`
   "TC001",    # typing-only-first-party-import, reduced rt overhead but slower development and messy imports
   "TC002",    # typing-only-third-party-import, reduced rt overhead but slower development and messy imports

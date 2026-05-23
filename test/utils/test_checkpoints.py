@@ -7,7 +7,7 @@ import sys
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import networkx as nx
 import numpy as np
@@ -56,8 +56,8 @@ def _skip_if_max_processes_exceeds_cpu_count(max_processes: int) -> None:
 class DummyAlg(DGD):
     def finalize(self, network: P2PNetwork) -> None:
         for agent in network.agents():
-            if agent.id == 0:
-                print(f"Agent {agent.id} finalizing with x: {agent.x}")  # noqa: T201
+            if agent.index == 0:
+                print(f"Agent {agent.index} finalizing with x: {agent.x}")  # noqa: T201
             agent.x = agent.x + 100
 
 
@@ -70,11 +70,11 @@ def _build_problem_and_algorithms(
         cost_cls=cost_cls,
         n_agents=4,
     )
-    agents = [Agent(i, cost, activation=UniformActivationRate(0.8)) for i, cost in enumerate(costs)]
+    agents = [Agent(cost, activation=UniformActivationRate(0.8)) for cost in costs]
     network = P2PNetwork(
         graph=nx.complete_graph(len(agents)),
         agents=agents,
-        message_compression=Quantization(8),
+        message_compression=Quantization(quantization_step=1e-2),
         message_noise=GaussianNoise(0.0, 0.01),
         message_drop=UniformDropRate(0.1),
     )
@@ -96,6 +96,21 @@ def test_init_validates_arguments(tmp_path: Path) -> None:  # noqa: D103
 
     with pytest.raises(ValueError, match="keep_n_checkpoints must be a positive integer"):
         CheckpointManager(tmp_path / "ckpt", keep_n_checkpoints=0)
+
+
+def test_checkpoint_restores_top_level_agent_keyed_algorithm_dict(tmp_path: Path) -> None:  # noqa: D103
+    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
+    algorithm = algorithms[0]
+    algorithm.custom_agent_map = {agent: float(idx) for idx, agent in enumerate(problem.network.agents())}  # type: ignore[attr-defined]
+    manager = CheckpointManager(tmp_path / "ckpt", keep_n_checkpoints=3)
+    manager.initialize(algorithms=[algorithm], problem=problem, n_trials=1)
+
+    loaded_algs = manager.load_initial_algorithms(network=problem.network)
+    loaded_alg = loaded_algs[0]
+
+    loaded_map = cast("dict[Agent, float]", loaded_alg.custom_agent_map)  # type: ignore[attr-defined]
+    assert all(isinstance(key, Agent) for key in loaded_map)
+    assert set(loaded_map) == set(problem.network.agents())
 
 
 def test_initialize_saves_structure_and_metadata(tmp_path: Path) -> None:  # noqa: D103

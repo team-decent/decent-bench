@@ -65,12 +65,12 @@ class DropOnCalls(DropScheme):
 
 
 class ScheduledSelection(ClientSelectionScheme):
-    def __init__(self, selected_ids_by_round: dict[int, list[int]]):
-        self._selected_ids_by_round = selected_ids_by_round
+    def __init__(self, selected_indices_by_round: dict[int, list[int]]):
+        self._selected_indices_by_round = selected_indices_by_round
 
     def select(self, clients: Sequence[Agent], iteration: int) -> list[Agent]:
-        selected_ids = set(self._selected_ids_by_round.get(iteration, []))
-        return [client for client in clients if client.id in selected_ids]
+        selected_indices = set(self._selected_indices_by_round.get(iteration, []))
+        return [client for client in clients if client.index in selected_indices]
 
 
 def _run_scaffold_local_update(
@@ -82,8 +82,8 @@ def _run_scaffold_local_update(
     server_control: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     algorithm = Scaffold(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
-    client = Agent(0, cost)
-    server = Agent(1, ZeroCost(cost.shape))
+    client = Agent(cost)
+    server = Agent(ZeroCost(cost.shape))
     client.initialize(
         x=np.zeros(cost.shape, dtype=float),
         aux_vars={"c_i": np.array([client_control], dtype=float)},
@@ -97,7 +97,7 @@ def _run_scaffold_local_update(
 
 
 def test_scaffold_initializes_control_variates_from_c0() -> None:
-    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))]
+    clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))]
     network = FedNetwork(clients=clients)
     algorithm = Scaffold(
         iterations=1,
@@ -116,7 +116,7 @@ def test_scaffold_initializes_control_variates_from_c0() -> None:
 
 
 def test_scaffold_infers_server_control_from_client_c0() -> None:
-    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))]
+    clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))]
     network = FedNetwork(clients=clients)
     algorithm = Scaffold(
         iterations=1,
@@ -155,7 +155,7 @@ def test_scaffold_persists_control_variates_across_rounds() -> None:
         num_local_epochs=1,
         server_step_size=1.0,
     )
-    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))]
+    clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))]
     network = FedNetwork(clients=clients)
     algorithm.initialize(network)
 
@@ -178,7 +178,7 @@ def test_scaffold_persists_control_variates_across_rounds() -> None:
 
 def test_scaffold_uses_uniform_aggregation() -> None:
     algorithm = Scaffold(iterations=1, step_size=1.0, num_local_epochs=1)
-    network = FedNetwork(clients=[Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))])
+    network = FedNetwork(clients=[Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))])
 
     algorithm.initialize(network)
     network._step(0)  # noqa: SLF001
@@ -201,8 +201,8 @@ def test_server_step_size_scales_only_the_server_model_update() -> None:
         num_local_epochs=1,
         server_step_size=0.25,
     )
-    full_step_network = FedNetwork(clients=[Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))])
-    damped_step_network = FedNetwork(clients=[Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))])
+    full_step_network = FedNetwork(clients=[Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))])
+    damped_step_network = FedNetwork(clients=[Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))])
 
     full_step_algorithm.initialize(full_step_network)
     damped_step_algorithm.initialize(damped_step_network)
@@ -220,7 +220,7 @@ def test_server_step_size_scales_only_the_server_model_update() -> None:
 
 def test_scaffold_aggregation_uses_only_received_updates_for_model_and_control_deltas() -> None:
     algorithm = Scaffold(iterations=1, step_size=1.0, num_local_epochs=1)
-    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(2.0))]
+    clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(2.0))]
     network = FedNetwork(clients=clients)
     algorithm.initialize(network)
     network.server().x = np.array([10.0])
@@ -243,9 +243,9 @@ def test_scaffold_partial_participation_persists_control_variates_across_rounds(
         step_size=1.0,
         num_local_epochs=1,
         server_step_size=1.0,
-        selection_scheme=ScheduledSelection({0: [0, 1], 1: [1], 2: [2]}),
+        selection_scheme=ScheduledSelection({0: [1, 2], 1: [2], 2: [3]}),
     )
-    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(2.0)), Agent(2, TrackingCost(3.0))]
+    clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(2.0)), Agent(TrackingCost(3.0))]
     network = FedNetwork(clients=clients)
     algorithm.initialize(network)
 
@@ -287,8 +287,8 @@ def test_scaffold_partial_participation_persists_control_variates_across_rounds(
 
 def test_scaffold_skips_participation_when_broadcast_is_dropped() -> None:
     algorithm = Scaffold(iterations=2, step_size=1.0, num_local_epochs=1)
-    client = Agent(0, TrackingCost(gradient_value=0.0))
-    server = Agent(1, ZeroCost((1,)))
+    client = Agent(TrackingCost(gradient_value=0.0))
+    server = Agent(ZeroCost((1,)))
     network = FedNetwork(
         clients=[client],
         server=server,
@@ -314,8 +314,8 @@ def test_scaffold_skips_participation_when_broadcast_is_dropped() -> None:
 
 def test_scaffold_dropped_server_broadcasts_do_not_make_clients_participate() -> None:
     algorithm = Scaffold(iterations=2, step_size=1.0, num_local_epochs=1)
-    clients = [Agent(0, TrackingCost(1.0)), Agent(1, TrackingCost(3.0))]
-    server = Agent(2, ZeroCost((1,)))
+    clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))]
+    server = Agent(ZeroCost((1,)))
     network = FedNetwork(
         clients=clients,
         server=server,

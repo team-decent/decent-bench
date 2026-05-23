@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from functools import cache
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -19,6 +19,9 @@ from decent_bench.utils.types import Dataset
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
+
+
+CACHE_MAX_SIZE = 50_000
 
 
 class MetricProgressBar(Progress):
@@ -45,19 +48,18 @@ class MetricProgressBar(Progress):
 def _clear_caches() -> None:
     """Clear module-level functools caches used by metric utilities."""
     x_mean.cache_clear()
-    _x_error.cache_clear()
     _predict_agent.cache_clear()
     _non_server_views.cache_clear()
     _server_view.cache_clear()
 
 
-@cache
+@lru_cache(maxsize=CACHE_MAX_SIZE)
 def _non_server_views(agents: tuple[AgentMetricsView, ...]) -> tuple[AgentMetricsView, ...]:
     """Return all non-server agent views."""
     return tuple(agent for agent in agents if not agent.is_server)
 
 
-@cache
+@lru_cache(maxsize=CACHE_MAX_SIZE)
 def _server_view(agents: tuple[AgentMetricsView, ...]) -> AgentMetricsView:
     """Return the federated server view."""
     return next(agent for agent in agents if agent.is_server)
@@ -69,20 +71,14 @@ def _drifts(agents: Sequence[AgentMetricsView], server: AgentMetricsView, iterat
     return [float(iop.norm(agent.x_history[iteration] - server_x)) for agent in agents]
 
 
-def single(values: Sequence[float]) -> float:
-    """
-    Assert that *values* contain exactly one element and return it.
-
-    Raises:
-        ValueError: if there isn't exactly one element in *values*
-
-    """
-    if len(values) != 1:
-        raise ValueError("Argument `values` must have exactly 1 element")
-    return values[0]
+def default_statistic(values: Sequence[float]) -> float:
+    """Return *values[0]* if it contains exactly one element, *mean(values)* otherwise."""
+    if len(values) == 1:
+        return values[0]
+    return np.average(values)
 
 
-@cache
+@lru_cache(maxsize=CACHE_MAX_SIZE)
 def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
     """
     Calculate the mean x at *iteration* (or using the agents' final x if *iteration* is -1).
@@ -112,9 +108,12 @@ def _regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", ite
     """
     x_opt = problem.x_optimal
     mean_x = x_mean(tuple(agents), iteration)
-    optimal_cost = sum(a.cost.function(x_opt) for a in agents)  # type: ignore[arg-type, misc]
-    actual_cost = sum(a.cost.function(mean_x) for a in agents)
-    return actual_cost - optimal_cost
+    optimal_cost, actual_cost = 0.0, 0.0
+    for a in agents:
+        kwargs = {"indices": "all"} if isinstance(a.cost, EmpiricalRiskCost) else {}
+        optimal_cost += a.cost.function(x_opt, **kwargs)  # type: ignore[arg-type]
+        actual_cost += a.cost.function(mean_x, **kwargs)
+    return (actual_cost - optimal_cost) / len(agents)
 
 
 def _gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> float:
@@ -126,26 +125,27 @@ def _gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> f
     .. include:: snippets/global_gradient_optimality.rst
     """
     mean_x = x_mean(tuple(agents), iteration)
-    grad_avg = sum(iop.to_numpy(a.cost.gradient(mean_x)) for a in agents) / len(agents)
-    return float(la.norm(grad_avg)) ** 2
+    gradients = []
+    for a in agents:
+        kwargs = {"indices": "all"} if isinstance(a.cost, EmpiricalRiskCost) else {}
+        gradients.append(iop.to_numpy(a.cost.gradient(mean_x, **kwargs)))
+    grad_avg = sum(gradients) / len(agents)
+    return float(la.norm(grad_avg))
 
 
-@cache
-def _x_error(agent: AgentMetricsView, problem: "BenchmarkProblem", iteration: int = -1) -> float:
+def _x_error(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
     r"""
-    Calculate x error at *iteration* (or at the agent's final x if *iteration* is -1).
+    Calculate x error at *iteration* (or at the final x if *iteration* is -1).
 
     .. math::
-        \|\mathbf{x}_k - \mathbf{x}^\star\|
+        \|\mathbf{\bar{x}}_k - \mathbf{x}^\star\|
 
-    where :math:`\mathbf{x}_k` is the agent's local x at iteration k,
+    where :math:`\mathbf{\bar{x}}_k` is the mean of the agents' local x at iteration k,
     and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
 
     """
-    agent_iteration = agent.x_history.max() if iteration == -1 else iteration
-    x_at_iteration = iop.to_numpy(agent.x_history[agent_iteration])
-    opt_x = iop.to_numpy(problem.x_optimal)  # type: ignore[arg-type]
-    return float(la.norm(x_at_iteration - opt_x))
+    mean_x = x_mean(tuple(agents), iteration)
+    return float(iop.norm(mean_x - problem.x_optimal))  # type: ignore[operator]
 
 
 def _observed_rounds(agents: Sequence[AgentMetricsView]) -> int:
@@ -335,7 +335,7 @@ def _split_dataset(data: Dataset) -> tuple[tuple[Array, ...], NDArray[float64]]:
     return test_x, test_y
 
 
-@cache
+@lru_cache(maxsize=CACHE_MAX_SIZE)
 def _predict_agent(agent: AgentMetricsView, iteration: int, problem: "BenchmarkProblem") -> NDArray[float64]:
     """Get the predictions of *agent* at *iteration*. Cached since predictions may be expensive."""
     test_x, _ = _split_dataset(problem.test_data)  # type: ignore[arg-type]

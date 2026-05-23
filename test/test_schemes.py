@@ -136,12 +136,12 @@ def test_cyclic_activation_requires_non_negative_offset() -> None:
 
 # test client selection
 def make_clients(n_clients: int) -> list[Agent]:
-    return [_make_linear_regression_client(agent_id, agent_id + 1) for agent_id in range(n_clients)]
+    return [_make_linear_regression_client(i + 1) for i in range(n_clients)]
 
 
-def _make_linear_regression_client(agent_id: int, n_samples: int, scale: float = 1.0) -> Agent:
+def _make_linear_regression_client(n_samples: int, scale: float = 1.0) -> Agent:
     dataset = [(np.array([1.0, 1.0]), np.array([0.0])) for _ in range(n_samples)]
-    return Agent(agent_id, scale * LinearRegressionCost(dataset))
+    return Agent(scale * LinearRegressionCost(dataset))
 
 
 @pytest.mark.parametrize(
@@ -169,18 +169,19 @@ def test_client_selection(
 def test_data_size_client_selection_prefers_larger_clients() -> None:
     iop.set_seed(0)
     clients = [
-        _make_linear_regression_client(0, 1),
-        _make_linear_regression_client(1, 1000),
+        _make_linear_regression_client(1),
+        _make_linear_regression_client(1000),
     ]
     scheme = DataSizeSelection(num_selected_clients=1)
 
     selected_client_ids = [scheme.select(clients, iteration=i)[0].id for i in range(200)]
+    larger_client_id = clients[1].id
 
-    assert selected_client_ids.count(1) > 190
+    assert selected_client_ids.count(larger_client_id) > 190
 
 
 def test_data_size_client_selection_requires_empirical_risk_cost() -> None:
-    clients = [Agent(0, L2RegularizerCost((2,))), Agent(1, L2RegularizerCost((2,)))]
+    clients = [Agent(L2RegularizerCost((2,))), Agent(L2RegularizerCost((2,)))]
     scheme = DataSizeSelection(num_selected_clients=1)
 
     with pytest.raises(ValueError, match="EmpiricalRiskCost"):
@@ -205,9 +206,9 @@ def test_fair_selection_updates_counts_when_all_selected() -> None:
 
 def test_high_loss_client_selection_selects_largest_loss() -> None:
     clients = [
-        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(2, 2.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(2.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
     ]
     for client in clients:
         client.x = Array(np.ones(2))
@@ -220,11 +221,11 @@ def test_high_loss_client_selection_selects_largest_loss() -> None:
 
 def test_high_loss_client_selection_selects_fraction() -> None:
     clients = [
-        Agent(0, 1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(1, 10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(2, 2.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(3, 5.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
-        Agent(4, 3.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(1.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(10.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(2.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(5.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
+        Agent(3.0 * L2RegularizerCost((2,)), data={"n_samples": 1}),
     ]
     for client in clients:
         client.x = Array(np.ones(2))
@@ -252,8 +253,8 @@ def test_high_loss_client_selection_does_not_consume_empirical_risk_batch() -> N
     iop.set_seed(0)
     selected_cost = LinearRegressionCost(dataset, batch_size=2)
     clients = [
-        Agent(0, selected_cost),
-        Agent(1, LinearRegressionCost(dataset, batch_size=2)),
+        Agent(selected_cost),
+        Agent(LinearRegressionCost(dataset, batch_size=2)),
     ]
     for client in clients:
         client.x = x
@@ -272,7 +273,7 @@ def test_high_loss_client_selection_does_not_consume_empirical_risk_batch() -> N
     ("scheme", "message"),
     [
         (NoCompression(), Array(np.array([3.0, -4.0, 1.0]))),
-        (Quantization(n_significant_digits=5), Array(np.array([1.2345, -2.3456]))),
+        (Quantization(quantization_step=1e-6), Array(np.array([1.2345, -2.3456]))),
         (StochasticQuantization(n_levels=4), Array(np.array([0.0, 0.0, 0.0]))),
         (TopK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
         (RandK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
@@ -292,9 +293,9 @@ def test_no_compression(scheme: CompressionScheme, message: Array) -> None:
     ("scheme", "message", "expected_norm"),
     [
         (
-            Quantization(n_significant_digits=3),
+            Quantization(quantization_step=1e-2),
             Array(np.array([1.2345, -2.3456])),
-            float(np.linalg.norm(np.array([0.0045, -0.0044]))),
+            float(np.linalg.norm(np.array([0.0045, 0.0044]))),
         ),
         (TopK(k=2 / 3), Array(np.array([3.0, -4.0, 1.0])), 1.0),
         (TopK(k=2), Array(np.array([3.0, -4.0, 1.0])), 1.0),
@@ -309,6 +310,12 @@ def test_compression(
     compression_error = float(iop.norm(original_message - scheme.compress(message)))
 
     assert compression_error == pytest.approx(expected_norm)
+
+
+@pytest.mark.parametrize("quantization_step", [0, -1.0])
+def test_quantization_invalid_step(quantization_step: float) -> None:
+    with pytest.raises(ValueError, match="quantization_step"):
+        Quantization(quantization_step)
 
 
 # test RandK
@@ -488,7 +495,9 @@ def test_no_noise(
     scheme: NoiseScheme,
 ) -> None:
     message = Array(np.ones(5))
-    noise_error = float(iop.norm(message - scheme.make_noise(message)))
+    framework, device = iop.framework_device_of_array(message)
+    noise = scheme.make_noise(iop.shape(message), framework, device)
+    noise_error = 0 if noise is None else float(iop.norm(noise))
 
     assert noise_error == pytest.approx(0)
 
@@ -504,7 +513,9 @@ def test_noise(
     scheme: NoiseScheme,
 ) -> None:
     message = Array(np.ones(5))
-    noise_error = float(iop.norm(message - scheme.make_noise(message)))
+    framework, device = iop.framework_device_of_array(message)
+    noise = scheme.make_noise(iop.shape(message), framework, device)
+    noise_error = 0 if noise is None else float(iop.norm(noise))
 
     assert noise_error > 0
 

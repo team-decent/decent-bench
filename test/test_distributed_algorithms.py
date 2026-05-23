@@ -108,7 +108,6 @@ def _create_p2p_network(impairments: bool, cost_cls: type) -> P2PNetwork:
         )
     agents = [
         Agent(
-            i,
             cost,
             activation=UniformActivationRate(0.8) if impairments else None,
         )
@@ -117,7 +116,7 @@ def _create_p2p_network(impairments: bool, cost_cls: type) -> P2PNetwork:
     return P2PNetwork(
         graph=nx.complete_graph(len(agents)),
         agents=agents,
-        message_compression=Quantization(8) if impairments else None,
+        message_compression=Quantization(quantization_step=1e-2) if impairments else None,
         message_noise=GaussianNoise(0.0, 0.01) if impairments else None,
         message_drop=UniformDropRate(0.1) if impairments else None,
     )
@@ -142,7 +141,6 @@ def _create_fed_network(impairments: bool, cost_cls: type) -> FedNetwork:
         )
     agents = [
         Agent(
-            i,
             cost,
             activation=UniformActivationRate(0.8) if impairments else None,
         )
@@ -150,7 +148,7 @@ def _create_fed_network(impairments: bool, cost_cls: type) -> FedNetwork:
     ]
     return FedNetwork(
         clients=agents,
-        message_compression=Quantization(8) if impairments else None,
+        message_compression=Quantization(quantization_step=1e-2) if impairments else None,
         message_noise=GaussianNoise(0.0, 0.01) if impairments else None,
         message_drop=UniformDropRate(0.1) if impairments else None,
     )

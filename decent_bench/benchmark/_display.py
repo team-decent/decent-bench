@@ -12,7 +12,6 @@ from decent_bench.metrics import (
     display_tables,
 )
 from decent_bench.utils import logger
-from decent_bench.utils._metric_helpers import _flatten_plot_metrics
 from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:
@@ -26,7 +25,7 @@ def display_metrics(  # noqa: PLR0912
     checkpoint_manager: "CheckpointManager | None" = None,
     *,
     table_metrics: list[Metric | str] | None = None,
-    plot_metrics: list[Metric | str] | list[list[Metric | str]] | None = None,
+    plot_metrics: list[Metric | str] | None = None,
     algorithms: list["Algorithm[Network] | str"] | None = None,
     table_fmt: Literal["grid", "latex"] = "grid",
     plot_grid: bool = True,
@@ -49,12 +48,12 @@ def display_metrics(  # noqa: PLR0912
         checkpoint_manager: if provided, will be used to load metrics result.
         table_metrics: metrics to tabulate, defaults to ``None`` which will display all metrics in the metrics_result.
             Entries can be :class:`~decent_bench.metrics.Metric` objects or strings
-            (matching :attr:`~decent_bench.metrics.Metric.table_description`).
+            (matching :attr:`~decent_bench.metrics.Metric.description`).
         plot_metrics: metrics to plot, defaults to ``None`` which will display all metrics in the metrics_result.
             Entries can be :class:`~decent_bench.metrics.Metric` objects or strings
-            (matching :attr:`~decent_bench.metrics.Metric.plot_description`).
-            If a list of lists is provided, each inner list will be plotted in a separate figure. Otherwise up to 3
-            metrics will be grouped and plotted in their own figure with subplots.
+            (matching :attr:`~decent_bench.metrics.Metric.description`).
+            If ``individual_plots`` is True, each metric is plotted in its own figure;
+            otherwise a maximum of 3 metrics are plotted as subplots in the same figure.
         algorithms: algorithms to display. If provided, only these algorithms are included in tables and plots.
             Entries can be :class:`~decent_bench.algorithms.Algorithm` objects or strings
             (matching :attr:`~decent_bench.algorithms.Algorithm.name`).
@@ -111,6 +110,7 @@ def display_metrics(  # noqa: PLR0912
 
     """
     logger.start_logger(log_level=log_level)
+    LOGGER.info("Displaying metrics")
 
     if metrics_result is None:
         if checkpoint_manager is None:
@@ -137,10 +137,10 @@ def display_metrics(  # noqa: PLR0912
     }
 
     if table_metrics is not None:
-        metrics_result.table_metrics = _get_new_table_metrics(metrics_result, table_metrics)
+        metrics_result.table_metrics = _get_new_metrics(metrics_result.table_metrics, table_metrics, "table")
 
     if plot_metrics is not None:
-        metrics_result.plot_metrics = _get_new_plot_metrics(metrics_result, plot_metrics)
+        metrics_result.plot_metrics = _get_new_metrics(metrics_result.plot_metrics, plot_metrics, "plot")
 
     if algorithms is not None:
         metrics_result = _filter_algorithms(metrics_result, algorithms)
@@ -215,70 +215,32 @@ def _filter_algorithms(
     return metrics_result
 
 
-def _get_new_table_metrics(
-    metrics_result: MetricResult,
-    table_metrics: list[Metric | str],
+def _get_new_metrics(
+    metrics: list[Metric] | None,
+    requested_metrics: list[Metric | str],
+    type_: Literal["table", "plot"],
 ) -> list[Metric]:
-    if metrics_result.table_metrics is None:
+    if metrics is None:
         return []
 
-    table_lookup = _build_metric_lookup(metrics_result.table_metrics, description_type="table")
+    lookup = _build_metric_lookup(metrics)
 
-    new_table_metrics = []
-    for metric_or_name in table_metrics:
-        metric_name = _get_name_or_value(metric_or_name, "table_description")
-        original_metric = table_lookup.get(metric_name)
+    new_metrics: list[Metric] = []
+    for metric_or_name in requested_metrics:
+        metric_name = _get_name_or_value(metric_or_name, "description")
+        original_metric = lookup.get(metric_name)
         if original_metric is None:
-            LOGGER.warning(f"Requested table metric '{metric_name}' not found in metrics result, skipping")
+            LOGGER.warning(f"Requested {type_} metric '{metric_name}' not found in metrics result, skipping")
             continue
-        new_table_metrics.append(original_metric)
+        new_metrics.append(original_metric)
 
-    return new_table_metrics
-
-
-def _get_new_plot_metrics(
-    metrics_result: MetricResult,
-    plot_metrics: list[Metric | str] | list[list[Metric | str]],
-) -> list[Metric] | list[list[Metric]]:
-    if metrics_result.plot_metrics is None:
-        return []
-
-    are_lists = [isinstance(item, list) for item in plot_metrics]
-    if any(are_lists) and not all(are_lists):
-        raise ValueError("If passing lists in ``plot_metrics``, all items must be lists.")
-
-    flat_metrics = _flatten_plot_metrics(metrics_result.plot_metrics)
-    plot_lookup = _build_metric_lookup(flat_metrics, description_type="plot")
-
-    new_plot_metrics = []
-    for group in plot_metrics:
-        if isinstance(group, list):
-            new_group = []
-            for metric_or_name in group:
-                metric_name = _get_name_or_value(metric_or_name, "plot_description")
-                original_metric = plot_lookup.get(metric_name)
-                if original_metric is None:
-                    LOGGER.warning(f"Requested plot metric '{metric_name}' not found in metrics result, skipping")
-                    continue
-                new_group.append(original_metric)
-            if new_group:
-                new_plot_metrics.append(new_group)
-        else:
-            metric_name = _get_name_or_value(group, "plot_description")
-            original_metric = plot_lookup.get(metric_name)
-            if original_metric is None:
-                LOGGER.warning(f"Requested plot metric '{metric_name}' not found in metrics result, skipping")
-                continue
-            new_plot_metrics.append(original_metric)  # type: ignore[arg-type]
-
-    return new_plot_metrics
+    return new_metrics
 
 
-def _build_metric_lookup(metrics: list[Metric], *, description_type: Literal["table", "plot"]) -> dict[str, Metric]:
+def _build_metric_lookup(metrics: list[Metric]) -> dict[str, Metric]:
     lookup: dict[str, Metric] = {}
     for metric in metrics:
-        description = metric.table_description if description_type == "table" else metric.plot_description
-        lookup.setdefault(description, metric)
+        lookup.setdefault(metric.description, metric)
 
     return lookup
 

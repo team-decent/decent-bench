@@ -11,6 +11,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.utils.agent_utils import infer_client_data_size
 from decent_bench.utils.array import Array
+from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
@@ -474,6 +475,10 @@ class CompressionScheme(ABC):
     def compress(self, msg: Array) -> Array:
         """Apply compression and return a new, compressed message."""
 
+    def compressed_msg_size(self, msg: Array) -> int:
+        """Compute the size of the compressed version of *msg*."""
+        return int(np.prod(iop.shape(msg)))  # replace with msg.size once available
+
 
 class NoCompression(CompressionScheme):
     """Scheme that leaves messages uncompressed."""
@@ -483,36 +488,28 @@ class NoCompression(CompressionScheme):
 
 
 class Quantization(CompressionScheme):
-    """
-    Scheme that rounds each element in a message to *significant_digits*.
+    r"""
+    Scheme applying uniform quantization to the message.
 
-    The scheme rounds finite, non-zero message entries to ``n_significant_digits`` significant digits and leaves zeros,
-    infinities, and NaNs unchanged.
+    Given a message :math:`x` and quantization step :math:`\Delta`, the scheme returns
 
-    Args:
-        n_significant_digits: number of significant digits to retain.
+        .. math:: q(x) = \Delta \operatorname{round}(x / \Delta)
+
+    where :math:`\operatorname{round}(\cdot)` represents rounding to the nearest integer.
 
     Raises:
-        ValueError: if ``n_significant_digits`` is not positive.
+        ValueError: if ``quantization_step`` is not positive.
 
     """
 
-    def __init__(self, n_significant_digits: int):
-        if n_significant_digits <= 0:
-            raise ValueError("`n_significant_digits` must be a positive integer")
-        self.n_significant_digits = n_significant_digits
+    def __init__(self, quantization_step: float):
+        if quantization_step <= 0:
+            raise ValueError("`quantization_step` must be a positive float")
+        self.quantization_step = quantization_step
 
     def compress(self, msg: Array) -> Array:  # noqa: D102
         msg_np = iop.to_numpy(msg, dtype=np.float64)
-
-        # Round finite non-zero entries to the requested number of significant digits.
-        mask = np.isfinite(msg_np) & (msg_np != 0)
-        if np.any(mask):
-            magnitudes = np.floor(np.log10(np.abs(msg_np[mask])))
-            scale = np.power(10.0, self.n_significant_digits - 1 - magnitudes)
-            msg_np[mask] = np.round(msg_np[mask] * scale) / scale
-
-        return iop.to_array_like(msg_np, msg)
+        return iop.to_array_like(self.quantization_step * np.rint(msg_np / self.quantization_step), msg)
 
 
 class StochasticQuantization(CompressionScheme):
@@ -622,6 +619,10 @@ class TopK(CompressionScheme):
 
         return iop.to_array_like(compressed_flat.reshape(msg_np.shape), msg)
 
+    def compressed_msg_size(self, msg: Array) -> int:
+        """Compute the size of the compressed version of *msg*."""
+        return int(self.k if self.is_integer_k else np.ceil(self.k * np.prod(iop.shape(msg))))  # replace with msg.size
+
 
 class RandK(CompressionScheme):
     """
@@ -663,6 +664,10 @@ class RandK(CompressionScheme):
         compressed_flat[idx] = flat_msg[idx]
 
         return iop.to_array_like(compressed_flat.reshape(msg_np.shape), msg)
+
+    def compressed_msg_size(self, msg: Array) -> int:
+        """Compute the size of the compressed version of *msg*."""
+        return int(self.k if self.is_integer_k else np.ceil(self.k * np.prod(iop.shape(msg))))  # replace with msg.size
 
 
 class DropScheme(ABC):
@@ -743,31 +748,39 @@ class GilbertElliott(DropScheme):
         return iop.rng_numpy().random() < self.drop_rate if self._current_state else False
 
 
+# later remove framework and device when iop refactored
 class NoiseScheme(ABC):
-    """Scheme defining how noise impacts messages."""
+    """Scheme defining the noise impacting messages."""
 
     @abstractmethod
-    def make_noise(self, msg: Array) -> Array:
-        """Apply noise scheme without mutating the *msg* passed in."""
+    def make_noise(
+        self, shape: tuple[int, ...], framework: SupportedFrameworks, device: SupportedDevices
+    ) -> Array | None:
+        """Generate noise array of given shape (None if no noise)."""
 
 
 class NoNoise(NoiseScheme):
-    """Scheme that leaves messages untouched."""
+    """Scheme representing transmission without noise."""
 
-    def make_noise(self, msg: Array) -> Array:  # noqa: D102
-        return msg
+    def make_noise(  # noqa: D102
+        self,
+        _: tuple[int, ...],
+        _framework: SupportedFrameworks,
+        _device: SupportedDevices,
+    ) -> Array | None:
+        return None
 
 
 class GaussianNoise(NoiseScheme):
     """
-    Scheme that applies additive Gaussian noise.
+    Scheme generating normal noise.
 
-    The scheme adds independent noise sampled from a normal distribution with mean ``mean`` and standard deviation
+    The scheme generates independent noise sampled from a normal distribution with mean ``mean`` and standard deviation
     ``std`` to each message entry.
 
     Args:
-        mean: mean of the Gaussian noise.
-        std: standard deviation of the Gaussian noise.
+        mean: mean of the normal noise.
+        std: standard deviation of the normal noise.
 
     Raises:
         ValueError: if ``std`` is negative.
@@ -780,5 +793,5 @@ class GaussianNoise(NoiseScheme):
         self.mean = mean
         self.std = std
 
-    def make_noise(self, msg: Array) -> Array:  # noqa: D102
-        return msg + iop.normal_like(msg, mean=self.mean, std=self.std)
+    def make_noise(self, shape: tuple[int, ...], framework: SupportedFrameworks, device: SupportedDevices) -> Array:  # noqa: D102
+        return iop.normal(framework=framework, device=device, shape=shape, mean=self.mean, std=self.std)

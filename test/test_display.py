@@ -7,6 +7,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 from decent_bench.agents import Agent, AgentHistory, AgentMetricsView
 from decent_bench.algorithms.federated import FedAvg
@@ -41,20 +42,14 @@ class _AlgorithmStub:
 class _MetricStub(Metric):
     def __init__(
         self,
-        table_description: str,
-        plot_description: str,
+        description: str,
     ) -> None:
         super().__init__([np.average], fmt=".2e", y_log=False)
-        self._table_description = table_description
-        self._plot_description = plot_description
+        self._description = description
 
     @property
-    def table_description(self) -> str:
-        return self._table_description
-
-    @property
-    def plot_description(self) -> str:
-        return self._plot_description
+    def description(self) -> str:
+        return self._description
 
     def get_data_from_trial(self, agents, problem, iteration):  # noqa: D102
         return [0.0]
@@ -64,6 +59,7 @@ def _agent_metrics_view(x_value: float) -> AgentMetricsView:
     history = AgentHistory()
     history[0] = np.array([x_value])
     return AgentMetricsView(
+        id=uuid4(),
         cost=object(),
         x_history=history,
         n_x_updates=0,
@@ -149,8 +145,8 @@ def _build_minimal_benchmark_result() -> BenchmarkResult:
 
 def _build_federated_benchmark_result(iterations: int = 2) -> tuple[BenchmarkResult, FedAvg]:
     clients = [
-        Agent(0, QuadraticCost(np.eye(1), np.array([0.0]))),
-        Agent(1, QuadraticCost(np.eye(1), np.array([0.0]))),
+        Agent(QuadraticCost(np.eye(1), np.array([0.0]))),
+        Agent(QuadraticCost(np.eye(1), np.array([0.0]))),
     ]
     network = FedNetwork(clients=clients)
     algorithm = FedAvg(iterations=iterations, step_size=0.1)
@@ -161,7 +157,7 @@ def _build_federated_benchmark_result(iterations: int = 2) -> tuple[BenchmarkRes
 def _build_display_metric_result(
     algorithms: list[_AlgorithmStub],
     table_metrics: list[_MetricStub],
-    plot_metrics: list[_MetricStub] | list[list[_MetricStub]],
+    plot_metrics: list[_MetricStub],
     *,
     agent_x_values: list[float] | None = None,
     table_results: dict[_AlgorithmStub, dict[_MetricStub, dict[str, tuple[float, float]]]] | None = None,
@@ -170,12 +166,6 @@ def _build_display_metric_result(
 ) -> MetricResult:
     if agent_x_values is None:
         agent_x_values = [1.0] * len(algorithms)
-
-    flat_plot_metrics = (
-        plot_metrics
-        if isinstance(plot_metrics[0], _MetricStub)
-        else [metric for group in plot_metrics for metric in group]
-    )
 
     default_table_results: dict[_AlgorithmStub, dict[_MetricStub, dict[str, tuple[float, float]]]] = {}
     default_plot_results: dict[
@@ -188,7 +178,7 @@ def _build_display_metric_result(
         for metric_idx, metric in enumerate(table_metrics):
             value = float(alg_idx + metric_idx + 1)
             default_table_results[alg][metric] = {"avg": (value, 0.0)}
-        for metric_idx, metric in enumerate(flat_plot_metrics):
+        for metric_idx, metric in enumerate(plot_metrics):
             value = float(alg_idx + metric_idx + 1)
             default_plot_results[alg][metric] = ([0.0], [value], [value], [value])
 
@@ -216,9 +206,9 @@ def _build_display_metric_result(
 def test_display_metrics_filters_algorithms(monkeypatch, algorithm_filter: str, expected_algorithms: list[str]) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
     alg_b = _AlgorithmStub("B")
-    metric = _MetricStub("table one", "plot one")
+    metric = _MetricStub("one")
 
-    metrics_result = _build_display_metric_result([alg_a, alg_b], [metric], [[metric]])
+    metrics_result = _build_display_metric_result([alg_a, alg_b], [metric], [metric])
     algorithms = [alg_b] if algorithm_filter == "object" else ["A"]
     captured = _run_display_with_capture(monkeypatch, metrics_result, algorithms=algorithms)
 
@@ -233,8 +223,8 @@ def test_display_metrics_filters_algorithms(monkeypatch, algorithm_filter: str, 
 def test_display_metrics_keeps_nan_table_metrics(monkeypatch) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
     alg_b = _AlgorithmStub("B")
-    valid_metric = _MetricStub("valid table", "valid plot")
-    nan_metric = _MetricStub("nan table", "nan plot")
+    valid_metric = _MetricStub("valid")
+    nan_metric = _MetricStub("nan")
 
     metrics_result = _build_display_metric_result(
         [alg_a, alg_b],
@@ -261,77 +251,57 @@ def test_display_metrics_keeps_nan_table_metrics(monkeypatch) -> None:  # noqa: 
 
     assert "table" in captured
     assert "plot" in captured
-    assert [metric.table_description for metric in captured["table"].table_metrics] == ["valid table", "nan table"]
-    assert [metric.plot_description for metric in captured["table"].plot_metrics] == ["valid plot", "nan plot"]
+    assert [metric.description for metric in captured["table"].table_metrics] == ["valid", "nan"]
+    assert [metric.description for metric in captured["table"].plot_metrics] == ["valid", "nan"]
     for algorithm_results in captured["table"].table_results.values():
-        assert [metric.table_description for metric in algorithm_results] == ["valid table", "nan table"]
+        assert [metric.description for metric in algorithm_results] == ["valid", "nan"]
 
 
 def test_display_metrics_filters_metrics_by_name(monkeypatch) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
-    metric_1 = _MetricStub("table one", "plot one")
-    metric_2 = _MetricStub("table two", "plot two")
+    metric_1 = _MetricStub("one")
+    metric_2 = _MetricStub("two")
 
-    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [[metric_1], [metric_2]])
+    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [metric_1, metric_2])
 
     captured = _run_display_with_capture(
         monkeypatch,
         metrics_result,
-        table_metrics=["table two"],
-        plot_metrics=[["plot one"]],
+        table_metrics=["two"],
+        plot_metrics=["one"],
     )
 
     assert "table" in captured
-    assert [metric.table_description for metric in captured["table"].table_metrics] == ["table two"]
-    assert isinstance(captured["table"].plot_metrics, list)
-    grouped_plot_metrics = captured["table"].plot_metrics
-    assert isinstance(grouped_plot_metrics[0], list)
-    assert [metric.plot_description for metric in grouped_plot_metrics[0]] == ["plot one"]
+    assert [metric.description for metric in captured["table"].table_metrics] == ["two"]
+    assert [metric.description for metric in captured["table"].plot_metrics] == ["one"]
 
 
 def test_display_metrics_filters_metrics_with_mixed_objects_and_names(monkeypatch) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
-    metric_1 = _MetricStub("table one", "plot one")
-    metric_2 = _MetricStub("table two", "plot two")
+    metric_1 = _MetricStub("one")
+    metric_2 = _MetricStub("two")
 
-    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [[metric_1], [metric_2]])
+    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [metric_1, metric_2])
 
     captured = _run_display_with_capture(
         monkeypatch,
         metrics_result,
-        table_metrics=[metric_1, "table two"],
-        plot_metrics=[[metric_1, "plot two"]],
+        table_metrics=[metric_1, "two"],
+        plot_metrics=[metric_1, "two"],
     )
 
     assert "table" in captured
-    assert [metric.table_description for metric in captured["table"].table_metrics] == ["table one", "table two"]
-    assert isinstance(captured["table"].plot_metrics, list)
-    grouped_plot_metrics = captured["table"].plot_metrics
-    assert isinstance(grouped_plot_metrics[0], list)
-    assert [metric.plot_description for metric in grouped_plot_metrics[0]] == ["plot one", "plot two"]
-
-
-def test_display_metrics_rejects_mixed_shape_plot_metrics() -> None:  # noqa: D103
-    alg_a = _AlgorithmStub("A")
-    metric_1 = _MetricStub("table one", "plot one")
-    metric_2 = _MetricStub("table two", "plot two")
-
-    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [[metric_1], [metric_2]])
-
-    with pytest.raises(ValueError, match="all items must be lists"):
-        display_metrics(
-            metrics_result=metrics_result,
-            plot_metrics=[metric_1, [metric_2]],
-        )
+    assert [metric.description for metric in captured["table"].table_metrics] == ["one", "two"]
+    assert [metric.description for metric in captured["table"].plot_metrics] == ["one", "two"]
 
 
 def test_display_metrics_filters_algorithms_with_mixed_objects_and_names(monkeypatch) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
     alg_b = _AlgorithmStub("B")
     alg_c = _AlgorithmStub("C")
-    metric = _MetricStub("table one", "plot one")
+    metric = _MetricStub("one")
 
-    metrics_result = _build_display_metric_result([alg_a, alg_b, alg_c], [metric], [[metric]])
+    metrics_result = _build_display_metric_result([alg_a, alg_b, alg_c], [metric], [metric])
 
     captured = _run_display_with_capture(monkeypatch, metrics_result, algorithms=[alg_a, "C"])
 
@@ -344,12 +314,12 @@ def test_display_metrics_filters_algorithms_with_mixed_objects_and_names(monkeyp
 
 def test_display_metrics_raises_when_all_algorithms_filtered_out(monkeypatch) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
-    metric = _MetricStub("table one", "plot one")
+    metric = _MetricStub("one")
 
     metrics_result = MetricResult(
         agent_metrics={alg_a: [[_agent_metrics_view(1.0)]]},
         table_metrics=[metric],
-        plot_metrics=[[metric]],
+        plot_metrics=[metric],
         table_results={alg_a: {metric: {"avg": (1.0, 0.0)}}},
         plot_results={alg_a: {metric: ([0.0], [1.0], [1.0], [1.0])}},
     )
@@ -360,13 +330,13 @@ def test_display_metrics_raises_when_all_algorithms_filtered_out(monkeypatch) ->
 
 def test_display_metrics_raises_when_all_table_and_plot_metrics_filtered_out(monkeypatch) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
-    metric_1 = _MetricStub("table one", "plot one")
-    metric_2 = _MetricStub("table two", "plot two")
+    metric_1 = _MetricStub("one")
+    metric_2 = _MetricStub("two")
 
     metrics_result = MetricResult(
         agent_metrics={alg_a: [[_agent_metrics_view(1.0)]]},
         table_metrics=[metric_1, metric_2],
-        plot_metrics=[[metric_1], [metric_2]],
+        plot_metrics=[metric_1, metric_2],
         table_results={
             alg_a: {
                 metric_1: {"avg": (1.0, 0.0)},
@@ -391,10 +361,10 @@ def test_display_metrics_raises_when_all_table_and_plot_metrics_filtered_out(mon
 
 def test_display_metrics_shows_only_tables_when_plot_metrics_empty(monkeypatch) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
-    metric_1 = _MetricStub("table one", "plot one")
-    metric_2 = _MetricStub("table two", "plot two")
+    metric_1 = _MetricStub("one")
+    metric_2 = _MetricStub("two")
 
-    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [[metric_1], [metric_2]])
+    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [metric_1, metric_2])
 
     captured = _run_display_with_capture(
         monkeypatch,
@@ -409,10 +379,10 @@ def test_display_metrics_shows_only_tables_when_plot_metrics_empty(monkeypatch) 
 
 def test_display_metrics_shows_only_plots_when_table_metrics_empty(monkeypatch) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
-    metric_1 = _MetricStub("table one", "plot one")
-    metric_2 = _MetricStub("table two", "plot two")
+    metric_1 = _MetricStub("one")
+    metric_2 = _MetricStub("two")
 
-    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [[metric_1], [metric_2]])
+    metrics_result = _build_display_metric_result([alg_a], [metric_1, metric_2], [metric_1, metric_2])
 
     captured = _run_display_with_capture(
         monkeypatch,
@@ -428,44 +398,42 @@ def test_display_metrics_shows_only_plots_when_table_metrics_empty(monkeypatch) 
 def test_metric_result_available_discovery_properties() -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
     alg_b = _AlgorithmStub("B")
-    metric_1 = _MetricStub("table one", "plot one")
-    metric_2 = _MetricStub("table two", "plot two")
+    metric_1 = _MetricStub("one")
+    metric_2 = _MetricStub("two")
 
     metrics_result = MetricResult(
         agent_metrics={alg_a: [[[]]], alg_b: [[[]]]},
         table_metrics=[metric_1, metric_1, metric_2],
-        plot_metrics=[[metric_1], [metric_1, metric_2]],
+        plot_metrics=[metric_1, metric_1, metric_2],
         table_results={alg_a: {metric_1: {"avg": (1.0, 0.1)}}},
         plot_results={alg_b: {metric_2: ([0.0], [2.0], [2.0], [2.0])}},
     )
 
     assert metrics_result.available_algorithms == ["A", "B"]
-    assert metrics_result.available_table_metrics == ["table one", "table two"]
-    assert metrics_result.available_plot_metrics == ["plot one", "plot two"]
+    assert metrics_result.available_table_metrics == ["one", "two"]
+    assert metrics_result.available_plot_metrics == ["one", "two"]
 
 
-def test_compute_metrics_rejects_duplicate_table_metric_descriptions(monkeypatch) -> None:  # noqa: D103
+@pytest.mark.parametrize(
+    ("table_metrics", "plot_metrics", "expected_error"),
+    [
+        ([_MetricStub("same"), _MetricStub("same")], [], "Table metric descriptions must be unique"),
+        ([], [_MetricStub("same"), _MetricStub("same")], "Plot metric descriptions must be unique"),
+    ],
+)
+def test_compute_metrics_rejects_duplicate_metric_descriptions(
+    monkeypatch,
+    table_metrics: list[_MetricStub],
+    plot_metrics: list[_MetricStub],
+    expected_error: str,
+) -> None:  # noqa: D103
     benchmark_result = _build_minimal_benchmark_result()
-    metric_1 = _MetricStub("same table", "plot one")
-    metric_2 = _MetricStub("same table", "plot two")
 
     monkeypatch.setattr("decent_bench.benchmark._compute.compute_tables", lambda *args, **kwargs: {})
     monkeypatch.setattr("decent_bench.benchmark._compute.compute_plots", lambda *args, **kwargs: {})
 
-    with pytest.raises(ValueError, match="Table metric descriptions must be unique"):
-        compute_metrics(benchmark_result=benchmark_result, table_metrics=[metric_1, metric_2], plot_metrics=[])
-
-
-def test_compute_metrics_rejects_duplicate_plot_metric_descriptions(monkeypatch) -> None:  # noqa: D103
-    benchmark_result = _build_minimal_benchmark_result()
-    metric_1 = _MetricStub("table one", "same plot")
-    metric_2 = _MetricStub("table two", "same plot")
-
-    monkeypatch.setattr("decent_bench.benchmark._compute.compute_tables", lambda *args, **kwargs: {})
-    monkeypatch.setattr("decent_bench.benchmark._compute.compute_plots", lambda *args, **kwargs: {})
-
-    with pytest.raises(ValueError, match="Plot metric descriptions must be unique"):
-        compute_metrics(benchmark_result=benchmark_result, table_metrics=[], plot_metrics=[[metric_1], [metric_2]])
+    with pytest.raises(ValueError, match=expected_error):
+        compute_metrics(benchmark_result=benchmark_result, table_metrics=table_metrics, plot_metrics=plot_metrics)
 
 
 def test_compute_metrics_uses_federated_defaults_and_server_view() -> None:  # noqa: D103
@@ -491,13 +459,13 @@ def test_compute_metrics_uses_federated_defaults_and_server_view() -> None:  # n
     )
 
     assert metrics_result.table_results is not None
-    assert metrics_result.table_results[algorithm][selected_metric]["single"] == (1.0, 0.0)
+    assert metrics_result.table_results[algorithm][selected_metric][""] == (1.0, 0.0)
     assert metrics_result.table_results[algorithm][sent_messages_metric]["sum"] == (8.0, 0.0)
 
 
 def test_compute_metrics_custom_metrics_do_not_append_federated_defaults(monkeypatch) -> None:  # noqa: D103
     benchmark_result, _ = _build_federated_benchmark_result(iterations=1)
-    metric = _MetricStub("custom table", "custom plot")
+    metric = _MetricStub("custom table")
     captured: dict[str, object] = {}
 
     def _capture_tables(*args, **kwargs):
@@ -513,7 +481,7 @@ def test_compute_metrics_custom_metrics_do_not_append_federated_defaults(monkeyp
 
     compute_metrics(benchmark_result=benchmark_result, table_metrics=[metric], plot_metrics=[])
 
-    assert [m.table_description for m in captured["table_metrics"]] == [metric.table_description]
+    assert [m.description for m in captured["table_metrics"]] == [metric.description]
     assert captured["plot_metrics"] == []
 
 
@@ -793,7 +761,7 @@ def test_classification_metrics_unavailable_with_float_targets() -> None:  # noq
 def test_server_mse_availability_and_values() -> None:  # noqa: D103
     test_data = [(np.array([1.0]), np.array([1.0]))]
     cost = LinearRegressionCost(test_data)
-    client = Agent(0, cost)
+    client = Agent(cost)
     client.initialize(x=np.array([0.0]))
 
     unavailable_problem = SimpleNamespace(
@@ -804,10 +772,16 @@ def test_server_mse_availability_and_values() -> None:  # noqa: D103
     assert not available
     assert "FedNetwork" in reason
 
+    client = Agent(cost)
+    client.initialize(x=np.array([0.0]))
+
     fed_problem_without_test_data = BenchmarkProblem(network=FedNetwork([client]))
     available, reason = ml.ServerMSE([np.average]).is_available(fed_problem_without_test_data)
     assert not available
     assert reason == "requires problem.test_data"
+
+    client = Agent(cost)
+    client.initialize(x=np.array([0.0]))
 
     problem = BenchmarkProblem(network=FedNetwork([client]), test_data=test_data)
     metric = ml.ServerMSE([np.average])
@@ -820,6 +794,7 @@ def test_server_mse_availability_and_values() -> None:  # noqa: D103
     server_history[0] = np.array([0.0])
     server_history[1] = np.array([1.0])
     server_view = AgentMetricsView(
+        id=uuid4(),
         cost=cost,
         x_history=server_history,
         n_x_updates=0,
@@ -842,12 +817,15 @@ def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
     train_data = [(np.array([1.0]), np.array([1])), (np.array([-1.0]), np.array([0]))]
     test_data = [(np.array([1.0]), 1), (np.array([-1.0]), 0)]
     cost = LogisticRegressionCost(train_data)
-    client = Agent(0, cost)
+    client = Agent(cost)
     client.initialize(x=np.array([0.0]))
     problem = BenchmarkProblem(network=FedNetwork([client]), test_data=test_data)
 
+    client_for_float_targets = Agent(cost)
+    client_for_float_targets.initialize(x=np.array([0.0]))
+
     float_target_problem = BenchmarkProblem(
-        network=FedNetwork([client]),
+        network=FedNetwork([client_for_float_targets]),
         test_data=[(np.array([1.0]), 1.0), (np.array([-1.0]), 0.0)],
     )
     metric = ml.ServerAccuracy([np.average])
@@ -864,6 +842,7 @@ def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
     server_history[0] = np.array([0.0])
     server_history[1] = np.array([10.0])
     server_view = AgentMetricsView(
+        id=uuid4(),
         cost=cost,
         x_history=server_history,
         n_x_updates=0,
@@ -884,7 +863,7 @@ def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
 
 def test_is_available_default_returns_true() -> None:  # noqa: D103
     """Base Metric.is_available default: always available."""
-    metric = _MetricStub("t", "p")
+    metric = _MetricStub("t")
     available, reason = metric.is_available(SimpleNamespace())
     assert available
     assert reason is None
@@ -896,18 +875,14 @@ def test_is_available_default_returns_true() -> None:  # noqa: D103
 
 
 class _PlotMetricStub(Metric):
-    def __init__(self, plot_description: str, plot_data_by_x_value: dict[float, list[tuple[float, float]]]) -> None:
+    def __init__(self, description: str, plot_data_by_x_value: dict[float, list[tuple[float, float]]]) -> None:
         super().__init__([np.average], fmt=".2e", y_log=False)
-        self._plot_description = plot_description
+        self._description = description
         self._plot_data_by_x_value = plot_data_by_x_value
 
     @property
-    def table_description(self) -> str:
-        return self._plot_description
-
-    @property
-    def plot_description(self) -> str:
-        return self._plot_description
+    def description(self) -> str:
+        return self._description
 
     def get_data_from_trial(self, agents, problem, iteration):  # noqa: D102
         return [0.0]

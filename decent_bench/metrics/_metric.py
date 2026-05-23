@@ -25,7 +25,7 @@ class Metric(ABC):
     Abstract base class for metrics.
 
     In order to create a new metric, subclass this class and implement the abstract methods
-    :func:`table_description`, :func:`plot_description`, and :func:`get_data_from_trial`.
+    :func:`description` and :func:`get_data_from_trial`.
     If you don't want the table to indicate whether the metric has diverged then override :func:`can_diverge`
     to return False. If you don't want to use the default behavior for :func:`get_table_data` or :func:`get_plot_data`
     you can also override those methods but this is not common. See the documentation for each method for more details
@@ -33,8 +33,9 @@ class Metric(ABC):
 
     Args:
         statistics: sequence of statistics such as :func:`min`, :func:`sum`, and :func:`~numpy.average` used for
-            aggregating the data retrieved with :func:`get_data_from_trial` into a single value, each statistic gets its
-            own row in the table.
+            aggregating across agents the data retrieved with :func:`get_data_from_trial` into a single value;
+            each statistic gets its own row in the table. If it is None (the default) or an empty list,
+            :func:`~numpy.average` is used as statistic.
         fmt: format string used to format the values in the table, defaults to ".2e". Common formats include:
 
             - ".2e": scientific notation with 2 decimal places
@@ -51,26 +52,20 @@ class Metric(ABC):
 
     def __init__(
         self,
-        statistics: Sequence[Statistic],
-        *,
+        statistics: Sequence[Statistic] | None = None,
         fmt: str = ".2e",
         x_log: bool = False,
         y_log: bool = True,
     ) -> None:
-        self.statistics = statistics
+        self.statistics = statistics or [utils.default_statistic]
         self.x_log = x_log
         self.y_log = y_log
         self.fmt = fmt
 
     @property
     @abstractmethod
-    def table_description(self) -> str:
-        """Metric description to display in the table."""
-
-    @property
-    @abstractmethod
-    def plot_description(self) -> str:
-        """Label for the y-axis in plots."""
+    def description(self) -> str:
+        """Metric description used as the table row label and y-axis label in plots."""
 
     @property
     def can_diverge(self) -> bool:

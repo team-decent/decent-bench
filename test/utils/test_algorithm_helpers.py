@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import networkx as nx
 import numpy as np
 import pytest
@@ -18,7 +20,7 @@ from decent_bench.utils.pytorch_utils import SimpleLinearModel
 
 
 def _make_p2p_network(n_agents: int = 3, shape: tuple[int, ...] = (2,)) -> P2PNetwork:
-    agents = [Agent(i, L2RegularizerCost(shape)) for i in range(n_agents)]
+    agents = [Agent(L2RegularizerCost(shape)) for _ in range(n_agents)]
     return P2PNetwork(graph=nx.complete_graph(n_agents), agents=agents)
 
 
@@ -46,14 +48,14 @@ def test_initial_states_dict_matches_by_agent_id() -> None:
     net = _make_p2p_network(n_agents=3, shape=(2,))
     x0_dict: dict[Agent, np.ndarray] = {}
 
-    for agent in net.graph:
-        same_id_other_instance = Agent(agent.id, L2RegularizerCost(agent.cost.shape))
-        x0_dict[same_id_other_instance] = np.full(agent.cost.shape, fill_value=float(agent.id + 1))
+    for idx, agent in enumerate(net.graph):
+        same_id_other_instance = deepcopy(agent)
+        x0_dict[same_id_other_instance] = np.full(agent.cost.shape, fill_value=float(idx + 1))
 
     x0s = initial_states(x0_dict, net)
 
-    for agent in net.graph:
-        np.testing.assert_array_equal(iop.to_numpy(x0s[agent]), np.full(agent.cost.shape, float(agent.id + 1)))
+    for idx, agent in enumerate(net.graph):
+        np.testing.assert_array_equal(iop.to_numpy(x0s[agent]), np.full(agent.cost.shape, float(idx + 1)))
 
 
 def test_initial_states_non_fed_missing_agent_raises() -> None:
@@ -83,7 +85,7 @@ def test_initial_states_invalid_type_raises() -> None:
 
 
 def test_initial_states_fed_infers_server_as_client_mean() -> None:
-    clients = [Agent(0, L2RegularizerCost((2,))), Agent(1, L2RegularizerCost((2,)))]
+    clients = [Agent(L2RegularizerCost((2,))), Agent(L2RegularizerCost((2,)))]
     net = FedNetwork(clients=clients)
 
     x0_dict = {
@@ -100,7 +102,7 @@ def test_initial_states_fed_infers_server_as_client_mean() -> None:
 
 
 def test_initial_states_fed_missing_client_raises() -> None:
-    clients = [Agent(0, L2RegularizerCost((2,))), Agent(1, L2RegularizerCost((2,)))]
+    clients = [Agent(L2RegularizerCost((2,))), Agent(L2RegularizerCost((2,)))]
     net = FedNetwork(clients=clients)
 
     with pytest.raises(ValueError, match="x0 not provided for agent"):
@@ -141,7 +143,7 @@ def test_infer_client_data_size_reads_empirical_risk_n_samples() -> None:
         (np.array([0.0, 1.0]), np.array([1.0])),
         (np.array([2.0, 0.0]), np.array([2.0])),
     ]
-    client = Agent(0, LinearRegressionCost(dataset))
+    client = Agent(LinearRegressionCost(dataset))
 
     data_size = infer_client_data_size(client)
 
@@ -149,14 +151,14 @@ def test_infer_client_data_size_reads_empirical_risk_n_samples() -> None:
 
 
 def test_infer_client_data_size_does_not_infer_from_quadratic_dimension() -> None:
-    client = Agent(0, QuadraticCost(A=np.eye(7), b=np.ones(7)))
+    client = Agent(QuadraticCost(A=np.eye(7), b=np.ones(7)))
 
     with pytest.raises(ValueError, match="Cannot infer client data size"):
         infer_client_data_size(client)
 
 
 def test_infer_client_data_size_raises_when_no_size_signal() -> None:
-    client = Agent(0, L2RegularizerCost((2,)))
+    client = Agent(L2RegularizerCost((2,)))
 
     with pytest.raises(ValueError, match="Cannot infer client data size"):
         infer_client_data_size(client)
@@ -178,7 +180,7 @@ def test_pytorch_initialization_extracts_flattened_model_parameters() -> None:
     ]
     model = SimpleLinearModel(input_size=2, hidden_sizes=[3], output_size=1)
     cost = PyTorchCost(dataset=dataset, model=model, loss_fn=torch.nn.MSELoss())
-    agent = Agent(0, cost)
+    agent = Agent(cost)
     net = P2PNetwork(graph=nx.complete_graph(1), agents=[agent])
 
     x0s = pytorch_initialization(net)

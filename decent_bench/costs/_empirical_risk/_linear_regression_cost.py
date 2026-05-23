@@ -7,7 +7,6 @@ from numpy import float64
 from numpy.typing import NDArray
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._empirical_risk._empirical_risk_cost import EmpiricalRiskCost
 from decent_bench.utils._tags import tags
 from decent_bench.utils.types import (
@@ -314,30 +313,9 @@ class LinearRegressionCost(EmpiricalRiskCost):
                 self.ATA = self.A.T @ self.A
             return self.A, self.ATA, self.b
 
-        A_list, b_list = [], []  # noqa: N806
-        for idx in indices:
+        A, b = np.empty((len(indices), *self.shape)), np.empty(len(indices))  # noqa: N806
+        for i, idx in enumerate(indices):
             x_i, y_i = self._dataset[idx]
-            A_list.append(iop.to_numpy(x_i))
-            b_list.append(iop.to_numpy(y_i))
-        A = np.stack(A_list)  # noqa: N806
-        b = np.stack(b_list).squeeze()
+            A[i, :] = iop.to_numpy(x_i)
+            b[i] = iop.to_numpy(y_i).item()
         return A, A.T @ A, b
-
-    def __add__(self, other: Cost) -> Cost:
-        """Add another cost function."""
-        self._validate_cost_operation(other)
-        if isinstance(other, LinearRegressionCost):
-            if self.batch_size == self.n_samples and other.batch_size == other.n_samples:
-                combined_batch_size = self.n_samples + other.n_samples
-            elif self.batch_size == self.n_samples:
-                combined_batch_size = other.batch_size
-            elif other.batch_size == other.n_samples:
-                combined_batch_size = self.batch_size
-            else:
-                combined_batch_size = max(self.batch_size, other.batch_size)
-
-            return LinearRegressionCost(
-                dataset=self.dataset + other.dataset,
-                batch_size=combined_batch_size,
-            )
-        return super().__add__(other)

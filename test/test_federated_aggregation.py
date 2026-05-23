@@ -64,7 +64,7 @@ class DropOnCalls(DropScheme):
 
 
 def _make_fed_network(*costs: Cost) -> tuple[FedNetwork, list[Agent]]:
-    clients = [Agent(i, cost) for i, cost in enumerate(costs)]
+    clients = [Agent(cost) for cost in costs]
     network = FedNetwork(clients=clients)
     for client in clients:
         client.initialize(x=np.zeros(client.cost.shape, dtype=float))
@@ -141,8 +141,8 @@ def test_aggregation_keeps_server_state_when_no_updates_are_received(
 def test_clients_without_server_broadcast_do_not_participate(
     algorithm_cls: type, kwargs: dict[str, float | int]
 ) -> None:
-    client = Agent(0, TrackingCost(1.0))
-    server = Agent(1, TrackingCost(0.0))
+    client = Agent(TrackingCost(1.0))
+    server = Agent(TrackingCost(0.0))
     network = FedNetwork(
         clients=[client],
         server=server,
@@ -423,8 +423,8 @@ def test_fedopt_server_state_updates_follow_variant_formula(
 def test_fedopt_clients_without_server_broadcast_do_not_participate(
     algorithm_cls: type, kwargs: dict[str, float | int]
 ) -> None:
-    client = Agent(0, TrackingCost(1.0))
-    server = Agent(1, TrackingCost(0.0))
+    client = Agent(TrackingCost(1.0))
+    server = Agent(TrackingCost(0.0))
     network = FedNetwork(
         clients=[client],
         server=server,
