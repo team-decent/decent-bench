@@ -565,7 +565,7 @@ def _truncate_to_common_finite_prefix(
     return [trial_data[:common_prefix_length] for trial_data in truncated_trials], had_non_finite
 
 
-def _plot_subplot(  # noqa: PLR0917
+def _plot_subplot(
     subplot: SubPlot,
     x: Sequence[float],
     y_mean: Sequence[float],

@@ -180,7 +180,7 @@ class ProgressBarController:
 
     """
 
-    def __init__(  # noqa: PLR0917
+    def __init__(
         self,
         manager: SyncManager | None,
         algorithms: Sequence[Algorithm[Any]],

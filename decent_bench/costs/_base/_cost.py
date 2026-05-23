@@ -10,7 +10,7 @@ from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
-class Cost(ABC):  # noqa: PLR0904
+class Cost(ABC):
     """Used by agents to evaluate the cost and its derivatives at a certain x."""
 
     def _validate_cost_operation(

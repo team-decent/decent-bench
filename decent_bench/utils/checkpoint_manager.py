@@ -1,5 +1,5 @@
 import json
-import pickle  # noqa: S403
+import pickle
 import re
 import shutil
 from datetime import datetime
@@ -34,7 +34,7 @@ class _CheckpointData(TypedDict):
     rng_state: dict[str, Any]
 
 
-class CheckpointManager:  # noqa: PLR0904
+class CheckpointManager:
     """
     Manages checkpoint directory structure and file operations for benchmark execution.
 

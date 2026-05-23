@@ -62,7 +62,7 @@ class RuntimeMetricPlotter:
         # Set matplotlib to use a backend that works in a separate process
         plt.ion()
 
-        try:  # noqa: PLR1702
+        try:
             while True:
                 processed = 0
                 try:

@@ -427,7 +427,7 @@ def _is_multiprocessing_main_guard_error(exc: RuntimeError) -> bool:
     return "start a new process before the" in msg and "bootstrapping phase" in msg
 
 
-def _run_trials(  # noqa: PLR0917
+def _run_trials(
     algorithms: list[Algorithm[Network]],
     n_trials: int,
     problem: BenchmarkProblem,
@@ -538,7 +538,7 @@ def _derive_trial_seed(base_seed: int | None, algorithm_index: int, trial: int) 
     return int((base_seed + 0x9E3779B9 * (algorithm_index + 1) + 0x85EBCA6B * (trial + 1)) % (2**32))
 
 
-def _run_trial(  # noqa: PLR0917
+def _run_trial(
     algorithm: Algorithm[Network],
     problem: BenchmarkProblem,
     progress_bar_handle: "ProgressBarHandle",
