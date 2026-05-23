@@ -7,6 +7,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 from decent_bench.agents import Agent, AgentHistory, AgentMetricsView
 from decent_bench.algorithms.federated import FedAvg
@@ -58,6 +59,7 @@ def _agent_metrics_view(x_value: float) -> AgentMetricsView:
     history = AgentHistory()
     history[0] = np.array([x_value])
     return AgentMetricsView(
+        id=uuid4(),
         cost=object(),
         x_history=history,
         n_x_updates=0,
@@ -792,6 +794,7 @@ def test_server_mse_availability_and_values() -> None:  # noqa: D103
     server_history[0] = np.array([0.0])
     server_history[1] = np.array([1.0])
     server_view = AgentMetricsView(
+        id=uuid4(),
         cost=cost,
         x_history=server_history,
         n_x_updates=0,
@@ -839,6 +842,7 @@ def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
     server_history[0] = np.array([0.0])
     server_history[1] = np.array([10.0])
     server_view = AgentMetricsView(
+        id=uuid4(),
         cost=cost,
         x_history=server_history,
         n_x_updates=0,

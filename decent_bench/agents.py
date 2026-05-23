@@ -426,6 +426,7 @@ class AgentHistory:
 class AgentMetricsView:
     """Immutable view of agent that exposes useful properties for calculating metrics."""
 
+    id: UUID
     cost: Cost
     x_history: AgentHistory
     n_x_updates: int
@@ -443,6 +444,7 @@ class AgentMetricsView:
     def from_agent(agent: Agent) -> AgentMetricsView:
         """Create from agent."""
         return AgentMetricsView(
+            id=agent.id,
             cost=agent.cost,
             x_history=agent._x_history,  # noqa: SLF001
             n_x_updates=agent._n_x_updates,  # noqa: SLF001
