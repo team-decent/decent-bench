@@ -68,8 +68,6 @@ class Network(ABC):  # noqa: B024
             raise ValueError("The graph nodes must be `Agent` objects")
         self._validate_agent_cost_compatibility(graph)
         for idx, agent in enumerate(graph.nodes()):  # assign agent index within the network
-            if agent.index != -1:
-                raise ValueError("Agents can only be assigned to one network at a time")
             agent.index = idx
 
         self._graph = graph
@@ -116,20 +114,26 @@ class Network(ABC):  # noqa: B024
     @staticmethod
     def _validate_agent_ids(agents: Sequence[Agent]) -> None:
         """
-        Validate that all agents have distinct ids.
+        Validate that all agents have distinct ids and were not assigned to a network.
 
         This util checks that all agents have distinct ``Agent.id``. Distinct ids are mandatory since agents are
         hashed by their id (necessary during un/pickling operations). The util is meant to be used in subclasses
         on raw Agent lists passed by users. NetworkX collapses two agents with the same id, so it is necessary to
         run this validation before Graph[Agent] is constructed.
 
+        Additionally, it checks that no agent was previously assigned to another network, by checking that its
+        index is -1.
+
         Raises:
-            ValueError: If any two agents have the same id.
+            ValueError: If any two agents have the same id or were already assigned to a network.
 
         """
         agent_ids = [agent.id for agent in agents]
         if len(agent_ids) != len(set(agent_ids)):
             raise ValueError("Agent IDs must be unique")
+
+        if any(agent.index != -1 for agent in agents):
+            raise ValueError("Agents can only be assigned to one network at a time")
 
     def _initialize_message_schemes(
         self,
@@ -305,7 +309,7 @@ class Network(ABC):  # noqa: B024
                 f"in iteration {self._iteration}"
             )
 
-        counter_increment = int(np.prod(iop.shape(msg)) / sender.cost.size)  # replace with msg.size once available
+        counter_increment = self._message_compression[sender].compressed_msg_size(msg) / sender.cost.size
         sender._n_sent_messages += counter_increment * len(receiver)  # noqa: SLF001
         framework, device = iop.framework_device_of_array(msg)  # remove after iop refactor
 

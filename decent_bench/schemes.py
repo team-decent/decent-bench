@@ -475,6 +475,10 @@ class CompressionScheme(ABC):
     def compress(self, msg: Array) -> Array:
         """Apply compression and return a new, compressed message."""
 
+    def compressed_msg_size(self, msg: Array) -> int:
+        """Compute the size of the compressed version of *msg*."""
+        return int(np.prod(iop.shape(msg)))  # replace with msg.size once available
+
 
 class NoCompression(CompressionScheme):
     """Scheme that leaves messages uncompressed."""
@@ -615,6 +619,10 @@ class TopK(CompressionScheme):
 
         return iop.to_array_like(compressed_flat.reshape(msg_np.shape), msg)
 
+    def compressed_msg_size(self, msg: Array) -> int:
+        """Compute the size of the compressed version of *msg*."""
+        return int(self.k if self.is_integer_k else np.ceil(self.k * np.prod(iop.shape(msg))))  # replace with msg.size
+
 
 class RandK(CompressionScheme):
     """
@@ -656,6 +664,10 @@ class RandK(CompressionScheme):
         compressed_flat[idx] = flat_msg[idx]
 
         return iop.to_array_like(compressed_flat.reshape(msg_np.shape), msg)
+
+    def compressed_msg_size(self, msg: Array) -> int:
+        """Compute the size of the compressed version of *msg*."""
+        return int(self.k if self.is_integer_k else np.ceil(self.k * np.prod(iop.shape(msg))))  # replace with msg.size
 
 
 class DropScheme(ABC):

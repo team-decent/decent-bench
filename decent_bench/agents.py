@@ -63,9 +63,9 @@ class Agent:
         self._auxiliary_variables: dict[str, Any] = {}
         self._received_messages: dict[Agent, Array] = {}
         self._n_x_updates = 0
-        self._n_sent_messages = 0
-        self._n_received_messages = 0
-        self._n_sent_messages_dropped = 0
+        self._n_sent_messages: float = 0
+        self._n_received_messages: float = 0
+        self._n_sent_messages_dropped: float = 0
         self._n_times_selected = 0
         self._is_server = False
         self._n_function_calls: float = 0
@@ -433,9 +433,9 @@ class AgentMetricsView:
     n_gradient_calls: float
     n_hessian_calls: float
     n_proximal_calls: float
-    n_sent_messages: int
-    n_received_messages: int
-    n_sent_messages_dropped: int
+    n_sent_messages: float
+    n_received_messages: float
+    n_sent_messages_dropped: float
     n_times_selected: int
     is_server: bool
 

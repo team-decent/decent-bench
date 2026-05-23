@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from functools import cache
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -19,6 +19,9 @@ from decent_bench.utils.types import Dataset
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
+
+
+CACHE_MAX_SIZE = 50
 
 
 class MetricProgressBar(Progress):
@@ -50,13 +53,13 @@ def _clear_caches() -> None:
     _server_view.cache_clear()
 
 
-@cache
+@lru_cache(maxsize=CACHE_MAX_SIZE)
 def _non_server_views(agents: tuple[AgentMetricsView, ...]) -> tuple[AgentMetricsView, ...]:
     """Return all non-server agent views."""
     return tuple(agent for agent in agents if not agent.is_server)
 
 
-@cache
+@lru_cache(maxsize=CACHE_MAX_SIZE)
 def _server_view(agents: tuple[AgentMetricsView, ...]) -> AgentMetricsView:
     """Return the federated server view."""
     return next(agent for agent in agents if agent.is_server)
@@ -75,7 +78,7 @@ def default_statistic(values: Sequence[float]) -> float:
     return np.average(values)
 
 
-@cache
+@lru_cache(maxsize=CACHE_MAX_SIZE)
 def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
     """
     Calculate the mean x at *iteration* (or using the agents' final x if *iteration* is -1).
@@ -142,7 +145,7 @@ def _x_error(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", it
 
     """
     mean_x = x_mean(tuple(agents), iteration)
-    return float(la.norm(iop.to_numpy(mean_x - problem.x_optimal)))  # type: ignore[operator]
+    return float(iop.norm(mean_x - problem.x_optimal))  # type: ignore[operator]
 
 
 def _observed_rounds(agents: Sequence[AgentMetricsView]) -> int:
@@ -332,7 +335,7 @@ def _split_dataset(data: Dataset) -> tuple[tuple[Array, ...], NDArray[float64]]:
     return test_x, test_y
 
 
-@cache
+@lru_cache(maxsize=CACHE_MAX_SIZE)
 def _predict_agent(agent: AgentMetricsView, iteration: int, problem: "BenchmarkProblem") -> NDArray[float64]:
     """Get the predictions of *agent* at *iteration*. Cached since predictions may be expensive."""
     test_x, _ = _split_dataset(problem.test_data)  # type: ignore[arg-type]

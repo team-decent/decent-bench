@@ -15,6 +15,7 @@ dependencies = [
   "matplotlib",
   "networkx",
   "numpy",
+  "pandas",
   "rich",
   "scipy",
   "scikit-learn",
@@ -39,7 +40,6 @@ dev = [
   "torch",
   "torchvision",
   "types-tensorflow",
-  "pandas",
   "pandas-stubs",
   "kagglehub",
 ]

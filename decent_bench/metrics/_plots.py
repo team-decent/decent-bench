@@ -52,6 +52,8 @@ LEGEND_MAX_COLS = 3
 SEPARATE_LEGEND_MIN_LABELS = 9
 SEPARATE_LEGEND_MIN_ROWS = 4
 SEPARATE_LEGEND_MAX_LABEL_LENGTH = 24
+# max number of subplots in a figure
+MAX_NUM_SUBPLOTS = 3
 
 
 def display_plots(
@@ -375,7 +377,7 @@ def _organize_metrics_into_groups(
     if individual_plots:
         return [[metric] for metric in metrics]
 
-    return [metrics[i : i + 3] for i in range(0, len(metrics), 3)]
+    return [metrics[i : i + MAX_NUM_SUBPLOTS] for i in range(0, len(metrics), MAX_NUM_SUBPLOTS)]
 
 
 def _create_metric_subplots(

@@ -9,6 +9,7 @@ from decent_bench.agents import Agent
 from decent_bench.networks import P2PNetwork, FedNetwork
 from decent_bench.costs import L2RegularizerCost
 from decent_bench.utils import interoperability as iop
+from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 from decent_bench.schemes import (
     AgentActivationScheme,
@@ -31,15 +32,23 @@ class MultiplyCompression(CompressionScheme):
     def __init__(self, factor: float):
         self.factor = factor
 
-    def compress(self, msg):  # noqa: ANN001, D102
+    def compress(self, msg: Array) -> Array:  # noqa: D102
         return msg * self.factor
+
+    def compressed_msg_size(self, msg: Array) -> int:  # noqa: D102
+        return int(np.prod(iop.shape(msg)))
 
 
 class AddNoise(NoiseScheme):
     def __init__(self, offset: float):
         self.offset = offset
 
-    def make_noise(self, shape, framework, device):  # noqa: ANN001, D102
+    def make_noise(
+        self,
+        shape: tuple[int, ...],
+        framework: SupportedFrameworks,
+        device: SupportedDevices,
+    ) -> Array:  # noqa: D102
         return iop.to_array(np.full(shape, self.offset), framework=framework, device=device)
 
 
@@ -247,6 +256,8 @@ def test_initialize_message_schemes_dict_used_in_send() -> None:
     mock_schemes = {agents[0]: MagicMock(spec=CompressionScheme), agents[1]: MagicMock(spec=CompressionScheme)}
     mock_schemes[agents[0]].compress = MagicMock(side_effect=lambda x: x)
     mock_schemes[agents[1]].compress = MagicMock(side_effect=lambda x: x)
+    mock_schemes[agents[0]].compressed_msg_size = MagicMock(return_value=agents[0].cost.size)
+    mock_schemes[agents[1]].compressed_msg_size = MagicMock(return_value=agents[1].cost.size)
 
     net._message_compression = mock_schemes
 
@@ -259,6 +270,9 @@ def test_initialize_message_schemes_dict_used_in_send() -> None:
 
     # verify agent 0's compression scheme was called
     mock_schemes[agents[0]].compress.assert_called_once()
+    mock_schemes[agents[0]].compressed_msg_size.assert_called_once()
+    assert agents[0]._n_sent_messages == pytest.approx(1.0)  # noqa: SLF001
+    assert agents[1]._n_received_messages == pytest.approx(1.0)  # noqa: SLF001
 
 
 def test_p2p_network_rejects_disconnected_graph() -> None:
@@ -354,6 +368,11 @@ def test_send_applies_drop_compression_and_noise_schemes() -> None:
     np_expected = np.array([5.0, 7.0])
     assert np_received.shape == np_expected.shape
     assert np_received.tolist() == pytest.approx(np_expected.tolist())
+    assert sender._n_sent_messages == pytest.approx(1.0)  # noqa: SLF001
+    assert sender._n_sent_messages_dropped == pytest.approx(0.0)  # noqa: SLF001
+    assert receiver._n_received_messages == pytest.approx(1.0)  # noqa: SLF001
 
     net.send(sender=dropped_sender, receiver=receiver, msg=msg)
     assert dropped_sender not in receiver.messages
+    assert dropped_sender._n_sent_messages == pytest.approx(1.0)  # noqa: SLF001
+    assert dropped_sender._n_sent_messages_dropped == pytest.approx(1.0)  # noqa: SLF001

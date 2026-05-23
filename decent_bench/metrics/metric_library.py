@@ -321,7 +321,7 @@ class SentMessages(Metric):
         agents: Sequence[AgentMetricsView],
         _: "BenchmarkProblem",
         __: int,
-    ) -> list[int]:
+    ) -> list[float]:
         return [a.n_sent_messages for a in agents]
 
 
@@ -346,7 +346,7 @@ class ReceivedMessages(Metric):
         agents: Sequence[AgentMetricsView],
         _: "BenchmarkProblem",
         __: int,
-    ) -> list[int]:
+    ) -> list[float]:
         return [a.n_received_messages for a in agents]
 
 
@@ -371,7 +371,7 @@ class SentMessagesDropped(Metric):
         agents: Sequence[AgentMetricsView],
         _: "BenchmarkProblem",
         __: int,
-    ) -> list[int]:
+    ) -> list[float]:
         return [a.n_sent_messages_dropped for a in agents]
 
 

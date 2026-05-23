@@ -1,23 +1,12 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from importlib import import_module
-from types import ModuleType
-from typing import TYPE_CHECKING
+
+import pandas as pd
 
 from decent_bench.agents import AgentMetricsView
 from decent_bench.algorithms import Algorithm
 from decent_bench.metrics import Metric
 from decent_bench.networks import Network
-
-if TYPE_CHECKING:
-    import pandas
-
-
-def _import_pandas() -> ModuleType:
-    try:
-        return import_module("pandas")
-    except ImportError as exc:  # pragma: no cover - exercised when pandas is unavailable
-        raise ImportError("pandas is required to convert MetricResult to dataframes") from exc
 
 
 @dataclass
@@ -82,7 +71,7 @@ class MetricResult:
         """Return ``description`` of available plot metrics, which can be used for filtering in :func:`~decent_bench.benchmark.display_metrics`."""  # noqa: E501
         return sorted({metric.description for metric in (self.plot_metrics or [])})
 
-    def to_dataframe(self) -> tuple["pandas.DataFrame | None", "pandas.DataFrame | None"]:
+    def to_dataframe(self) -> tuple["pd.DataFrame | None", "pd.DataFrame | None"]:
         """
         Convert the stored metric results into pandas dataframes.
 
@@ -106,8 +95,6 @@ class MetricResult:
                 y_mean_values = loss_rows["y_mean"]
 
         """
-        pd = _import_pandas()
-
         table_frame = None
         if self.table_results is not None:
             table_rows: list[dict[str, object]] = []
