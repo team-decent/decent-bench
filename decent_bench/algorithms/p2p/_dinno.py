@@ -89,13 +89,13 @@ class DiNNO(P2PAlgorithm):
     def _auxiliary_update(self, agent: Agent) -> None:
         # p_i^(k+1) = p_i^k + rho * sum_{j in N_i}(theta_i^k - theta_j^k)
         s = None
-        for val in agent.messages.values():
+        for val in agent.messages().values():
             if s is None:
                 s = val
             else:
                 s += val
         if s is not None:
-            consensus_error = agent.x * len(agent.messages) - s
+            consensus_error = agent.x * len(agent.messages()) - s
             agent.aux_vars["p"] += self.penalty * consensus_error
 
     def _local_training(self, agent: Agent) -> None:
@@ -103,7 +103,7 @@ class DiNNO(P2PAlgorithm):
         psi = iop.copy(agent.x)
 
         neighbor_thetas_sum: Array | None = None
-        for val in agent.messages.values():
+        for val in agent.messages().values():
             if neighbor_thetas_sum is None:
                 neighbor_thetas_sum = val
             else:
@@ -122,7 +122,7 @@ class DiNNO(P2PAlgorithm):
             # Term 3: grad[rho sum_{j in N_i} ||theta - (theta_i^k + theta_j^k)/2||^2]
             #       = 2 rho sum_{j in N_i} (theta - (theta_i^k + theta_j^k)/2)
             if neighbor_thetas_sum is not None:
-                consensus_term = (psi - agent.x / 2) * len(agent.messages) - neighbor_thetas_sum
+                consensus_term = (psi - agent.x / 2) * len(agent.messages()) - neighbor_thetas_sum
                 # Note: factor of 2 from derivative of squared norm
                 grad_consensus: Array | float = 2.0 * self.penalty * consensus_term
             else:

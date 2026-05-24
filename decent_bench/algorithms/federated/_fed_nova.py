@@ -17,6 +17,10 @@ if TYPE_CHECKING:
     from decent_bench.utils.array import Array
 
 
+_NORMALIZER_LABEL = "normalizer"
+_CUMULATIVE_GRADIENT_LABEL = "cumulative_gradient"
+
+
 @tags("federated")
 @dataclass(eq=False)
 class FedNova(FedAlgorithm):
@@ -176,7 +180,6 @@ class FedNova(FedAlgorithm):
             for client in participating_clients:
                 client.aux_vars.pop("_fednova_cumulative_gradient", None)
             return
-        network._clear_received_messages(receivers=[network.server()], senders=participating_clients)  # noqa: SLF001
         self._communicate_cumulative_gradients(network, participating_clients)
         self.aggregate(network, participating_clients)
 
@@ -187,7 +190,7 @@ class FedNova(FedAlgorithm):
             client.x = local_x
             client.aux_vars["_fednova_cumulative_gradient"] = cumulative_gradient
             normalizer_upload = iop.reshape(iop.to_array_like(a_i, cumulative_gradient), (1,))
-            network.send(sender=client, receiver=server, msg=normalizer_upload)
+            network.send(sender=client, receiver=server, msg=normalizer_upload, label=_NORMALIZER_LABEL)
 
     def _compute_local_update(self, client: "Agent", server: "Agent") -> tuple["Array", "Array", float]:
         """
@@ -233,9 +236,9 @@ class FedNova(FedAlgorithm):
     def _collect_received_normalizers(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
         server = network.server()
         received_normalizers = {
-            client: iop.astype(server.messages[client], float)
+            client: iop.astype(server.message(client, _NORMALIZER_LABEL), float)
             for client in participating_clients
-            if client in server.messages
+            if client in server.messages(_NORMALIZER_LABEL)
         }
         server.aux_vars["received_a_i"] = received_normalizers
 
@@ -243,7 +246,12 @@ class FedNova(FedAlgorithm):
         server = network.server()
         for client in participating_clients:
             cumulative_gradient = client.aux_vars.pop("_fednova_cumulative_gradient")
-            network.send(sender=client, receiver=server, msg=cumulative_gradient)
+            network.send(
+                sender=client,
+                receiver=server,
+                msg=cumulative_gradient,
+                label=_CUMULATIVE_GRADIENT_LABEL,
+            )
 
     def aggregate(
         self,
@@ -253,12 +261,11 @@ class FedNova(FedAlgorithm):
         r"""
         Aggregate FedNova client uploads following the Local-SGD FedNova pseudocode.
 
-        This method assumes the current round has already cached the received FedNova coefficients ``a_i`` on the
-        server and that the server's current messages contain the received cumulative local updates
-        :math:`\mathbf{c}_i^t`. Client sample counts are looked up from the mapping stored on the server during
-        ``initialize``. The server inbox is cleared between the ``a_i`` and cumulative-gradient upload phases so
-        dropped second-phase messages cannot be confused with first-phase normalizers. If no client has both uploads
-        available in the current round, this method returns without updating the server model.
+        This method assumes the current round has already cached the received FedNova coefficients ``a_i`` in
+        ``server.aux_vars["received_a_i"]`` and that cumulative local updates :math:`\mathbf{c}_i^t` are read from
+        the server inbox under the cumulative-gradient label. Client sample counts are looked up from the mapping
+        stored on the server during ``initialize``. Only clients with both uploads available in the current round are
+        aggregated; if none are available, this method returns without updating the server model.
 
         Raises:
             ValueError: if any received FedNova coefficient ``a_i`` is non-positive.
@@ -266,13 +273,15 @@ class FedNova(FedAlgorithm):
         """
         server = network.server()
         received_normalizers = server.aux_vars["received_a_i"]
-        received_gradient_clients = [client for client in participating_clients if client in server.messages]
+        received_gradient_clients = [
+            client for client in participating_clients if client in server.messages(_CUMULATIVE_GRADIENT_LABEL)
+        ]
         received_clients = [client for client in received_gradient_clients if client in received_normalizers]
         if not received_clients:
             return
         server_sample_counts = server.aux_vars["client_sample_counts"]
         server_x = iop.copy(server.x)
-        cumulative_gradients = [server.messages[client] for client in received_clients]
+        cumulative_gradients = [server.message(client, _CUMULATIVE_GRADIENT_LABEL) for client in received_clients]
         a_values = [received_normalizers[client] for client in received_clients]
         if any(a_i <= 0 for a_i in a_values):
             raise ValueError("FedNova coefficients `a_i` must be positive")
@@ -288,7 +297,9 @@ class FedNova(FedAlgorithm):
                 cumulative_gradients, a_values, client_weights, strict=True
             )
         ]
-        global_update = iop.sum(iop.stack(weighted_terms, dim=0), dim=0)
+        global_update = iop.zeros_like(server_x)
+        for weighted_term in weighted_terms:
+            global_update += weighted_term
         if self.use_server_momentum:
             server.aux_vars["m"] = (self.gamma * server.aux_vars["m"]) + global_update
             server.x = server_x - server.aux_vars["m"]

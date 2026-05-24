@@ -8,6 +8,9 @@ from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
 
+_Z_Y_LABEL = "z_y"
+_Z_S_LABEL = "z_s"
+
 
 @tags("peer-to-peer", "gradient-tracking", "dual method", "ADMM")
 @dataclass(eq=False)
@@ -99,22 +102,24 @@ class ATG(P2PAlgorithm):
         # step 2: communicate and update z_{ij} variables
         for i in network.active_agents():
             for j in network.active_neighbors(i):
-                # transmit the messages as a single message, stacking along the first axis
                 idx = i.aux_vars["neighbor_to_idx"][j]
-                s = iop.stack(
-                    (
-                        -i.aux_vars["z_y"][idx] + 2 * self.rho * i.aux_vars["y"],
-                        -i.aux_vars["z_s"][idx] + 2 * self.rho * i.aux_vars["s"],
-                    ),
-                    dim=0,
-                )
-                network.send(i, j, s)
+                z_y_update = -i.aux_vars["z_y"][idx] + 2 * self.rho * i.aux_vars["y"]
+                z_s_update = -i.aux_vars["z_s"][idx] + 2 * self.rho * i.aux_vars["s"]
+                network.send(i, j, z_y_update, label=_Z_Y_LABEL)
+                network.send(i, j, z_s_update, label=_Z_S_LABEL)
 
         for i in network.active_agents():
-            for j, msg in i.messages.items():
+            received_z_y_updates = i.messages(_Z_Y_LABEL)
+            received_z_s_updates = i.messages(_Z_S_LABEL)
+            received_both = set(received_z_y_updates).intersection(received_z_s_updates)
+            for j in received_both:
                 idx = i.aux_vars["neighbor_to_idx"][j]
-                i.aux_vars["z_y"][idx] = (1 - self.alpha) * i.aux_vars["z_y"][idx] + self.alpha * msg[0]
-                i.aux_vars["z_s"][idx] = (1 - self.alpha) * i.aux_vars["z_s"][idx] + self.alpha * msg[1]
+                i.aux_vars["z_y"][idx] = (1 - self.alpha) * i.aux_vars["z_y"][idx] + self.alpha * received_z_y_updates[
+                    j
+                ]
+                i.aux_vars["z_s"][idx] = (1 - self.alpha) * i.aux_vars["z_s"][idx] + self.alpha * received_z_s_updates[
+                    j
+                ]
 
 
 ADMM_Tracking = ATG  # alias

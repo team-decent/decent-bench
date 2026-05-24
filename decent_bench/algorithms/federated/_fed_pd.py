@@ -16,6 +16,10 @@ if TYPE_CHECKING:
     from decent_bench.utils.array import Array
 
 
+_CENTER_CANDIDATE_LABEL = "center_candidate"
+_CENTER_UPDATE_LABEL = "center_update"
+
+
 @tags("federated")
 @dataclass(eq=False)
 class FedPD(FedAlgorithm):
@@ -140,7 +144,12 @@ class FedPD(FedAlgorithm):
         participating_clients: Sequence["Agent"],
     ) -> None:
         for client in participating_clients:
-            network.send(sender=client, receiver=network.server(), msg=client.aux_vars["center"])
+            network.send(
+                sender=client,
+                receiver=network.server(),
+                msg=client.aux_vars["center"],
+                label=_CENTER_CANDIDATE_LABEL,
+            )
 
     def aggregate(
         self,
@@ -157,14 +166,16 @@ class FedPD(FedAlgorithm):
         If no centre candidates are received, the server state is left unchanged and no synchronization is sent.
         """
         server = network.server()
-        received_clients = [client for client in participating_clients if client in network.server().messages]
+        received_clients = [
+            client for client in participating_clients if client in server.messages(_CENTER_CANDIDATE_LABEL)
+        ]
         if not received_clients:
             return
-        center_candidates = [server.messages[client] for client in received_clients]
+        center_candidates = [server.message(client, _CENTER_CANDIDATE_LABEL) for client in received_clients]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))
         server.x = self._weighted_average(center_candidates, weights, total_weight)
-        self.server_broadcast(network, participating_clients)
+        network.send(sender=server, receiver=participating_clients, msg=server.x, label=_CENTER_UPDATE_LABEL)
         for client in participating_clients:
-            if server in client.messages:
-                client.aux_vars["center"] = self._get_server_broadcast(client, server)
+            if server in client.messages(_CENTER_UPDATE_LABEL):
+                client.aux_vars["center"] = client.message(server, _CENTER_UPDATE_LABEL)

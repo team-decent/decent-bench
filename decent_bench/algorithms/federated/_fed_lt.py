@@ -213,7 +213,10 @@ class FedLT(FedAlgorithm):
 
     def _compute_server_y(self, network: FedNetwork) -> "Array":
         z_values = list(network.server().aux_vars["z_by_client"].values())
-        average_z = iop.mean(iop.stack(z_values, dim=0), dim=0)
+        z_sum = iop.zeros_like(z_values[0])
+        for z_value in z_values:
+            z_sum += z_value
+        average_z = z_sum / len(z_values)
         return network.server().cost.proximal(average_z, self.rho / len(network.clients()))
 
     def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
@@ -286,5 +289,5 @@ class FedLT(FedAlgorithm):
         """
         z_by_client = network.server().aux_vars["z_by_client"]
         for client in participating_clients:
-            if client in network.server().messages:
-                z_by_client[client] = network.server().messages[client]
+            if client in network.server().messages():
+                z_by_client[client] = network.server().message(client)

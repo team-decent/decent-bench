@@ -55,6 +55,6 @@ class DGD(P2PAlgorithm):
 
         for i in network.active_agents():
             neighborhood_avg = self.W[i, i] * i.x
-            for j, x_j in i.messages.items():
+            for j, x_j in i.messages().items():
                 neighborhood_avg += self.W[i, j] * x_j
             i.x = neighborhood_avg - self.step_size * i.cost.gradient(i.x)

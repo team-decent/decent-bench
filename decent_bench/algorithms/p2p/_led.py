@@ -108,7 +108,7 @@ class LED(P2PAlgorithm):
         Algorithm 1, line 2:
         """
         weighted_sum = self.W[agent, agent] * agent.aux_vars["phi"]
-        for j, phi_j in agent.messages.items():
+        for j, phi_j in agent.messages().items():
             weighted_sum += self.W[agent, j] * phi_j
         agent.x = weighted_sum
 

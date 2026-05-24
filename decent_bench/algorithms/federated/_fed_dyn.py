@@ -137,16 +137,18 @@ class FedDyn(FedAlgorithm):
         Only client models received in the current round are aggregated.
         """
         server = network.server()
-        received_clients = [client for client in participating_clients if client in server.messages]
+        received_clients = [client for client in participating_clients if client in server.messages()]
         if not received_clients:
             return
         reference_x = iop.copy(server.x)
-        client_models = [server.messages[client] for client in received_clients]
+        client_models = [server.message(client) for client in received_clients]
         average_model = self._weighted_average(
             client_models,
             weights=[1.0] * len(received_clients),
             total_weight=float(len(received_clients)),
         )
-        model_delta_sum = iop.sum(iop.stack([model - reference_x for model in client_models], dim=0), dim=0)
+        model_delta_sum = iop.zeros_like(reference_x)
+        for model in client_models:
+            model_delta_sum += model - reference_x
         server.aux_vars["h"] -= self.alpha * model_delta_sum / len(network.clients())
         server.x = average_model - server.aux_vars["h"] / self.alpha

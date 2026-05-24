@@ -68,7 +68,7 @@ class EXTRA(P2PAlgorithm):
 
             for i in network.active_agents():
                 neighborhood_avg = self.W[i, i] * i.x
-                for j, x_j in i.messages.items():
+                for j, x_j in i.messages().items():
                     neighborhood_avg += self.W[i, j] * x_j
                 i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
                 i.aux_vars["x_old"] = i.x  # store x_0
@@ -80,7 +80,7 @@ class EXTRA(P2PAlgorithm):
 
             for i in network.active_agents():
                 neighborhood_avg = self.W[i, i] * i.x
-                for j, x_j in i.messages.items():
+                for j, x_j in i.messages().items():
                     neighborhood_avg += self.W[i, j] * x_j
                 i.aux_vars["x_old_old"] = i.aux_vars["x_old"]  # store x_{k-1}
                 i.aux_vars["x_old"] = i.x  # store x_k

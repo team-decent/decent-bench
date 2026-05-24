@@ -88,6 +88,6 @@ class ADMM(P2PAlgorithm):
                 network.send(i, j, i.aux_vars["z"][idx] - 2 * self.rho * i.x)
 
         for i in network.active_agents():
-            for j, msg in i.messages.items():
+            for j, msg in i.messages().items():
                 idx = i.aux_vars["neighbor_to_idx"][j]
                 i.aux_vars["z"][idx] = (1 - self.alpha) * i.aux_vars["z"][idx] - self.alpha * (msg)

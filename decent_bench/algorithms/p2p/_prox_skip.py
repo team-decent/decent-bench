@@ -127,7 +127,7 @@ class ProxSkip(P2PAlgorithm):
         # In practice, we only communicate with neighbors, so:
         # x_i^{t+1} = sum_{j in N_i} W_a[i,j] z_j^t
         weighted_sum = self.W_a[agent, agent] * agent.aux_vars["z"]
-        for j, z_j in agent.messages.items():
+        for j, z_j in agent.messages().items():
             weighted_sum += self.W_a[agent, j] * z_j
         # Update primal: x_i^{t+1} = weighted average
         agent.x = weighted_sum

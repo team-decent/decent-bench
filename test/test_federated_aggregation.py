@@ -466,5 +466,5 @@ def test_fedopt_local_uploads_are_model_deltas(algorithm_cls: type, kwargs: dict
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
     algorithm._run_local_updates(network, participating_clients)
 
-    np.testing.assert_allclose(network.server().messages[clients[0]], np.array([-1.0]))
-    np.testing.assert_allclose(network.server().messages[clients[1]], np.array([-2.0]))
+    np.testing.assert_allclose(network.server().message(clients[0]), np.array([-1.0]))
+    np.testing.assert_allclose(network.server().message(clients[1]), np.array([-2.0]))

@@ -66,7 +66,7 @@ class ED(P2PAlgorithm):
 
         for i in network.active_agents():
             s = self.W[i, i] * i.aux_vars["msg"]
-            for j, msg in i.messages.items():
+            for j, msg in i.messages().items():
                 s += self.W[i, j] * msg
             i.x = s
             i.aux_vars["y"] = i.aux_vars["y_new"]

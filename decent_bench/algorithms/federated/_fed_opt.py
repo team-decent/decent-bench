@@ -146,11 +146,11 @@ class FedOpt(FedAlgorithm, ABC):
         This method assumes clients upload final local model deltas.
         """
         server = network.server()
-        received_clients = [client for client in participating_clients if client in server.messages]
+        received_clients = [client for client in participating_clients if client in server.messages()]
         if not received_clients:
             return
         server_x = iop.copy(server.x)
-        model_deltas = [server.messages[client] for client in received_clients]
+        model_deltas = [server.message(client) for client in received_clients]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))
         average_delta = self._weighted_average(model_deltas, weights, total_weight)

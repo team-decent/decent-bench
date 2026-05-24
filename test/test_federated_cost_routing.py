@@ -215,17 +215,18 @@ def _run_federated_local_update(
     client.initialize(x=np.zeros(cost.shape, dtype=float), aux_vars=aux_vars)
     server.initialize(x=np.zeros(cost.shape, dtype=float))
     if isinstance(algorithm, Scaffold):
-        client._received_messages[server] = np.stack(  # noqa: SLF001
-            [np.zeros(cost.shape, dtype=float), np.zeros(cost.shape, dtype=float)]
+        client._received_messages.put(  # noqa: SLF001
+            server,
+            np.stack([np.zeros(cost.shape, dtype=float), np.zeros(cost.shape, dtype=float)]),
         )
     elif not isinstance(algorithm, FedPD):
-        client._received_messages[server] = np.zeros(cost.shape, dtype=float)  # noqa: SLF001
+        client._received_messages.put(server, np.zeros(cost.shape, dtype=float))  # noqa: SLF001
     if isinstance(algorithm, FedPD):
         algorithm._num_local_steps_by_client = {client: num_local_epochs}  # noqa: SLF001
     if isinstance(algorithm, FedPD):
         local_update = algorithm._compute_local_update(client)
     elif isinstance(algorithm, FedDyn):
-        local_update = algorithm._compute_local_update(client, client.messages[server])
+        local_update = algorithm._compute_local_update(client, client.message(server))
     else:
         local_update = algorithm._compute_local_update(client, server)
     if isinstance(algorithm, Scaffold):

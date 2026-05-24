@@ -11,6 +11,10 @@ from decent_bench.schemes import ClientSelectionScheme, DropScheme, NoDrops
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
+_MODEL_DELTA_LABEL = "model_delta"
+_CONTROL_VARIATE_DELTA_LABEL = "control_variate_delta"
+
+
 class TrackingCost(Cost):
     def __init__(self, gradient_value: float = 1.0):
         self.gradient_kwargs: list[dict[str, Any]] = []
@@ -89,8 +93,9 @@ def _run_scaffold_local_update(
         aux_vars={"c_i": np.array([client_control], dtype=float)},
     )
     server.initialize(x=np.zeros(cost.shape, dtype=float))
-    client._received_messages[server] = np.stack(  # noqa: SLF001
-        [np.zeros(cost.shape, dtype=float), np.array([server_control], dtype=float)]
+    client._received_messages.put(  # noqa: SLF001
+        server,
+        np.stack([np.zeros(cost.shape, dtype=float), np.array([server_control], dtype=float)]),
     )
     local_x, _, control_delta = algorithm._compute_local_update(client, server)
     return local_x, client.aux_vars["c_i"], control_delta
@@ -228,7 +233,14 @@ def test_scaffold_aggregation_uses_only_received_updates_for_model_and_control_d
     network.send(
         sender=clients[0],
         receiver=network.server(),
-        msg=np.stack([np.array([2.0]), np.array([4.0])]),
+        msg=np.array([2.0]),
+        label=_MODEL_DELTA_LABEL,
+    )
+    network.send(
+        sender=clients[0],
+        receiver=network.server(),
+        msg=np.array([4.0]),
+        label=_CONTROL_VARIATE_DELTA_LABEL,
     )
 
     algorithm.aggregate(network, clients)
