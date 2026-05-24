@@ -1,6 +1,5 @@
 """Collection of pre-defined table and plot metrics."""
 
-from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -9,7 +8,7 @@ import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs import Cost, EmpiricalRiskCost
 from decent_bench.metrics._metric import Metric
-from decent_bench.metrics._metrics_view import AgentMetricsView
+from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import FedNetwork
 
 if TYPE_CHECKING:
@@ -47,12 +46,11 @@ class Regret(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return (utils._regret(agent_views, problem, iteration),)  # noqa: SLF001
+        return (utils._regret(network.agents(), problem, iteration),)  # noqa: SLF001
 
 
 class GradientNorm(Metric):
@@ -75,12 +73,11 @@ class GradientNorm(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return (utils._gradient_norm(agent_views, iteration),)  # noqa: SLF001
+        return (utils._gradient_norm(network.agents(), iteration),)  # noqa: SLF001
 
 
 class XError(Metric):
@@ -119,11 +116,11 @@ class XError(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        return (utils._x_error(agents, problem, iteration),)  # noqa: SLF001
+        return (utils._x_error(network.agents(), problem, iteration),)  # noqa: SLF001
 
 
 class ConsensusError(Metric):
@@ -153,12 +150,11 @@ class ConsensusError(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        agent_views = network.agents()
         x_mean = utils.x_mean(tuple(agent_views), iteration)
         return [float(iop.norm(x_mean - a.x_history[iteration])) for a in agent_views]
 
@@ -181,11 +177,11 @@ class XUpdates(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
-        return [a.n_x_updates for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
+        return [a.n_x_updates for a in network.agents()]
 
 
 class FunctionCalls(Metric):
@@ -210,11 +206,11 @@ class FunctionCalls(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_function_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
+        return [a.n_function_calls for a in network.agents()]
 
 
 class GradientCalls(Metric):
@@ -239,11 +235,11 @@ class GradientCalls(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_gradient_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
+        return [a.n_gradient_calls for a in network.agents()]
 
 
 class HessianCalls(Metric):
@@ -268,11 +264,11 @@ class HessianCalls(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_hessian_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
+        return [a.n_hessian_calls for a in network.agents()]
 
 
 class ProximalCalls(Metric):
@@ -293,11 +289,11 @@ class ProximalCalls(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_proximal_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
+        return [a.n_proximal_calls for a in network.agents()]
 
 
 class SentMessages(Metric):
@@ -318,11 +314,11 @@ class SentMessages(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_sent_messages for a in agents]
+        return [a.n_sent_messages for a in network.graph.nodes]
 
 
 class ReceivedMessages(Metric):
@@ -343,11 +339,11 @@ class ReceivedMessages(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_received_messages for a in agents]
+        return [a.n_received_messages for a in network.graph.nodes]
 
 
 class SentMessagesDropped(Metric):
@@ -368,11 +364,11 @@ class SentMessagesDropped(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_sent_messages_dropped for a in agents]
+        return [a.n_sent_messages_dropped for a in network.graph.nodes]
 
 
 class Accuracy(Metric):
@@ -425,12 +421,11 @@ class Accuracy(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return utils._accuracy(agent_views, problem, iteration)  # noqa: SLF001
+        return utils._accuracy(network.agents(), problem, iteration)  # noqa: SLF001
 
 
 class MSE(Metric):
@@ -478,12 +473,11 @@ class MSE(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return utils._mse(agent_views, problem, iteration)  # noqa: SLF001
+        return utils._mse(network.agents(), problem, iteration)  # noqa: SLF001
 
 
 class Precision(Metric):
@@ -536,12 +530,11 @@ class Precision(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return utils._precision(agent_views, problem, iteration)  # noqa: SLF001
+        return utils._precision(network.agents(), problem, iteration)  # noqa: SLF001
 
 
 class Recall(Metric):
@@ -594,12 +587,11 @@ class Recall(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return utils._recall(agent_views, problem, iteration)  # noqa: SLF001
+        return utils._recall(network.agents(), problem, iteration)  # noqa: SLF001
 
 
 class Loss(Metric):
@@ -622,12 +614,11 @@ class Loss(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return utils._losses(agent_views, iteration)  # noqa: SLF001
+        return utils._losses(network.agents(), iteration)  # noqa: SLF001
 
 
 def _requires_fednetwork(problem: "BenchmarkProblem", metric_name: str) -> tuple[bool, str | None]:
@@ -636,8 +627,8 @@ def _requires_fednetwork(problem: "BenchmarkProblem", metric_name: str) -> tuple
     return True, None
 
 
-def _server_metric_cost(agents: Sequence[AgentMetricsView], metric_name: str) -> Cost:
-    agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+def _server_metric_cost(network: NetworkMetricsView, metric_name: str) -> Cost:
+    agent_views = network.agents()
     if not agent_views:
         raise ValueError(f"{metric_name} requires at least one client metrics view")
     return agent_views[0].cost
@@ -675,21 +666,20 @@ class ClientDriftFromServer(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",  # noqa: ARG002
         iteration: int,
     ) -> list[float]:
-        server = utils._server_view(tuple(agents))  # noqa: SLF001
-        return utils._drifts(utils._non_server_views(tuple(agents)), server, iteration)  # noqa: SLF001
+        return utils._drifts(network.clients(), network.server(), iteration)  # noqa: SLF001
 
     def get_plot_data(
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
     ) -> list[tuple[float, float]]:
         """Extract client drift trajectory."""
-        server = utils._server_view(tuple(agents))  # noqa: SLF001
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        server = network.server()
+        agent_views = network.clients()
         return [
             (i, float(np.mean(utils._drifts(agent_views, server, i))))  # noqa: SLF001
             for i in utils.all_sorted_iterations([server])
@@ -719,11 +709,11 @@ class FractionSelectedClients(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> tuple[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        agent_views = network.clients()
         n_rounds = utils._observed_rounds(agent_views)  # noqa: SLF001
         if n_rounds == 0 or not agent_views:
             return (np.nan,)
@@ -764,22 +754,21 @@ class ServerMSE(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        server = utils._server_view(tuple(agents))  # noqa: SLF001
-        cost = _server_metric_cost(agents, self.description)
-        return (utils._mse_at_x(cost, server.x_history[iteration], problem),)  # noqa: SLF001
+        cost = _server_metric_cost(network, self.description)
+        return (utils._mse_at_x(cost, network.server().x_history[iteration], problem),)  # noqa: SLF001
 
     def get_plot_data(
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
     ) -> list[tuple[float, float]]:
         """Extract server MSE trajectory."""
-        server = utils._server_view(tuple(agents))  # noqa: SLF001
-        return [(i, self.get_data_from_trial(agents, problem, i)[0]) for i in utils.all_sorted_iterations([server])]
+        server = network.server()
+        return [(i, self.get_data_from_trial(network, problem, i)[0]) for i in utils.all_sorted_iterations([server])]
 
 
 class ServerAccuracy(Metric):
@@ -819,22 +808,21 @@ class ServerAccuracy(Metric):
 
     def get_data_from_trial(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> tuple[float]:
-        server = utils._server_view(tuple(agents))  # noqa: SLF001
-        cost = _server_metric_cost(agents, self.description)
-        return (utils._accuracy_at_x(cost, server.x_history[iteration], problem),)  # noqa: SLF001
+        cost = _server_metric_cost(network, self.description)
+        return (utils._accuracy_at_x(cost, network.server().x_history[iteration], problem),)  # noqa: SLF001
 
     def get_plot_data(
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
     ) -> list[tuple[float, float]]:
         """Extract server accuracy trajectory."""
-        server = utils._server_view(tuple(agents))  # noqa: SLF001
-        return [(i, self.get_data_from_trial(agents, problem, i)[0]) for i in utils.all_sorted_iterations([server])]
+        server = network.server()
+        return [(i, self.get_data_from_trial(network, problem, i)[0]) for i in utils.all_sorted_iterations([server])]
 
 
 _BASE_TABLE_METRICS: list[Metric] = [

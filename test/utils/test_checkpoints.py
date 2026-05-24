@@ -329,7 +329,7 @@ def test_save_and_load_metrics_result(tmp_path: Path) -> None:  # noqa: D103
     ckpt_path.mkdir(parents=True, exist_ok=True)
     manager = CheckpointManager(ckpt_path)
     metrics_result = MetricResult(
-        agent_metrics=None,
+        network_views=None,
         table_metrics=None,
         plot_metrics=None,
         table_results=None,

@@ -5,7 +5,7 @@ import pandas as pd
 
 from decent_bench.algorithms import Algorithm
 from decent_bench.metrics import Metric
-from decent_bench.metrics._metrics_view import AgentMetricsView
+from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network
 
 
@@ -19,9 +19,9 @@ class MetricResult:
     all the information about the computed metrics, including agent-level metrics, table statistics,
     and plot data for visualization.
 
-    * `agent_metrics`: contains the raw agent-level metrics for each algorithm, organized by algorithm where
-      each algorithm maps to a sequence of trials, with each trial containing metrics for all snapshotted agents.
-      For federated networks, this includes the server.
+    * `network_views`: contains the raw network-level metrics for each algorithm, organized by algorithm where
+        each algorithm maps to a sequence of trials, with each trial containing a
+        :class:`~decent_bench.metrics.NetworkMetricsView`.
     * `table_metrics`: contains the list of metrics that were tabulated as confidence intervals.
     * `plot_metrics`: contains the list of metrics that were plotted.
     * `table_results`: contains the computed table statistics for each algorithm and metric, organized by
@@ -33,7 +33,7 @@ class MetricResult:
     benchmark problem.
     """
 
-    agent_metrics: Mapping[Algorithm[Network], Sequence[Sequence[AgentMetricsView]]] | None
+    network_views: Mapping[Algorithm[Network], Sequence[NetworkMetricsView]] | None
     table_metrics: list[Metric] | None
     plot_metrics: list[Metric] | None
     table_results: Mapping[Algorithm[Network], Mapping[Metric, Mapping[str, tuple[float, float]]]] | None
@@ -52,7 +52,7 @@ class MetricResult:
             {
                 algorithm.name
                 for mapping in (
-                    self.agent_metrics,
+                    self.network_views,
                     self.table_results,
                     self.plot_results,
                 )

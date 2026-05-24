@@ -15,7 +15,7 @@ from decent_bench.metrics import (
     metric_utils,
 )
 from decent_bench.metrics import metric_library as ml
-from decent_bench.metrics._metrics_view import AgentMetricsView
+from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network
 from decent_bench.utils._metric_helpers import _find_duplicates
 from decent_bench.utils.logger import LOGGER, start_logger
@@ -111,16 +111,14 @@ def compute_metrics(
     plot_metrics = _remove_unavailable(plot_metrics, benchmark_result.problem, "plot")
 
     # compute table and plot results
-    resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
+    resulting_network_views: dict[Algorithm[Network], list[NetworkMetricsView]] = {}
     for alg, networks in benchmark_result.states.items():
-        resulting_agent_states[alg] = [
-            [AgentMetricsView.from_agent(a) for a in nw.snapshot_agents()] for nw in networks
-        ]
-    table_results = compute_tables(resulting_agent_states, benchmark_result.problem, table_metrics, confidence_level)
-    plot_results = compute_plots(resulting_agent_states, benchmark_result.problem, plot_metrics)
+        resulting_network_views[alg] = [NetworkMetricsView.from_network(nw) for nw in networks]
+    table_results = compute_tables(resulting_network_views, benchmark_result.problem, table_metrics, confidence_level)
+    plot_results = compute_plots(resulting_network_views, benchmark_result.problem, plot_metrics)
 
     result = MetricResult(
-        agent_metrics=resulting_agent_states,
+        network_views=resulting_network_views,
         table_metrics=table_metrics,
         plot_metrics=plot_metrics,
         table_results=table_results,

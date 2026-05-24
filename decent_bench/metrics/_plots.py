@@ -15,7 +15,7 @@ import decent_bench.metrics.metric_utils as utils
 from decent_bench.algorithms import Algorithm
 from decent_bench.metrics._computational_cost import ComputationalCost
 from decent_bench.metrics._metric import Metric, X, Y
-from decent_bench.metrics._metrics_view import AgentMetricsView
+from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 
@@ -108,7 +108,7 @@ def display_plots(
     """
     plot_results = metrics_result.plot_results
     metrics = metrics_result.plot_metrics
-    agent_metrics = metrics_result.agent_metrics
+    network_views = metrics_result.network_views
 
     if plot_results is None or metrics is None:
         return
@@ -123,7 +123,7 @@ def display_plots(
     all_figures = _create_and_plot_figures(
         metric_groups,
         plot_results,
-        agent_metrics,
+        network_views,
         use_cost,
         two_columns,
         computational_cost=computational_cost,
@@ -140,7 +140,7 @@ def display_plots(
 
 
 def compute_plots(
-    resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]],
+    resulting_network_views: dict[Algorithm[Network], list[NetworkMetricsView]],
     problem: "BenchmarkProblem",
     metrics: list[Metric],
 ) -> Mapping[
@@ -152,7 +152,7 @@ def compute_plots(
     Each algorithm's curve is its mean across the trials. The surrounding envelope is the min and max across the trials.
 
     Args:
-        resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
+        resulting_network_views: resulting network views from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties are used for metric calculations
         metrics: metrics to calculate and plot. A maximum of 3 metrics are plotted as subplots in the same figure
 
@@ -174,14 +174,14 @@ def compute_plots(
     if not metrics:
         return {}
 
-    algs = list(resulting_agent_states)
+    algs = list(resulting_network_views)
     results: dict[
         Algorithm[Network],
         dict[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]],
     ] = {alg: {} for alg in algs}
 
     with utils.MetricProgressBar() as progress:
-        total_plots = len(metrics) * len(resulting_agent_states)
+        total_plots = len(metrics) * len(resulting_network_views)
         plot_task = progress.add_task(
             "Computing plot metrics",
             total=total_plots,
@@ -191,9 +191,9 @@ def compute_plots(
         for metric in metrics:
             progress.update(plot_task, status=f"Task: {metric.description}")
 
-            for alg, agent_states in resulting_agent_states.items():
+            for alg, network_views in resulting_network_views.items():
                 data_per_trial: list[Sequence[tuple[X, Y]]] = _plot_data_per_trial(
-                    agent_states,
+                    network_views,
                     problem,
                     metric,
                 )
@@ -242,7 +242,7 @@ def _create_and_plot_figures(  # noqa: PLR0912
         Algorithm[Network],
         Mapping[Metric, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]],
     ],
-    resulting_agent_states: Mapping[Algorithm[Network], Sequence[Sequence[AgentMetricsView]]] | None,
+    resulting_network_views: Mapping[Algorithm[Network], Sequence[NetworkMetricsView]] | None,
     use_cost: bool,
     two_columns: bool,
     *,
@@ -305,14 +305,14 @@ def _create_and_plot_figures(  # noqa: PLR0912
                 # Transform x-axis for computational cost if needed
                 x_to_plot = x
                 if use_cost and computational_cost is not None:
-                    if resulting_agent_states is None:
+                    if resulting_network_views is None:
                         LOGGER.warning(
-                            f"Computational cost provided but resulting agent states are missing. Cannot compute "
+                            f"Computational cost provided but resulting network views are missing. Cannot compute "
                             f"total computational cost for algorithm {alg.name}. Plotting against iterations instead."
                         )
                     else:
-                        agent_states_for_alg = [list(trial) for trial in resulting_agent_states[alg]]
-                        total_computational_cost = _calc_total_cost(agent_states_for_alg, computational_cost)
+                        network_views_for_alg = list(resulting_network_views[alg])
+                        total_computational_cost = _calc_total_cost(network_views_for_alg, computational_cost)
                         x_to_plot = tuple(val * total_computational_cost * scale_x_axis for val in x)
 
                 # Plot iterations version if comparing
@@ -610,8 +610,8 @@ def _get_marker_style_color(
     return MARKERS[marker_idx], STYLES[style_idx], COLORS[color_idx]
 
 
-def _calc_total_cost(agent_states: list[list[AgentMetricsView]], computational_cost: ComputationalCost) -> float:
-    non_server_states = [a for agents in agent_states for a in agents if not a.is_server]
+def _calc_total_cost(network_views: list[NetworkMetricsView], computational_cost: ComputationalCost) -> float:
+    non_server_states = [a for network_view in network_views for a in network_view.agents()]
     mean_function_calls = np.mean([a.n_function_calls for a in non_server_states])
     mean_gradient_calls = np.mean([a.n_gradient_calls for a in non_server_states])
     mean_hessian_calls = np.mean([a.n_hessian_calls for a in non_server_states])
@@ -628,14 +628,14 @@ def _calc_total_cost(agent_states: list[list[AgentMetricsView]], computational_c
 
 
 def _plot_data_per_trial(
-    agents_per_trial: list[list[AgentMetricsView]],
+    network_views_per_trial: list[NetworkMetricsView],
     problem: "BenchmarkProblem",
     metric: Metric,
 ) -> list[Sequence[tuple[X, Y]]]:
     data_per_trial: list[Sequence[tuple[X, Y]]] = []
-    for agents in agents_per_trial:
+    for network_view in network_views_per_trial:
         with warnings.catch_warnings(action="ignore"):
-            trial_data = metric.get_plot_data(agents, problem)
+            trial_data = metric.get_plot_data(network_view, problem)
         data_per_trial.append(trial_data)
     return data_per_trial
 

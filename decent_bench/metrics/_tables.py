@@ -11,7 +11,7 @@ import decent_bench.metrics.metric_utils as utils
 from decent_bench.algorithms import Algorithm
 from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.metrics._metric import Metric
-from decent_bench.metrics._metrics_view import AgentMetricsView
+from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 
@@ -56,9 +56,10 @@ def display_tables(
 
     if (
         any(isinstance(metric, SCALE_METRICS) for metric in metrics_result.table_metrics)
-        and metrics_result.agent_metrics
+        and metrics_result.network_views
     ):
-        metric_views = next(iter(metrics_result.agent_metrics.values()))[0]
+        network_view = next(iter(metrics_result.network_views.values()))[0]
+        metric_views = network_view.agents()
         scale_metrics_in_use = [
             metric.description for metric in metrics_result.table_metrics if isinstance(metric, SCALE_METRICS)
         ]
@@ -108,7 +109,7 @@ def display_tables(
 
 
 def compute_tables(
-    resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]],
+    resulting_network_views: dict[Algorithm[Network], list[NetworkMetricsView]],
     problem: "BenchmarkProblem",
     metrics: list[Metric],
     confidence_level: float,
@@ -117,7 +118,7 @@ def compute_tables(
     Compute table metrics with confidence intervals.
 
     Args:
-        resulting_agent_states: resulting agent states from the trial executions, grouped by algorithm
+        resulting_network_views: resulting network views from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties are used for metric calculations
         metrics: metrics to calculate
         confidence_level: confidence level for computing confidence intervals of the metrics, expressed as a value
@@ -132,7 +133,7 @@ def compute_tables(
     if not metrics:
         return {}
 
-    algs = list(resulting_agent_states)
+    algs = list(resulting_network_views)
     results: dict[Algorithm[Network], dict[Metric, dict[str, tuple[float, float]]]] = {a: {} for a in algs}
 
     with warnings.catch_warnings(action="ignore"), utils.MetricProgressBar() as progress:
@@ -146,7 +147,7 @@ def compute_tables(
 
             data_per_trial = [
                 _table_data_per_trial(
-                    resulting_agent_states[a],
+                    resulting_network_views[a],
                     problem,
                     metric,
                 )
@@ -172,11 +173,11 @@ def compute_tables(
 
 
 def _table_data_per_trial(
-    agents_per_trial: list[list[AgentMetricsView]],
+    network_views_per_trial: list[NetworkMetricsView],
     problem: "BenchmarkProblem",
     metric: Metric,
 ) -> list[Sequence[float]]:
-    return [metric.get_table_data(agents, problem) for agents in agents_per_trial]
+    return [metric.get_table_data(network_view, problem) for network_view in network_views_per_trial]
 
 
 def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: float) -> tuple[float, float]:

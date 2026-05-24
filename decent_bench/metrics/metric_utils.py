@@ -49,20 +49,6 @@ def _clear_caches() -> None:
     """Clear module-level functools caches used by metric utilities."""
     x_mean.cache_clear()
     _predict_agent.cache_clear()
-    _non_server_views.cache_clear()
-    _server_view.cache_clear()
-
-
-@lru_cache(maxsize=CACHE_MAX_SIZE)
-def _non_server_views(agents: tuple[AgentMetricsView, ...]) -> tuple[AgentMetricsView, ...]:
-    """Return all non-server agent views."""
-    return tuple(agent for agent in agents if not agent.is_server)
-
-
-@lru_cache(maxsize=CACHE_MAX_SIZE)
-def _server_view(agents: tuple[AgentMetricsView, ...]) -> AgentMetricsView:
-    """Return the federated server view."""
-    return next(agent for agent in agents if agent.is_server)
 
 
 def _drifts(agents: Sequence[AgentMetricsView], server: AgentMetricsView, iteration: int) -> list[float]:

@@ -32,7 +32,7 @@ def test_metric_result_to_dataframe_converts_table_and_plot_results() -> None:
     metric_two = _MetricStub("two")
 
     metrics_result = MetricResult(
-        agent_metrics=None,
+        network_views=None,
         table_metrics=[metric_one, metric_two],
         plot_metrics=[metric_one, metric_two],
         table_results={
@@ -83,14 +83,14 @@ def test_metric_result_to_dataframe_handles_missing_table_or_plot_results() -> N
     metric = _MetricStub("one")
 
     table_only_result = MetricResult(
-        agent_metrics=None,
+        network_views=None,
         table_metrics=[metric],
         plot_metrics=None,
         table_results={algorithm: {metric: {"avg": (1.0, 0.0)}}},
         plot_results=None,
     )
     plot_only_result = MetricResult(
-        agent_metrics=None,
+        network_views=None,
         table_metrics=None,
         plot_metrics=[metric],
         table_results=None,

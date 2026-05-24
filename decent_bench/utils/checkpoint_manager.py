@@ -14,7 +14,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, MetricResult
-from decent_bench.metrics._metrics_view import AgentMetricsView
+from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 
@@ -677,10 +677,10 @@ class CheckpointManager:
         metric_path = self.checkpoint_dir / "metric_computation.pkl.zst"
         metric_marker_path = self.checkpoint_dir / "metric_computation_complete.json"
 
-        # Remove agent metrics from checkpoint to save space (can be a lot),
+        # Remove network views from checkpoint to save space (can be a lot),
         # this can be loaded again from the benchmark result
         if self.is_benchmark_completed():
-            metrics_result.agent_metrics = None
+            metrics_result.network_views = None
 
         self._save_pickle(metric_path, metrics_result)
 
@@ -692,15 +692,15 @@ class CheckpointManager:
 
         LOGGER.info(f"Saved computed metrics result to {metric_path}")
 
-    def load_metrics_result(self, skip_agent_metrics: bool = False) -> MetricResult:
+    def load_metrics_result(self, skip_network_views: bool = False) -> MetricResult:
         """
         Load the computed metrics result from the checkpoint directory.
 
         Args:
-            skip_agent_metrics: If True, do not attempt to load agent metrics from the benchmark
-                result if they are not present in the checkpoint. This can save time if agent metrics
+            skip_network_views: If True, do not attempt to load network views from the benchmark
+                result if they are not present in the checkpoint. This can save time if network views
                 are not needed for the intended analysis, which can be useful for automatic analysis.
-                Agent metrics are needed for :class:`~decent_bench.metrics.ComputationalCost` and may be used if
+                Network views are needed for :class:`~decent_bench.metrics.ComputationalCost` and may be used if
                 :class:`~decent_bench.costs.EmpiricalRiskCost` is used.
 
         Returns:
@@ -710,29 +710,27 @@ class CheckpointManager:
         metric_path = self._resolve_data_file("metric_computation.pkl.zst", "metric_computation.pkl")
         metrics_result = cast("MetricResult", self._load_pickle(metric_path))
 
-        if metrics_result.agent_metrics is None and not skip_agent_metrics:
+        if metrics_result.network_views is None and not skip_network_views:
             try:
                 benchmark_result = self.load_benchmark_result()
-                resulting_agent_states: dict[Algorithm[Network], list[list[AgentMetricsView]]] = {}
+                resulting_network_views: dict[Algorithm[Network], list[NetworkMetricsView]] = {}
                 for alg, networks in benchmark_result.states.items():
                     algorithms = list(metrics_result.table_results or metrics_result.plot_results or [])
                     original_alg = next((a for a in algorithms if a.name == alg.name), None)
                     if original_alg is None:
                         LOGGER.warning(
                             f"Original algorithm '{alg.name}' not found in benchmark problem configuration. "
-                            "Cannot reconstruct agent metrics for this algorithm."
+                            "Cannot reconstruct network views for this algorithm."
                         )
                         continue
-                    resulting_agent_states[original_alg] = [
-                        [AgentMetricsView.from_agent(a) for a in nw.snapshot_agents()] for nw in networks
-                    ]
-                metrics_result.agent_metrics = resulting_agent_states
+                    resulting_network_views[original_alg] = [NetworkMetricsView.from_network(nw) for nw in networks]
+                metrics_result.network_views = resulting_network_views
             except Exception as e:
                 LOGGER.warning(
-                    f"Failed to load benchmark result to reconstruct agent metrics: {e}"
-                    "Some functionality may be limited without agent metrics available."
+                    f"Failed to load benchmark result to reconstruct network views: {e}"
+                    "Some functionality may be limited without network views available."
                 )
-                metrics_result.agent_metrics = None
+                metrics_result.network_views = None
 
         LOGGER.info(f"Loaded computed metrics result from {metric_path}")
         return metrics_result

@@ -27,7 +27,6 @@ class AgentMetricsView:
     n_received_messages: float
     n_sent_messages_dropped: float
     n_times_selected: int
-    is_server: bool
 
     @staticmethod
     def from_agent(agent: Agent) -> AgentMetricsView:
@@ -45,7 +44,6 @@ class AgentMetricsView:
             n_received_messages=agent._n_received_messages,  # noqa: SLF001
             n_sent_messages_dropped=agent._n_sent_messages_dropped,  # noqa: SLF001
             n_times_selected=agent._n_times_selected,  # noqa: SLF001
-            is_server=agent._is_server,  # noqa: SLF001
         )
 
 

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 import decent_bench.metrics.metric_utils as utils
-from decent_bench.metrics._metrics_view import AgentMetricsView
+from decent_bench.metrics._metrics_view import NetworkMetricsView
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
@@ -102,7 +102,7 @@ class Metric(ABC):
     @abstractmethod
     def get_data_from_trial(
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> Sequence[float]:
@@ -110,7 +110,7 @@ class Metric(ABC):
         Get the data for this metric from a trial.
 
         Args:
-            agents: the snapshotted agent views being evaluated. For federated networks, this includes the server.
+            network: the snapshotted network view being evaluated.
             problem: the benchmark problem being evaluated
             iteration: the iteration at which to evaluate the metric, or -1 to use the agents' final x
 
@@ -119,7 +119,7 @@ class Metric(ABC):
 
         """
 
-    def get_table_data(self, agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem") -> Sequence[float]:
+    def get_table_data(self, network: NetworkMetricsView, problem: "BenchmarkProblem") -> Sequence[float]:
         """
         Extract trial data to be used in the table for this metric.
 
@@ -127,9 +127,9 @@ class Metric(ABC):
         By default, it returns the metric from the last iteration,
         but it can be overridden to perform additional processing on the data before it is used in the table.
         """
-        return self.get_data_from_trial(agents, problem, -1)
+        return self.get_data_from_trial(network, problem, -1)
 
-    def get_plot_data(self, agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem") -> Sequence[tuple[X, Y]]:
+    def get_plot_data(self, network: NetworkMetricsView, problem: "BenchmarkProblem") -> Sequence[tuple[X, Y]]:
         """
         Extract trial data to be used in plots for this metric.
 
@@ -138,6 +138,6 @@ class Metric(ABC):
         This method can be overridden to perform additional processing on the data before it is used in plots.
         """
         return [
-            (i, float(np.mean(self.get_data_from_trial(agents, problem, i))))
-            for i in utils.all_sorted_iterations(agents)
+            (i, float(np.mean(self.get_data_from_trial(network, problem, i))))
+            for i in utils.all_sorted_iterations(network.agents())
         ]

@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
 import pytest
 from copy import deepcopy
@@ -16,7 +17,7 @@ from decent_bench.benchmark._display import display_metrics
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.costs import LinearRegressionCost, LogisticRegressionCost, QuadraticCost
 from decent_bench.metrics._metric import Metric
-from decent_bench.metrics._metrics_view import AgentMetricsView
+from decent_bench.metrics._metrics_view import AgentMetricsView, NetworkMetricsView, NetworkType
 from decent_bench.metrics import metric_library as ml
 from decent_bench.metrics._plots import (
     MAX_Y_PLOT_VALUE,
@@ -72,8 +73,18 @@ def _agent_metrics_view(x_value: float) -> AgentMetricsView:
         n_received_messages=0,
         n_sent_messages_dropped=0,
         n_times_selected=0,
-        is_server=False,
     )
+
+
+def _network_metrics_view(
+    agents: list[AgentMetricsView],
+    *,
+    network_type: NetworkType = NetworkType.P2P,
+    server: AgentMetricsView | None = None,
+) -> NetworkMetricsView:
+    graph = nx.Graph()
+    graph.add_nodes_from(agents)
+    return NetworkMetricsView(graph=graph, network_type=network_type, _server=server)
 
 
 def _run_display_with_capture(
@@ -184,7 +195,10 @@ def _build_display_metric_result(
             default_plot_results[alg][metric] = ([0.0], [value], [value], [value])
 
     return MetricResult(
-        agent_metrics={alg: [[_agent_metrics_view(agent_x_values[idx])]] for idx, alg in enumerate(algorithms)},
+        network_views={
+            alg: [_network_metrics_view([_agent_metrics_view(agent_x_values[idx])])]
+            for idx, alg in enumerate(algorithms)
+        },
         table_metrics=table_metrics,
         plot_metrics=plot_metrics,
         table_results=table_results or default_table_results,
@@ -217,7 +231,7 @@ def test_display_metrics_filters_algorithms(monkeypatch, algorithm_filter: str, 
     assert "plot" in captured
     assert [alg.name for alg in captured["table"].table_results] == expected_algorithms
     assert [alg.name for alg in captured["table"].plot_results] == expected_algorithms
-    assert [alg.name for alg in captured["table"].agent_metrics] == expected_algorithms
+    assert [alg.name for alg in captured["table"].network_views] == expected_algorithms
     assert [alg.name for alg in metrics_result.table_results] == ["A", "B"]
 
 
@@ -309,7 +323,7 @@ def test_display_metrics_filters_algorithms_with_mixed_objects_and_names(monkeyp
     assert "table" in captured
     assert [alg.name for alg in captured["table"].table_results] == ["A", "C"]
     assert [alg.name for alg in captured["table"].plot_results] == ["A", "C"]
-    assert [alg.name for alg in captured["table"].agent_metrics] == ["A", "C"]
+    assert [alg.name for alg in captured["table"].network_views] == ["A", "C"]
     assert [alg.name for alg in metrics_result.table_results] == ["A", "B", "C"]
 
 
@@ -318,7 +332,7 @@ def test_display_metrics_raises_when_all_algorithms_filtered_out(monkeypatch) ->
     metric = _MetricStub("one")
 
     metrics_result = MetricResult(
-        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]]},
+        network_views={alg_a: [_network_metrics_view([_agent_metrics_view(1.0)])]},
         table_metrics=[metric],
         plot_metrics=[metric],
         table_results={alg_a: {metric: {"avg": (1.0, 0.0)}}},
@@ -335,7 +349,7 @@ def test_display_metrics_raises_when_all_table_and_plot_metrics_filtered_out(mon
     metric_2 = _MetricStub("two")
 
     metrics_result = MetricResult(
-        agent_metrics={alg_a: [[_agent_metrics_view(1.0)]]},
+        network_views={alg_a: [_network_metrics_view([_agent_metrics_view(1.0)])]},
         table_metrics=[metric_1, metric_2],
         plot_metrics=[metric_1, metric_2],
         table_results={
@@ -403,7 +417,10 @@ def test_metric_result_available_discovery_properties() -> None:  # noqa: D103
     metric_2 = _MetricStub("two")
 
     metrics_result = MetricResult(
-        agent_metrics={alg_a: [[[]]], alg_b: [[[]]]},
+        network_views={
+            alg_a: [_network_metrics_view([])],
+            alg_b: [_network_metrics_view([])],
+        },
         table_metrics=[metric_1, metric_1, metric_2],
         plot_metrics=[metric_1, metric_1, metric_2],
         table_results={alg_a: {metric_1: {"avg": (1.0, 0.1)}}},
@@ -442,10 +459,8 @@ def test_compute_metrics_uses_federated_defaults_and_server_view() -> None:  # n
 
     metrics_result = compute_metrics(benchmark_result=benchmark_result, log_level=40)
 
-    assert metrics_result.agent_metrics is not None
-    server_views = [view for view in metrics_result.agent_metrics[algorithm][0] if view.is_server]
-    assert len(server_views) == 1
-    assert server_views[0].x_history.max() == 2
+    assert metrics_result.network_views is not None
+    assert metrics_result.network_views[algorithm][0].server().x_history.max() == 2
     table_metric_types = {type(metric) for metric in metrics_result.table_metrics or []}
     plot_metric_types = {type(metric) for metric in metrics_result.plot_metrics or []}
     assert ml.ClientDriftFromServer in table_metric_types
@@ -502,7 +517,12 @@ def test_compute_plots_truncates_trials_at_first_non_finite_value() -> None:  # 
     )
 
     plot_results = compute_plots(
-        {alg_a: [[_agent_metrics_view(1.0)], [_agent_metrics_view(2.0)]]},
+        {
+            alg_a: [
+                _network_metrics_view([_agent_metrics_view(1.0)]),
+                _network_metrics_view([_agent_metrics_view(2.0)]),
+            ]
+        },
         SimpleNamespace(),
         [metric],
     )
@@ -526,7 +546,12 @@ def test_compute_plots_drops_trials_without_finite_prefix() -> None:  # noqa: D1
     )
 
     plot_results = compute_plots(
-        {alg_a: [[_agent_metrics_view(1.0)], [_agent_metrics_view(2.0)]]},
+        {
+            alg_a: [
+                _network_metrics_view([_agent_metrics_view(1.0)]),
+                _network_metrics_view([_agent_metrics_view(2.0)]),
+            ]
+        },
         SimpleNamespace(),
         [metric],
     )
@@ -550,7 +575,12 @@ def test_compute_plots_omits_metric_without_any_finite_prefix() -> None:  # noqa
     )
 
     plot_results = compute_plots(
-        {alg_a: [[_agent_metrics_view(1.0)], [_agent_metrics_view(2.0)]]},
+        {
+            alg_a: [
+                _network_metrics_view([_agent_metrics_view(1.0)]),
+                _network_metrics_view([_agent_metrics_view(2.0)]),
+            ]
+        },
         SimpleNamespace(),
         [metric],
     )
@@ -569,7 +599,12 @@ def test_compute_plots_truncates_trials_at_over_threshold_value() -> None:  # no
     )
 
     plot_results = compute_plots(
-        {alg_a: [[_agent_metrics_view(1.0)], [_agent_metrics_view(2.0)]]},
+        {
+            alg_a: [
+                _network_metrics_view([_agent_metrics_view(1.0)]),
+                _network_metrics_view([_agent_metrics_view(2.0)]),
+            ]
+        },
         SimpleNamespace(),
         [metric],
     )
@@ -807,11 +842,15 @@ def test_server_mse_availability_and_values() -> None:  # noqa: D103
         n_received_messages=0,
         n_sent_messages_dropped=0,
         n_times_selected=0,
-        is_server=True,
     )
 
-    assert metric.get_table_data([client_view, server_view], problem) == (0.0,)
-    assert metric.get_plot_data([client_view, server_view], problem) == [(0, 1.0), (1, 0.0)]
+    network_view = _network_metrics_view(
+        [client_view, server_view],
+        network_type=NetworkType.FEDERATED,
+        server=server_view,
+    )
+    assert metric.get_table_data(network_view, problem) == (0.0,)
+    assert metric.get_plot_data(network_view, problem) == [(0, 1.0), (1, 0.0)]
 
 
 def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
@@ -855,11 +894,15 @@ def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
         n_received_messages=0,
         n_sent_messages_dropped=0,
         n_times_selected=0,
-        is_server=True,
     )
 
-    assert metric.get_table_data([client_view, server_view], problem) == (1.0,)
-    assert metric.get_plot_data([client_view, server_view], problem) == [(0, 0.5), (1, 1.0)]
+    network_view = _network_metrics_view(
+        [client_view, server_view],
+        network_type=NetworkType.FEDERATED,
+        server=server_view,
+    )
+    assert metric.get_table_data(network_view, problem) == (1.0,)
+    assert metric.get_plot_data(network_view, problem) == [(0, 0.5), (1, 1.0)]
 
 
 def test_is_available_default_returns_true() -> None:  # noqa: D103
@@ -885,10 +928,11 @@ class _PlotMetricStub(Metric):
     def description(self) -> str:
         return self._description
 
-    def get_data_from_trial(self, agents, problem, iteration):  # noqa: D102
+    def get_data_from_trial(self, network, problem, iteration):  # noqa: D102
         return [0.0]
 
-    def get_plot_data(self, agents, problem):  # noqa: D102
-        last_iteration = agents[0].x_history.max()
-        x_value = float(agents[0].x_history[last_iteration][0])
+    def get_plot_data(self, network, problem):  # noqa: D102
+        first_agent = network.agents()[0]
+        last_iteration = first_agent.x_history.max()
+        x_value = float(first_agent.x_history[last_iteration][0])
         return self._plot_data_by_x_value[x_value]
