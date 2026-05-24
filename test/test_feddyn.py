@@ -186,8 +186,8 @@ def test_feddyn_clients_without_server_broadcast_do_not_participate() -> None:
     ("kwargs", "expected_message"),
     [
         pytest.param({"step_size": 0.0}, "`step_size` must be positive", id="step-size-zero"),
-        pytest.param({"penalty": 0.0}, "`penalty` must be positive", id="alpha-zero"),
-        pytest.param({"num_local_steps": 0}, "`num_local_steps` must be positive", id="local-epochs-zero"),
+        pytest.param({"penalty": 0.0}, "`penalty` must be positive", id="penalty-zero"),
+        pytest.param({"num_local_steps": 0}, "`num_local_steps` must be positive", id="local-steps-zero"),
     ],
 )
 def test_feddyn_rejects_invalid_hyperparameters(kwargs: dict[str, float | int], expected_message: str) -> None:

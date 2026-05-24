@@ -272,7 +272,7 @@ def test_fedpd_probabilistic_communication_is_reproducible_when_seeded() -> None
     ("kwargs", "expected_message"),
     [
         pytest.param({"step_size": 0.0}, "`step_size` must be positive", id="step-size-zero"),
-        pytest.param({"penalty": 0.0}, "`penalty` must be positive", id="eta-zero"),
+        pytest.param({"penalty": 0.0}, "`penalty` must be positive", id="penalty-zero"),
         pytest.param(
             {"skip_probability": -0.1},
             "`skip_probability` must satisfy 0 <= skip_probability <= 1",

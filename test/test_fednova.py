@@ -568,11 +568,11 @@ def test_fednova_rejects_non_integer_local_step_mapping_values(step_value: objec
 @pytest.mark.parametrize(
     ("kwargs", "expected_message"),
     [
-        pytest.param({"momentum": -0.1}, "`momentum` must satisfy 0 <= momentum < 1", id="beta-negative"),
-        pytest.param({"momentum": 1.0}, "`momentum` must satisfy 0 <= momentum < 1", id="beta-too-large"),
-        pytest.param({"penalty": -0.1}, "`penalty` must be non-negative", id="mu-negative"),
-        pytest.param({"server_momentum": -0.1}, "`server_momentum` must satisfy 0 <= server_momentum < 1", id="gamma-negative"),
-        pytest.param({"server_momentum": 1.0}, "`server_momentum` must satisfy 0 <= server_momentum < 1", id="gamma-too-large"),
+        pytest.param({"momentum": -0.1}, "`momentum` must satisfy 0 <= momentum < 1", id="momentum-negative"),
+        pytest.param({"momentum": 1.0}, "`momentum` must satisfy 0 <= momentum < 1", id="momentum-too-large"),
+        pytest.param({"penalty": -0.1}, "`penalty` must be non-negative", id="penalty-negative"),
+        pytest.param({"server_momentum": -0.1}, "`server_momentum` must satisfy 0 <= server_momentum < 1", id="server_momentum-negative"),
+        pytest.param({"server_momentum": 1.0}, "`server_momentum` must satisfy 0 <= server_momentum < 1", id="server_momentum-too-large"),
     ],
 )
 def test_fednova_rejects_invalid_hyperparameters(kwargs: dict[str, float], expected_message: str) -> None:

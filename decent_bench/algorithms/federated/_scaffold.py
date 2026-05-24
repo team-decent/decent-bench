@@ -18,8 +18,6 @@ if TYPE_CHECKING:
 
 _MODEL_DELTA_LABEL = "model_delta"
 _CONTROL_VARIATE_DELTA_LABEL = "control_variate_delta"
-_SERVER_MODEL_LABEL = "server_model"
-_SERVER_CONTROL_LABEL = "server_control"
 
 
 @tags("federated")
