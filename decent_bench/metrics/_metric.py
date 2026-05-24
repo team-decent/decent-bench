@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 import decent_bench.metrics.metric_utils as utils
-from decent_bench.agents import AgentMetricsView
+from decent_bench.metrics._metrics_view import AgentMetricsView
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem

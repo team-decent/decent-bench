@@ -9,13 +9,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
-from decent_bench.agents import Agent, AgentHistory, AgentMetricsView
+from decent_bench.agents import Agent, AgentHistory
 from decent_bench.algorithms.federated import FedAvg
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, compute_metrics
 from decent_bench.benchmark._display import display_metrics
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.costs import LinearRegressionCost, LogisticRegressionCost, QuadraticCost
 from decent_bench.metrics._metric import Metric
+from decent_bench.metrics._metrics_view import AgentMetricsView
 from decent_bench.metrics import metric_library as ml
 from decent_bench.metrics._plots import (
     MAX_Y_PLOT_VALUE,

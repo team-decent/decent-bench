@@ -12,10 +12,10 @@ from matplotlib.axes import Axes as SubPlot
 from matplotlib.figure import Figure
 
 import decent_bench.metrics.metric_utils as utils
-from decent_bench.agents import AgentMetricsView
 from decent_bench.algorithms import Algorithm
 from decent_bench.metrics._computational_cost import ComputationalCost
 from decent_bench.metrics._metric import Metric, X, Y
+from decent_bench.metrics._metrics_view import AgentMetricsView
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 

@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Literal
 
 from rich.status import Status
 
-from decent_bench.agents import AgentMetricsView
 from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
 from decent_bench.benchmark._metric_result import MetricResult
@@ -16,6 +15,7 @@ from decent_bench.metrics import (
     metric_utils,
 )
 from decent_bench.metrics import metric_library as ml
+from decent_bench.metrics._metrics_view import AgentMetricsView
 from decent_bench.networks import Network
 from decent_bench.utils._metric_helpers import _find_duplicates
 from decent_bench.utils.logger import LOGGER, start_logger

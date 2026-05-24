@@ -3,9 +3,9 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from decent_bench.agents import AgentMetricsView
 from decent_bench.algorithms import Algorithm
 from decent_bench.metrics import Metric
+from decent_bench.metrics._metrics_view import AgentMetricsView
 from decent_bench.networks import Network
 
 

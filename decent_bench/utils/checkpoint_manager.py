@@ -11,9 +11,10 @@ from rich.progress import track
 from rich.status import Status
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.agents import Agent, AgentMetricsView
+from decent_bench.agents import Agent
 from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, MetricResult
+from decent_bench.metrics._metrics_view import AgentMetricsView
 from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
 

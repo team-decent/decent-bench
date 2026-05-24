@@ -3,7 +3,6 @@ from __future__ import annotations
 import bisect
 import contextlib
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Self, cast
 from uuid import UUID, uuid4
@@ -420,41 +419,3 @@ class AgentHistory:
     def __repr__(self) -> str:
         """Human readable representation of the history."""
         return self._x_history.__repr__()
-
-
-@dataclass(frozen=True, eq=False)
-class AgentMetricsView:
-    """Immutable view of agent that exposes useful properties for calculating metrics."""
-
-    id: UUID
-    cost: Cost
-    x_history: AgentHistory
-    n_x_updates: int
-    n_function_calls: float
-    n_gradient_calls: float
-    n_hessian_calls: float
-    n_proximal_calls: float
-    n_sent_messages: float
-    n_received_messages: float
-    n_sent_messages_dropped: float
-    n_times_selected: int
-    is_server: bool
-
-    @staticmethod
-    def from_agent(agent: Agent) -> AgentMetricsView:
-        """Create from agent."""
-        return AgentMetricsView(
-            id=agent.id,
-            cost=agent.cost,
-            x_history=agent._x_history,  # noqa: SLF001
-            n_x_updates=agent._n_x_updates,  # noqa: SLF001
-            n_function_calls=agent._n_function_calls,  # noqa: SLF001
-            n_gradient_calls=agent._n_gradient_calls,  # noqa: SLF001
-            n_hessian_calls=agent._n_hessian_calls,  # noqa: SLF001
-            n_proximal_calls=agent._n_proximal_calls,  # noqa: SLF001
-            n_sent_messages=agent._n_sent_messages,  # noqa: SLF001
-            n_received_messages=agent._n_received_messages,  # noqa: SLF001
-            n_sent_messages_dropped=agent._n_sent_messages_dropped,  # noqa: SLF001
-            n_times_selected=agent._n_times_selected,  # noqa: SLF001
-            is_server=agent._is_server,  # noqa: SLF001
-        )

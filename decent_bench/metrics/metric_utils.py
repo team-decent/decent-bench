@@ -11,8 +11,8 @@ from rich.table import Column
 from sklearn import metrics as sk_metrics
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.agents import AgentMetricsView
 from decent_bench.costs import Cost, EmpiricalRiskCost
+from decent_bench.metrics._metrics_view import AgentMetricsView
 from decent_bench.utils.array import Array
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import Dataset

@@ -7,9 +7,9 @@ import numpy as np
 
 import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
-from decent_bench.agents import AgentMetricsView
 from decent_bench.costs import Cost, EmpiricalRiskCost
 from decent_bench.metrics._metric import Metric
+from decent_bench.metrics._metrics_view import AgentMetricsView
 from decent_bench.networks import FedNetwork
 
 if TYPE_CHECKING:
