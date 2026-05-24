@@ -234,8 +234,8 @@ class Agent:
             self._n_hessian_calls += 1
         return res
 
-    def _call_counting_proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        res = self._cost.__class__.proximal(self.cost, x, rho, *args, **kwargs)
+    def _call_counting_proximal(self, x: Array, penalty: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
+        res = self._cost.__class__.proximal(self.cost, x, penalty, *args, **kwargs)
         if self._no_count_depth > 0:
             return res
         if isinstance(self._cost, EmpiricalRiskCost):

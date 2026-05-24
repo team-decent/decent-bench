@@ -171,7 +171,7 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
             dim=0,
         )
 
-    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
+    def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ANN401
         """
         Proximal is only supported for a single positively scaled regularizer term.
 
@@ -179,16 +179,16 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
         mathematically valid in general.
 
         Raises:
-            ValueError: If rho is not positive.
+            ValueError: If penalty is not positive.
             NotImplementedError: If the composite is not a single positively scaled term.
 
         """
-        if rho <= 0:
-            raise ValueError("The penalty parameter rho must be positive.")
+        if penalty <= 0:
+            raise ValueError("The penalty parameter penalty must be positive.")
         if len(self._terms) == 1:
             regularizer, weight = self._terms[0]
             if weight > 0:
-                return regularizer.proximal(x, rho * weight, **kwargs)
+                return regularizer.proximal(x, penalty * weight, **kwargs)
         raise NotImplementedError(
             "Composite regularizers do not implement a generic proximal operator because sums of regularizers and "
             "negative scaling do not admit a proximal from simple composition in general. Use a specialized proximal "
@@ -223,10 +223,10 @@ class L1RegularizerCost(BaseRegularizerCost):
             self._hessian_cache = iop.zeros(shape=(self._dim, self._dim), framework=self.framework, device=self.device)
         return self._hessian_cache
 
-    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
-        if rho <= 0:
-            raise ValueError("The penalty parameter rho must be positive.")
-        shrink = iop.maximum(iop.absolute(x) - rho, 0.0)
+    def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
+        if penalty <= 0:
+            raise ValueError("The penalty parameter penalty must be positive.")
+        shrink = iop.maximum(iop.absolute(x) - penalty, 0.0)
         return iop.sign(x) * shrink
 
 
@@ -257,10 +257,10 @@ class L2RegularizerCost(BaseRegularizerCost):
             self._hessian_cache = iop.eye(n=self._dim, framework=self.framework, device=self.device)
         return self._hessian_cache
 
-    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
-        if rho <= 0:
-            raise ValueError("The penalty parameter rho must be positive.")
-        return x / (1.0 + rho)
+    def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
+        if penalty <= 0:
+            raise ValueError("The penalty parameter penalty must be positive.")
+        return x / (1.0 + penalty)
 
 
 @tags("regularizer")
@@ -309,15 +309,15 @@ class FractionalQuadraticRegularizerCost(BaseRegularizerCost):
         second = 2.0 * (1.0 - 3.0 * x2) / denom
         return iop.diag(iop.reshape(second, (self._dim,)))
 
-    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
-        if rho <= 0:
-            raise ValueError("The penalty parameter rho must be positive.")
-        step_size = 1.0 / (2.0 + 1.0 / rho)
+    def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
+        if penalty <= 0:
+            raise ValueError("The penalty parameter penalty must be positive.")
+        step_size = 1.0 / (2.0 + 1.0 / penalty)
         current = iop.copy(x)
         for _ in range(self._prox_max_iter):
             x2 = current * current
             denom = (1.0 + x2) ** 2
-            grad = 2.0 * current / denom + (current - x) / rho
+            grad = 2.0 * current / denom + (current - x) / penalty
             next_x = current - step_size * grad
             if self._prox_tol is not None and iop.astype(iop.norm(next_x - current), float) <= self._prox_tol:
                 return next_x

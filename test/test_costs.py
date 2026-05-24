@@ -35,7 +35,7 @@ def test_linear_regression_cost_matches_closed_form_values() -> None:
     np.testing.assert_allclose(cost.gradient(x, indices="all"), np.array([1.0, 1.0]))
     np.testing.assert_allclose(cost.gradient(x, indices="all", reduction=None), np.array([[2.0, 0.0], [0.0, 2.0]]))
     np.testing.assert_allclose(cost.hessian(x, indices="all"), 0.5 * np.eye(2))
-    np.testing.assert_allclose(cost.proximal(x, rho=2.0), np.array([2.0, 3.0]))
+    np.testing.assert_allclose(cost.proximal(x, penalty=2.0), np.array([2.0, 3.0]))
     assert cost.batch_used == [0, 1]
 
 
@@ -76,7 +76,7 @@ def test_logistic_regression_proximal_preserves_batch_size_and_returns_finite_re
     cost = LogisticRegressionCost(dataset=dataset, batch_size=2)
     x = np.array([0.5, -0.25])
 
-    prox = cost.proximal(x, rho=0.5)
+    prox = cost.proximal(x, penalty=0.5)
 
     assert prox.shape == x.shape
     assert np.all(np.isfinite(prox))
@@ -114,7 +114,7 @@ def test_quadratic_cost_matches_direct_formula_and_symmetrized_derivatives() -> 
     assert cost.function(x) == pytest.approx(7.0)
     np.testing.assert_allclose(cost.gradient(x), A_sym @ x + b)
     np.testing.assert_allclose(cost.hessian(x), A_sym)
-    np.testing.assert_allclose(cost.proximal(x, rho=0.5), np.array([0.3, -0.1]))
+    np.testing.assert_allclose(cost.proximal(x, penalty=0.5), np.array([0.3, -0.1]))
     eigvals = np.linalg.eigvalsh(A_sym)
     assert cost.m_smooth == pytest.approx(float(np.max(np.abs(eigvals))))
     assert cost.m_cvx == pytest.approx(float(np.min(eigvals)))
@@ -143,7 +143,7 @@ def test_zero_cost_returns_zero_values_and_preserves_framework_metadata() -> Non
     assert cost.function(x) == 0.0
     np.testing.assert_allclose(iop.to_numpy(cost.gradient(x)), np.zeros(2))
     np.testing.assert_allclose(iop.to_numpy(cost.hessian(x)), np.zeros((2, 2)))
-    np.testing.assert_allclose(iop.to_numpy(cost.proximal(x, rho=1.0)), x)
+    np.testing.assert_allclose(iop.to_numpy(cost.proximal(x, penalty=1.0)), x)
     assert cost.m_smooth == 0.0
     assert cost.m_cvx == 0.0
 
@@ -156,8 +156,8 @@ def test_zero_cost_validates_shape_and_penalty() -> None:
     with pytest.raises(ValueError, match="Mismatching domain shapes"):
         cost.gradient(np.array([1.0, 2.0, 3.0]))
 
-    with pytest.raises(ValueError, match="penalty parameter rho must be positive"):
-        cost.proximal(np.array([1.0, 2.0]), rho=0.0)
+    with pytest.raises(ValueError, match="penalty parameter penalty must be positive"):
+        cost.proximal(np.array([1.0, 2.0]), penalty=0.0)
 
 
 @pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available")
@@ -219,4 +219,4 @@ def test_pytorch_cost_per_sample_gradient_and_error_paths() -> None:
         cost.hessian(x)
 
     with pytest.raises(NotImplementedError, match="Proximal operator is not implemented"):
-        cost.proximal(x, rho=1.0)
+        cost.proximal(x, penalty=1.0)

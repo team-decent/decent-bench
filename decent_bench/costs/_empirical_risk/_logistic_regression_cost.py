@@ -297,7 +297,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         return res
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.proximal)
-    def proximal(self, x: Array, rho: float) -> Array:
+    def proximal(self, x: Array, penalty: float) -> Array:
         """
         Proximal at x solved using an iterative method.
 
@@ -311,7 +311,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         """
         prev_batch_size = self.batch_size
         self._batch_size = self.n_samples  # Use full dataset for proximal
-        approx = ca.proximal_solver(self, x, rho)
+        approx = ca.proximal_solver(self, x, penalty)
         self._batch_size = prev_batch_size  # Restore previous batch size
         return approx
 

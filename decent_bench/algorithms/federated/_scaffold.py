@@ -31,7 +31,8 @@ class Scaffold(FedAlgorithm):
     When the server control variate :math:`\mathbf{c}` and all client control variates :math:`\mathbf{c}_i`
     are zero, the local updates reduce to :class:`FedAvg <decent_bench.algorithms.federated.FedAvg>`.
 
-    Here, :math:`\eta_l` is the local client step size, :math:`\eta_g` is the global server step size,
+    Here, :math:`\eta_l` is the local client step size (the corresponding argument is ``step_size``),
+    :math:`\eta_g` is the global server step size (the corresponding argument is ``server_step_size``),
     :math:`S` is the set of selected clients, and :math:`|S|` its size.
 
     Selected clients perform local steps with the correction
@@ -41,7 +42,8 @@ class Scaffold(FedAlgorithm):
         \left(\nabla f_i(\mathbf{y}_{i}^{(t)}) - \mathbf{c}_i + \mathbf{c}\right)
 
     and update their control variates using the practical SCAFFOLD rule, where :math:`K` is the number of
-    local steps and :math:`\mathbf{y}_i` is the final local model after those :math:`K` steps:
+    local steps (the corresponding argument is ``num_local_steps``) and :math:`\mathbf{y}_i` is the final local model
+    after those :math:`K` steps:
 
     .. math::
         \mathbf{c}_i^+ = \mathbf{c}_i - \mathbf{c}
@@ -76,7 +78,7 @@ class Scaffold(FedAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    num_local_epochs: int = 1
+    num_local_steps: int = 1
     server_step_size: float = 1.0
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
@@ -95,8 +97,8 @@ class Scaffold(FedAlgorithm):
         """
         if self.step_size <= 0:
             raise ValueError("`step_size` must be positive")
-        if self.num_local_epochs <= 0:
-            raise ValueError("`num_local_epochs` must be positive")
+        if self.num_local_steps <= 0:
+            raise ValueError("`num_local_steps` must be positive")
         if self.server_step_size <= 0:
             raise ValueError("`server_step_size` must be positive")
 
@@ -167,12 +169,12 @@ class Scaffold(FedAlgorithm):
         client_control = client.aux_vars["c_i"]
         server_control = iop.copy(server_broadcast[1])
 
-        for _ in range(self.num_local_epochs):
+        for _ in range(self.num_local_steps):
             grad = client.cost.gradient(local_x)
             local_x -= self.step_size * (grad - client_control + server_control)
 
         new_client_control = (
-            client_control - server_control + ((reference_x - local_x) / (self.num_local_epochs * self.step_size))
+            client_control - server_control + ((reference_x - local_x) / (self.num_local_steps * self.step_size))
         )
         model_delta = local_x - reference_x
         control_variate_delta = new_client_control - client_control

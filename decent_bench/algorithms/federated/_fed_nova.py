@@ -99,9 +99,13 @@ class FedNova(FedAlgorithm):
     clients use the same number of local steps (:math:`\tau_i = \tau_j` for all :math:`i, j \in S_t`) and
     FedNova and FedAvg both use data-proportional aggregation weights.
 
-    Here :math:`\tau_i` is the number of local SGD steps used by client :math:`i`, which can be homogeneous
-    (single int ``num_local_steps``) or heterogeneous via a mapping keyed by client agent. In this implementation,
-    :math:`n_i` is inferred once during ``initialize`` from each client's local cost via
+    Here :math:`\tau_i` is the number of local SGD steps used by client :math:`i` (the corresponding argument is
+    ``num_local_steps``), :math:`\eta_l` is the local step size (the corresponding argument is ``step_size``),
+    :math:`\mu` is the proximal coefficient (the corresponding argument is ``penalty``), :math:`\beta` is the local
+    momentum coefficient (the corresponding argument is ``momentum``), and :math:`\gamma` is the server momentum
+    coefficient (the corresponding argument is ``server_momentum``).
+
+    In this implementation, :math:`n_i` is inferred once during ``initialize`` from each client's local cost via
     :func:`~decent_bench.utils.agent_utils.infer_client_data_size`, then stored on the server for later rounds.
     If no first-phase ``a_i`` uploads are received in a round under network impairments, the server skips that round
     without error.
@@ -113,11 +117,11 @@ class FedNova(FedAlgorithm):
     step_size: float = 0.001
     num_local_steps: LocalSteps = 1
     use_momentum: bool = False
-    beta: float = 0.9
+    momentum: float = 0.9
     use_prox: bool = False
-    mu: float = 0.01
+    penalty: float = 0.01
     use_server_momentum: bool = False
-    gamma: float = 0.9
+    server_momentum: float = 0.9
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
     )
@@ -135,12 +139,12 @@ class FedNova(FedAlgorithm):
         """
         if self.step_size <= 0:
             raise ValueError("`step_size` must be positive")
-        if not (0 <= self.beta < 1):
-            raise ValueError("`beta` must satisfy 0 <= beta < 1")
-        if self.mu < 0:
-            raise ValueError("`mu` must be non-negative")
-        if not (0 <= self.gamma < 1):
-            raise ValueError("`gamma` must satisfy 0 <= gamma < 1")
+        if not (0 <= self.momentum < 1):
+            raise ValueError("`momentum` must satisfy 0 <= momentum < 1")
+        if self.penalty < 0:
+            raise ValueError("`penalty` must be non-negative")
+        if not (0 <= self.server_momentum < 1):
+            raise ValueError("`server_momentum` must satisfy 0 <= server_momentum < 1")
         self._validate_num_local_steps()
 
     def _resolve_client_sample_counts(self, network: FedNetwork) -> dict["Agent", float]:
@@ -212,10 +216,10 @@ class FedNova(FedAlgorithm):
         for _ in range(tau_i):
             grad = client.cost.gradient(local_x)
             if self.use_prox:
-                grad += self.mu * (local_x - reference_x)
+                grad += self.penalty * (local_x - reference_x)
 
             if self.use_momentum:
-                local_momentum = (self.beta * local_momentum) + grad
+                local_momentum = (self.momentum * local_momentum) + grad
                 direction = local_momentum
             else:
                 direction = grad
@@ -224,10 +228,10 @@ class FedNova(FedAlgorithm):
             local_x -= local_step_update
             cumulative_gradient += local_step_update
 
-            momentum_scalar = (self.beta * momentum_scalar) + 1.0 if self.use_momentum else 1.0
+            momentum_scalar = (self.momentum * momentum_scalar) + 1.0 if self.use_momentum else 1.0
 
             if self.use_prox:
-                a_i = ((1 - (self.step_size * self.mu)) * a_i) + momentum_scalar
+                a_i = ((1 - (self.step_size * self.penalty)) * a_i) + momentum_scalar
             else:
                 a_i += momentum_scalar
 
@@ -301,7 +305,7 @@ class FedNova(FedAlgorithm):
         for weighted_term in weighted_terms:
             global_update += weighted_term
         if self.use_server_momentum:
-            server.aux_vars["m"] = (self.gamma * server.aux_vars["m"]) + global_update
+            server.aux_vars["m"] = (self.server_momentum * server.aux_vars["m"]) + global_update
             server.x = server_x - server.aux_vars["m"]
         else:
             server.x = server_x - global_update

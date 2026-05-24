@@ -17,7 +17,7 @@ class FedYogi(FedOpt):
     FedYogi uses local SGD on clients and a Yogi-style adaptive server update :footcite:p:`Alg_FedOpt`.
 
     Each selected client starts from the broadcast global model :math:`\mathbf{x}_t` and performs
-    ``num_local_epochs`` local SGD steps with client step size ``step_size``.
+    ``num_local_steps`` local SGD steps with client step size ``step_size``.
 
     .. math::
         \mathbf{x}_{i, t}^{(k+1)} = \mathbf{x}_{i, t}^{(k)} - \eta_l
@@ -44,13 +44,15 @@ class FedYogi(FedOpt):
 
     .. math::
         \mathbf{x}_{t+1} = \mathbf{x}_t + \eta
-        \frac{\mathbf{m}_t}{\sqrt{\mathbf{v}_t} + \tau}.
+        \frac{\mathbf{m}_t}{\sqrt{\mathbf{v}_t} + \epsilon}.
 
-    Here :math:`\eta_l` is the client learning rate (``step_size``), :math:`K` is the number of local SGD steps
-    (``num_local_epochs``), :math:`\eta` is the server learning rate (``server_step_size``), :math:`\beta_1` and
-    :math:`\beta_2` are the first- and second-moment coefficients, :math:`\tau` is the numerical stability term, and
-    :math:`S_t` is the set of clients whose uploads are actually received in round :math:`t`. Aggregation is always
-    uniform across the received clients. Costs that preserve the
+    Here :math:`\eta_l` is the client learning rate (the corresponding argument is ``step_size``), :math:`K` is the
+    number of local SGD steps (the corresponding argument is ``num_local_steps``), :math:`\eta` is the server
+    learning rate (the corresponding argument is ``server_step_size``), :math:`\beta_1` and :math:`\beta_2` are the
+    first- and second-moment coefficients (the corresponding arguments are ``beta_1`` and ``beta_2``),
+    :math:`\epsilon` is the numerical stability term (the corresponding argument is ``epsilon``), and :math:`S_t` is
+    the set of clients whose uploads are actually received in round :math:`t`. Aggregation is always uniform across
+    the received clients. Costs that preserve the
     :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use mini-batch local updates; generic costs use their
     usual full-gradient updates.
 

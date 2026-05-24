@@ -281,7 +281,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
         return res
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.proximal)
-    def proximal(self, x: NDArray[float64], rho: float) -> NDArray[float64]:
+    def proximal(self, x: NDArray[float64], penalty: float) -> NDArray[float64]:
         r"""
         Proximal at x using the full dataset.
 
@@ -295,8 +295,8 @@ class LinearRegressionCost(EmpiricalRiskCost):
         """
         A, ATA, b = self._get_batch_data("all")  # noqa: N806
         scale = 1 / self.n_samples
-        lhs = rho * scale * ATA + np.eye(A.shape[1])
-        rhs = x + rho * scale * A.T @ b
+        lhs = penalty * scale * ATA + np.eye(A.shape[1])
+        rhs = x + penalty * scale * A.T @ b
         return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
 
     def _get_batch_data(

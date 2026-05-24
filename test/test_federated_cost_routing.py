@@ -177,28 +177,28 @@ def _run_federated_local_update(
     cost: Cost,
     *,
     step_size: float = 1.0,
-    num_local_epochs: int = 1,
+    num_local_steps: int = 1,
     mu: float = 0.5,
 ) -> np.ndarray:
     client = Agent(cost)
     server = Agent(ZeroCost(cost.shape))
 
     if algorithm_name == "fedavg":
-        algorithm = FedAvg(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
+        algorithm = FedAvg(iterations=1, step_size=step_size, num_local_steps=num_local_steps)
     elif algorithm_name == "fedadagrad":
-        algorithm = FedAdagrad(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
+        algorithm = FedAdagrad(iterations=1, step_size=step_size, num_local_steps=num_local_steps)
     elif algorithm_name == "fedyogi":
-        algorithm = FedYogi(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
+        algorithm = FedYogi(iterations=1, step_size=step_size, num_local_steps=num_local_steps)
     elif algorithm_name == "fedadam":
-        algorithm = FedAdam(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
+        algorithm = FedAdam(iterations=1, step_size=step_size, num_local_steps=num_local_steps)
     elif algorithm_name == "fedprox":
-        algorithm = FedProx(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs, mu=mu)
+        algorithm = FedProx(iterations=1, step_size=step_size, num_local_steps=num_local_steps, penalty=mu)
     elif algorithm_name == "feddyn":
-        algorithm = FedDyn(iterations=1, step_size=step_size, alpha=1.0, num_local_epochs=num_local_epochs)
+        algorithm = FedDyn(iterations=1, step_size=step_size, penalty=1.0, num_local_steps=num_local_steps)
     elif algorithm_name == "fedpd":
-        algorithm = FedPD(iterations=1, step_size=step_size, eta=1.0, num_local_steps=num_local_epochs)
+        algorithm = FedPD(iterations=1, step_size=step_size, penalty=1.0, num_local_steps=num_local_steps)
     elif algorithm_name == "scaffold":
-        algorithm = Scaffold(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
+        algorithm = Scaffold(iterations=1, step_size=step_size, num_local_steps=num_local_steps)
     else:
         raise ValueError(f"Unsupported federated algorithm: {algorithm_name}")
 
@@ -222,7 +222,7 @@ def _run_federated_local_update(
     elif not isinstance(algorithm, FedPD):
         client._received_messages.put(server, np.zeros(cost.shape, dtype=float))  # noqa: SLF001
     if isinstance(algorithm, FedPD):
-        algorithm._num_local_steps_by_client = {client: num_local_epochs}  # noqa: SLF001
+        algorithm._num_local_steps_by_client = {client: num_local_steps}  # noqa: SLF001
     if isinstance(algorithm, FedPD):
         local_update = algorithm._compute_local_update(client)
     elif isinstance(algorithm, FedDyn):
@@ -250,7 +250,7 @@ def _run_federated_local_update(
 def test_empirical_costs_use_minibatch_local_updates(algorithm_name: str, expected: float) -> None:
     cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
 
-    updated = _run_federated_local_update(algorithm_name, cost, num_local_epochs=3)
+    updated = _run_federated_local_update(algorithm_name, cost, num_local_steps=3)
 
     np.testing.assert_allclose(updated, np.array([expected]))
     assert len(cost.gradient_indices) == 3
@@ -276,7 +276,7 @@ def test_empirical_regularized_costs_keep_minibatch_local_updates(algorithm_name
     regularizer = TrackingRegularizerCost()
     objective = empirical_cost + regularizer
 
-    updated = _run_federated_local_update(algorithm_name, objective, num_local_epochs=3)
+    updated = _run_federated_local_update(algorithm_name, objective, num_local_steps=3)
 
     np.testing.assert_allclose(updated, np.array([expected]))
     assert len(empirical_cost.gradient_indices) == 3
@@ -305,7 +305,7 @@ def test_scaled_empirical_costs_keep_minibatch_local_updates(algorithm_name: str
     empirical_cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
     objective = 2.0 * empirical_cost
 
-    updated = _run_federated_local_update(algorithm_name, objective, num_local_epochs=3)
+    updated = _run_federated_local_update(algorithm_name, objective, num_local_steps=3)
 
     np.testing.assert_allclose(updated, np.array([expected]))
     assert len(empirical_cost.gradient_indices) == 3
@@ -331,7 +331,7 @@ def test_scaled_empirical_costs_keep_minibatch_local_updates(algorithm_name: str
 def test_plain_costs_use_full_gradient_local_updates(algorithm_name: str, expected: float) -> None:
     cost = TrackingCost(gradient_value=1.0)
 
-    updated = _run_federated_local_update(algorithm_name, cost, num_local_epochs=3)
+    updated = _run_federated_local_update(algorithm_name, cost, num_local_steps=3)
 
     np.testing.assert_allclose(updated, np.array([expected]))
     assert len(cost.gradient_kwargs) == 3
@@ -346,7 +346,7 @@ def test_sum_costs_over_non_empirical_terms_use_full_gradient_local_updates(algo
     cost_b = TrackingCost(gradient_value=2.0)
     objective = cost_a + cost_b
 
-    updated = _run_federated_local_update(algorithm_name, objective, num_local_epochs=2)
+    updated = _run_federated_local_update(algorithm_name, objective, num_local_steps=2)
 
     expected = -3.0 if algorithm_name in {"feddyn", "fedpd"} else -6.0
     np.testing.assert_allclose(updated, np.array([expected]))
@@ -357,7 +357,7 @@ def test_sum_costs_over_non_empirical_terms_use_full_gradient_local_updates(algo
 
 
 @pytest.mark.parametrize(
-    ("algorithm_name", "expected", "num_local_epochs"),
+    ("algorithm_name", "expected", "num_local_steps"),
     [
         pytest.param("fedavg", -4.0, 2, id="fedavg"),
         pytest.param("fedadagrad", -4.0, 2, id="fedadagrad"),
@@ -370,20 +370,20 @@ def test_sum_costs_over_non_empirical_terms_use_full_gradient_local_updates(algo
     ],
 )
 def test_scaled_costs_over_non_empirical_terms_use_full_gradient_local_updates(
-    algorithm_name: str, expected: float, num_local_epochs: int
+    algorithm_name: str, expected: float, num_local_steps: int
 ) -> None:
     cost = TrackingCost(gradient_value=1.0)
     objective = 2.0 * cost
 
-    updated = _run_federated_local_update(algorithm_name, objective, num_local_epochs=num_local_epochs)
+    updated = _run_federated_local_update(algorithm_name, objective, num_local_steps=num_local_steps)
 
     np.testing.assert_allclose(updated, np.array([expected]))
-    assert len(cost.gradient_kwargs) == num_local_epochs
+    assert len(cost.gradient_kwargs) == num_local_steps
     assert all(kwargs == {} for kwargs in cost.gradient_kwargs)
 
 
 @pytest.mark.parametrize(
-    ("algorithm_name", "expected", "num_local_epochs"),
+    ("algorithm_name", "expected", "num_local_steps"),
     [
         pytest.param("fedavg", -2.0, 2, id="fedavg"),
         pytest.param("fedadagrad", -2.0, 2, id="fedadagrad"),
@@ -396,14 +396,14 @@ def test_scaled_costs_over_non_empirical_terms_use_full_gradient_local_updates(
     ],
 )
 def test_regularizers_follow_the_non_batched_local_update_path(
-    algorithm_name: str, expected: float, num_local_epochs: int
+    algorithm_name: str, expected: float, num_local_steps: int
 ) -> None:
     regularizer = TrackingRegularizerCost(gradient_value=1.0)
 
-    updated = _run_federated_local_update(algorithm_name, regularizer, num_local_epochs=num_local_epochs)
+    updated = _run_federated_local_update(algorithm_name, regularizer, num_local_steps=num_local_steps)
 
     np.testing.assert_allclose(updated, np.array([expected]))
-    assert len(regularizer.gradient_kwargs) == num_local_epochs
+    assert len(regularizer.gradient_kwargs) == num_local_steps
     assert all(kwargs == {} for kwargs in regularizer.gradient_kwargs)
 
 
@@ -413,7 +413,7 @@ def test_regularizers_follow_the_non_batched_local_update_path(
 def test_zero_costs_do_not_need_special_local_update_handling(algorithm_name: str) -> None:
     cost = TrackingZeroCost()
 
-    updated = _run_federated_local_update(algorithm_name, cost, num_local_epochs=3)
+    updated = _run_federated_local_update(algorithm_name, cost, num_local_steps=3)
 
     np.testing.assert_allclose(updated, np.array([0.0]))
     assert len(cost.gradient_kwargs) == 3

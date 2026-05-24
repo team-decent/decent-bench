@@ -15,13 +15,13 @@ class DGD(P2PAlgorithm):
     Distributed gradient descent characterized by the update step below.
 
     .. math::
-        \mathbf{x}_{i, k+1} = \gamma (\sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k}) - \rho \nabla f_i(\mathbf{x}_{i,k})
+        \mathbf{x}_{i, k+1} = \sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k}) - \rho \nabla f_i(\mathbf{x}_{i,k})
 
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
     j is a neighbor of i or i itself,
     :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j,
-    :math:`\rho` is the step size,
+    :math:`\rho` is the step size (the corresponding argument is ``step_size``),
     and :math:`f_i` is agent i's local cost function.
 
     """

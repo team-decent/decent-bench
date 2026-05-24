@@ -26,13 +26,15 @@ class FedLT(FedAlgorithm):
     r"""
     Federated Local Training (Fed-LT) with cost-driven local gradients :footcite:p:`Alg_FedPLT,Alg_FedLT`.
 
-    Fed-LT maintains one auxiliary variable :math:`z_i` per client. At the start of round :math:`k`, the server
+    Fed-LT maintains one auxiliary variable :math:`z_i` per client. This :math:`z_i` state is maintained during
+    execution and is not a constructor argument. At the start of round :math:`k`, the server
     computes the broadcast variable
 
     .. math::
         y_{k+1} = \operatorname{prox}_{\rho h / N}\left(\frac{1}{N}\sum_{i=1}^N z_{i,k}\right)
 
-    where :math:`N` is the number of clients. The server sends :math:`y_{k+1}` to the selected clients.
+    where :math:`N` is the number of clients, and :math:`\rho` is the regularization strength (the corresponding
+    argument is ``penalty``). The server sends :math:`y_{k+1}` to the selected clients.
     The initial auxiliary states ``z0`` follow the same :obj:`~decent_bench.utils.types.InitialStates` convention as
     ``x0``. If ``z0`` is ``None``, Fed-LT initializes :math:`z_{i,0}=x_{i,0}` for every client.
 
@@ -65,6 +67,8 @@ class FedLT(FedAlgorithm):
         w^{\ell+1}_{i,k} = w^\ell_{i,k} - \gamma\left(\nabla f_i(w^\ell_{i,k})
         + \frac{1}{\rho}(w^\ell_{i,k} - v_{i,k})\right).
 
+    Here :math:`\gamma` is the local step size (the corresponding argument is ``step_size``).
+
     **Nesterov.**
     The ``local_solver="nesterov"`` option applies a Nesterov-style update to the same local gradient. It initializes
     :math:`u_i^0=w^0_{i,k}` and uses ``step_size`` as the local step size. Its ``solver_args`` may contain
@@ -77,6 +81,9 @@ class FedLT(FedAlgorithm):
     .. math::
         w^{\ell+1}_{i,k} = u_i^{\ell+1}
         + \beta\left(u_i^{\ell+1} - u_i^\ell\right).
+
+    Here :math:`\beta` is the Nesterov momentum coefficient (the corresponding argument is
+    ``solver_args["momentum"]``).
 
     One possible centralized strongly-convex choice is
     :math:`\beta=(\sqrt{L_i + 1/\rho} - \sqrt{\mu_i + 1/\rho}) / (\sqrt{L_i + 1/\rho}
@@ -102,7 +109,11 @@ class FedLT(FedAlgorithm):
         w^{\ell-1}_{i,k}
         - \gamma\frac{\hat m^\ell_{i,k}}{\sqrt{\hat s^\ell_{i,k}} + \epsilon},
 
-    for :math:`\ell=1,\ldots,N_e`, with :math:`m^0_{i,k}=s^0_{i,k}=0`. The terms
+    for :math:`\ell=1,\ldots,N_e`, with :math:`m^0_{i,k}=s^0_{i,k}=0`. Here :math:`N_e` is the local step count
+    (the corresponding argument is ``num_local_steps``), :math:`\beta_1` and :math:`\beta_2` are the Adam moment
+    coefficients (the corresponding arguments are ``solver_args["beta1"]`` and ``solver_args["beta2"]``), and
+    :math:`\epsilon` is the Adam numerical stability term (the corresponding argument is
+    ``solver_args["epsilon"]``). The terms
     :math:`\hat m^\ell_{i,k}` and :math:`\hat s^\ell_{i,k}` are the Adam bias-corrected moments.
 
 
@@ -122,8 +133,8 @@ class FedLT(FedAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    num_local_epochs: int = 1
-    rho: float = 1.0
+    num_local_steps: int = 1
+    penalty: float = 1.0
     local_solver: str = "gd"
     solver_args: SolverArgs = field(default_factory=dict)
     selection_scheme: ClientSelectionScheme | None = field(
@@ -143,10 +154,10 @@ class FedLT(FedAlgorithm):
         """
         if self.step_size <= 0:
             raise ValueError("`step_size` must be positive")
-        if self.num_local_epochs <= 0:
-            raise ValueError("`num_local_epochs` must be positive")
-        if self.rho <= 0:
-            raise ValueError("`rho` must be positive")
+        if self.num_local_steps <= 0:
+            raise ValueError("`num_local_steps` must be positive")
+        if self.penalty <= 0:
+            raise ValueError("`penalty` must be positive")
         if self.local_solver not in {"gd", "nesterov", "adam"}:
             raise ValueError("`local_solver` must be one of 'gd', 'nesterov', or 'adam'")
         self._validate_solver_args()
@@ -217,7 +228,7 @@ class FedLT(FedAlgorithm):
         for z_value in z_values:
             z_sum += z_value
         average_z = z_sum / len(z_values)
-        return network.server().cost.proximal(average_z, self.rho / len(network.clients()))
+        return network.server().cost.proximal(average_z, self.penalty / len(network.clients()))
 
     def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
         for client in participating_clients:
@@ -242,8 +253,8 @@ class FedLT(FedAlgorithm):
         elif self.local_solver == "adam":
             local_x = self._compute_adam_local_update(client, local_x, v)
         else:
-            for _ in range(self.num_local_epochs):
-                grad = client.cost.gradient(local_x) + ((local_x - v) / self.rho)
+            for _ in range(self.num_local_steps):
+                grad = client.cost.gradient(local_x) + ((local_x - v) / self.penalty)
                 local_x -= self.step_size * grad
 
         z_next = z + (2 * (local_x - y))
@@ -253,8 +264,8 @@ class FedLT(FedAlgorithm):
         momentum = self.solver_args["momentum"]
         u_previous = iop.copy(local_x)
 
-        for _ in range(self.num_local_epochs):
-            grad = client.cost.gradient(local_x) + ((local_x - v) / self.rho)
+        for _ in range(self.num_local_steps):
+            grad = client.cost.gradient(local_x) + ((local_x - v) / self.penalty)
             u_next = local_x - (self.step_size * grad)
             local_x = u_next + (momentum * (u_next - u_previous))
             u_previous = u_next
@@ -267,8 +278,8 @@ class FedLT(FedAlgorithm):
         m = iop.zeros_like(local_x)
         s = iop.zeros_like(local_x)
 
-        for step in range(1, self.num_local_epochs + 1):
-            grad = client.cost.gradient(local_x) + ((local_x - v) / self.rho)
+        for step in range(1, self.num_local_steps + 1):
+            grad = client.cost.gradient(local_x) + ((local_x - v) / self.penalty)
             m = (beta1 * m) + ((1 - beta1) * grad)
             s = (beta2 * s) + ((1 - beta2) * (grad * grad))
             m_hat = m / (1 - (beta1**step))

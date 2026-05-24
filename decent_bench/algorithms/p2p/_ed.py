@@ -23,7 +23,7 @@ class ED(P2PAlgorithm):
 
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
-    :math:`\rho` is the step size,
+    :math:`\rho` is the step size (the corresponding argument is ``step_size``),
     :math:`f_i` is agent i's local cost function,
     j is a neighbor of i or i itself,
     and :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j.

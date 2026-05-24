@@ -89,7 +89,7 @@ def test_fedpd_initializes_primal_dual_and_center_states() -> None:
 def test_fedpd_p_zero_always_aggregates_and_synchronizes_centers() -> None:
     clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))]
     network = FedNetwork(clients=clients)
-    algorithm = FedPD(iterations=1, step_size=1.0, eta=1.0, skip_probability=0.0)
+    algorithm = FedPD(iterations=1, step_size=1.0, penalty=1.0, skip_probability=0.0)
     algorithm.initialize(network)
 
     network._step(0)  # noqa: SLF001
@@ -110,7 +110,7 @@ def test_fedpd_supports_heterogeneous_local_steps() -> None:
     algorithm = FedPD(
         iterations=1,
         step_size=0.5,
-        eta=1.0,
+        penalty=1.0,
         skip_probability=0.0,
         num_local_steps={clients[0]: 1, clients[1]: 2},
     )
@@ -127,7 +127,7 @@ def test_fedpd_supports_heterogeneous_local_steps() -> None:
 def test_fedpd_always_selects_all_active_clients() -> None:
     clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(2.0)), Agent(TrackingCost(3.0))]
     network = FedNetwork(clients=clients)
-    algorithm = FedPD(iterations=1, step_size=1.0, eta=1.0, skip_probability=1.0)
+    algorithm = FedPD(iterations=1, step_size=1.0, penalty=1.0, skip_probability=1.0)
     algorithm.initialize(network)
 
     network._step(0)  # noqa: SLF001
@@ -146,7 +146,7 @@ def test_fedpd_rejects_selection_scheme_argument() -> None:
 def test_fedpd_p_one_always_skips_aggregation() -> None:
     clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))]
     network = FedNetwork(clients=clients)
-    algorithm = FedPD(iterations=1, step_size=1.0, eta=1.0, skip_probability=1.0)
+    algorithm = FedPD(iterations=1, step_size=1.0, penalty=1.0, skip_probability=1.0)
     algorithm.initialize(network)
 
     network._step(0)  # noqa: SLF001
@@ -159,7 +159,7 @@ def test_fedpd_p_one_always_skips_aggregation() -> None:
 
 
 def test_fedpd_dual_update_uses_previous_center() -> None:
-    algorithm = FedPD(iterations=1, step_size=1.0, eta=2.0, skip_probability=1.0)
+    algorithm = FedPD(iterations=1, step_size=1.0, penalty=2.0, skip_probability=1.0)
     client = Agent(TrackingCost(gradient_value=0.0))
     network = FedNetwork(clients=[client])
     algorithm.initialize(network)
@@ -199,7 +199,7 @@ def test_fedpd_synchronizes_all_active_clients_after_aggregating_received_candid
         clients=clients,
         message_drop={clients[0]: DropOnCalls({1}), clients[1]: NoDrops()},
     )
-    algorithm = FedPD(iterations=1, step_size=1.0, eta=1.0, skip_probability=0.0)
+    algorithm = FedPD(iterations=1, step_size=1.0, penalty=1.0, skip_probability=0.0)
     algorithm.initialize(network)
 
     network._step(0)  # noqa: SLF001
@@ -216,7 +216,7 @@ def test_fedpd_does_not_synchronize_when_no_center_candidates_are_received() -> 
         clients=clients,
         message_drop={clients[0]: DropOnCalls({1}), clients[1]: DropOnCalls({1})},
     )
-    algorithm = FedPD(iterations=1, step_size=1.0, eta=1.0, skip_probability=0.0)
+    algorithm = FedPD(iterations=1, step_size=1.0, penalty=1.0, skip_probability=0.0)
     algorithm.initialize(network)
 
     network._step(0)  # noqa: SLF001
@@ -237,7 +237,7 @@ def test_fedpd_keeps_local_center_when_server_sync_message_is_dropped() -> None:
         server=server,
         message_drop={server: DropOnCalls({1}), clients[0]: NoDrops(), clients[1]: NoDrops()},
     )
-    algorithm = FedPD(iterations=1, step_size=1.0, eta=1.0, skip_probability=0.0)
+    algorithm = FedPD(iterations=1, step_size=1.0, penalty=1.0, skip_probability=0.0)
     algorithm.initialize(network)
 
     network._step(0)  # noqa: SLF001
@@ -253,7 +253,7 @@ def test_fedpd_probabilistic_communication_is_reproducible_when_seeded() -> None
         iop.set_seed(123, frameworks=[])
         clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))]
         network = FedNetwork(clients=clients)
-        algorithm = FedPD(iterations=5, step_size=1.0, eta=1.0, skip_probability=0.5)
+        algorithm = FedPD(iterations=5, step_size=1.0, penalty=1.0, skip_probability=0.5)
         algorithm.initialize(network)
         for iteration in range(algorithm.iterations):
             network._step(iteration)  # noqa: SLF001
@@ -272,7 +272,7 @@ def test_fedpd_probabilistic_communication_is_reproducible_when_seeded() -> None
     ("kwargs", "expected_message"),
     [
         pytest.param({"step_size": 0.0}, "`step_size` must be positive", id="step-size-zero"),
-        pytest.param({"eta": 0.0}, "`eta` must be positive", id="eta-zero"),
+        pytest.param({"penalty": 0.0}, "`penalty` must be positive", id="eta-zero"),
         pytest.param(
             {"skip_probability": -0.1},
             "`skip_probability` must satisfy 0 <= skip_probability <= 1",

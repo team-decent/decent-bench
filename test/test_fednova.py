@@ -117,14 +117,14 @@ def _expected_single_client_fednova(
     iterations: int,
     step_size: float = 1.0,
     use_momentum: bool = False,
-    beta: float = 0.9,
+    momentum: float = 0.9,
     use_prox: bool = False,
-    mu: float = 0.0,
+    penalty: float = 0.0,
     use_server_momentum: bool = False,
-    gamma: float = 0.9,
+    server_momentum: float = 0.9,
 ) -> float:
     server_x = 0.0
-    server_momentum = 0.0
+    server_momentum_state = 0.0
 
     for _ in range(iterations):
         local_x = server_x
@@ -136,10 +136,10 @@ def _expected_single_client_fednova(
         for _ in range(local_steps):
             grad = gradient_value
             if use_prox:
-                grad += mu * (local_x - server_x)
+                grad += penalty * (local_x - server_x)
 
             if use_momentum:
-                local_momentum = (beta * local_momentum) + grad
+                local_momentum = (momentum * local_momentum) + grad
                 direction = local_momentum
             else:
                 direction = grad
@@ -148,17 +148,17 @@ def _expected_single_client_fednova(
             local_x -= local_step_update
             cumulative_gradient += local_step_update
 
-            momentum_scalar = (beta * momentum_scalar) + 1.0 if use_momentum else 1.0
+            momentum_scalar = (momentum * momentum_scalar) + 1.0 if use_momentum else 1.0
             if use_prox:
-                a_i = ((1 - (step_size * mu)) * a_i) + momentum_scalar
+                a_i = ((1 - (step_size * penalty)) * a_i) + momentum_scalar
             else:
                 a_i += momentum_scalar
 
         tau_eff = a_i
         global_update = (tau_eff / a_i) * cumulative_gradient
         if use_server_momentum:
-            server_momentum = (gamma * server_momentum) + global_update
-            server_x -= server_momentum
+            server_momentum_state = (server_momentum * server_momentum_state) + global_update
+            server_x -= server_momentum_state
         else:
             server_x -= global_update
 
@@ -181,7 +181,7 @@ def test_plain_fednova_equals_fedavg_when_local_steps_and_aggregation_weights_ma
     fednova_network = _make_fed_network(1.0, 3.0)
     fedavg_network = _make_fed_network(1.0, 3.0)
     fednova = FedNova(iterations=1, step_size=1.0, num_local_steps=2)
-    fedavg = FedAvg(iterations=1, step_size=1.0, num_local_epochs=2)
+    fedavg = FedAvg(iterations=1, step_size=1.0, num_local_steps=2)
 
     fednova_server_x = _run_fed_algorithm(fednova_network, fednova)
     fedavg_server_x = _run_fed_algorithm(fedavg_network, fedavg)
@@ -246,42 +246,42 @@ def test_fednova_resolves_client_sample_counts_once_on_initialize(monkeypatch: p
             "local-momentum",
             1,
             2,
-            {"use_momentum": True, "beta": 0.5},
+            {"use_momentum": True, "momentum": 0.5},
             id="only-local-momentum",
         ),
         pytest.param(
             "prox",
             1,
             2,
-            {"use_prox": True, "mu": 0.5},
+            {"use_prox": True, "penalty": 0.5},
             id="only-prox",
         ),
         pytest.param(
             "server-momentum",
             2,
             1,
-            {"use_server_momentum": True, "gamma": 0.5},
+            {"use_server_momentum": True, "server_momentum": 0.5},
             id="only-server-momentum",
         ),
         pytest.param(
             "both-momentums",
             2,
             2,
-            {"use_momentum": True, "beta": 0.5, "use_server_momentum": True, "gamma": 0.5},
+            {"use_momentum": True, "momentum": 0.5, "use_server_momentum": True, "server_momentum": 0.5},
             id="both-momentums",
         ),
         pytest.param(
             "server-momentum-prox",
             2,
             2,
-            {"use_prox": True, "mu": 0.5, "use_server_momentum": True, "gamma": 0.5},
+            {"use_prox": True, "penalty": 0.5, "use_server_momentum": True, "server_momentum": 0.5},
             id="server-momentum-plus-prox",
         ),
         pytest.param(
             "momentum-prox",
             1,
             2,
-            {"use_momentum": True, "beta": 0.5, "use_prox": True, "mu": 0.5},
+            {"use_momentum": True, "momentum": 0.5, "use_prox": True, "penalty": 0.5},
             id="local-momentum-plus-prox",
         ),
         pytest.param(
@@ -290,11 +290,11 @@ def test_fednova_resolves_client_sample_counts_once_on_initialize(monkeypatch: p
             2,
             {
                 "use_momentum": True,
-                "beta": 0.5,
+                "momentum": 0.5,
                 "use_prox": True,
-                "mu": 0.5,
+                "penalty": 0.5,
                 "use_server_momentum": True,
-                "gamma": 0.5,
+                "server_momentum": 0.5,
             },
             id="all-three",
         ),
@@ -316,11 +316,11 @@ def test_fednova_matches_scalar_pseudocode_for_option_combinations(
         local_steps=local_steps,
         step_size=1.0,
         use_momentum=bool(kwargs.get("use_momentum", False)),
-        beta=float(kwargs.get("beta", 0.9)),
+        momentum=float(kwargs.get("momentum", 0.9)),
         use_prox=bool(kwargs.get("use_prox", False)),
-        mu=float(kwargs.get("mu", 0.0)),
+        penalty=float(kwargs.get("penalty", 0.0)),
         use_server_momentum=bool(kwargs.get("use_server_momentum", False)),
-        gamma=float(kwargs.get("gamma", 0.9)),
+        server_momentum=float(kwargs.get("server_momentum", 0.9)),
     )
 
     actual_server_x = _run_fed_algorithm(network, algorithm)
@@ -484,7 +484,7 @@ def test_fednova_differs_from_fedavg_when_local_steps_are_heterogeneous() -> Non
         step_size=1.0,
         num_local_steps={fednova_clients[0]: 1, fednova_clients[1]: 3},
     )
-    fedavg = FedAvg(iterations=1, step_size=1.0, num_local_epochs=1)
+    fedavg = FedAvg(iterations=1, step_size=1.0, num_local_steps=1)
 
     fednova.initialize(fednova_network)
     fedavg.initialize(fedavg_network)
@@ -509,7 +509,7 @@ def test_fednova_differs_from_uniform_weighting_when_client_sizes_differ() -> No
         step_size=1.0,
         num_local_steps={fednova_clients[0]: 1, fednova_clients[1]: 3},
     )
-    fedavg = FedAvg(iterations=1, step_size=1.0, num_local_epochs=1)
+    fedavg = FedAvg(iterations=1, step_size=1.0, num_local_steps=1)
 
     fednova.initialize(fednova_network)
     fedavg.initialize(fedavg_network)
@@ -568,11 +568,11 @@ def test_fednova_rejects_non_integer_local_step_mapping_values(step_value: objec
 @pytest.mark.parametrize(
     ("kwargs", "expected_message"),
     [
-        pytest.param({"beta": -0.1}, "`beta` must satisfy 0 <= beta < 1", id="beta-negative"),
-        pytest.param({"beta": 1.0}, "`beta` must satisfy 0 <= beta < 1", id="beta-too-large"),
-        pytest.param({"mu": -0.1}, "`mu` must be non-negative", id="mu-negative"),
-        pytest.param({"gamma": -0.1}, "`gamma` must satisfy 0 <= gamma < 1", id="gamma-negative"),
-        pytest.param({"gamma": 1.0}, "`gamma` must satisfy 0 <= gamma < 1", id="gamma-too-large"),
+        pytest.param({"momentum": -0.1}, "`momentum` must satisfy 0 <= momentum < 1", id="beta-negative"),
+        pytest.param({"momentum": 1.0}, "`momentum` must satisfy 0 <= momentum < 1", id="beta-too-large"),
+        pytest.param({"penalty": -0.1}, "`penalty` must be non-negative", id="mu-negative"),
+        pytest.param({"server_momentum": -0.1}, "`server_momentum` must satisfy 0 <= server_momentum < 1", id="gamma-negative"),
+        pytest.param({"server_momentum": 1.0}, "`server_momentum` must satisfy 0 <= server_momentum < 1", id="gamma-too-large"),
     ],
 )
 def test_fednova_rejects_invalid_hyperparameters(kwargs: dict[str, float], expected_message: str) -> None:

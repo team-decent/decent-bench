@@ -100,14 +100,14 @@ class _EmpiricalScaledCost(EmpiricalRiskCost):
     def hessian(self, x: Array, indices: EmpiricalRiskIndices = "batch", **kwargs: Any) -> Array:  # noqa: ANN401
         return self.cost.hessian(x, indices=indices, **kwargs) * self.scalar
 
-    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
-        if rho <= 0:
-            raise ValueError("The penalty parameter rho must be positive.")
+    def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ANN401
+        if penalty <= 0:
+            raise ValueError("The penalty parameter penalty must be positive.")
         if self.scalar < 0:
             raise ValueError("The proximal operator is not defined for negative scaling.")
         if self.scalar == 0:
             return x
-        return self.cost.proximal(x, rho * self.scalar, **kwargs)
+        return self.cost.proximal(x, penalty * self.scalar, **kwargs)
 
     def _sample_batch_indices(self, indices: EmpiricalRiskIndices = "batch") -> list[int]:
         return self.cost._sample_batch_indices(indices)  # noqa: SLF001

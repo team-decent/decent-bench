@@ -37,9 +37,11 @@ class ATG(P2PAlgorithm):
     and :math:`\mathbf{z}_{ij,k} \in \mathbb{R}^{2n}` are auxiliary variables,
     :math:`N_i` is the number of neighbors of i,
     :math:`f_i` is i's local cost function,
-    j is a neighbor of i. The parameters are: the penalty :math:`\rho > 0`, the relaxation :math:`\alpha \in (0, 1)`,
-    the step-size :math:`\delta > 0`, and the mixing parameter :math:`\gamma > 0`. Notice that the convergence of
-    the algorithm is guaranteed provided that :math:`\delta, \ \gamma` are below certain thresholds.
+    j is a neighbor of i. The parameters are: the penalty :math:`\rho > 0` (the corresponding argument is
+    ``penalty``), the relaxation :math:`\alpha \in (0, 1)` (the corresponding argument is ``relaxation``), the
+    step-size :math:`\delta > 0` (the corresponding argument is ``delta``), and the mixing parameter
+    :math:`\gamma > 0` (the corresponding argument is ``gamma``). Notice that the convergence of the algorithm is
+    guaranteed provided that :math:`\delta, \ \gamma` are below certain thresholds.
 
     The idea of the algorithm is to apply distributed ADMM to perform gradient tracking,
     instead of the usual average consensus.
@@ -51,8 +53,8 @@ class ATG(P2PAlgorithm):
     """
 
     iterations: int = 100
-    rho: float = 1
-    alpha: float = 0.5
+    penalty: float = 1
+    relaxation: float = 0.5
     gamma: float = 0.1
     delta: float = 0.001
     x0: InitialStates = None
@@ -67,17 +69,17 @@ class ATG(P2PAlgorithm):
             ValueError: if hyperparameters are invalid.
 
         """
-        if self.rho <= 0:
-            raise ValueError("`rho` must be positive")
-        if not (0 < self.alpha < 1):
-            raise ValueError("`alpha` must be in (0, 1)")
+        if self.penalty <= 0:
+            raise ValueError("`penalty` must be positive")
+        if not (0 < self.relaxation < 1):
+            raise ValueError("`relaxation` must be in (0, 1)")
         if self.gamma <= 0:
             raise ValueError("`gamma` must be positive")
         if self.delta <= 0:
             raise ValueError("`delta` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:
-        self.pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}
+        self.pN = {i: self.penalty * len(network.neighbors(i)) for i in network.agents()}
         self.x0 = initial_states(self.x0, network)
         self.z0 = initial_states(self.z0, network)
         for i in network.agents():
@@ -103,8 +105,8 @@ class ATG(P2PAlgorithm):
         for i in network.active_agents():
             for j in network.active_neighbors(i):
                 idx = i.aux_vars["neighbor_to_idx"][j]
-                z_y_update = -i.aux_vars["z_y"][idx] + 2 * self.rho * i.aux_vars["y"]
-                z_s_update = -i.aux_vars["z_s"][idx] + 2 * self.rho * i.aux_vars["s"]
+                z_y_update = -i.aux_vars["z_y"][idx] + 2 * self.penalty * i.aux_vars["y"]
+                z_s_update = -i.aux_vars["z_s"][idx] + 2 * self.penalty * i.aux_vars["s"]
                 network.send(i, j, z_y_update, label=_Z_Y_LABEL)
                 network.send(i, j, z_s_update, label=_Z_S_LABEL)
 
@@ -114,12 +116,12 @@ class ATG(P2PAlgorithm):
             received_both = set(received_z_y_updates).intersection(received_z_s_updates)
             for j in received_both:
                 idx = i.aux_vars["neighbor_to_idx"][j]
-                i.aux_vars["z_y"][idx] = (1 - self.alpha) * i.aux_vars["z_y"][idx] + self.alpha * received_z_y_updates[
-                    j
-                ]
-                i.aux_vars["z_s"][idx] = (1 - self.alpha) * i.aux_vars["z_s"][idx] + self.alpha * received_z_s_updates[
-                    j
-                ]
+                i.aux_vars["z_y"][idx] = (1 - self.relaxation) * i.aux_vars["z_y"][
+                    idx
+                ] + self.relaxation * received_z_y_updates[j]
+                i.aux_vars["z_s"][idx] = (1 - self.relaxation) * i.aux_vars["z_s"][
+                    idx
+                ] + self.relaxation * received_z_s_updates[j]
 
 
 ADMM_Tracking = ATG  # alias

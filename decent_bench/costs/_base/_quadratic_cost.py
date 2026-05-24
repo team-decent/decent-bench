@@ -123,7 +123,7 @@ class QuadraticCost(Cost):
         return ret
 
     @iop.autodecorate_cost_method(Cost.proximal)
-    def proximal(self, x: NDArray[float64], rho: float) -> NDArray[float64]:
+    def proximal(self, x: NDArray[float64], penalty: float) -> NDArray[float64]:
         r"""
         Proximal at x.
 
@@ -136,8 +136,8 @@ class QuadraticCost(Cost):
         :meth:`Cost.proximal() <decent_bench.costs.Cost.proximal>`
         for the general proximal definition.
         """
-        lhs = rho * self.A_sym + np.eye(self.A.shape[1])
-        rhs = x - self.b * rho
+        lhs = penalty * self.A_sym + np.eye(self.A.shape[1])
+        rhs = x - self.b * penalty
 
         return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
 
