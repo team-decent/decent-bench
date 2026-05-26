@@ -49,8 +49,8 @@ def compute_metrics(
             benchmark problem will be used.
         statistics_across_agents: statistics to compute across agents for metrics that return one value per agent
             (like ``ConsensusError`` or ``Accuracy``). Available statistics are "mean" (aliases "average", "avg"),
-            "std", "max" (alias "maximum"), "min" (alias "minimum"), and "median" (alias "mdn"). If ``None``, all
-            statistics are applied.
+            "std", "max" (alias "maximum"), "min" (alias "minimum"), and "median" (alias "mdn"). If ``None``, "mean"
+            and "std" are used.
         log_level: minimum level to log, e.g. :data:`logging.INFO`
 
     Returns:

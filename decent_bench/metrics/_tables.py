@@ -135,8 +135,8 @@ def compute_tables(
         metrics: metrics to calculate
         statistics_across_agents: statistics to compute across agents for metrics that return one value per agent
             (like ``ConsensusError`` or ``Accuracy``). Available statistics are "mean" (aliases "average", "avg"),
-            "std", "max" (alias "maximum"), "min" (alias "minimum"), and "median" (alias "mdn"). If ``None``, "all
-            statistics are applied."
+            "std", "max" (alias "maximum"), "min" (alias "minimum"), and "median" (alias "mdn"). If ``None``, "mean"
+            and "std" are used.
 
     Returns:
         A nested dictionary containing the mean and std (across trials) for each metric and statistic, structured as
@@ -188,7 +188,7 @@ def compute_tables(
 
 def _resolve_statistics(statistics: list[str] | None) -> dict[str, Callable[[Sequence[float]], float]]:
     if statistics is None:
-        return STATISTICS
+        return {"mean": STATISTICS["mean"], "std": STATISTICS["std"]}
 
     statistics_to_use: dict[str, Callable[[Sequence[float]], float]] = {}
     for stat in statistics:
