@@ -40,6 +40,7 @@ STATISTICS_ALIASES = {
     "minimum": "min",
     "mdn": "median",
 }
+DEFAULT_STATISTICS = {"mean": STATISTICS["mean"], "std": STATISTICS["std"]}
 
 
 def display_tables(
@@ -85,12 +86,19 @@ def display_tables(
 
     table_results = metrics_result.table_results
     algs = list(table_results.keys())
-    headers = ["Metric (statistic across agents)"] + [alg.name for alg in algs]
-    rows: list[list[str]] = []
+
+    row_header_1 = ["Metric", "Statistic\nacross agents", "mean ± std\nacross trials"] + [""] * (len(algs) - 1)
+    row_header_2 = ["", ""] + [alg.name for alg in algs]
+    rows: list[list[str] | str] = [
+        row_header_1,
+        row_header_2,
+        tb.SEPARATING_LINE,
+    ]
 
     for metric in metrics_result.table_metrics:
+        first_statistic_row = True
         for statistic_name in table_results[algs[0]][metric]:
-            row = [f"{metric.description} ({statistic_name})"] if statistic_name else [f"{metric.description}"]
+            row = [metric.description if first_statistic_row else "", statistic_name]
             for alg in algs:
                 mean, std = table_results[alg][metric][statistic_name]
 
@@ -104,9 +112,10 @@ def display_tables(
                 )
                 row.append(formatted_mean_std)
             rows.append(row)
+            first_statistic_row = False
 
-    grid_table = tb.tabulate(rows, headers, tablefmt="grid")
-    latex_table = tb.tabulate(rows, headers, tablefmt="latex")
+    grid_table = tb.tabulate(rows, tablefmt="grid")
+    latex_table = tb.tabulate(rows, tablefmt="latex")
     LOGGER.info("\n" + latex_table if table_fmt == "latex" else "\n" + grid_table)
 
     if table_path:
@@ -188,23 +197,23 @@ def compute_tables(
 
 def _resolve_statistics(statistics: list[str] | None) -> dict[str, Callable[[Sequence[float]], float]]:
     if statistics is None:
-        return {"mean": STATISTICS["mean"], "std": STATISTICS["std"]}
+        return DEFAULT_STATISTICS
 
     statistics_to_use: dict[str, Callable[[Sequence[float]], float]] = {}
     for stat in statistics:
         resolved_alias = STATISTICS_ALIASES.get(stat)
         resolved_stat = stat if STATISTICS_ALIASES.get(stat) is None else resolved_alias
         if resolved_stat not in STATISTICS:
-            LOGGER.warning(f"{stat} is not a valid statistic (or alias), skipping it")
+            LOGGER.warning(f"Skipping {stat} because it is not a valid statistic (or alias)")
             continue
         statistics_to_use[resolved_stat] = STATISTICS[resolved_stat]
 
     if len(statistics_to_use) == 0:
         LOGGER.warning(
-            f"No valid statistic was passed, defaulting to all available statistics; "
-            f"valid stats {', '.join(STATISTICS.keys())}, passed {statistics}"
+            f"No valid statistic was passed, defaulting to mean and std; "
+            f"valid stats: {', '.join(STATISTICS.keys())}, passed: {', '.join(statistics)}"
         )
-        return STATISTICS
+        return DEFAULT_STATISTICS
 
     return statistics_to_use
 

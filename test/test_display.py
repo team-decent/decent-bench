@@ -27,6 +27,7 @@ from decent_bench.metrics._plots import (
     _select_legend_mode,
     compute_plots,
 )
+from decent_bench.metrics._tables import display_tables
 from decent_bench.metrics.metric_library import Accuracy, MSE, Precision, Recall, Regret, XError
 from decent_bench.networks import FedNetwork
 
@@ -408,6 +409,62 @@ def test_display_metrics_shows_only_plots_when_table_metrics_empty(monkeypatch) 
 
     assert "plot" in captured
     assert "table" not in captured
+
+
+def test_display_tables_uses_shared_tabulate_layout_for_grid_and_latex(tmp_path: Path) -> None:  # noqa: D103
+    alg_a = _AlgorithmStub("A")
+    alg_b = _AlgorithmStub("B")
+    metric = _MetricStub("loss")
+
+    metrics_result = _build_display_metric_result(
+        [alg_a, alg_b],
+        [metric],
+        [],
+        table_results={
+            alg_a: {metric: {"mean": (1.0, 0.1), "std": (0.2, 0.05)}},
+            alg_b: {metric: {"mean": (2.0, 0.2), "std": (0.3, 0.06)}},
+        },
+    )
+
+    display_tables(metrics_result, table_path=tmp_path)
+
+    grid_table = (tmp_path / "table.txt").read_text(encoding="utf-8")
+    latex_table = (tmp_path / "table.tex").read_text(encoding="utf-8")
+
+    assert "mean+/-std across trials" in grid_table
+    assert "Metric" in grid_table
+    assert "Statistic across agents" in grid_table
+    assert "A" in grid_table and "B" in grid_table
+    assert "mean" in grid_table and "std" in grid_table
+    assert grid_table.count("loss") == 1
+
+    assert "mean+/-std across trials" in latex_table
+    assert "Metric" in latex_table
+    assert "Statistic across agents" in latex_table
+    assert "A" in latex_table and "B" in latex_table
+    assert "mean" in latex_table and "std" in latex_table
+    assert latex_table.count("loss") == 1
+
+
+def test_display_tables_scales_compute_metrics_in_shared_layout(tmp_path: Path) -> None:  # noqa: D103
+    alg_a = _AlgorithmStub("A")
+    metric = ml.FunctionCalls()
+
+    metrics_result = MetricResult(
+        network_views={alg_a: [_network_metrics_view([_agent_metrics_view(1.0)])]},
+        table_metrics=[metric],
+        plot_metrics=[],
+        table_results={alg_a: {metric: {"mean": (20.0, 4.0)}}},
+        plot_results={},
+    )
+
+    display_tables(metrics_result, scale_compute=0.5, table_path=tmp_path)
+
+    grid_table = (tmp_path / "table.txt").read_text(encoding="utf-8")
+    latex_table = (tmp_path / "table.tex").read_text(encoding="utf-8")
+
+    assert "1.00e+01 ± 2.00e+00" in grid_table
+    assert "1.00e+01 ± 2.00e+00" in latex_table
 
 
 def test_metric_result_available_discovery_properties() -> None:  # noqa: D103
