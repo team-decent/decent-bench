@@ -1,11 +1,10 @@
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import tabulate as tb
-from scipy import stats
 
 import decent_bench.metrics.metric_utils as utils
 from decent_bench.algorithms import Algorithm
@@ -25,8 +24,22 @@ from .metric_library import (
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem, MetricResult
 
-STATISTICS_ABBR = {"average": "avg", "median": "mdn"}
 SCALE_METRICS = (FunctionCalls, GradientCalls, HessianCalls, ProximalCalls)
+
+STATISTICS: dict[str, Callable[[Sequence[float]], float]] = {
+    "mean": np.mean,
+    "std": np.std,
+    "max": np.max,
+    "min": np.min,
+    "median": np.median,
+}
+STATISTICS_ALIASES = {
+    "average": "mean",
+    "avg": "mean",
+    "maximum": "max",
+    "minimum": "min",
+    "mdn": "median",
+}
 
 
 def display_tables(
@@ -111,6 +124,7 @@ def compute_tables(
     resulting_network_views: dict[Algorithm[Network], list[NetworkMetricsView]],
     problem: "BenchmarkProblem",
     metrics: list[Metric],
+    statistics_across_agents: list[str] | None,
 ) -> Mapping[Algorithm[Network], Mapping[Metric, Mapping[str, tuple[float, float]]]]:
     """
     Compute table metrics with mean and std across trials.
@@ -119,14 +133,20 @@ def compute_tables(
         resulting_network_views: resulting network views from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties are used for metric calculations
         metrics: metrics to calculate
+        statistics_across_agents: statistics to compute across agents for metrics that return one value per agent
+            (like ``ConsensusError`` or ``Accuracy``). Available statistics are "mean" (aliases "average", "avg"),
+            "std", "max" (alias "maximum"), "min" (alias "minimum"), and "median" (alias "mdn"). If ``None``, "all
+            statistics are applied."
 
     Returns:
-        A nested dictionary containing the mean and std for each metric and statistic, structured as
+        A nested dictionary containing the mean and std (across trials) for each metric and statistic, structured as
         {algorithm: {metric: {statistic_name: (mean, std)}}}
 
     """
     if not metrics:
         return {}
+
+    statistics = _resolve_statistics(statistics_across_agents)
 
     algs = list(resulting_network_views)
     results: dict[Algorithm[Network], dict[Metric, dict[str, tuple[float, float]]]] = {a: {} for a in algs}
@@ -134,7 +154,7 @@ def compute_tables(
     with warnings.catch_warnings(action="ignore"), utils.MetricProgressBar() as progress:
         table_task = progress.add_task(
             "Computing table metrics",
-            total=sum(len(metric.statistics) for metric in metrics),
+            total=len(metrics),
             status="",
         )
         for metric in metrics:
@@ -149,22 +169,44 @@ def compute_tables(
                 for a in algs
             ]
 
-            for statistic in metric.statistics:
-                statistic_name = STATISTICS_ABBR.get(statistic.__name__) or statistic.__name__
-                if statistic_name == "default_statistic":
-                    statistic_name = ""
+            statistics_to_use = statistics if len(data_per_trial[0][0]) > 1 else {"": _single_value}
+
+            for stat_name, stat in statistics_to_use.items():
                 for i, alg in enumerate(algs):
-                    agg_data_per_trial = [statistic(trial) for trial in data_per_trial[i]]
+                    agg_data_per_trial = [stat(trial) for trial in data_per_trial[i]]
                     mean, std = _calculate_mean_and_std(agg_data_per_trial)
 
                     if metric not in results[alg]:
                         results[alg][metric] = {}
-                    results[alg][metric][statistic_name] = (mean, std)
+                    results[alg][metric][stat_name] = (mean, std)
 
-                progress.advance(table_task)
+            progress.advance(table_task)
         progress.update(table_task, status="Table computation complete")
 
     return results
+
+
+def _resolve_statistics(statistics: list[str] | None) -> dict[str, Callable[[Sequence[float]], float]]:
+    if statistics is None:
+        return STATISTICS
+
+    statistics_to_use: dict[str, Callable[[Sequence[float]], float]] = {}
+    for stat in statistics:
+        resolved_alias = STATISTICS_ALIASES.get(stat)
+        resolved_stat = stat if STATISTICS_ALIASES.get(stat) is None else resolved_alias
+        if resolved_stat not in STATISTICS:
+            LOGGER.warning(f"{stat} is not a valid statistic (or alias), skipping it")
+            continue
+        statistics_to_use[resolved_stat] = STATISTICS[resolved_stat]
+
+    if len(statistics_to_use) == 0:
+        LOGGER.warning(
+            f"No valid statistic was passed, defaulting to all available statistics; "
+            f"valid stats {', '.join(STATISTICS.keys())}, passed {statistics}"
+        )
+        return STATISTICS
+
+    return statistics_to_use
 
 
 def _table_data_per_trial(
@@ -173,6 +215,11 @@ def _table_data_per_trial(
     metric: Metric,
 ) -> list[Sequence[float]]:
     return [metric.get_table_data(network_view, problem) for network_view in network_views_per_trial]
+
+
+def _single_value(values: Sequence[float]) -> float:
+    """Return *values[0]*."""
+    return values[0]
 
 
 def _calculate_mean_and_std(data: list[float]) -> tuple[float, float]:

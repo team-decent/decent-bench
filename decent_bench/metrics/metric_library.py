@@ -821,37 +821,37 @@ _BASE_TABLE_METRICS: list[Metric] = [
     Regret(),
     GradientNorm(),
     XError(),
-    ConsensusError([min, np.average, max]),
-    Loss([min, np.average, max]),
-    XUpdates([np.average, sum]),
-    FunctionCalls([np.average, sum]),
-    GradientCalls([np.average, sum]),
-    HessianCalls([np.average, sum]),
-    ProximalCalls([np.average, sum]),
-    SentMessages([np.average, sum]),
-    ReceivedMessages([np.average, sum]),
-    SentMessagesDropped([np.average, sum]),
+    ConsensusError(),
+    Loss(),
+    XUpdates(),
+    FunctionCalls(),
+    GradientCalls(),
+    HessianCalls(),
+    ProximalCalls(),
+    SentMessages(),
+    ReceivedMessages(),
+    SentMessagesDropped(),
 ]
 """
-- :class:`Regret` (no statistics)
-- :class:`GradientNorm` (no statistics)
-- :class:`XError` (no statistics)
-- :class:`ConsensusError` - :func:`min`, :func:`~numpy.average`, :func:`max`
-- :class:`Loss` - :func:`min`, :func:`~numpy.average`, :func:`max`
-- :class:`XUpdates` - :func:`~numpy.average`, :func:`sum`
-- :class:`FunctionCalls` - :func:`~numpy.average`, :func:`sum`
-- :class:`GradientCalls` - :func:`~numpy.average`, :func:`sum`
-- :class:`HessianCalls` - :func:`~numpy.average`, :func:`sum`
-- :class:`ProximalCalls` - :func:`~numpy.average`, :func:`sum`
-- :class:`SentMessages` - :func:`~numpy.average`, :func:`sum`
-- :class:`ReceivedMessages` - :func:`~numpy.average`, :func:`sum`
-- :class:`SentMessagesDropped` - :func:`~numpy.average`, :func:`sum`
+- :class:`Regret`
+- :class:`GradientNorm`
+- :class:`XError`
+- :class:`ConsensusError`
+- :class:`Loss`
+- :class:`XUpdates`
+- :class:`FunctionCalls`
+- :class:`GradientCalls`
+- :class:`HessianCalls`
+- :class:`ProximalCalls`
+- :class:`SentMessages`
+- :class:`ReceivedMessages`
+- :class:`SentMessagesDropped`
 
 :meta hide-value:
 """
 
 _REGRESSION_TABLE_METRICS: list[Metric] = [
-    MSE([min, np.average, max], x_log=False, y_log=True),
+    MSE(x_log=False, y_log=True),
 ]
 """
 - :class:`MSE` - :func:`min`, :func:`~numpy.average`, :func:`max`
@@ -860,14 +860,14 @@ _REGRESSION_TABLE_METRICS: list[Metric] = [
 """
 
 _CLASSIFICATION_TABLE_METRICS: list[Metric] = [
-    Accuracy([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
-    Precision([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
-    Recall([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
+    Accuracy(fmt=".2%", x_log=False, y_log=False),
+    Precision(fmt=".2%", x_log=False, y_log=False),
+    Recall(fmt=".2%", x_log=False, y_log=False),
 ]
 """
-- :class:`Accuracy` - :func:`min`, :func:`~numpy.average`, :func:`max` with percentage format
-- :class:`Precision` - :func:`min`, :func:`~numpy.average`, :func:`max` with percentage format
-- :class:`Recall` - :func:`min`, :func:`~numpy.average`, :func:`max` with percentage format
+- :class:`Accuracy` - with percentage format
+- :class:`Precision` - with percentage format
+- :class:`Recall` - with percentage format
 
 :meta hide-value:
 """
@@ -876,10 +876,10 @@ _CLASSIFICATION_TABLE_METRICS: list[Metric] = [
 # used for table metrics, if you were to use the same Metric object
 # for both, you would need to specify statistics
 _BASE_PLOT_METRICS: list[Metric] = [
-    Regret([], x_log=False, y_log=True),
-    GradientNorm([], x_log=False, y_log=True),
-    ConsensusError([], x_log=False, y_log=True),
-    Loss([], x_log=False, y_log=False),
+    Regret(x_log=False, y_log=True),
+    GradientNorm(x_log=False, y_log=True),
+    ConsensusError(x_log=False, y_log=True),
+    Loss(x_log=False, y_log=False),
 ]
 """
 - :class:`Regret` (semi-log)
@@ -908,18 +908,18 @@ _CLASSIFICATION_PLOT_METRICS: list[Metric] = _CLASSIFICATION_TABLE_METRICS
 """
 
 _FEDERATED_TABLE_METRICS: list[Metric] = [
-    ClientDriftFromServer([min, np.average, max]),
+    ClientDriftFromServer(),
     FractionSelectedClients(fmt=".2%", x_log=False, y_log=False),
 ]
 """
-- :class:`ClientDriftFromServer` - min, average, max
-- :class:`FractionSelectedClients` - single value with percentage format
+- :class:`ClientDriftFromServer`
+- :class:`FractionSelectedClients` - with percentage format
 
 :meta hide-value:
 """
 
 _FEDERATED_PLOT_METRICS: list[Metric] = [
-    ClientDriftFromServer([], x_log=False, y_log=True),
+    ClientDriftFromServer(x_log=False, y_log=True),
 ]
 """
 - :class:`ClientDriftFromServer` (semi-log)
@@ -931,13 +931,13 @@ _FEDERATED_REGRESSION_TABLE_METRICS: list[Metric] = [
     ServerMSE(x_log=False, y_log=True),
 ]
 """
-- :class:`ServerMSE` - single value
+- :class:`ServerMSE`
 
 :meta hide-value:
 """
 
 _FEDERATED_REGRESSION_PLOT_METRICS: list[Metric] = [
-    ServerMSE([], x_log=False, y_log=True),
+    ServerMSE(x_log=False, y_log=True),
 ]
 """
 - :class:`ServerMSE` (semi-log)
@@ -949,13 +949,13 @@ _FEDERATED_CLASSIFICATION_TABLE_METRICS: list[Metric] = [
     ServerAccuracy(fmt=".2%", x_log=False, y_log=False),
 ]
 """
-- :class:`ServerAccuracy` - single value with percentage format
+- :class:`ServerAccuracy` - with percentage format
 
 :meta hide-value:
 """
 
 _FEDERATED_CLASSIFICATION_PLOT_METRICS: list[Metric] = [
-    ServerAccuracy([], fmt=".2%", x_log=False, y_log=False),
+    ServerAccuracy(fmt=".2%", x_log=False, y_log=False),
 ]
 """
 - :class:`ServerAccuracy` (linear)

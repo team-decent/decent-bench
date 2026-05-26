@@ -46,7 +46,7 @@ class _MetricStub(Metric):
         self,
         description: str,
     ) -> None:
-        super().__init__([np.average], fmt=".2e", y_log=False)
+        super().__init__(fmt=".2e", y_log=False)
         self._description = description
 
     @property
@@ -476,7 +476,9 @@ def test_compute_metrics_uses_federated_defaults_and_server_view() -> None:  # n
 
     assert metrics_result.table_results is not None
     assert metrics_result.table_results[algorithm][selected_metric][""] == (1.0, 0.0)
-    assert metrics_result.table_results[algorithm][sent_messages_metric]["sum"] == (8.0, 0.0)
+    sent_messages_stats = metrics_result.table_results[algorithm][sent_messages_metric]
+    assert "sum" not in sent_messages_stats
+    assert sent_messages_stats["mean"] == pytest.approx((8.0 / 3.0, 0.0))
 
 
 def test_compute_metrics_custom_metrics_do_not_append_federated_defaults(monkeypatch) -> None:  # noqa: D103
@@ -920,7 +922,7 @@ def test_is_available_default_returns_true() -> None:  # noqa: D103
 
 class _PlotMetricStub(Metric):
     def __init__(self, description: str, plot_data_by_x_value: dict[float, list[tuple[float, float]]]) -> None:
-        super().__init__([np.average], fmt=".2e", y_log=False)
+        super().__init__(fmt=".2e", y_log=False)
         self._description = description
         self._plot_data_by_x_value = plot_data_by_x_value
 

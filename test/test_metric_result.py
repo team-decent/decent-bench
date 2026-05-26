@@ -12,7 +12,7 @@ class _AlgorithmStub:
 
 class _MetricStub(Metric):
     def __init__(self, description: str) -> None:
-        super().__init__([np.average], fmt=".2e", y_log=False)
+        super().__init__(fmt=".2e", y_log=False)
         self._description = description
 
     @property

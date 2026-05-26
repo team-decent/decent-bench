@@ -25,9 +25,9 @@ class MetricResult:
     * `table_metrics`: contains the list of metrics that were tabulated as mean+/-std intervals.
     * `plot_metrics`: contains the list of metrics that were plotted.
     * `table_results`: contains the computed table statistics for each algorithm and metric, organized by
-      algorithm and metric, where each metric maps to statistics with mean+/-std.
+        algorithm and metric, where each metric maps to statistics with mean+/-std.
     * `plot_results`: contains the plot data for each algorithm and metric, organized by algorithm and metric,
-      where each metric maps to a tuple of sequences representing (x, y_mean, y_min, y_max) for plotting.
+        where each metric maps to a tuple of sequences representing (x, y_mean, y_min, y_max) for plotting.
 
     These results can be used for analysis, visualization, and comparison of the algorithms' performance on the
     benchmark problem.
@@ -78,7 +78,7 @@ class MetricResult:
         Returns:
             ``table_results``: a dataframe with columns ``algorithm``, ``metric``, ``statistic``, ``mean``, and ``std``.
             ``plot_results``: a dataframe with columns ``algorithm``, ``metric``, ``x``, ``y_mean``, ``y_min``,
-                and ``y_max``.
+            and ``y_max``.
 
         Examples:
             Access the table dataframe and filter for a specific algorithm:

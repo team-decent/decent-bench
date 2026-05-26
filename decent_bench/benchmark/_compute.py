@@ -31,6 +31,7 @@ def compute_metrics(
     *,
     table_metrics: list[Metric] | None = None,
     plot_metrics: list[Metric] | None = None,
+    statistics_across_agents: list[str] | None = None,
     log_level: int = logging.INFO,
 ) -> MetricResult:
     """
@@ -46,6 +47,10 @@ def compute_metrics(
             when a non-federated network is passed.
         plot_metrics: metrics to be plotted over algorithm iterations. If ``None``, all plot metrics available for the
             benchmark problem will be used.
+        statistics_across_agents: statistics to compute across agents for metrics that return one value per agent
+            (like ``ConsensusError`` or ``Accuracy``). Available statistics are "mean" (aliases "average", "avg"),
+            "std", "max" (alias "maximum"), "min" (alias "minimum"), and "median" (alias "mdn"). If ``None``, all
+            statistics are applied.
         log_level: minimum level to log, e.g. :data:`logging.INFO`
 
     Returns:
@@ -110,7 +115,9 @@ def compute_metrics(
     resulting_network_views: dict[Algorithm[Network], list[NetworkMetricsView]] = {}
     for alg, networks in benchmark_result.states.items():
         resulting_network_views[alg] = [NetworkMetricsView.from_network(nw) for nw in networks]
-    table_results = compute_tables(resulting_network_views, benchmark_result.problem, table_metrics)
+    table_results = compute_tables(
+        resulting_network_views, benchmark_result.problem, table_metrics, statistics_across_agents
+    )
     plot_results = compute_plots(resulting_network_views, benchmark_result.problem, plot_metrics)
 
     result = MetricResult(

@@ -31,10 +31,6 @@ class Metric(ABC):
     and implementation specifications.
 
     Args:
-        statistics: sequence of statistics such as :func:`min`, :func:`sum`, and :func:`~numpy.average` used for
-            aggregating across agents the data retrieved with :func:`get_data_from_trial` into a single value;
-            each statistic gets its own row in the table. If it is None (the default) or an empty list,
-            :func:`~numpy.average` is used as statistic.
         fmt: format string used to format the values in the table, defaults to ".2e". Common formats include:
 
             - ".2e": scientific notation with 2 decimal places
@@ -51,12 +47,10 @@ class Metric(ABC):
 
     def __init__(
         self,
-        statistics: Sequence[Statistic] | None = None,
         fmt: str = ".2e",
         x_log: bool = False,
         y_log: bool = True,
     ) -> None:
-        self.statistics = statistics or [utils.default_statistic]
         self.x_log = x_log
         self.y_log = y_log
         self.fmt = fmt
