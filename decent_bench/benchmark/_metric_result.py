@@ -22,10 +22,10 @@ class MetricResult:
     * `network_views`: contains the raw network-level metrics for each algorithm, organized by algorithm where
         each algorithm maps to a sequence of trials, with each trial containing a
         :class:`~decent_bench.metrics.NetworkMetricsView`.
-    * `table_metrics`: contains the list of metrics that were tabulated as confidence intervals.
+    * `table_metrics`: contains the list of metrics that were tabulated as mean+/-std intervals.
     * `plot_metrics`: contains the list of metrics that were plotted.
     * `table_results`: contains the computed table statistics for each algorithm and metric, organized by
-      algorithm and metric, where each metric maps to statistics with their confidence intervals.
+      algorithm and metric, where each metric maps to statistics with mean+/-std.
     * `plot_results`: contains the plot data for each algorithm and metric, organized by algorithm and metric,
       where each metric maps to a tuple of sequences representing (x, y_mean, y_min, y_max) for plotting.
 
@@ -76,8 +76,7 @@ class MetricResult:
         Convert the stored metric results into pandas dataframes.
 
         Returns:
-            ``table_results``: a dataframe with columns ``algorithm``, ``metric``, ``statistic``, ``mean``, and
-                ``margin_of_error``.
+            ``table_results``: a dataframe with columns ``algorithm``, ``metric``, ``statistic``, ``mean``, and ``std``.
             ``plot_results``: a dataframe with columns ``algorithm``, ``metric``, ``x``, ``y_mean``, ``y_min``,
                 and ``y_max``.
 
@@ -100,20 +99,20 @@ class MetricResult:
             table_rows: list[dict[str, object]] = []
             for algorithm, table_metric_results in self.table_results.items():
                 for metric, statistics in table_metric_results.items():
-                    for statistic_name, (mean, margin_of_error) in statistics.items():
+                    for statistic_name, (mean, std) in statistics.items():
                         table_rows.append(
                             {
                                 "algorithm": algorithm.name,
                                 "metric": metric.description,
                                 "statistic": statistic_name,
                                 "mean": mean,
-                                "margin_of_error": margin_of_error,
+                                "std": std,
                             }
                         )
 
             table_frame = pd.DataFrame.from_records(
                 table_rows,
-                columns=["algorithm", "metric", "statistic", "mean", "margin_of_error"],
+                columns=["algorithm", "metric", "statistic", "mean", "std"],
             )
 
         plot_frame = None

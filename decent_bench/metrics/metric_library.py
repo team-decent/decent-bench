@@ -404,7 +404,6 @@ class Accuracy(Metric):
     """
 
     description: str = "accuracy"
-    can_diverge: bool = False
 
     def is_available(  # noqa: D102
         self,
@@ -459,7 +458,6 @@ class MSE(Metric):
     """
 
     description: str = "mse"
-    can_diverge: bool = False
 
     def is_available(  # noqa: D102
         self,
@@ -513,7 +511,6 @@ class Precision(Metric):
     """
 
     description: str = "precision"
-    can_diverge: bool = False
 
     def is_available(  # noqa: D102
         self,
@@ -570,7 +567,6 @@ class Recall(Metric):
     """
 
     description: str = "recall"
-    can_diverge: bool = False
 
     def is_available(  # noqa: D102
         self,
@@ -610,7 +606,6 @@ class Loss(Metric):
     """
 
     description: str = "loss"
-    can_diverge: bool = False
 
     def get_data_from_trial(  # noqa: D102
         self,
@@ -699,7 +694,6 @@ class FractionSelectedClients(Metric):
     """
 
     description: str = "fraction selected clients"
-    can_diverge: bool = False
 
     def is_available(  # noqa: D102
         self,
@@ -737,7 +731,6 @@ class ServerMSE(Metric):
     """
 
     description: str = "server mse"
-    can_diverge: bool = False
 
     def is_available(  # noqa: D102
         self,
@@ -788,7 +781,6 @@ class ServerAccuracy(Metric):
     """
 
     description: str = "server accuracy"
-    can_diverge: bool = False
 
     def is_available(  # noqa: D102
         self,

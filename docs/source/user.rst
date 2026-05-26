@@ -301,7 +301,7 @@ efficient option compared with native framework-specific regularization.
 
 Execution settings
 ------------------
-Configure settings for metrics, trials, statistical confidence level, logging, and multiprocessing.
+Configure settings for metrics, trials, logging, and multiprocessing.
 
 .. code-block:: python
 
@@ -338,7 +338,6 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
             benchmark_result, 
             table_metrics=[regret, gradient_calls],
             plot_metrics=[regret],
-            confidence_level=0.9,
             log_level=DEBUG,
         )
 

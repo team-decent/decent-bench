@@ -57,11 +57,11 @@ def test_metric_result_to_dataframe_converts_table_and_plot_results() -> None:
 
     expected_table = pd.DataFrame(
         [
-            {"algorithm": "A", "metric": "one", "statistic": "avg", "mean": 1.0, "margin_of_error": 0.1},
-            {"algorithm": "A", "metric": "one", "statistic": "mdn", "mean": 1.5, "margin_of_error": 0.2},
-            {"algorithm": "B", "metric": "two", "statistic": "avg", "mean": 2.0, "margin_of_error": 0.3},
+            {"algorithm": "A", "metric": "one", "statistic": "avg", "mean": 1.0, "std": 0.1},
+            {"algorithm": "A", "metric": "one", "statistic": "mdn", "mean": 1.5, "std": 0.2},
+            {"algorithm": "B", "metric": "two", "statistic": "avg", "mean": 2.0, "std": 0.3},
         ],
-        columns=["algorithm", "metric", "statistic", "mean", "margin_of_error"],
+        columns=["algorithm", "metric", "statistic", "mean", "std"],
     )
     expected_plot = pd.DataFrame(
         [
@@ -102,5 +102,5 @@ def test_metric_result_to_dataframe_handles_missing_table_or_plot_results() -> N
 
     assert table_only_plot_df is None
     assert plot_only_table_df is None
-    assert list(table_only_df.columns) == ["algorithm", "metric", "statistic", "mean", "margin_of_error"]
+    assert list(table_only_df.columns) == ["algorithm", "metric", "statistic", "mean", "std"]
     assert list(plot_only_df.columns) == ["algorithm", "metric", "x", "y_mean", "y_min", "y_max"]

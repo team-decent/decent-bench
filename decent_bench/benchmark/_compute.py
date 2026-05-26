@@ -31,7 +31,6 @@ def compute_metrics(
     *,
     table_metrics: list[Metric] | None = None,
     plot_metrics: list[Metric] | None = None,
-    confidence_level: float = 0.95,
     log_level: int = logging.INFO,
 ) -> MetricResult:
     """
@@ -42,14 +41,11 @@ def compute_metrics(
             checkpoint manager
         checkpoint_manager: if provided, will be used to save results of metrics computation and/or load benchmark
             result.
-        table_metrics: metrics to tabulate as confidence intervals after the execution. If ``None``, all table metrics
-            available for the benchmark problem will be used. For example, federated-only metrics are removed when a
-            non-federated network is passed.
-        plot_metrics: metrics to plot after the execution. If ``None``, all plot metrics available for the benchmark
-            problem will be used.
-        confidence_level: confidence level for computing confidence intervals of the table metrics, expressed as a value
-            between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
-            wider confidence intervals.
+        table_metrics: metrics to be displayed in a table of results. If ``None``, all table
+            metrics available for the benchmark problem will be used. For example, federated-only metrics are removed
+            when a non-federated network is passed.
+        plot_metrics: metrics to be plotted over algorithm iterations. If ``None``, all plot metrics available for the
+            benchmark problem will be used.
         log_level: minimum level to log, e.g. :data:`logging.INFO`
 
     Returns:
@@ -114,7 +110,7 @@ def compute_metrics(
     resulting_network_views: dict[Algorithm[Network], list[NetworkMetricsView]] = {}
     for alg, networks in benchmark_result.states.items():
         resulting_network_views[alg] = [NetworkMetricsView.from_network(nw) for nw in networks]
-    table_results = compute_tables(resulting_network_views, benchmark_result.problem, table_metrics, confidence_level)
+    table_results = compute_tables(resulting_network_views, benchmark_result.problem, table_metrics)
     plot_results = compute_plots(resulting_network_views, benchmark_result.problem, plot_metrics)
 
     result = MetricResult(

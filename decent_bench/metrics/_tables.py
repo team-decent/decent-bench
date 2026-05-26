@@ -36,7 +36,7 @@ def display_tables(
     table_path: Path | None = None,
 ) -> None:
     """
-    Display table with confidence intervals, one row per metric and statistic, and one column per algorithm.
+    Display table of metrics as mean+/-std across trials, and statistics across agents, one column per algorithm.
 
     Args:
         metrics_result: result of metrics computation containing the metrics to display.
@@ -79,18 +79,17 @@ def display_tables(
         for statistic_name in table_results[algs[0]][metric]:
             row = [f"{metric.description} ({statistic_name})"] if statistic_name else [f"{metric.description}"]
             for alg in algs:
-                mean, margin_of_error = table_results[alg][metric][statistic_name]
+                mean, std = table_results[alg][metric][statistic_name]
 
                 if isinstance(metric, SCALE_METRICS):
-                    mean, margin_of_error = mean * scale_compute, margin_of_error * scale_compute
+                    mean, std = mean * scale_compute, std * scale_compute
 
-                formatted_confidence_interval = _format_confidence_interval(
+                formatted_mean_std = _format_mean_std(
                     mean,
-                    margin_of_error,
+                    std,
                     metric.fmt,
-                    metric.can_diverge,
                 )
-                row.append(formatted_confidence_interval)
+                row.append(formatted_mean_std)
             rows.append(row)
 
     grid_table = tb.tabulate(rows, headers, tablefmt="grid")
@@ -112,22 +111,18 @@ def compute_tables(
     resulting_network_views: dict[Algorithm[Network], list[NetworkMetricsView]],
     problem: "BenchmarkProblem",
     metrics: list[Metric],
-    confidence_level: float,
 ) -> Mapping[Algorithm[Network], Mapping[Metric, Mapping[str, tuple[float, float]]]]:
     """
-    Compute table metrics with confidence intervals.
+    Compute table metrics with mean and std across trials.
 
     Args:
         resulting_network_views: resulting network views from the trial executions, grouped by algorithm
         problem: benchmark problem whose properties are used for metric calculations
         metrics: metrics to calculate
-        confidence_level: confidence level for computing confidence intervals of the metrics, expressed as a value
-            between 0 and 1 (e.g., 0.95 for 95% confidence, 0.99 for 99% confidence). Higher values result in
-            wider confidence intervals.
 
     Returns:
-        A nested dictionary containing the mean and margin of error for each metric and statistic, structured as
-        {algorithm: {metric: {statistic_name: (mean, margin_of_error)}}}
+        A nested dictionary containing the mean and std for each metric and statistic, structured as
+        {algorithm: {metric: {statistic_name: (mean, std)}}}
 
     """
     if not metrics:
@@ -160,11 +155,11 @@ def compute_tables(
                     statistic_name = ""
                 for i, alg in enumerate(algs):
                     agg_data_per_trial = [statistic(trial) for trial in data_per_trial[i]]
-                    mean, margin_of_error = _calculate_mean_and_margin_of_error(agg_data_per_trial, confidence_level)
+                    mean, std = _calculate_mean_and_std(agg_data_per_trial)
 
                     if metric not in results[alg]:
                         results[alg][metric] = {}
-                    results[alg][metric][statistic_name] = (mean, margin_of_error)
+                    results[alg][metric][statistic_name] = (mean, std)
 
                 progress.advance(table_task)
         progress.update(table_task, status="Table computation complete")
@@ -180,29 +175,20 @@ def _table_data_per_trial(
     return [metric.get_table_data(network_view, problem) for network_view in network_views_per_trial]
 
 
-def _calculate_mean_and_margin_of_error(data: list[float], confidence_level: float) -> tuple[float, float]:
-    mean = np.mean(data)
-    sem = stats.sem(data) if len(set(data)) > 1 else None
-    raw_interval = (
-        stats.t.interval(confidence=confidence_level, df=len(data) - 1, loc=mean, scale=sem) if sem else (mean, mean)
-    )
-    if np.isfinite(mean) and np.isfinite(raw_interval).all():
-        return (float(mean), float(mean - raw_interval[0]))
+def _calculate_mean_and_std(data: list[float]) -> tuple[float, float]:
+    mean, std = np.mean(data), np.std(data)
+    if np.isfinite(mean) and np.isfinite(std):
+        return (float(mean), float(std))
 
     return np.nan, np.nan
 
 
-def _format_confidence_interval(mean: float, margin_of_error: float, fmt: str, can_diverge: bool) -> str:
+def _format_mean_std(mean: float, std: float, fmt: str) -> str:
     if not _is_valid_float_format_spec(fmt):
         LOGGER.warning(f"Invalid format string '{fmt}', defaulting to scientific notation")
         fmt = ".2e"
 
-    formatted_confidence_interval = f"{mean:{fmt}} \u00b1 {margin_of_error:{fmt}}"
-
-    if any(np.isnan([mean, margin_of_error])) and can_diverge:
-        formatted_confidence_interval += " (diverged?)"
-
-    return formatted_confidence_interval
+    return f"{mean:{fmt}} \u00b1 {std:{fmt}}"
 
 
 def _is_valid_float_format_spec(fmt: str) -> bool:
