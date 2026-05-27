@@ -2,15 +2,13 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+import pandas as pd
 from rich.status import Status
 
 from decent_bench.benchmark._metric_result import MetricResult
-from decent_bench.metrics import (
-    ComputationalCost,
-    Metric,
-    display_plots,
-    display_tables,
-)
+from decent_bench.metrics import ComputationalCost, Metric
+from decent_bench.metrics.plots.display_plots import display_plots
+from decent_bench.metrics.tables.display_tables import display_tables
 from decent_bench.utils import logger
 from decent_bench.utils.logger import LOGGER
 
@@ -130,6 +128,8 @@ def display_metrics(  # noqa: PLR0912
     # filter `metrics_result` based on `plot_metrics`, `table_metrics`, and `algorithms` (if provided)
     prev_values = {
         "network_views": metrics_result.network_views,
+        "raw_table_results": metrics_result.raw_table_results,
+        "raw_plot_results": metrics_result.raw_plot_results,
         "table_results": metrics_result.table_results,
         "plot_results": metrics_result.plot_results,
         "table_metrics": metrics_result.table_metrics,
@@ -203,14 +203,38 @@ def _filter_algorithms(
             f"{', '.join(missing_names)}. Available algorithms: {', '.join(metrics_result.available_algorithms)}"
         )
 
-    for attribute in ("network_views", "table_results", "plot_results"):
-        mapping = getattr(metrics_result, attribute, None)
-        if mapping is not None:
-            setattr(
-                metrics_result,
-                attribute,
-                {algorithm: values for algorithm, values in mapping.items() if algorithm.name in selected_names},
-            )
+    if metrics_result.network_views is not None:
+        metrics_result.network_views = {
+            algorithm: values
+            for algorithm, values in metrics_result.network_views.items()
+            if algorithm.name in selected_names
+        }
+
+    for attribute in ("table_results", "plot_results"):
+        frame = getattr(metrics_result, attribute, None)
+        if frame:
+            mask = frame.index.get_level_values("algorithm").isin(selected_names)
+            setattr(metrics_result, attribute, frame[mask])
+
+    if metrics_result.raw_table_results is not None:
+        filtered_raw_table_results: dict[Metric, object] = {}
+        for metric, frame in metrics_result.raw_table_results.items():
+            if not hasattr(frame.index, "names") or "algorithm" not in frame.index.names:
+                filtered_raw_table_results[metric] = frame
+                continue
+            selected_frame = frame[frame.index.get_level_values("algorithm").isin(selected_names)]
+            filtered_raw_table_results[metric] = selected_frame
+        metrics_result.raw_table_results = filtered_raw_table_results
+
+    if metrics_result.raw_plot_results is not None:
+        filtered_raw_plot_results: dict[Metric, object] = {}
+        for metric, frame in metrics_result.raw_plot_results.items():
+            if not hasattr(frame.index, "names") or "algorithm" not in frame.index.names:
+                filtered_raw_plot_results[metric] = frame
+                continue
+            selected_frame = frame[frame.index.get_level_values("algorithm").isin(selected_names)]
+            filtered_raw_plot_results[metric] = selected_frame
+        metrics_result.raw_plot_results = filtered_raw_plot_results
 
     return metrics_result
 

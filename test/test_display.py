@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+import pandas as pd
 import pytest
+import importlib
 from copy import deepcopy
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
@@ -19,17 +21,19 @@ from decent_bench.costs import LinearRegressionCost, LogisticRegressionCost, Qua
 from decent_bench.metrics._metric import Metric
 from decent_bench.metrics._metrics_view import AgentMetricsView, NetworkMetricsView, NetworkType
 from decent_bench.metrics import metric_library as ml
-from decent_bench.metrics._plots import (
-    MAX_Y_PLOT_VALUE,
+from decent_bench.metrics.plots.compute_plot_metrics import compute_plot_metrics
+from decent_bench.metrics.plots.compute_plots import MAX_Y_PLOT_VALUE, compute_plots
+from decent_bench.metrics.plots.display_plots import (
     _add_legend_and_save,
     _create_separate_legend_figure,
     _get_separate_legend_path,
     _select_legend_mode,
-    compute_plots,
 )
-from decent_bench.metrics._tables import display_tables
+from decent_bench.metrics.tables.display_tables import display_tables
 from decent_bench.metrics.metric_library import Accuracy, MSE, Precision, Recall, Regret, XError
 from decent_bench.networks import FedNetwork
+
+display_plots_module = importlib.import_module("decent_bench.metrics.plots.display_plots")
 
 
 # -----------------------------------------------------------------------------
@@ -173,27 +177,53 @@ def _build_display_metric_result(
     plot_metrics: list[_MetricStub],
     *,
     agent_x_values: list[float] | None = None,
-    table_results: dict[_AlgorithmStub, dict[_MetricStub, dict[str, tuple[float, float]]]] | None = None,
-    plot_results: dict[_AlgorithmStub, dict[_MetricStub, tuple[list[float], list[float], list[float], list[float]]]]
-    | None = None,
+    table_results: pd.DataFrame | None = None,
+    raw_table_results: dict[_MetricStub, pd.DataFrame] | None = None,
+    plot_results: pd.DataFrame | None = None,
 ) -> MetricResult:
     if agent_x_values is None:
         agent_x_values = [1.0] * len(algorithms)
 
-    default_table_results: dict[_AlgorithmStub, dict[_MetricStub, dict[str, tuple[float, float]]]] = {}
-    default_plot_results: dict[
-        _AlgorithmStub, dict[_MetricStub, tuple[list[float], list[float], list[float], list[float]]]
-    ] = {}
+    default_table_rows: list[dict[str, object]] = []
+    raw_table_records: dict[_MetricStub, list[tuple[str, int, int, float]]] = {}
+    default_plot_rows: list[dict[str, object]] = []
 
     for alg_idx, alg in enumerate(algorithms):
-        default_table_results[alg] = {}
-        default_plot_results[alg] = {}
         for metric_idx, metric in enumerate(table_metrics):
             value = float(alg_idx + metric_idx + 1)
-            default_table_results[alg][metric] = {"avg": (value, 0.0)}
+            default_table_rows.append(
+                {
+                    "metric": metric.description,
+                    "statistic": "avg",
+                    "algorithm": alg.name,
+                    "mean": value,
+                    "std": 0.0,
+                }
+            )
+            raw_table_records.setdefault(metric, []).append((alg.name, 0, 0, value))
         for metric_idx, metric in enumerate(plot_metrics):
             value = float(alg_idx + metric_idx + 1)
-            default_plot_results[alg][metric] = ([0.0], [value], [value], [value])
+            default_plot_rows.append(
+                {
+                    "metric": metric.description,
+                    "algorithm": alg.name,
+                    "iterations": 0.0,
+                    "y_mean": value,
+                    "y_min": value,
+                    "y_max": value,
+                }
+            )
+
+    default_raw_table_results = {
+        metric: pd.DataFrame(
+            {"value": [record[3] for record in records]},
+            index=pd.MultiIndex.from_tuples(
+                [(record[0], record[1], record[2]) for record in records],
+                names=["algorithm", "trial", "agent"],
+            ),
+        )
+        for metric, records in raw_table_records.items()
+    }
 
     return MetricResult(
         network_views={
@@ -202,8 +232,17 @@ def _build_display_metric_result(
         },
         table_metrics=table_metrics,
         plot_metrics=plot_metrics,
-        table_results=table_results or default_table_results,
-        plot_results=plot_results or default_plot_results,
+        raw_table_results=raw_table_results or default_raw_table_results,
+        table_results=table_results
+        if table_results is not None
+        else pd.DataFrame.from_records(
+            default_table_rows, columns=["metric", "statistic", "algorithm", "mean", "std"]
+        ).set_index(["metric", "statistic", "algorithm"]),
+        plot_results=plot_results
+        if plot_results is not None
+        else pd.DataFrame.from_records(
+            default_plot_rows, columns=["metric", "algorithm", "iterations", "y_mean", "y_min", "y_max"]
+        ).set_index(["metric", "algorithm", "iterations"]),
     )
 
 
@@ -230,10 +269,12 @@ def test_display_metrics_filters_algorithms(monkeypatch, algorithm_filter: str, 
 
     assert "table" in captured
     assert "plot" in captured
-    assert [alg.name for alg in captured["table"].table_results] == expected_algorithms
-    assert [alg.name for alg in captured["table"].plot_results] == expected_algorithms
     assert [alg.name for alg in captured["table"].network_views] == expected_algorithms
-    assert [alg.name for alg in metrics_result.table_results] == ["A", "B"]
+    assert captured["table"].raw_table_results is not None
+    raw_metric_df = next(iter(captured["table"].raw_table_results.values()))
+    assert raw_metric_df.index.get_level_values("algorithm").unique().tolist() == expected_algorithms
+    assert metrics_result.table_results is not None
+    assert metrics_result.table_results.index.get_level_values("algorithm").unique().tolist() == ["A", "B"]
 
 
 def test_display_metrics_keeps_nan_table_metrics(monkeypatch) -> None:  # noqa: D103
@@ -247,20 +288,20 @@ def test_display_metrics_keeps_nan_table_metrics(monkeypatch) -> None:  # noqa: 
         [valid_metric, nan_metric],
         [valid_metric, nan_metric],
         agent_x_values=[1.0, 2.0],
-        table_results={
-            alg_a: {
-                valid_metric: {"avg": (1.0, 0.1)},
-                nan_metric: {"avg": (np.nan, np.nan)},
-            },
-            alg_b: {
-                valid_metric: {"avg": (2.0, 0.1)},
-                nan_metric: {"avg": (np.nan, np.nan)},
-            },
-        },
-        plot_results={
-            alg_a: {valid_metric: ([0.0], [1.0], [1.0], [1.0])},
-            alg_b: {valid_metric: ([0.0], [2.0], [2.0], [2.0])},
-        },
+        table_results=pd.DataFrame.from_records(
+            [
+                {"metric": valid_metric.description, "statistic": "avg", "algorithm": "A", "mean": 1.0, "std": 0.1},
+                {"metric": nan_metric.description, "statistic": "avg", "algorithm": "A", "mean": np.nan, "std": np.nan},
+                {"metric": valid_metric.description, "statistic": "avg", "algorithm": "B", "mean": 2.0, "std": 0.1},
+                {"metric": nan_metric.description, "statistic": "avg", "algorithm": "B", "mean": np.nan, "std": np.nan},
+            ]
+        ).set_index(["metric", "statistic", "algorithm"]),
+        plot_results=pd.DataFrame.from_records(
+            [
+                {"metric": valid_metric.description, "algorithm": "A", "iterations": 0.0, "y_mean": 1.0, "y_min": 1.0, "y_max": 1.0},
+                {"metric": valid_metric.description, "algorithm": "B", "iterations": 0.0, "y_mean": 2.0, "y_min": 2.0, "y_max": 2.0},
+            ]
+        ).set_index(["metric", "algorithm", "iterations"]),
     )
 
     captured = _run_display_with_capture(monkeypatch, metrics_result)
@@ -269,8 +310,7 @@ def test_display_metrics_keeps_nan_table_metrics(monkeypatch) -> None:  # noqa: 
     assert "plot" in captured
     assert [metric.description for metric in captured["table"].table_metrics] == ["valid", "nan"]
     assert [metric.description for metric in captured["table"].plot_metrics] == ["valid", "nan"]
-    for algorithm_results in captured["table"].table_results.values():
-        assert [metric.description for metric in algorithm_results] == ["valid", "nan"]
+    assert captured["table"].table_results.index.get_level_values("metric").unique().tolist() == ["valid", "nan"]
 
 
 def test_display_metrics_filters_metrics_by_name(monkeypatch) -> None:  # noqa: D103
@@ -322,10 +362,10 @@ def test_display_metrics_filters_algorithms_with_mixed_objects_and_names(monkeyp
     captured = _run_display_with_capture(monkeypatch, metrics_result, algorithms=[alg_a, "C"])
 
     assert "table" in captured
-    assert [alg.name for alg in captured["table"].table_results] == ["A", "C"]
-    assert [alg.name for alg in captured["table"].plot_results] == ["A", "C"]
     assert [alg.name for alg in captured["table"].network_views] == ["A", "C"]
-    assert [alg.name for alg in metrics_result.table_results] == ["A", "B", "C"]
+    assert captured["table"].table_results.index.get_level_values("algorithm").unique().tolist() == ["A", "C"]
+    assert captured["table"].plot_results.index.get_level_values("algorithm").unique().tolist() == ["A", "C"]
+    assert metrics_result.table_results.index.get_level_values("algorithm").unique().tolist() == ["A", "B", "C"]
 
 
 def test_display_metrics_raises_when_all_algorithms_filtered_out(monkeypatch) -> None:  # noqa: D103
@@ -336,8 +376,21 @@ def test_display_metrics_raises_when_all_algorithms_filtered_out(monkeypatch) ->
         network_views={alg_a: [_network_metrics_view([_agent_metrics_view(1.0)])]},
         table_metrics=[metric],
         plot_metrics=[metric],
-        table_results={alg_a: {metric: {"avg": (1.0, 0.0)}}},
-        plot_results={alg_a: {metric: ([0.0], [1.0], [1.0], [1.0])}},
+        raw_table_results={
+            metric: pd.DataFrame(
+                {"value": [1.0]},
+                index=pd.MultiIndex.from_tuples(
+                    [("A", 0, 0)],
+                    names=["algorithm", "trial", "agent"],
+                ),
+            )
+        },
+        table_results=pd.DataFrame.from_records(
+            [{"metric": metric.description, "statistic": "avg", "algorithm": "A", "mean": 1.0, "std": 0.0}]
+        ).set_index(["metric", "statistic", "algorithm"]),
+        plot_results=pd.DataFrame.from_records(
+            [{"metric": metric.description, "algorithm": "A", "iterations": 0.0, "y_mean": 1.0, "y_min": 1.0, "y_max": 1.0}]
+        ).set_index(["metric", "algorithm", "iterations"]),
     )
 
     with pytest.raises(ValueError, match="No algorithms remain after filtering"):
@@ -353,18 +406,34 @@ def test_display_metrics_raises_when_all_table_and_plot_metrics_filtered_out(mon
         network_views={alg_a: [_network_metrics_view([_agent_metrics_view(1.0)])]},
         table_metrics=[metric_1, metric_2],
         plot_metrics=[metric_1, metric_2],
-        table_results={
-            alg_a: {
-                metric_1: {"avg": (1.0, 0.0)},
-                metric_2: {"avg": (2.0, 0.0)},
-            }
+        raw_table_results={
+            metric_1: pd.DataFrame(
+                {"value": [1.0]},
+                index=pd.MultiIndex.from_tuples(
+                    [("A", 0, 0)],
+                    names=["algorithm", "trial", "agent"],
+                ),
+            ),
+            metric_2: pd.DataFrame(
+                {"value": [2.0]},
+                index=pd.MultiIndex.from_tuples(
+                    [("A", 0, 0)],
+                    names=["algorithm", "trial", "agent"],
+                ),
+            ),
         },
-        plot_results={
-            alg_a: {
-                metric_1: ([0.0], [1.0], [1.0], [1.0]),
-                metric_2: ([0.0], [2.0], [2.0], [2.0]),
-            }
-        },
+        table_results=pd.DataFrame.from_records(
+            [
+                {"metric": metric_1.description, "statistic": "avg", "algorithm": "A", "mean": 1.0, "std": 0.0},
+                {"metric": metric_2.description, "statistic": "avg", "algorithm": "A", "mean": 2.0, "std": 0.0},
+            ]
+        ).set_index(["metric", "statistic", "algorithm"]),
+        plot_results=pd.DataFrame.from_records(
+            [
+                {"metric": metric_1.description, "algorithm": "A", "iterations": 0.0, "y_mean": 1.0, "y_min": 1.0, "y_max": 1.0},
+                {"metric": metric_2.description, "algorithm": "A", "iterations": 0.0, "y_mean": 2.0, "y_min": 2.0, "y_max": 2.0},
+            ]
+        ).set_index(["metric", "algorithm", "iterations"]),
     )
 
     with pytest.raises(ValueError, match="No table or plot metrics remain after filtering"):
@@ -420,10 +489,14 @@ def test_display_tables_uses_shared_tabulate_layout_for_grid_and_latex(tmp_path:
         [alg_a, alg_b],
         [metric],
         [],
-        table_results={
-            alg_a: {metric: {"mean": (1.0, 0.1), "std": (0.2, 0.05)}},
-            alg_b: {metric: {"mean": (2.0, 0.2), "std": (0.3, 0.06)}},
-        },
+        table_results=pd.DataFrame.from_records(
+            [
+                {"metric": metric.description, "statistic": "mean", "algorithm": "A", "mean": 1.0, "std": 0.1},
+                {"metric": metric.description, "statistic": "std", "algorithm": "A", "mean": 0.2, "std": 0.05},
+                {"metric": metric.description, "statistic": "mean", "algorithm": "B", "mean": 2.0, "std": 0.2},
+                {"metric": metric.description, "statistic": "std", "algorithm": "B", "mean": 0.3, "std": 0.06},
+            ]
+        ).set_index(["metric", "statistic", "algorithm"]),
     )
 
     display_tables(metrics_result, table_path=tmp_path)
@@ -431,16 +504,16 @@ def test_display_tables_uses_shared_tabulate_layout_for_grid_and_latex(tmp_path:
     grid_table = (tmp_path / "table.txt").read_text(encoding="utf-8")
     latex_table = (tmp_path / "table.tex").read_text(encoding="utf-8")
 
-    assert "mean+/-std across trials" in grid_table
+    assert "mean ± std" in grid_table
     assert "Metric" in grid_table
-    assert "Statistic across agents" in grid_table
+    assert "Statistic" in grid_table and "across agents" in grid_table
     assert "A" in grid_table and "B" in grid_table
     assert "mean" in grid_table and "std" in grid_table
     assert grid_table.count("loss") == 1
 
-    assert "mean+/-std across trials" in latex_table
+    assert "mean ± std" in latex_table
     assert "Metric" in latex_table
-    assert "Statistic across agents" in latex_table
+    assert "Statistic" in latex_table and "across agents" in latex_table
     assert "A" in latex_table and "B" in latex_table
     assert "mean" in latex_table and "std" in latex_table
     assert latex_table.count("loss") == 1
@@ -454,8 +527,19 @@ def test_display_tables_scales_compute_metrics_in_shared_layout(tmp_path: Path) 
         network_views={alg_a: [_network_metrics_view([_agent_metrics_view(1.0)])]},
         table_metrics=[metric],
         plot_metrics=[],
-        table_results={alg_a: {metric: {"mean": (20.0, 4.0)}}},
-        plot_results={},
+        raw_table_results={
+            metric: pd.DataFrame(
+                {"value": [20.0]},
+                index=pd.MultiIndex.from_tuples(
+                    [("A", 0, 0)],
+                    names=["algorithm", "trial", "agent"],
+                ),
+            )
+        },
+        table_results=pd.DataFrame.from_records(
+            [{"metric": metric.description, "statistic": "mean", "algorithm": "A", "mean": 20.0, "std": 4.0}]
+        ).set_index(["metric", "statistic", "algorithm"]),
+        plot_results=pd.DataFrame(columns=["y_mean", "y_min", "y_max"]),
     )
 
     display_tables(metrics_result, scale_compute=0.5, table_path=tmp_path)
@@ -480,8 +564,21 @@ def test_metric_result_available_discovery_properties() -> None:  # noqa: D103
         },
         table_metrics=[metric_1, metric_1, metric_2],
         plot_metrics=[metric_1, metric_1, metric_2],
-        table_results={alg_a: {metric_1: {"avg": (1.0, 0.1)}}},
-        plot_results={alg_b: {metric_2: ([0.0], [2.0], [2.0], [2.0])}},
+        raw_table_results={
+            metric_1: pd.DataFrame(
+                {"value": [1.0]},
+                index=pd.MultiIndex.from_tuples(
+                    [("A", 0, 0)],
+                    names=["algorithm", "trial", "agent"],
+                ),
+            )
+        },
+        table_results=pd.DataFrame.from_records(
+            [{"metric": metric_1.description, "statistic": "avg", "algorithm": "A", "mean": 1.0, "std": 0.1}]
+        ).set_index(["metric", "statistic", "algorithm"]),
+        plot_results=pd.DataFrame.from_records(
+            [{"metric": metric_2.description, "algorithm": "B", "iterations": 0.0, "y_mean": 2.0, "y_min": 2.0, "y_max": 2.0}]
+        ).set_index(["metric", "algorithm", "iterations"]),
     )
 
     assert metrics_result.available_algorithms == ["A", "B"]
@@ -504,7 +601,7 @@ def test_compute_metrics_rejects_duplicate_metric_descriptions(
 ) -> None:  # noqa: D103
     benchmark_result = _build_minimal_benchmark_result()
 
-    monkeypatch.setattr("decent_bench.benchmark._compute.compute_tables", lambda *args, **kwargs: {})
+    monkeypatch.setattr("decent_bench.benchmark._compute.compute_table_metrics", lambda *args, **kwargs: {})
     monkeypatch.setattr("decent_bench.benchmark._compute.compute_plots", lambda *args, **kwargs: {})
 
     with pytest.raises(ValueError, match=expected_error):
@@ -518,6 +615,11 @@ def test_compute_metrics_uses_federated_defaults_and_server_view() -> None:  # n
 
     assert metrics_result.network_views is not None
     assert metrics_result.network_views[algorithm][0].server().x_history.max() == 2
+    assert metrics_result.raw_table_results is not None
+    assert set(metrics_result.raw_table_results) == set(metrics_result.table_metrics or [])
+    sample_raw_frame = next(iter(metrics_result.raw_table_results.values()))
+    assert sample_raw_frame.index.names == ["algorithm", "trial", "agent"]
+    assert list(sample_raw_frame.columns) == ["value"]
     table_metric_types = {type(metric) for metric in metrics_result.table_metrics or []}
     plot_metric_types = {type(metric) for metric in metrics_result.plot_metrics or []}
     assert ml.ClientDriftFromServer in table_metric_types
@@ -532,10 +634,16 @@ def test_compute_metrics_uses_federated_defaults_and_server_view() -> None:  # n
     )
 
     assert metrics_result.table_results is not None
-    assert metrics_result.table_results[algorithm][selected_metric][""] == (1.0, 0.0)
-    sent_messages_stats = metrics_result.table_results[algorithm][sent_messages_metric]
-    assert "sum" not in sent_messages_stats
-    assert sent_messages_stats["mean"] == pytest.approx((8.0 / 3.0, 0.0))
+    selected_row = metrics_result.table_results.loc[(selected_metric.description, "", algorithm.name)]
+    assert float(selected_row["mean"]) == pytest.approx(1.0)
+    assert float(selected_row["std"]) == pytest.approx(0.0)
+    sent_messages_stats = metrics_result.table_results.xs(
+        (sent_messages_metric.description, algorithm.name),
+        level=("metric", "algorithm"),
+    )
+    assert "sum" not in sent_messages_stats.index
+    assert float(sent_messages_stats.loc["mean", "mean"]) == pytest.approx(8.0 / 3.0)
+    assert float(sent_messages_stats.loc["mean", "std"]) == pytest.approx(0.0)
 
 
 def test_compute_metrics_custom_metrics_do_not_append_federated_defaults(monkeypatch) -> None:  # noqa: D103
@@ -551,8 +659,8 @@ def test_compute_metrics_custom_metrics_do_not_append_federated_defaults(monkeyp
         captured["plot_metrics"] = args[2]
         return {}
 
-    monkeypatch.setattr("decent_bench.benchmark._compute.compute_tables", _capture_tables)
-    monkeypatch.setattr("decent_bench.benchmark._compute.compute_plots", _capture_plots)
+    monkeypatch.setattr("decent_bench.benchmark._compute.compute_table_metrics", _capture_tables)
+    monkeypatch.setattr("decent_bench.benchmark._compute.compute_plot_metrics", _capture_plots)
 
     compute_metrics(benchmark_result=benchmark_result, table_metrics=[metric], plot_metrics=[])
 
@@ -575,7 +683,7 @@ def test_compute_plots_truncates_trials_at_first_non_finite_value() -> None:  # 
         },
     )
 
-    plot_results = compute_plots(
+    raw_plot_results = compute_plot_metrics(
         {
             alg_a: [
                 _network_metrics_view([_agent_metrics_view(1.0)]),
@@ -585,13 +693,13 @@ def test_compute_plots_truncates_trials_at_first_non_finite_value() -> None:  # 
         SimpleNamespace(),
         [metric],
     )
+    plot_results = compute_plots(raw_plot_results)
 
-    assert metric in plot_results[alg_a]
-    x, y_mean, y_min, y_max = plot_results[alg_a][metric]
-    assert list(x) == [0.0, 1.0]
-    assert list(y_mean) == [2.0, 3.0]
-    assert list(y_min) == [1.0, 2.0]
-    assert list(y_max) == [3.0, 4.0]
+    metric_df = plot_results.xs((metric.description, alg_a.name), level=("metric", "algorithm"))
+    assert list(metric_df.index) == [0.0, 1.0]
+    assert list(metric_df["y_mean"]) == [2.0, 3.0]
+    assert list(metric_df["y_min"]) == [1.0, 2.0]
+    assert list(metric_df["y_max"]) == [3.0, 4.0]
 
 
 def test_compute_plots_drops_trials_without_finite_prefix() -> None:  # noqa: D103
@@ -604,7 +712,7 @@ def test_compute_plots_drops_trials_without_finite_prefix() -> None:  # noqa: D1
         },
     )
 
-    plot_results = compute_plots(
+    raw_plot_results = compute_plot_metrics(
         {
             alg_a: [
                 _network_metrics_view([_agent_metrics_view(1.0)]),
@@ -614,13 +722,13 @@ def test_compute_plots_drops_trials_without_finite_prefix() -> None:  # noqa: D1
         SimpleNamespace(),
         [metric],
     )
+    plot_results = compute_plots(raw_plot_results)
 
-    assert metric in plot_results[alg_a]
-    x, y_mean, y_min, y_max = plot_results[alg_a][metric]
-    assert list(x) == [0.0, 1.0]
-    assert list(y_mean) == [3.0, 4.0]
-    assert list(y_min) == [3.0, 4.0]
-    assert list(y_max) == [3.0, 4.0]
+    metric_df = plot_results.xs((metric.description, alg_a.name), level=("metric", "algorithm"))
+    assert list(metric_df.index) == [0.0, 1.0]
+    assert list(metric_df["y_mean"]) == [3.0, 4.0]
+    assert list(metric_df["y_min"]) == [3.0, 4.0]
+    assert list(metric_df["y_max"]) == [3.0, 4.0]
 
 
 def test_compute_plots_omits_metric_without_any_finite_prefix() -> None:  # noqa: D103
@@ -633,7 +741,7 @@ def test_compute_plots_omits_metric_without_any_finite_prefix() -> None:  # noqa
         },
     )
 
-    plot_results = compute_plots(
+    raw_plot_results = compute_plot_metrics(
         {
             alg_a: [
                 _network_metrics_view([_agent_metrics_view(1.0)]),
@@ -643,8 +751,9 @@ def test_compute_plots_omits_metric_without_any_finite_prefix() -> None:  # noqa
         SimpleNamespace(),
         [metric],
     )
+    plot_results = compute_plots(raw_plot_results)
 
-    assert metric not in plot_results[alg_a]
+    assert plot_results.empty
 
 
 def test_compute_plots_truncates_trials_at_over_threshold_value() -> None:  # noqa: D103
@@ -657,7 +766,7 @@ def test_compute_plots_truncates_trials_at_over_threshold_value() -> None:  # no
         },
     )
 
-    plot_results = compute_plots(
+    raw_plot_results = compute_plot_metrics(
         {
             alg_a: [
                 _network_metrics_view([_agent_metrics_view(1.0)]),
@@ -667,13 +776,13 @@ def test_compute_plots_truncates_trials_at_over_threshold_value() -> None:  # no
         SimpleNamespace(),
         [metric],
     )
+    plot_results = compute_plots(raw_plot_results)
 
-    assert metric in plot_results[alg_a]
-    x, y_mean, y_min, y_max = plot_results[alg_a][metric]
-    assert list(x) == [0.0, 1.0]
-    assert list(y_mean) == [2.0, 3.0]
-    assert list(y_min) == [1.0, 2.0]
-    assert list(y_max) == [3.0, 4.0]
+    metric_df = plot_results.xs((metric.description, alg_a.name), level=("metric", "algorithm"))
+    assert list(metric_df.index) == [0.0, 1.0]
+    assert list(metric_df["y_mean"]) == [2.0, 3.0]
+    assert list(metric_df["y_min"]) == [1.0, 2.0]
+    assert list(metric_df["y_max"]) == [3.0, 4.0]
 
 
 # -----------------------------------------------------------------------------
@@ -742,7 +851,8 @@ def _test_figure(*, figsize: tuple[float, float] | None = None) -> Figure:
 
 def test_create_separate_legend_figure_tightly_fits_legend(monkeypatch) -> None:  # noqa: D103
     monkeypatch.setattr(
-        "decent_bench.metrics._plots.plt.figure",
+        display_plots_module.plt,
+        "figure",
         lambda *args, **kwargs: _test_figure(figsize=kwargs.get("figsize")),
     )
     handles = [

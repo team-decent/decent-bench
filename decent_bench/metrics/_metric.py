@@ -106,7 +106,7 @@ class Metric(ABC):
         """
         Extract trial data to be used in the table for this metric.
 
-        This is used by :func:`~decent_bench.metrics.compute_tables` to generate the table for this metric.
+        This is used by :func:`~decent_bench.benchmark.compute_metrics` when computing table metrics.
         By default, it returns the metric from the last iteration,
         but it can be overridden to perform additional processing on the data before it is used in the table.
         """
@@ -116,7 +116,7 @@ class Metric(ABC):
         """
         Extract trial data to be used in plots for this metric.
 
-        This is used by :func:`~decent_bench.metrics.compute_plots` to generate plots for this metric.
+        This is used by :func:`~decent_bench.benchmark.compute_metrics` when computing plot metrics.
         By default, it calculates the mean value of all the agents results at each iteration.
         This method can be overridden to perform additional processing on the data before it is used in plots.
         """

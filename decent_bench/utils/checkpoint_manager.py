@@ -2,10 +2,13 @@ import json
 import pickle
 import re
 import shutil
+from collections.abc import Mapping
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
+import pandas as pd
 import zstandard as zstd
 from rich.progress import track
 from rich.status import Status
@@ -679,10 +682,11 @@ class CheckpointManager:
 
         # Remove network views from checkpoint to save space (can be a lot),
         # this can be loaded again from the benchmark result
+        metrics_result_to_save = metrics_result
         if self.is_benchmark_completed():
-            metrics_result.network_views = None
+            metrics_result_to_save = replace(metrics_result, network_views=None)
 
-        self._save_pickle(metric_path, metrics_result)
+        self._save_pickle(metric_path, metrics_result_to_save)
 
         # Save a small marker file to indicate that metric computation was saved successfully.
         # This is used to avoid issues where the process is killed while writing the potentially
@@ -710,20 +714,21 @@ class CheckpointManager:
         metric_path = self._resolve_data_file("metric_computation.pkl.zst", "metric_computation.pkl")
         metrics_result = cast("MetricResult", self._load_pickle(metric_path))
 
-        if metrics_result.network_views is None and not skip_network_views:
+        if metrics_result.network_views is None and not skip_network_views:  # populate network views
             try:
                 benchmark_result = self.load_benchmark_result()
                 resulting_network_views: dict[Algorithm[Network], list[NetworkMetricsView]] = {}
+                available_algorithms = metrics_result.available_algorithms
+
                 for alg, networks in benchmark_result.states.items():
-                    algorithms = list(metrics_result.table_results or metrics_result.plot_results or [])
-                    original_alg = next((a for a in algorithms if a.name == alg.name), None)
-                    if original_alg is None:
+                    if alg.name not in available_algorithms:
                         LOGGER.warning(
-                            f"Original algorithm '{alg.name}' not found in benchmark problem configuration. "
-                            "Cannot reconstruct network views for this algorithm."
+                            f"Algorithm '{alg.name}' not found in metric results, skipping reconstruction of its "
+                            "network views."
                         )
                         continue
-                    resulting_network_views[original_alg] = [NetworkMetricsView.from_network(nw) for nw in networks]
+
+                    resulting_network_views[alg] = [NetworkMetricsView.from_network(nw) for nw in networks]
                 metrics_result.network_views = resulting_network_views
             except Exception as e:
                 LOGGER.warning(

@@ -8,14 +8,13 @@ from rich.status import Status
 from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
 from decent_bench.benchmark._metric_result import MetricResult
-from decent_bench.metrics import (
-    Metric,
-    compute_plots,
-    compute_tables,
-    metric_utils,
-)
+from decent_bench.metrics import Metric, metric_utils
 from decent_bench.metrics import metric_library as ml
 from decent_bench.metrics._metrics_view import NetworkMetricsView
+from decent_bench.metrics.plots.compute_plot_metrics import compute_plot_metrics
+from decent_bench.metrics.plots.compute_plots import compute_plots
+from decent_bench.metrics.tables.compute_table_metrics import compute_table_metrics
+from decent_bench.metrics.tables.compute_tables import compute_tables
 from decent_bench.networks import Network
 from decent_bench.utils._metric_helpers import _find_duplicates
 from decent_bench.utils.logger import LOGGER, start_logger
@@ -111,22 +110,30 @@ def compute_metrics(
     table_metrics = _remove_unavailable(table_metrics, benchmark_result.problem, "table")
     plot_metrics = _remove_unavailable(plot_metrics, benchmark_result.problem, "plot")
 
-    # compute table and plot results
+    # compute table and plot metrics
     resulting_network_views: dict[Algorithm[Network], list[NetworkMetricsView]] = {}
     for alg, networks in benchmark_result.states.items():
         resulting_network_views[alg] = [NetworkMetricsView.from_network(nw) for nw in networks]
-    table_results = compute_tables(
-        resulting_network_views, benchmark_result.problem, table_metrics, statistics_across_agents
-    )
-    plot_results = compute_plots(resulting_network_views, benchmark_result.problem, plot_metrics)
 
+    # 1) compute raw metrics data
+    raw_table_results = compute_table_metrics(resulting_network_views, benchmark_result.problem, table_metrics)
+    raw_plot_results = compute_plot_metrics(resulting_network_views, benchmark_result.problem, plot_metrics)
+
+    # 2) create MetricResult
     result = MetricResult(
         network_views=resulting_network_views,
         table_metrics=table_metrics,
         plot_metrics=plot_metrics,
-        table_results=table_results,
-        plot_results=plot_results,
+        raw_table_results=raw_table_results,
+        raw_plot_results=raw_plot_results,
+        table_results=None,
+        plot_results=None,
     )
+
+    # 3) aggregate data (using statistics_across_agents for table, mean+max+min for plots)
+    result.table_results = compute_tables(result, statistics_across_agents)
+    result.plot_results = compute_plots(result)
+
 
     if checkpoint_manager is not None:
         with Status("Saving computed metrics..."):
