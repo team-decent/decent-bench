@@ -103,28 +103,48 @@ def aggregate_table_metrics(
     """
     Aggregate table metrics by statistics across agents and by mean, std across trials.
 
-    Each DataFrame that is returned has columns (algorithm, mean_across_trials, std_across_trials)
-    and one column for each of the statistics. Numerical values are cast to float32.
+    Each DataFrame that is returned has columns (algorithm, statistic, mean, std). Numerical values are cast to float32.
     """
     resolved_statistics = _resolve_statistics(statistics)
     frames_by_metric: dict[Metric, pd.DataFrame] = {}
 
     for metric, frame in table_results.items():
 
-        # 1) compute statistics across agents
-        if len(frame["agent"].unique()):
-            new_frame = frame.drop("agent", axis="columns")
+        # if there is a single value (agent is always 0), drop agent column and add a dummy statistic column
+        if len(frame["agent"].unique()) == 1:
+            new_frame = (
+                frame.groupby(["algorithm", "trial"])["value"]
+                .reset_index()
+            )
+            new_frame["statistic"] = ""
+            new_frame = new_frame[["algorithm", "trial", "statistic", "stat_value"]]  # reorder columns
+
+        # if there are per-agent values, compute statistics across them
+        # gives DataFrame with columns (algorithm, trial, statistic, value)
         else:
-            new_frame = frame.groupby(["algorithm", "trial"])["value"].agg(
-                resolved_statistics
-            ).reset_index().astype("float32")
+            # compute statistics
+            new_frame = (
+                frame.groupby(["algorithm", "trial"])["value"]
+                .agg(**resolved_statistics)
+                .reset_index()
+            )
+            # turn the statistics into a new column
+            new_frame = (
+                new_frame.melt(
+                    id_vars=["algorithm", "trial"],
+                    value_vars=list(resolved_statistics.keys()),
+                    var_name="statistic",
+                    value_name="value",
+                )
+            )
 
-        # 2) compute mean and std across trials
-        new_frame = new_frame.groupby(["algorithm", *list(resolved_statistics.keys())])["value"].agg(
-            mean = "mean_across_trials",
-            std = "std_across_trials",
-        ).reset_index().astype("float32")
+        # 3) compute mean and std across trials, gives DataFrame with (algorithm, statistic, mean, std)
+        new_frame = (
+            new_frame.groupby(["algorithm", "statistic"])["value"]
+                    .agg(mean="mean", std="std")
+                    .reset_index()
+        )
 
-        frames_by_metric[metric] = new_frame
+        frames_by_metric[metric] = new_frame.astype("float32")
 
     return frames_by_metric

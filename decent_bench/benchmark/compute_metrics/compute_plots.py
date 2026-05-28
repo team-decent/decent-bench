@@ -69,8 +69,8 @@ def aggregate_plot_metrics(
             mean = "mean",
             min = "min",
             max = "max"
-        ).reset_index().astype("float32")
+        ).reset_index()
 
-        frames_by_metric[metric] = new_frame
+        frames_by_metric[metric] = new_frame.astype("float32")
 
     return frames_by_metric

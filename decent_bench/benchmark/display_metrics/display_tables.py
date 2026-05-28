@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-import tabulate as tb
+import numpy as np
+import pandas as pd
 
-from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.metrics.metric_library import FunctionCalls, GradientCalls, HessianCalls, ProximalCalls
 from decent_bench.utils.logger import LOGGER
 
@@ -15,93 +15,78 @@ SCALE_METRICS = (FunctionCalls, GradientCalls, HessianCalls, ProximalCalls)
 
 def display_tables(
     metrics_result: "MetricResult",
-    table_fmt: Literal["grid", "latex"] = "grid",
+    table_fmt: Literal["text", "latex"] = "text",
     scale_compute: float = 1.0,
     table_path: Path | None = None,
 ) -> None:
     """Display table of metrics as mean ± std across trials."""
-    if metrics_result.table_metrics is None or metrics_result.table_results is None:
+    if metrics_result.table_metrics is None or not metrics_result.table_results:
         return
 
-    if (
-        any(isinstance(metric, SCALE_METRICS) for metric in metrics_result.table_metrics)
-        and metrics_result.network_views
-    ):
-        network_view = next(iter(metrics_result.network_views.values()))[0]
-        metric_views = network_view.agents()
-        scale_metrics_in_use = [
-            metric.description for metric in metrics_result.table_metrics if isinstance(metric, SCALE_METRICS)
-        ]
-        if any(isinstance(a.cost, EmpiricalRiskCost) for a in metric_views):
-            LOGGER.info(
-                f"Empirical-risk cost functions are in use. Compute counters increment by the number of samples "
-                f"processed in each method call, which can lead to large raw counts. Applying scaling factor of "
-                f"'scale_compute={scale_compute}' to {scale_metrics_in_use} metrics for display."
+    formatted_frames = []
+    has_infinite = False
+
+    for metric, frame in metrics_result.table_results.items():
+        # detect if there are +/-inf values
+        has_infinite = has_infinite or bool(np.any(np.isinf(frame[["mean", "std"]])))
+
+        # scale mean and std if needed
+        if isinstance(metric, SCALE_METRICS):
+            new_frame = frame.assign(
+                mean=frame["mean"] * scale_compute,
+                std=frame["std"] * scale_compute,
             )
 
-    table_results = metrics_result.table_results
-    if table_results.empty:
-        LOGGER.warning("No table rows available to display")
-        return
+        # format mean and std, add a metric column
+        # result is a DataFrame with columns (metric, algorithm, statistic, value={mean:fmt} +/- {std:fmt})
+        fmt = f"{{:{_get_format(metric.fmt)}}}".format
+        new_frame = new_frame.assign(
+            metric=metric.description,
+            value=fmt(new_frame["mean"]) + " \u00b1 " + fmt(new_frame["std"]),
+        )
+        formatted_frames.append(new_frame[["metric", "algorithm", "statistic", "value"]])  # reorder columns
 
-    algs = list(table_results.index.get_level_values("algorithm").unique())
+    # stack into a big frame with columns (metric, algorithm, statistic, value={mean:fmt} +/- {std:fmt})
+    table_frame = pd.concat(formatted_frames, ignore_index=True)
 
-    row_header_1 = ["Metric", "Statistic\nacross agents", "mean ± std\nacross trials"] + [""] * (len(algs) - 1)
-    row_header_2 = ["", ""] + [str(alg) for alg in algs]
-    rows: list[list[str] | str] = [
-        row_header_1,
-        row_header_2,
-        tb.SEPARATING_LINE,
-    ]
+    # reorganize the DataFrame so that it has a MultiIndex (metric, statistic)
+    # and algorithms as the columns; each value in a column is mean +/- std (formatted)
+    table_frame = table_frame.pivot_table(
+        index=["metric", "statistic"],
+        columns="algorithm",
+        values="value",
+        aggfunc="first",
+    )
 
-    metric_lookup = {metric.description: metric for metric in metrics_result.table_metrics}
+    # info to user
+    if any(isinstance(metric, SCALE_METRICS) for metric in metrics_result.table_metrics):
+        LOGGER.info("Compute counters (FunctionCalls, GradientCalls, HessianCalls, ProximalCalls) can yield very large "
+                    "numbers. Set ``scale_compute < 1`` to scale their values for display.")
+    if has_infinite:
+        LOGGER.info("Infinite values likely indicate divergence. Inspect plots to confirm.")
 
-    for metric in metrics_result.table_metrics:
-        metric_name = metric.description
-        if metric_name not in table_results.index.get_level_values("metric"):
-            continue
+    # prepare for printing and storing
+    text_table = table_frame.to_string()
+    latex_table = table_frame.to_latex(column_format="ll" + "c"*len(table_frame.columns))  # index left-align, algorithm center-align  # noqa: E501
 
-        metric_frame = table_results.xs(metric_name, level="metric", drop_level=False)
-        statistic_names = list(metric_frame.index.get_level_values("statistic").unique())
-        first_statistic_row = True
-        for statistic_name in statistic_names:
-            row = [metric.description if first_statistic_row else "", statistic_name]
-            for alg in algs:
-                key = (metric_name, statistic_name, alg)
-                if key not in table_results.index:
-                    row.append("-")
-                    continue
-
-                mean = float(table_results.loc[key, "mean"])
-                std = float(table_results.loc[key, "std"])
-
-                if isinstance(metric, SCALE_METRICS):
-                    mean, std = mean * scale_compute, std * scale_compute
-
-                row.append(_format_mean_std(mean, std, metric_lookup[metric_name].fmt))
-            rows.append(row)
-            first_statistic_row = False
-
-    grid_table = tb.tabulate(rows, tablefmt="grid")
-    latex_table = tb.tabulate(rows, tablefmt="latex")
-    LOGGER.info("\n" + latex_table if table_fmt == "latex" else "\n" + grid_table)
+    LOGGER.info("\n" + latex_table if table_fmt == "latex" else "\n" + text_table)
 
     if table_path:
         table_path.mkdir(parents=True, exist_ok=True)
         latex_path = table_path / "table.tex"
         grid_path = table_path / "table.txt"
         latex_path.write_text(latex_table, encoding="utf-8")
-        grid_path.write_text(grid_table, encoding="utf-8")
+        grid_path.write_text(text_table, encoding="utf-8")
         LOGGER.info(f"Saved LaTeX table to {latex_path}")
-        LOGGER.info(f"Saved grid table to {grid_path}")
+        LOGGER.info(f"Saved text table to {grid_path}")
 
 
-def _format_mean_std(mean: float, std: float, fmt: str) -> str:
+def _get_format(fmt: str) -> str:
     if not _is_valid_float_format_spec(fmt):
         LOGGER.warning(f"Invalid format string '{fmt}', defaulting to scientific notation")
         fmt = ".2e"
 
-    return f"{mean:{fmt}} \u00b1 {std:{fmt}}"
+    return fmt
 
 
 def _is_valid_float_format_spec(fmt: str) -> bool:

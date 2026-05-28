@@ -26,7 +26,7 @@ def display_metrics(  # noqa: PLR0912
     table_metrics: list[Metric | str] | None = None,
     plot_metrics: list[Metric | str] | None = None,
     algorithms: list["Algorithm[Network] | str"] | None = None,
-    table_fmt: Literal["grid", "latex"] = "grid",
+    table_fmt: Literal["text", "latex"] = "text",
     plot_grid: bool = True,
     individual_plots: bool = False,
     computational_cost: ComputationalCost | None = None,
@@ -56,14 +56,14 @@ def display_metrics(  # noqa: PLR0912
         algorithms: algorithms to display. Entries can be :class:`~decent_bench.algorithms.Algorithm` objects or strings
             (matching :attr:`~decent_bench.algorithms.Algorithm.name`).
             If ``None`` all algorithms in metrics_result are displayed.
-        table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
+        table_fmt: table format, text is suitable for the terminal while latex can be copy-pasted into a latex document
         plot_grid: whether to show grid lines on the plots
         individual_plots: whether to plot each metric in a separate figure
         computational_cost: computational cost settings for plot metrics, if ``None`` x-axis will be iterations instead
             of computational cost
         scale_x_axis: scaling factor for computational cost x-axis, used to convert the cost units into more
             manageable units for plotting. Only used if ``computational_cost`` is provided.
-        scale_compute: scaling factor for the compute related metrics (i.e.
+        scale_compute: scaling factor for the compute-related metrics (i.e.
             :class:`~decent_bench.metrics.metric_library.FunctionCalls`,
             :class:`~decent_bench.metrics.metric_library.GradientCalls`,
             :class:`~decent_bench.metrics.metric_library.HessianCalls` and

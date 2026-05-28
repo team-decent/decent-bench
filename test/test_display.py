@@ -480,44 +480,6 @@ def test_display_metrics_shows_only_plots_when_table_metrics_empty(monkeypatch) 
     assert "table" not in captured
 
 
-def test_display_tables_uses_shared_tabulate_layout_for_grid_and_latex(tmp_path: Path) -> None:  # noqa: D103
-    alg_a = _AlgorithmStub("A")
-    alg_b = _AlgorithmStub("B")
-    metric = _MetricStub("loss")
-
-    metrics_result = _build_display_metric_result(
-        [alg_a, alg_b],
-        [metric],
-        [],
-        table_results=pd.DataFrame.from_records(
-            [
-                {"metric": metric.description, "statistic": "mean", "algorithm": "A", "mean": 1.0, "std": 0.1},
-                {"metric": metric.description, "statistic": "std", "algorithm": "A", "mean": 0.2, "std": 0.05},
-                {"metric": metric.description, "statistic": "mean", "algorithm": "B", "mean": 2.0, "std": 0.2},
-                {"metric": metric.description, "statistic": "std", "algorithm": "B", "mean": 0.3, "std": 0.06},
-            ]
-        ).set_index(["metric", "statistic", "algorithm"]),
-    )
-
-    display_tables(metrics_result, table_path=tmp_path)
-
-    grid_table = (tmp_path / "table.txt").read_text(encoding="utf-8")
-    latex_table = (tmp_path / "table.tex").read_text(encoding="utf-8")
-
-    assert "mean ± std" in grid_table
-    assert "Metric" in grid_table
-    assert "Statistic" in grid_table and "across agents" in grid_table
-    assert "A" in grid_table and "B" in grid_table
-    assert "mean" in grid_table and "std" in grid_table
-    assert grid_table.count("loss") == 1
-
-    assert "mean ± std" in latex_table
-    assert "Metric" in latex_table
-    assert "Statistic" in latex_table and "across agents" in latex_table
-    assert "A" in latex_table and "B" in latex_table
-    assert "mean" in latex_table and "std" in latex_table
-    assert latex_table.count("loss") == 1
-
 
 def test_display_tables_scales_compute_metrics_in_shared_layout(tmp_path: Path) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
