@@ -18,7 +18,7 @@ class _MetricStub(Metric):
     def description(self) -> str:
         return self._description
 
-    def get_data_from_trial(self, agents, problem, iteration):  # noqa: D102
+    def compute(self, agents, problem, iteration):  # noqa: D102
         return [0.0]
 
 

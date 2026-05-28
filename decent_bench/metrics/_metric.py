@@ -2,9 +2,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
-import numpy as np
-
-import decent_bench.metrics.metric_utils as utils
 from decent_bench.metrics._metrics_view import NetworkMetricsView
 
 if TYPE_CHECKING:
@@ -25,10 +22,7 @@ class Metric(ABC):
     Abstract base class for metrics.
 
     In order to create a new metric, subclass this class and implement the abstract methods
-    :func:`description` and :func:`get_data_from_trial`.
-    If you don't want to use the default behavior for :func:`get_table_data` or :func:`get_plot_data`
-    you can also override those methods but this is not common. See the documentation for each method for more details
-    and implementation specifications.
+    :func:`description` and :func:`compute`.
 
     Args:
         fmt: format string used to format the values in the table, defaults to ".2e". Common formats include:
@@ -83,44 +77,21 @@ class Metric(ABC):
         return True, None
 
     @abstractmethod
-    def get_data_from_trial(
+    def compute(
         self,
         network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> Sequence[float]:
         """
-        Get the data for this metric from a trial.
+        Evaluate the metric on the results of a trial.
 
         Args:
             network: the snapshotted network view being evaluated.
             problem: the benchmark problem being evaluated
-            iteration: the iteration at which to evaluate the metric, or -1 to use the agents' final x
+            iteration: the iteration at which to compute the metric, or -1 to use the agents' final x
 
         Returns:
             a sequence of metric values
 
         """
-
-    def get_table_data(self, network: NetworkMetricsView, problem: "BenchmarkProblem") -> Sequence[float]:
-        """
-        Extract trial data to be used in the table for this metric.
-
-        This is used by :func:`~decent_bench.benchmark.compute_metrics` when computing table metrics.
-        By default, it returns the metric from the last iteration,
-        but it can be overridden to perform additional processing on the data before it is used in the table.
-        """
-        return self.get_data_from_trial(network, problem, -1)
-
-    def get_plot_data(self, network: NetworkMetricsView, problem: "BenchmarkProblem") -> Sequence[tuple[X, Y]]:
-        """
-        Extract trial data to be used in plots for this metric.
-
-        This is used by :func:`~decent_bench.benchmark.compute_metrics` when computing plot metrics.
-        By default, it calculates the mean value of all the agents results at each iteration.
-        This method can be overridden to perform additional processing on the data before it is used in plots.
-        """
-        return [
-            (i, float(np.mean(self.get_data_from_trial(network, problem, i))))
-            for i in utils.all_sorted_iterations(network.agents())
-        ]

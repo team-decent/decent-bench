@@ -1,4 +1,4 @@
-from . import metric_library, metric_utils, runtime_library
+from . import metric_library, runtime_library, utils
 from ._computational_cost import ComputationalCost
 from ._metric import Metric, X, Y
 from ._metrics_view import AgentMetricsView, NetworkMetricsView, NetworkType
@@ -16,6 +16,6 @@ __all__ = [
     "X",
     "Y",
     "metric_library",
-    "metric_utils",
     "runtime_library",
+    "utils",
 ]

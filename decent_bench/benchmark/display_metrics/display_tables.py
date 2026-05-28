@@ -1,7 +1,6 @@
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-import pandas as pd
 import tabulate as tb
 
 from decent_bench.costs import EmpiricalRiskCost

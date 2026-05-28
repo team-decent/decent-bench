@@ -8,16 +8,20 @@ from rich.status import Status
 from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
 from decent_bench.benchmark._metric_result import MetricResult
-from decent_bench.metrics import Metric, metric_utils
+from decent_bench.benchmark.compute_metrics.compute_plots import (
+    aggregate_plot_metrics,
+    compute_plot_metrics,
+)
+from decent_bench.benchmark.compute_metrics.compute_tables import aggregate_table_metrics, compute_table_metrics
+from decent_bench.metrics import Metric, utils
 from decent_bench.metrics import metric_library as ml
 from decent_bench.metrics._metrics_view import NetworkMetricsView
-from decent_bench.metrics.plots.compute_plot_metrics import compute_plot_metrics
-from decent_bench.metrics.plots.compute_plots import compute_plots
-from decent_bench.metrics.tables.compute_table_metrics import compute_table_metrics
-from decent_bench.metrics.tables.compute_tables import compute_tables
 from decent_bench.networks import Network
 from decent_bench.utils._metric_helpers import _find_duplicates
 from decent_bench.utils.logger import LOGGER, start_logger
+
+if TYPE_CHECKING:
+    from decent_bench.benchmark import BenchmarkProblem
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
@@ -41,10 +45,12 @@ def compute_metrics(
             checkpoint manager
         checkpoint_manager: if provided, will be used to save results of metrics computation and/or load benchmark
             result.
-        table_metrics: metrics to be displayed in a table of results. If ``None``, all table
+        table_metrics: metrics to be displayed in a table of results. Table metrics are computed only at the
+            *recentmost* iteration reached during benchmarking. If ``None``, all table
             metrics available for the benchmark problem will be used. For example, federated-only metrics are removed
             when a non-federated network is passed.
-        plot_metrics: metrics to be plotted over algorithm iterations. If ``None``, all plot metrics available for the
+        plot_metrics: metrics to be plotted over algorithm iterations. Plot metrics are computed at *all* the
+            iterations reached during benchmarking. If ``None``, all plot metrics available for the
             benchmark problem will be used.
         statistics_across_agents: statistics to compute across agents for metrics that return one value per agent
             (like ``ConsensusError`` or ``Accuracy``). Available statistics are "mean" (aliases "average", "avg"),
@@ -79,6 +85,7 @@ def compute_metrics(
     start_logger(log_level=log_level)
     LOGGER.info("Starting metrics computation")
 
+    # 1) user input validation
     if benchmark_result is None:
         if checkpoint_manager is None:
             raise ValueError(
@@ -110,29 +117,34 @@ def compute_metrics(
     table_metrics = _remove_unavailable(table_metrics, benchmark_result.problem, "table")
     plot_metrics = _remove_unavailable(plot_metrics, benchmark_result.problem, "plot")
 
-    # compute table and plot metrics
-    resulting_network_views: dict[Algorithm[Network], list[NetworkMetricsView]] = {}
-    for alg, networks in benchmark_result.states.items():
-        resulting_network_views[alg] = [NetworkMetricsView.from_network(nw) for nw in networks]
 
-    # 1) compute raw metrics data
-    raw_table_results = compute_table_metrics(resulting_network_views, benchmark_result.problem, table_metrics)
-    raw_plot_results = compute_plot_metrics(resulting_network_views, benchmark_result.problem, plot_metrics)
+    # 2) compute table and plot metrics
+    network_views: dict[Algorithm[Network], list[NetworkMetricsView]] = {}
+    for alg, networks in benchmark_result.states.items():
+        network_views[alg] = [NetworkMetricsView.from_network(nw) for nw in networks]
+
+    iterations = _all_iterations(network_views)
+
+    # compute metrics
+    raw_plot_results = compute_plot_metrics(network_views, benchmark_result.problem, plot_metrics, iterations)
+    raw_table_results = compute_table_metrics(network_views,
+                                               benchmark_result.problem,
+                                               table_metrics,
+                                               iterations,
+                                               raw_plot_results)
+
+    # aggregate metrics
+    aggregated_plot_metrics = aggregate_plot_metrics(raw_plot_results)
+    aggregated_table_metrics = aggregate_table_metrics(raw_table_results, statistics_across_agents)
 
     # 2) create MetricResult
     result = MetricResult(
-        network_views=resulting_network_views,
-        table_metrics=table_metrics,
-        plot_metrics=plot_metrics,
+        network_views=network_views,
         raw_table_results=raw_table_results,
         raw_plot_results=raw_plot_results,
-        table_results=None,
-        plot_results=None,
+        table_results=aggregated_table_metrics,
+        plot_results=aggregated_plot_metrics,
     )
-
-    # 3) aggregate data (using statistics_across_agents for table, mean+max+min for plots)
-    result.table_results = compute_tables(result, statistics_across_agents)
-    result.plot_results = compute_plots(result)
 
 
     if checkpoint_manager is not None:
@@ -144,7 +156,7 @@ def compute_metrics(
             checkpoint_manager.save_metrics_result(result)
             checkpoint_manager.append_metadata(metadata)
 
-    metric_utils._clear_caches()  # noqa: SLF001
+    utils._clear_caches()  # noqa: SLF001
 
     return result
 
@@ -180,3 +192,12 @@ def _remove_unavailable(
         available_metrics.append(metric)
 
     return available_metrics
+
+def _all_iterations(network_views: dict[Algorithm[Network], list[NetworkMetricsView]]) -> list[int]:
+    """Find all the iterations that were reached in at least one trial by at least one algorithm."""
+    iterations: list[int] = []
+    for network_views_by_trial in network_views.values():
+        for network_view in network_views_by_trial:
+            iterations += network_view.iterations
+
+    return list(set(iterations))

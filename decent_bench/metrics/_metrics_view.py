@@ -8,6 +8,7 @@ import networkx as nx
 
 from decent_bench.agents import Agent, AgentHistory
 from decent_bench.costs import Cost
+from decent_bench.metrics import utils
 from decent_bench.networks import FedNetwork, Network, P2PNetwork
 
 
@@ -127,3 +128,8 @@ class NetworkMetricsView:
         if self.network_type is not NetworkType.P2P:
             raise ValueError("neighbors() is only available for p2p networks")
         return self.connected_agents(agent)
+
+    @property
+    def iterations(self) -> list[int]:
+        """List of iterations reached by any agent (plus server) in the network."""
+        return utils.all_sorted_iterations(self.graph.nodes)

@@ -9,7 +9,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
-from decent_bench.metrics.plots.display_plots import _get_marker_style_color
+from decent_bench.benchmark.display_metrics.display_plots import _get_marker_style_color
 from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:

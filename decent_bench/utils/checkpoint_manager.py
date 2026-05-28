@@ -2,13 +2,11 @@ import json
 import pickle
 import re
 import shutil
-from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
-import pandas as pd
 import zstandard as zstd
 from rich.progress import track
 from rich.status import Status
@@ -718,7 +716,7 @@ class CheckpointManager:
             try:
                 benchmark_result = self.load_benchmark_result()
                 resulting_network_views: dict[Algorithm[Network], list[NetworkMetricsView]] = {}
-                available_algorithms = metrics_result.available_algorithms
+                available_algorithms = metrics_result.algorithms
 
                 for alg, networks in benchmark_result.states.items():
                     if alg.name not in available_algorithms:

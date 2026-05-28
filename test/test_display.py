@@ -15,21 +15,21 @@ from uuid import uuid4
 from decent_bench.agents import Agent, AgentHistory
 from decent_bench.algorithms.federated import FedAvg
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, compute_metrics
-from decent_bench.benchmark._display import display_metrics
+from decent_bench.benchmark.display_metrics.display_metrics import display_metrics
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.costs import LinearRegressionCost, LogisticRegressionCost, QuadraticCost
 from decent_bench.metrics._metric import Metric
 from decent_bench.metrics._metrics_view import AgentMetricsView, NetworkMetricsView, NetworkType
 from decent_bench.metrics import metric_library as ml
-from decent_bench.metrics.plots.compute_plot_metrics import compute_plot_metrics
-from decent_bench.metrics.plots.compute_plots import MAX_Y_PLOT_VALUE, compute_plots
-from decent_bench.metrics.plots.display_plots import (
+from decent_bench.benchmark.compute_metrics.compute_plot_metrics import compute_plot_metrics
+from decent_bench.benchmark.compute_metrics.compute_plots import MAX_Y_PLOT_VALUE, compute_plots
+from decent_bench.benchmark.display_metrics.display_plots import (
     _add_legend_and_save,
     _create_separate_legend_figure,
     _get_separate_legend_path,
     _select_legend_mode,
 )
-from decent_bench.metrics.tables.display_tables import display_tables
+from decent_bench.benchmark.display_metrics.display_tables import display_tables
 from decent_bench.metrics.metric_library import Accuracy, MSE, Precision, Recall, Regret, XError
 from decent_bench.networks import FedNetwork
 
@@ -58,7 +58,7 @@ class _MetricStub(Metric):
     def description(self) -> str:
         return self._description
 
-    def get_data_from_trial(self, agents, problem, iteration):  # noqa: D102
+    def compute(self, agents, problem, iteration):  # noqa: D102
         return [0.0]
 
 
@@ -1097,7 +1097,7 @@ class _PlotMetricStub(Metric):
     def description(self) -> str:
         return self._description
 
-    def get_data_from_trial(self, network, problem, iteration):  # noqa: D102
+    def compute(self, network, problem, iteration):  # noqa: D102
         return [0.0]
 
     def get_plot_data(self, network, problem):  # noqa: D102

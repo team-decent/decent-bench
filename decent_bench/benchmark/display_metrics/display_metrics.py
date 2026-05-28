@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -6,9 +7,9 @@ import pandas as pd
 from rich.status import Status
 
 from decent_bench.benchmark._metric_result import MetricResult
+from decent_bench.benchmark.display_metrics.display_plots import display_plots
+from decent_bench.benchmark.display_metrics.display_tables import display_tables
 from decent_bench.metrics import ComputationalCost, Metric
-from decent_bench.metrics.plots.display_plots import display_plots
-from decent_bench.metrics.tables.display_tables import display_tables
 from decent_bench.utils import logger
 from decent_bench.utils.logger import LOGGER
 
@@ -38,24 +39,23 @@ def display_metrics(  # noqa: PLR0912
     log_level: int = logging.INFO,
 ) -> None:
     """
-    Display metrics from a metrics result.
+    Display the results of metrics computation.
 
     Args:
         metrics_result: result of metrics computation containing the metrics to display. If not provided,
             the result will be loaded from the checkpoint manager
         checkpoint_manager: if provided, will be used to load metrics result.
-        table_metrics: metrics to tabulate, defaults to ``None`` which will display all metrics in the metrics_result.
-            Entries can be :class:`~decent_bench.metrics.Metric` objects or strings
+        table_metrics: metrics to tabulate. Entries can be :class:`~decent_bench.metrics.Metric` objects or strings
             (matching :attr:`~decent_bench.metrics.Metric.description`).
-        plot_metrics: metrics to plot, defaults to ``None`` which will display all metrics in the metrics_result.
-            Entries can be :class:`~decent_bench.metrics.Metric` objects or strings
+            If ``None`` all table metrics in metrics_result are displayed.
+        plot_metrics: metrics to plot. Entries can be :class:`~decent_bench.metrics.Metric` objects or strings
             (matching :attr:`~decent_bench.metrics.Metric.description`).
+            If ``None`` all plot metrics in metrics_result are displayed.
             If ``individual_plots`` is True, each metric is plotted in its own figure;
             otherwise a maximum of 3 metrics are plotted as subplots in the same figure.
-        algorithms: algorithms to display. If provided, only these algorithms are included in tables and plots.
-            Entries can be :class:`~decent_bench.algorithms.Algorithm` objects or strings
+        algorithms: algorithms to display. Entries can be :class:`~decent_bench.algorithms.Algorithm` objects or strings
             (matching :attr:`~decent_bench.algorithms.Algorithm.name`).
-            Defaults to ``None`` which displays all algorithms in the metrics_result.
+            If ``None`` all algorithms in metrics_result are displayed.
         table_fmt: table format, grid is suitable for the terminal while latex can be copy-pasted into a latex document
         plot_grid: whether to show grid lines on the plots
         individual_plots: whether to plot each metric in a separate figure
@@ -85,16 +85,12 @@ def display_metrics(  # noqa: PLR0912
 
     Raises:
         ValueError: If neither ``metrics_result`` nor ``checkpoint_manager`` is provided, or
-            if the checkpoint manager does not contain a valid metrics result to load. Also raised if
-            ``algorithms`` filtering results in no algorithms remaining, or if both ``table_metrics`` and
-            ``plot_metrics`` are specified and both result in no metrics remaining after filtering.
+            if the checkpoint manager does not contain a valid metrics result to load.
         FileNotFoundError: If ``metrics_result`` is not provided and the checkpoint manager does not contain a metrics
             result file to load.
 
     Note:
-        Checkpoint_manager is ignored if ``metrics_result`` is provided. If either ``plot_metrics`` or ``table_metrics``
-        is provided, only metrics which are present in the provided ``metrics_result`` will be displayed.
-        If neither is provided, all metrics in the ``metrics_result`` will be displayed.
+        Checkpoint_manager is ignored if ``metrics_result`` is provided.
 
         Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
         Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
@@ -126,54 +122,61 @@ def display_metrics(  # noqa: PLR0912
             raise ValueError("No metrics result found in checkpoint manager to display")
 
     # filter `metrics_result` based on `plot_metrics`, `table_metrics`, and `algorithms` (if provided)
-    prev_values = {
-        "network_views": metrics_result.network_views,
-        "raw_table_results": metrics_result.raw_table_results,
-        "raw_plot_results": metrics_result.raw_plot_results,
-        "table_results": metrics_result.table_results,
-        "plot_results": metrics_result.plot_results,
-        "table_metrics": metrics_result.table_metrics,
-        "plot_metrics": metrics_result.plot_metrics,
-    }
+    # and drop metrics that were not selected
+    raw_table_results, table_results, raw_plot_results, plot_results = None, None, None, None
 
-    if table_metrics is not None:
-        metrics_result.table_metrics = _get_new_metrics(metrics_result.table_metrics, table_metrics, "table")
+    selected_algorithms = _filter_algorithms(metrics_result, algorithms)
+    selected_table_metrics = _filter_metrics(metrics_result, table_metrics, "table")
+    selected_plot_metrics = _filter_metrics(metrics_result, plot_metrics, "plot")
 
-    if plot_metrics is not None:
-        metrics_result.plot_metrics = _get_new_metrics(metrics_result.plot_metrics, plot_metrics, "plot")
+    if not selected_algorithms:
+        LOGGER.warning("No available algorithms were selected, stopping")
+        return
+    if not selected_table_metrics and not selected_plot_metrics:
+        LOGGER.warning("No available metrics were selected, stopping")
+        return
 
-    if algorithms is not None:
-        metrics_result = _filter_algorithms(metrics_result, algorithms)
+    if not selected_table_metrics:
+        LOGGER.warning("No available table metrics were selected, skipping table")
+    else:
+        raw_table_results = _drop_metrics(selected_table_metrics, metrics_result.raw_table_results)
+        table_results = _drop_metrics(selected_table_metrics, metrics_result.table_results)
 
-    # check that filtering didn't empty out the displayable results
-    if algorithms is not None and not metrics_result.available_algorithms:
-        raise ValueError(
-            f"No algorithms remain after filtering. Requested algorithms not found in metrics result. "
-            f"Available algorithms: {', '.join(metrics_result.available_algorithms)}"
-        )
+    if not selected_plot_metrics:
+        LOGGER.warning("No available plot metrics were selected, skipping plots")
+    else:
+        raw_plot_results = _drop_metrics(selected_plot_metrics, metrics_result.raw_plot_results)
+        plot_results = _drop_metrics(selected_plot_metrics, metrics_result.plot_results)
 
-    if (table_metrics is not None and not metrics_result.available_table_metrics) and (
-        plot_metrics is not None and not metrics_result.available_plot_metrics
-    ):
-        raise ValueError(
-            f"No table or plot metrics remain after filtering. "
-            f"Available table metrics: {', '.join(metrics_result.available_table_metrics)}. "
-            f"Available plot metrics: {', '.join(metrics_result.available_plot_metrics)}"
-        )
+    # drop algorithms that were not selected (from network_views and DataFrames)
+    network_views = (
+        None
+        if not metrics_result.network_views
+        else {
+            alg: net_view
+            for alg, net_view in metrics_result.network_views.items()
+            if alg.name in selected_algorithms
+        }
+    )
+    raw_table_results = _drop_algorithms(selected_algorithms, raw_table_results)
+    table_results = _drop_algorithms(selected_algorithms, table_results)
+    raw_plot_results = _drop_algorithms(selected_algorithms, raw_plot_results)
+    plot_results = _drop_algorithms(selected_algorithms, plot_results)
+
+    new_metrics_result = MetricResult(network_views, raw_table_results, raw_plot_results, table_results, plot_results)
 
     if save_path is not None:
         save_path = Path(save_path)
     elif save_path is None and checkpoint_manager is not None:
         save_path = checkpoint_manager.get_results_path()
 
-    if metrics_result.table_metrics:
-        display_tables(metrics_result, table_fmt=table_fmt, scale_compute=scale_compute, table_path=save_path)
-    else:
-        LOGGER.warning("No table metrics to display, skipping tables")
+    # display tables and/or plots
+    if selected_table_metrics:
+        display_tables(new_metrics_result, table_fmt=table_fmt, scale_compute=scale_compute, table_path=save_path)
 
-    if metrics_result.plot_metrics:
+    if selected_plot_metrics:
         display_plots(
-            metrics_result,
+            new_metrics_result,
             computational_cost=computational_cost,
             scale_x_axis=scale_x_axis,
             compare_iterations_and_computational_cost=compare_iterations_and_computational_cost,
@@ -183,91 +186,59 @@ def display_metrics(  # noqa: PLR0912
             plot_path=save_path,
             show_plots=show_plots,
         )
-    else:
-        LOGGER.warning("No plot metrics to display, skipping plots")
-
-    for attribute, prev_value in prev_values.items():
-        setattr(metrics_result, attribute, prev_value)
 
 
-def _filter_algorithms(
-    metrics_result: MetricResult,
-    algorithms: list["Algorithm[Network] | str"],
-) -> MetricResult:
-    selected_names = {_get_name_or_value(algorithm, "name") for algorithm in algorithms}
-    available_names = set(metrics_result.available_algorithms)
-    missing_names = sorted(selected_names - available_names)
+def _filter_algorithms(metrics_result: MetricResult, algorithms: list["Algorithm[Network] | str"] | None) -> list[str]:
+    if algorithms is None:
+        return metrics_result.algorithms
+
+    selected_algs = {_get_name_or_value(algorithm, "name") for algorithm in algorithms}
+    available_algs = set(metrics_result.algorithms)
+    missing_names = sorted(selected_algs - available_algs)
     if missing_names:
         LOGGER.warning(
-            "Requested algorithm(s) not found in metrics result, skipping: "
-            f"{', '.join(missing_names)}. Available algorithms: {', '.join(metrics_result.available_algorithms)}"
+            "Requested algorithm(s) were not found in metrics result, skipping: "
+            f"{', '.join(missing_names)}. Available algorithms: {', '.join(metrics_result.algorithms)}"
         )
 
-    if metrics_result.network_views is not None:
-        metrics_result.network_views = {
-            algorithm: values
-            for algorithm, values in metrics_result.network_views.items()
-            if algorithm.name in selected_names
-        }
-
-    for attribute in ("table_results", "plot_results"):
-        frame = getattr(metrics_result, attribute, None)
-        if frame:
-            mask = frame.index.get_level_values("algorithm").isin(selected_names)
-            setattr(metrics_result, attribute, frame[mask])
-
-    if metrics_result.raw_table_results is not None:
-        filtered_raw_table_results: dict[Metric, object] = {}
-        for metric, frame in metrics_result.raw_table_results.items():
-            if not hasattr(frame.index, "names") or "algorithm" not in frame.index.names:
-                filtered_raw_table_results[metric] = frame
-                continue
-            selected_frame = frame[frame.index.get_level_values("algorithm").isin(selected_names)]
-            filtered_raw_table_results[metric] = selected_frame
-        metrics_result.raw_table_results = filtered_raw_table_results
-
-    if metrics_result.raw_plot_results is not None:
-        filtered_raw_plot_results: dict[Metric, object] = {}
-        for metric, frame in metrics_result.raw_plot_results.items():
-            if not hasattr(frame.index, "names") or "algorithm" not in frame.index.names:
-                filtered_raw_plot_results[metric] = frame
-                continue
-            selected_frame = frame[frame.index.get_level_values("algorithm").isin(selected_names)]
-            filtered_raw_plot_results[metric] = selected_frame
-        metrics_result.raw_plot_results = filtered_raw_plot_results
-
-    return metrics_result
+    return list(selected_algs & available_algs)
 
 
-def _get_new_metrics(
-    metrics: list[Metric] | None,
-    requested_metrics: list[Metric | str],
+def _filter_metrics(metrics_result: MetricResult,
+    metrics: list[Metric | str] | None,
     type_: Literal["table", "plot"],
-) -> list[Metric]:
+) -> list[str]:
+    available_metrics = metrics_result.table_metrics if type_ == "table" else metrics_result.plot_metrics
     if metrics is None:
-        return []
+        return available_metrics
 
-    lookup = _build_metric_lookup(metrics)
+    selected_metrics = {_get_name_or_value(metric, "description") for metric in metrics}
+    set_available_metrics = set(available_metrics)
+    missing_names = sorted(selected_metrics - set_available_metrics)
+    if missing_names:
+        LOGGER.warning(
+            f"Requested {type_} metric(s) were not found in metrics result, skipping: "
+            f"{', '.join(missing_names)}. Available metrics: {', '.join(set_available_metrics)}"
+        )
 
-    new_metrics: list[Metric] = []
-    for metric_or_name in requested_metrics:
-        metric_name = _get_name_or_value(metric_or_name, "description")
-        original_metric = lookup.get(metric_name)
-        if original_metric is None:
-            LOGGER.warning(f"Requested {type_} metric '{metric_name}' not found in metrics result, skipping")
-            continue
-        new_metrics.append(original_metric)
-
-    return new_metrics
-
-
-def _build_metric_lookup(metrics: list[Metric]) -> dict[str, Metric]:
-    lookup: dict[str, Metric] = {}
-    for metric in metrics:
-        lookup.setdefault(metric.description, metric)
-
-    return lookup
+    return list(selected_metrics & set_available_metrics)
 
 
 def _get_name_or_value(value: object, attribute: str) -> str:
     return value if isinstance(value, str) else str(getattr(value, attribute))
+
+
+def _drop_metrics(selected_metrics: list[str],
+                  frames: Mapping[Metric, pd.DataFrame] | None
+                  ) -> Mapping[Metric, pd.DataFrame] | None:
+    if not frames:
+        return None
+    return {metric: frame for metric, frame in frames.items() if metric.description in selected_metrics}
+
+
+def _drop_algorithms(selected_algs: list[str],
+                     frames: Mapping[Metric, pd.DataFrame] | None
+                     ) -> Mapping[Metric, pd.DataFrame] | None:
+    if not frames:
+        return None
+    return {metric: frame[frame["algorithm"].isin(selected_algs)] for metric, frame in frames.items()}
