@@ -1,8 +1,7 @@
-import copy
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,15 +10,11 @@ from matplotlib.artist import Artist
 from matplotlib.axes import Axes as SubPlot
 from matplotlib.figure import Figure
 
-from decent_bench.algorithms import Algorithm
+from decent_bench.benchmark import MetricResult
 from decent_bench.metrics._computational_cost import ComputationalCost
 from decent_bench.metrics._metric import Metric
 from decent_bench.metrics._metrics_view import NetworkMetricsView
-from decent_bench.networks import Network
 from decent_bench.utils.logger import LOGGER
-
-if TYPE_CHECKING:
-    from decent_bench.benchmark import MetricResult
 
 
 MIN_Y_VALUE = 1e-15  # replacement for negative/zero values when y_log
@@ -79,19 +74,10 @@ def display_plots(
 
 
 
-    metric_groups = _organize_metrics_into_groups(metrics, individual_plots)
 
-
-    all_figures = _create_and_plot_figures(
-        metric_groups,
-        plot_lookup,
-        network_views,
-        use_cost,
-        two_columns,
-        computational_cost=computational_cost,
-        scale_x_axis=scale_x_axis,
-        plot_grid=plot_grid,
-    )
+    all_figures = _create_and_plot_figures(frames_by_metrics,
+                                           plot_grid,
+                                           individual_plots)
 
     if not all_figures:
         LOGGER.warning("No plots were generated due to invalid data.")
@@ -199,23 +185,20 @@ def _calc_total_cost(network_views: list[NetworkMetricsView], computational_cost
     )
 
 
-
-def _create_and_plot_figures(  # noqa: PLR0912
-    metric_groups: list[list[Metric]],
-    plot_results: Mapping[str, Mapping[str, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]],
-    resulting_network_views: Mapping[Algorithm[Network], Sequence[NetworkMetricsView]] | None,
-    use_cost: bool,
-    two_columns: bool,
-    *,
-    computational_cost: ComputationalCost | None,
-    scale_x_axis: float,
+def _create_and_plot_figures(
+    frames_by_metrics: dict[Metric, pd.DataFrame],
     plot_grid: bool,
+    individual_plots: bool,
 ) -> list[tuple[Figure, list[SubPlot]]]:
     """Create figures, plot data, and return non-empty figures."""
+    metric_groups = _organize_metrics_into_groups(list(frames_by_metrics.keys()), individual_plots)
 
+    sample_df = next(iter(frames_by_metrics.values()))
 
-    use_cost = computational_cost is not None
-    two_columns = use_cost and compare_iterations_and_computational_cost
+    algs = list(sample_df["algorithm"].unique())
+    use_cost = "compute" in sample_df
+    two_columns = {"iteration", "compute"}.issubset(sample_df.columns)
+
     all_figures: list[tuple[Figure, list[SubPlot]]] = []
 
     for metric_group in metric_groups:
@@ -227,70 +210,26 @@ def _create_and_plot_figures(  # noqa: PLR0912
         )
         all_figures.append((fig, metric_subplots))
 
-    algs = list(plot_results.keys())
-    network_views_by_name = {
-        algorithm.name: list(network_views)
-        for algorithm, network_views in (resulting_network_views or {}).items()
-    }
-
     for group_idx, metric_group in enumerate(metric_groups):
         fig, metric_subplots = all_figures[group_idx]
 
         for metric_index_in_group, metric in enumerate(metric_group):
-            metric_name = metric.description
             for alg_idx, alg_name in enumerate(algs):
-                if metric_name not in plot_results[alg_name]:
-                    continue
 
-                x, y_mean, y_min, y_max = plot_results[alg_name][metric_name]
-
-                if metric.x_log and any(val <= 0 for val in x):
-                    offset = 1 - min(x)
-                    x = [val + offset for val in x]
-                    LOGGER.warning(
-                        f"Metric '{metric.description}' has x_log=True but contains non-positive x values. "
-                        f"Added {offset} to all x values for plotting purposes."
-                    )
-                if metric.y_log and any(val <= 0 for val in y_mean):
-                    non_positive_replacement = min(*(val for val in y_mean if val > 0), 1e-8)
-                    y_mean = [val if val > 0 else non_positive_replacement for val in y_mean]
-                    LOGGER.warning(
-                        f"Metric '{metric.description}' has y_log=True but contains non-positive y values for"
-                        f"algorithm {alg_name}. These values have been replaced with {non_positive_replacement} for "
-                        f"plotting purposes."
-                    )
-                if metric.y_log and any(val <= 0 for val in y_min):
-                    non_positive_replacement = min(*(val for val in y_min if val > 0), 1e-8)
-                    y_min = [val if val > 0 else non_positive_replacement for val in y_min]
-                if metric.y_log and any(val <= 0 for val in y_max):
-                    non_positive_replacement = min(*(val for val in y_max if val > 0), 1e-8)
-                    y_max = [val if val > 0 else non_positive_replacement for val in y_max]
+                y_mean = frames_by_metrics[metric]["mean"].tolist()
+                y_min = frames_by_metrics[metric]["min"].tolist()
+                y_max = frames_by_metrics[metric]["max"].tolist()
 
                 subplot_idx = metric_index_in_group * (2 if two_columns else 1)
 
-                x_to_plot = x
-                if use_cost and computational_cost is not None:
-                    if resulting_network_views is None:
-                        LOGGER.warning(
-                            f"Computational cost provided but resulting network views are missing. Cannot compute "
-                            f"total computational cost for algorithm {alg_name}. Plotting against iterations instead."
-                        )
-                    else:
-                        network_views_for_alg = network_views_by_name.get(alg_name)
-                        if network_views_for_alg is None:
-                            LOGGER.warning(
-                                f"No network views available for algorithm {alg_name}. "
-                                "Plotting against iterations instead of computational cost."
-                            )
-                            network_views_for_alg = []
-                        total_computational_cost = _calc_total_cost(network_views_for_alg, computational_cost)
-                        x_to_plot = tuple(val * total_computational_cost * scale_x_axis for val in x)
-
                 if two_columns:
                     iter_idx = metric_index_in_group * 2 + 1
-                    _plot_subplot(metric_subplots[iter_idx], x, y_mean, y_min, y_max, alg_name, alg_idx)
+                    _plot_subplot(metric_subplots[iter_idx],
+                                  frames_by_metrics[metric]["compute"].tolist(),
+                                  y_mean, y_min, y_max, alg_name, alg_idx)
 
-                _plot_subplot(metric_subplots[subplot_idx], x_to_plot, y_mean, y_min, y_max, alg_name, alg_idx)
+                _plot_subplot(metric_subplots[subplot_idx],
+                              frames_by_metrics[metric]["iteration"].tolist(), y_mean, y_min, y_max, alg_name, alg_idx)
 
     return [
         (fig, metric_subplots)
