@@ -50,14 +50,14 @@ def compute_plot_metrics(
 
 def aggregate_plot_metrics(
     plot_results: Mapping[Metric, pd.DataFrame],
-) -> Mapping[Metric, pd.DataFrame]:
+) -> pd.DataFrame:
     """
     Aggregate plot metrics by mean across agents and by mean, min, and max across trials.
 
-    Each DataFrame that is returned has columns (algorithm, iteration, mean, min, max), with mean, min, max being
+    The DataFrame that is returned has columns (metric, algorithm, iteration, mean, min, max), with mean, min, max being
     float32.
     """
-    frames_by_metric: dict[Metric, pd.DataFrame] = {}
+    frames_by_metric: list[pd.DataFrame] = []
 
     for metric, frame in plot_results.items():
 
@@ -71,6 +71,11 @@ def aggregate_plot_metrics(
             max = "max"
         ).reset_index()
 
-        frames_by_metric[metric] = new_frame.astype("float32")
+        # 3) add metric column
+        new_frame = new_frame.assign(metric=metric.description)
+        new_frame = new_frame[["metric", "algorithm", "iteration", "mean", "min", "max"]]  # reorder columns
 
-    return frames_by_metric
+        frames_by_metric.append(new_frame.astype("float32"))
+
+    # 4) return concatenated frames
+    return pd.concat(frames_by_metric, ignore_index=True)

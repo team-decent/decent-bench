@@ -99,14 +99,15 @@ def compute_table_metrics(
 def aggregate_table_metrics(
     table_results: Mapping[Metric, pd.DataFrame],
     statistics: list[str] | None = None,
-) -> Mapping[Metric, pd.DataFrame]:
+) -> pd.DataFrame:
     """
     Aggregate table metrics by statistics across agents and by mean, std across trials.
 
-    Each DataFrame that is returned has columns (algorithm, statistic, mean, std). Numerical values are cast to float32.
+    The DataFrame that is returned has columns (metric, algorithm, statistic, mean, std). Numerical values are cast
+    to float32.
     """
     resolved_statistics = _resolve_statistics(statistics)
-    frames_by_metric: dict[Metric, pd.DataFrame] = {}
+    frames_by_metric: list[pd.DataFrame] = []
 
     for metric, frame in table_results.items():
 
@@ -145,6 +146,11 @@ def aggregate_table_metrics(
                     .reset_index()
         )
 
-        frames_by_metric[metric] = new_frame.astype("float32")
+        # 4) add metric column
+        new_frame = new_frame.assign(metric=metric.description)
+        new_frame = new_frame[["metric", "algorithm", "statistic", "mean", "std"]]  # reorder columns
 
-    return frames_by_metric
+        frames_by_metric.append(new_frame.astype("float32"))
+
+    # 5) return concatenated frames
+    return pd.concat(frames_by_metric, ignore_index=True)

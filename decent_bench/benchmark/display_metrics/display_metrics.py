@@ -1,3 +1,4 @@
+import copy
 import logging
 from collections.abc import Mapping
 from pathlib import Path
@@ -122,9 +123,6 @@ def display_metrics(  # noqa: PLR0912
             raise ValueError("No metrics result found in checkpoint manager to display")
 
     # filter `metrics_result` based on `plot_metrics`, `table_metrics`, and `algorithms` (if provided)
-    # and drop metrics that were not selected
-    raw_table_results, table_results, raw_plot_results, plot_results = None, None, None, None
-
     selected_algorithms = _filter_algorithms(metrics_result, algorithms)
     selected_table_metrics = _filter_metrics(metrics_result, table_metrics, "table")
     selected_plot_metrics = _filter_metrics(metrics_result, plot_metrics, "plot")
@@ -136,34 +134,36 @@ def display_metrics(  # noqa: PLR0912
         LOGGER.warning("No available metrics were selected, stopping")
         return
 
+    # drop metrics that were not selected
+    new_metrics_result = copy.deepcopy(metrics_result)
+
     if not selected_table_metrics:
         LOGGER.warning("No available table metrics were selected, skipping table")
     else:
-        raw_table_results = _drop_metrics(selected_table_metrics, metrics_result.raw_table_results)
-        table_results = _drop_metrics(selected_table_metrics, metrics_result.table_results)
+        raw_table_results = _drop_metrics(selected_table_metrics, new_metrics_result.raw_table_results)
+        table_results = _drop_df_rows(selected_table_metrics, new_metrics_result.table_results, "metric")
 
     if not selected_plot_metrics:
         LOGGER.warning("No available plot metrics were selected, skipping plots")
     else:
-        raw_plot_results = _drop_metrics(selected_plot_metrics, metrics_result.raw_plot_results)
-        plot_results = _drop_metrics(selected_plot_metrics, metrics_result.plot_results)
+        raw_plot_results = _drop_metrics(selected_plot_metrics, new_metrics_result.raw_plot_results)
+        plot_results = _drop_df_rows(selected_plot_metrics, new_metrics_result.plot_results, "metric")
 
     # drop algorithms that were not selected (from network_views and DataFrames)
-    network_views = (
+    new_metrics_result.network_views = (
         None
-        if not metrics_result.network_views
+        if not new_metrics_result.network_views
         else {
             alg: net_view
-            for alg, net_view in metrics_result.network_views.items()
+            for alg, net_view in new_metrics_result.network_views.items()
             if alg.name in selected_algorithms
         }
     )
-    raw_table_results = _drop_algorithms(selected_algorithms, raw_table_results)
-    table_results = _drop_algorithms(selected_algorithms, table_results)
-    raw_plot_results = _drop_algorithms(selected_algorithms, raw_plot_results)
-    plot_results = _drop_algorithms(selected_algorithms, plot_results)
+    new_metrics_result.raw_table_results = _drop_algorithms(selected_algorithms, raw_table_results)
+    new_metrics_result.table_results = _drop_df_rows(selected_algorithms, table_results, "algorithm")
+    new_metrics_result.raw_plot_results = _drop_algorithms(selected_algorithms, raw_plot_results)
+    new_metrics_result.plot_results = _drop_df_rows(selected_algorithms, plot_results, "algorithm")
 
-    new_metrics_result = MetricResult(network_views, raw_table_results, raw_plot_results, table_results, plot_results)
 
     if save_path is not None:
         save_path = Path(save_path)
@@ -242,3 +242,7 @@ def _drop_algorithms(selected_algs: list[str],
     if not frames:
         return None
     return {metric: frame[frame["algorithm"].isin(selected_algs)] for metric, frame in frames.items()}
+
+
+def _drop_df_rows(selected: list[str], frame: pd.DataFrame, column: str) -> pd.DataFrame:
+    return frame[frame[column].isin(selected)].copy()

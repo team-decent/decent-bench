@@ -1,3 +1,4 @@
+import copy
 import math
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from decent_bench.benchmark import MetricResult
 
 
+MIN_Y_VALUE = 1e-15  # replacement for negative/zero values when y_log
 X_LABELS = {
     "iterations": "iterations",
     "computational_cost": "time (computational cost units)",
@@ -63,26 +65,22 @@ def display_plots(
     plot_path: Path | None = None,
     show_plots: bool = True,
 ) -> None:
-    """Display and optionally save metric plots."""
-    plot_results = metrics_result.plot_results
-    metrics = metrics_result.plot_metrics
-    network_views = metrics_result.network_views
+    """Display and optionally save plot metrics."""
+    # process y and x values (remove inf, replace non-positive values, add compute cost)
+    frames_by_metrics = _preprocess(metrics_result,
+                                    computational_cost,
+                                    scale_x_axis,
+                                    compare_iterations_and_computational_cost)
+    # the result is a dict[Metric, DataFrame]
+    # each DataFrame has column (algorithm, mean, min, max) and for x axis:
+    #    "iteration" only (if no computational cost)
+    #    "compute" only (if only computational cost is to be plotted)
+    #    otherwise "iteration" and "compute" both
 
-    if plot_results is None or metrics is None:
-        return
 
-    if isinstance(plot_results, pd.DataFrame):
-        if plot_results.empty:
-            return
-        if not isinstance(plot_results.index, pd.MultiIndex):
-            LOGGER.warning("plot_results must use a MultiIndex to be displayed")
-            return
-        plot_lookup = _build_plot_lookup(plot_results)
 
     metric_groups = _organize_metrics_into_groups(metrics, individual_plots)
 
-    use_cost = computational_cost is not None
-    two_columns = use_cost and compare_iterations_and_computational_cost
 
     all_figures = _create_and_plot_figures(
         metric_groups,
@@ -102,6 +100,106 @@ def display_plots(
     _save_and_show_figures(all_figures, plot_path=plot_path, plot_format=plot_format, show_plots=show_plots)
 
 
+
+
+def _preprocess(metrics_result: MetricResult,
+                computational_cost: ComputationalCost | None,
+                scale_x_axis: float = 1e-4,
+                compare_iterations_and_computational_cost: bool = False
+                ) -> dict[Metric, pd.DataFrame]:
+    if metrics_result.raw_plot_results is None or metrics_result.plot_results is None:
+        return {}
+
+    plot_results = metrics_result.plot_results
+    metrics = list(metrics_result.raw_plot_results.keys())
+
+    # 1) split into dict[Metric, DataFrame] (copies data to avoid modifying original)
+    frames = {metric: plot_results[plot_results["metric"] == metric.description].copy().drop(columns=["metric"])
+              for metric in metrics}
+
+    for metric, frame in frames.items():
+        # 2) truncate at first occurrence of inf in mean/min/max (likely divergence)
+
+        has_inf = np.isinf(frame[["mean", "min", "max"]]).any(axis=1)
+        if has_inf.any():
+            cutoff = (
+                frame.loc[has_inf, ["algorithm", "iteration"]]  # search only on rows with inf
+                .groupby("algorithm")["iteration"]
+                .min()                                          # find earliest iteration with inf
+                .rename("cutoff")
+            )
+            # map cutoff iteration to the corresponding algorithm
+            frame["cutoff"] = frame.set_index("algorithm").index.map(cutoff)
+
+            # truncate: keep a row if no inf was found or, if found, if iteration < cutoff
+            frames[metric] = frame[
+                (frame["cutoff"].isna()) | (frame["iteration"] < frame["cutoff"])
+            ].copy().drop(columns=["cutoff"])
+
+        # 3) replace negative values if y_log
+        if metric.y_log:
+            subset = frames[metric][["mean", "min", "max"]]
+            positive_values = subset[subset > 0]
+            non_positive_replacement = np.min(positive_values) if np.any(positive_values) else MIN_Y_VALUE
+
+            frames[metric][["mean", "min", "max"]] = subset.mask(subset <= 0, non_positive_replacement)
+            LOGGER.warning(
+                f"Metric '{metric.description}' has y_log=True but contains non-positive y values. "
+                f"They were replaced with {non_positive_replacement} for plotting purposes."
+            )
+
+        # 4) increment iteration by 1 if x_log
+        if metric.x_log and np.any(frames[metric]["iteration"] == 0):
+            frames[metric]["iteration"] += 1
+            LOGGER.warning(
+                f"Metric '{metric.description}' has x_log=True but contains iteration=0. "
+                f"Added 1 to all x values for plotting purposes."
+            )
+
+    # 5) resolve handling of x-axis
+    # if no compuational cost can be computed -> "iteration" only
+    # if computational cost computed and not compare_iterations_and_computational_cost -> "compute" only
+    # otherwise -> "iteration" and "compute"
+    if computational_cost is None:
+        return frames
+    if metrics_result.network_views is None:
+        LOGGER.warning(
+            "Computational cost provided but network views are missing. Cannot compute "
+            "total computational cost. Plotting against iterations instead."
+        )
+        return frames
+
+    # get scaling factors
+    scaling = {algorithm: _calc_total_cost(list(network_views), computational_cost) * scale_x_axis
+               for algorithm, network_views in metrics_result.network_views.items()}
+
+    # add "compute" column (scaled according to computational cost and scale_x_axis)
+    for metric, frame in frames.values():
+        frame["compute"] = frame["iteration"] * frame["algorithm"].map(scaling)
+        if not compare_iterations_and_computational_cost:
+            frames[metric] = frame.drop(columns=["iteration"])
+
+    return frames
+
+
+def _calc_total_cost(network_views: list[NetworkMetricsView], computational_cost: ComputationalCost) -> float:
+    non_server_states = [a for network_view in network_views for a in network_view.agents()]
+    mean_function_calls = np.mean([a.n_function_calls for a in non_server_states])
+    mean_gradient_calls = np.mean([a.n_gradient_calls for a in non_server_states])
+    mean_hessian_calls = np.mean([a.n_hessian_calls for a in non_server_states])
+    mean_proximal_calls = np.mean([a.n_proximal_calls for a in non_server_states])
+    mean_communication_calls = np.mean([a.n_sent_messages for a in non_server_states])
+
+    return float(
+        computational_cost.function * mean_function_calls
+        + computational_cost.gradient * mean_gradient_calls
+        + computational_cost.hessian * mean_hessian_calls
+        + computational_cost.proximal * mean_proximal_calls
+        + computational_cost.communication * mean_communication_calls
+    )
+
+
+
 def _create_and_plot_figures(  # noqa: PLR0912
     metric_groups: list[list[Metric]],
     plot_results: Mapping[str, Mapping[str, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]],
@@ -114,6 +212,10 @@ def _create_and_plot_figures(  # noqa: PLR0912
     plot_grid: bool,
 ) -> list[tuple[Figure, list[SubPlot]]]:
     """Create figures, plot data, and return non-empty figures."""
+
+
+    use_cost = computational_cost is not None
+    two_columns = use_cost and compare_iterations_and_computational_cost
     all_figures: list[tuple[Figure, list[SubPlot]]] = []
 
     for metric_group in metric_groups:
@@ -420,46 +522,3 @@ def _get_marker_style_color(
     style_idx = (idx // len(MARKERS)) % len(STYLES)
 
     return MARKERS[marker_idx], STYLES[style_idx], COLORS[color_idx]
-
-
-def _calc_total_cost(network_views: list[NetworkMetricsView], computational_cost: ComputationalCost) -> float:
-    if not network_views:
-        return 0.0
-
-    non_server_states = [a for network_view in network_views for a in network_view.agents()]
-    mean_function_calls = np.mean([a.n_function_calls for a in non_server_states])
-    mean_gradient_calls = np.mean([a.n_gradient_calls for a in non_server_states])
-    mean_hessian_calls = np.mean([a.n_hessian_calls for a in non_server_states])
-    mean_proximal_calls = np.mean([a.n_proximal_calls for a in non_server_states])
-    mean_communication_calls = np.mean([a.n_sent_messages for a in non_server_states])
-
-    return float(
-        computational_cost.function * mean_function_calls
-        + computational_cost.gradient * mean_gradient_calls
-        + computational_cost.hessian * mean_hessian_calls
-        + computational_cost.proximal * mean_proximal_calls
-        + computational_cost.communication * mean_communication_calls
-    )
-
-
-def _build_plot_lookup(
-    plot_results: pd.DataFrame,
-) -> dict[str, dict[str, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]]:
-    lookup: dict[str, dict[str, tuple[Sequence[float], Sequence[float], Sequence[float], Sequence[float]]]] = {}
-
-    if not isinstance(plot_results.index, pd.MultiIndex):
-        return lookup
-
-    grouped = plot_results.groupby(level=["metric", "algorithm"], sort=False)
-    for (metric_name, algorithm_name), group in grouped:
-        ordered = group.sort_index(level="iterations")
-        index_vals = ordered.index.get_level_values("iterations")
-        x_values = index_vals.to_numpy(dtype=float).tolist()
-        y_mean = ordered["y_mean"].to_numpy(dtype=float).tolist()
-        y_min = ordered["y_min"].to_numpy(dtype=float).tolist()
-        y_max = ordered["y_max"].to_numpy(dtype=float).tolist()
-        lookup.setdefault(str(algorithm_name), {})[str(metric_name)] = (x_values, y_mean, y_min, y_max)
-
-    return lookup
-
-

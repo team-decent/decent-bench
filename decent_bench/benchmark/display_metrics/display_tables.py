@@ -1,3 +1,4 @@
+import copy
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -19,39 +20,37 @@ def display_tables(
     scale_compute: float = 1.0,
     table_path: Path | None = None,
 ) -> None:
-    """Display table of metrics as mean ± std across trials."""
-    if metrics_result.table_metrics is None or not metrics_result.table_results:
+    """Display and optionally save table metrics."""
+    if metrics_result.raw_table_results is None or metrics_result.table_results is None:
         return
 
-    formatted_frames = []
-    has_infinite = False
+    # avoid modifying table_results
+    table_results = copy.deepcopy(metrics_result.table_results)
 
-    for metric, frame in metrics_result.table_results.items():
-        # detect if there are +/-inf values
-        has_infinite = has_infinite or bool(np.any(np.isinf(frame[["mean", "std"]])))
+    # detect if there are +/-inf values
+    has_infinite = bool(np.any(np.isinf(table_results[["mean", "std"]])))
 
-        # scale mean and std if needed
-        if isinstance(metric, SCALE_METRICS):
-            new_frame = frame.assign(
-                mean=frame["mean"] * scale_compute,
-                std=frame["std"] * scale_compute,
-            )
+    # scale mean and std (if needed) and format
+    for metric in metrics_result.raw_table_results:
 
-        # format mean and std, add a metric column
-        # result is a DataFrame with columns (metric, algorithm, statistic, value={mean:fmt} +/- {std:fmt})
-        fmt = f"{{:{_get_format(metric.fmt)}}}".format
-        new_frame = new_frame.assign(
-            metric=metric.description,
-            value=fmt(new_frame["mean"]) + " \u00b1 " + fmt(new_frame["std"]),
+        mask = table_results["metric"] == metric.description
+        scaling = scale_compute if isinstance(metric, SCALE_METRICS) else 1
+        fmt = metric.fmt
+
+        table_results.loc[mask, ["mean", "std"]] = _scale_and_format(
+            table_results.loc[mask, ["mean", "std"]],
+            fmt,
+            scaling
         )
-        formatted_frames.append(new_frame[["metric", "algorithm", "statistic", "value"]])  # reorder columns
 
-    # stack into a big frame with columns (metric, algorithm, statistic, value={mean:fmt} +/- {std:fmt})
-    table_frame = pd.concat(formatted_frames, ignore_index=True)
+    # join mean and std into single string
+    # the result is a DataFrame with columns (metric, algorithm, statistic, value={mean:fmt} +/- {std:fmt})
+    table_results["value"] = table_results["mean"] + " \u00b1 " + table_results["std"]
+    table_results = table_results.drop(columns=["mean", "std"])
 
     # reorganize the DataFrame so that it has a MultiIndex (metric, statistic)
     # and algorithms as the columns; each value in a column is mean +/- std (formatted)
-    table_frame = table_frame.pivot_table(
+    table_results = table_results.pivot_table(
         index=["metric", "statistic"],
         columns="algorithm",
         values="value",
@@ -59,15 +58,15 @@ def display_tables(
     )
 
     # info to user
-    if any(isinstance(metric, SCALE_METRICS) for metric in metrics_result.table_metrics):
+    if any(isinstance(metric, SCALE_METRICS) for metric in metrics_result.raw_table_results):
         LOGGER.info("Compute counters (FunctionCalls, GradientCalls, HessianCalls, ProximalCalls) can yield very large "
                     "numbers. Set ``scale_compute < 1`` to scale their values for display.")
     if has_infinite:
         LOGGER.info("Infinite values likely indicate divergence. Inspect plots to confirm.")
 
     # prepare for printing and storing
-    text_table = table_frame.to_string()
-    latex_table = table_frame.to_latex(column_format="ll" + "c"*len(table_frame.columns))  # index left-align, algorithm center-align  # noqa: E501
+    text_table = table_results.to_string()
+    latex_table = table_results.to_latex(column_format="ll" + "c"*len(table_results.columns))  # index left-align, algorithm center-align  # noqa: E501
 
     LOGGER.info("\n" + latex_table if table_fmt == "latex" else "\n" + text_table)
 
@@ -81,17 +80,20 @@ def display_tables(
         LOGGER.info(f"Saved text table to {grid_path}")
 
 
+def _scale_and_format(frame: pd.DataFrame, fmt: str, scaling: float = 1) -> pd.DataFrame:
+    # scale
+    if scaling != 1:
+        frame = frame * scaling
+    # format
+    fmt_map = f"{{:{_get_format(fmt)}}}".format
+    return frame.map(fmt_map)
+
+
 def _get_format(fmt: str) -> str:
-    if not _is_valid_float_format_spec(fmt):
+    try:
+        f"{0.01:{fmt}}"
+    except (ValueError, TypeError):
         LOGGER.warning(f"Invalid format string '{fmt}', defaulting to scientific notation")
         fmt = ".2e"
 
     return fmt
-
-
-def _is_valid_float_format_spec(fmt: str) -> bool:
-    try:
-        f"{0.01:{fmt}}"
-    except (ValueError, TypeError):
-        return False
-    return True

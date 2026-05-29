@@ -30,10 +30,10 @@ class MetricResult:
     * `raw_plot_results`: contains raw metric evaluations in a dictionary mapping Metric to pandas.DataFrame. Each
         DataFrame has columns (algorithm, trial, agent, iteration, value). Plot metrics are evaluated at *all*
         iterations reached during benchmarking.
-    * `table_results`: contains the aggregated results in a dictionary mapping Metric to pandas.DataFrame. Each
-        (algorithm, mean_across_trials, std_across_trials) and one column for each of the statistics across agents.
-    * `plot_results`: contains the aggregated results in a dictionary mapping Metric to pandas.DataFrame. Each
-        (algorithm, iteration, mean, min, max).
+    * `table_results`: contains the aggregated results in a pandas.DataFrame with columns
+        (metric, algorithm, statistic, mean, std).
+    * `plot_results`: contains the aggregated results in a pandas.DataFrame with columns
+        (metric, algorithm, iteration, mean, min, max).
 
     `table_results` can be recomputed with a new set of statistics across agents by using :meth:`update_table_results`.
 
@@ -46,10 +46,10 @@ class MetricResult:
     network_views: Mapping[Algorithm[Network], Sequence[NetworkMetricsView]] | None
     raw_table_results: Mapping[Metric, pd.DataFrame] | None
     raw_plot_results: Mapping[Metric, pd.DataFrame] | None
-    table_results: Mapping[Metric, pd.DataFrame] | None
-    plot_results: Mapping[Metric, pd.DataFrame] | None
+    table_results: pd.DataFrame | None
+    plot_results: pd.DataFrame | None
 
-    def update_table_results(self, statistics_across_agents: list[str] | None) -> Mapping[Metric, pd.DataFrame] | None:
+    def update_table_results(self, statistics_across_agents: list[str] | None) -> pd.DataFrame | None:
         """Recompute aggregated table statistics from stored raw table results."""
         if not self.raw_table_results:
             return None
@@ -91,9 +91,9 @@ class MetricResult:
 
     def _which_attribute(self, type_: Literal["all", "table", "plot"] = "all") -> Mapping[Metric, pd.DataFrame] | None:
         if type_ == "all":
-            candidates = [self.raw_table_results, self.raw_plot_results, self.table_results, self.plot_results]
+            candidates = [self.raw_table_results, self.raw_plot_results]
         elif type_ == "table":
-            candidates = [self.raw_table_results, self.table_results]
+            candidates = [self.raw_table_results]
         else:
-            candidates = [self.raw_plot_results, self.plot_results]
+            candidates = [self.raw_plot_results]
         return next((c for c in candidates if c is not None), None)
