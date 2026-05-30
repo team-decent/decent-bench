@@ -73,7 +73,7 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
     if len(all_x_at_iter) == 0:
         raise ValueError(f"No agent reached iteration {iteration}")
 
-    return iop.mean(iop.stack(all_x_at_iter), dim=0)
+    return Array(sum(all_x_at_iter) / len(all_x_at_iter))
 
 
 def _regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
@@ -107,9 +107,9 @@ def _gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> f
     gradients = []
     for a in agents:
         kwargs = {"indices": "all"} if isinstance(a.cost, EmpiricalRiskCost) else {}
-        gradients.append(iop.to_numpy(a.cost.gradient(mean_x, **kwargs)))
-    grad_avg = sum(gradients) / len(agents)
-    return float(la.norm(grad_avg))
+        gradients.append(a.cost.gradient(mean_x, **kwargs))
+    grad_avg = Array(sum(gradients) / len(agents))
+    return float(iop.norm(grad_avg))
 
 
 def _x_error(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
