@@ -29,18 +29,16 @@ def display_tables(
 
     # detect if there are +/-inf values
     has_infinite = bool(np.any(np.isinf(table_results[["mean", "std"]])))
+    table_results[["mean", "std"]] = table_results[["mean", "std"]].astype(object)
 
     # scale mean and std (if needed) and format
     for metric in metrics_result.raw_table_results:
-
         mask = table_results["metric"] == metric.description
         scaling = scale_compute if isinstance(metric, SCALE_METRICS) else 1
         fmt = metric.fmt
 
         table_results.loc[mask, ["mean", "std"]] = _scale_and_format(
-            table_results.loc[mask, ["mean", "std"]],
-            fmt,
-            scaling
+            table_results.loc[mask, ["mean", "std"]], fmt, scaling
         )
 
     # join mean and std into single string
@@ -57,18 +55,22 @@ def display_tables(
         aggfunc="first",
     )
 
-    # info to user
-    if any(isinstance(metric, SCALE_METRICS) for metric in metrics_result.raw_table_results):
-        LOGGER.info("Compute counters (FunctionCalls, GradientCalls, HessianCalls, ProximalCalls) can yield very large "
-                    "numbers. Set ``scale_compute < 1`` to scale their values for display.")
-    if has_infinite:
-        LOGGER.info("Infinite values likely indicate divergence. Inspect plots to confirm.")
-
     # prepare for printing and storing
     text_table = table_results.to_string()
-    latex_table = table_results.to_latex(column_format="ll" + "c"*len(table_results.columns))  # index left-align, algorithm center-align  # noqa: E501
+    latex_table = table_results.to_latex(
+        column_format="ll" + "c" * len(table_results.columns)
+    )  # index left-align, algorithm center-align
 
     LOGGER.info("\n" + latex_table if table_fmt == "latex" else "\n" + text_table)
+
+    # info to user
+    if any(isinstance(metric, SCALE_METRICS) for metric in metrics_result.raw_table_results):
+        LOGGER.info(
+            "Compute counters (FunctionCalls, GradientCalls, HessianCalls, ProximalCalls) can yield very large "
+            "numbers. Set ``scale_compute < 1`` to scale their values for display."
+        )
+    if has_infinite:
+        LOGGER.info("Infinite/NaN values likely indicate algorithm divergence. Inspect plots to confirm.")
 
     if table_path:
         table_path.mkdir(parents=True, exist_ok=True)

@@ -10,12 +10,6 @@ if TYPE_CHECKING:
 
 Statistic = Callable[[Sequence[float]], float]
 
-X = float
-"""Type alias for the x values in plots, typically iterations or time."""
-
-Y = float
-"""Type alias for the y values in plots, typically the metric value."""
-
 
 class Metric(ABC):
     """

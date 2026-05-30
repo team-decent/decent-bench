@@ -1,7 +1,7 @@
 import math
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,12 +10,13 @@ from matplotlib.artist import Artist
 from matplotlib.axes import Axes as SubPlot
 from matplotlib.figure import Figure
 
-from decent_bench.benchmark import MetricResult
 from decent_bench.metrics._computational_cost import ComputationalCost
 from decent_bench.metrics._metric import Metric
 from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.utils.logger import LOGGER
 
+if TYPE_CHECKING:
+    from decent_bench.benchmark import MetricResult
 
 MIN_Y_VALUE = 1e-15  # replacement for negative/zero values when y_log
 X_LABELS = {
@@ -62,22 +63,16 @@ def display_plots(
 ) -> None:
     """Display and optionally save plot metrics."""
     # process y and x values (remove inf, replace non-positive values, add compute cost)
-    frames_by_metrics = _preprocess(metrics_result,
-                                    computational_cost,
-                                    scale_x_axis,
-                                    compare_iterations_and_computational_cost)
+    frames_by_metrics = _preprocess(
+        metrics_result, computational_cost, scale_x_axis, compare_iterations_and_computational_cost
+    )
     # the result is a dict[Metric, DataFrame]
     # each DataFrame has column (algorithm, mean, min, max) and for x axis:
     #    "iteration" only (if no computational cost)
     #    "compute" only (if only computational cost is to be plotted)
     #    otherwise "iteration" and "compute" both
 
-
-
-
-    all_figures = _create_and_plot_figures(frames_by_metrics,
-                                           plot_grid,
-                                           individual_plots)
+    all_figures = _create_and_plot_figures(frames_by_metrics, plot_grid, individual_plots)
 
     if not all_figures:
         LOGGER.warning("No plots were generated due to invalid data.")
@@ -86,13 +81,12 @@ def display_plots(
     _save_and_show_figures(all_figures, plot_path=plot_path, plot_format=plot_format, show_plots=show_plots)
 
 
-
-
-def _preprocess(metrics_result: MetricResult,
-                computational_cost: ComputationalCost | None,
-                scale_x_axis: float = 1e-4,
-                compare_iterations_and_computational_cost: bool = False
-                ) -> dict[Metric, pd.DataFrame]:
+def _preprocess(
+    metrics_result: "MetricResult",
+    computational_cost: ComputationalCost | None,
+    scale_x_axis: float = 1e-4,
+    compare_iterations_and_computational_cost: bool = False,
+) -> dict[Metric, pd.DataFrame]:
     if metrics_result.raw_plot_results is None or metrics_result.plot_results is None:
         return {}
 
@@ -100,68 +94,80 @@ def _preprocess(metrics_result: MetricResult,
     metrics = list(metrics_result.raw_plot_results.keys())
 
     # 1) split into dict[Metric, DataFrame] (copies data to avoid modifying original)
-    frames = {metric: plot_results[plot_results["metric"] == metric.description].copy().drop(columns=["metric"])
-              for metric in metrics}
+    frames = {
+        metric: plot_results[plot_results["metric"] == metric.description].copy().drop(columns=["metric"])
+        for metric in metrics
+    }
 
     for metric, frame in frames.items():
         # 2) truncate at first occurrence of inf in mean/min/max (likely divergence)
 
-        has_inf = np.isinf(frame[["mean", "min", "max"]]).any(axis=1)
+        has_inf = frame[["mean", "min", "max"]].isin([np.inf, -np.inf]).any(axis=1)
         if has_inf.any():
-            cutoff = (
-                frame.loc[has_inf, ["algorithm", "iteration"]]  # search only on rows with inf
-                .groupby("algorithm")["iteration"]
-                .min()                                          # find earliest iteration with inf
-                .rename("cutoff")
-            )
+            rows_with_inf = frame[has_inf]
+            cutoff = rows_with_inf.groupby("algorithm")["iteration"].min().rename("cutoff")
             # map cutoff iteration to the corresponding algorithm
-            frame["cutoff"] = frame.set_index("algorithm").index.map(cutoff)
+            frame["cutoff"] = frame.set_index("algorithm").index.map(cutoff.to_dict())
 
             # truncate: keep a row if no inf was found or, if found, if iteration < cutoff
-            frames[metric] = frame[
-                (frame["cutoff"].isna()) | (frame["iteration"] < frame["cutoff"])
-            ].copy().drop(columns=["cutoff"])
+            frames[metric] = (
+                frame[(frame["cutoff"].isna()) | (frame["iteration"] < frame["cutoff"])].copy().drop(columns=["cutoff"])
+            )
 
         # 3) replace negative values if y_log
         if metric.y_log:
             subset = frames[metric][["mean", "min", "max"]]
-            positive_values = subset[subset > 0]
-            non_positive_replacement = np.min(positive_values) if np.any(positive_values) else MIN_Y_VALUE
+            if (subset <= 0).any().any():
+                positive_values = subset[subset > 0].min().min()
+                non_positive_replacement = positive_values.min() if not positive_values else MIN_Y_VALUE
+                frames[metric][["mean", "min", "max"]] = subset.mask(subset <= 0, non_positive_replacement)
 
-            frames[metric][["mean", "min", "max"]] = subset.mask(subset <= 0, non_positive_replacement)
-            LOGGER.warning(
-                f"Metric '{metric.description}' has y_log=True but contains non-positive y values. "
-                f"They were replaced with {non_positive_replacement} for plotting purposes."
-            )
+                flat = subset.melt(value_name="val")["val"]
+                unique_non_positive = flat[flat <= 0].unique()
+                LOGGER.warning(
+                    f"Metric '{metric.description}' has y_log=True but contains non-positive y values. "
+                    f"They were replaced with {non_positive_replacement} for plotting purposes. "
+                    f"Non-positive values that were replaced (when close to 0, they are likely rounding errors): "
+                    f"{unique_non_positive.tolist()}."
+                )
 
         # 4) increment iteration by 1 if x_log
         if metric.x_log and np.any(frames[metric]["iteration"] == 0):
             frames[metric]["iteration"] += 1
             LOGGER.warning(
                 f"Metric '{metric.description}' has x_log=True but contains iteration=0. "
-                f"Added 1 to all x values for plotting purposes."
+                f"Shifted all x values for plotting purposes."
             )
 
     # 5) resolve handling of x-axis
-    # if no compuational cost can be computed -> "iteration" only
-    # if computational cost computed and not compare_iterations_and_computational_cost -> "compute" only
-    # otherwise -> "iteration" and "compute"
+    # if computational_cost is None -> skip adding column "compute"
+    #    if also compare_iterations_and_computational_cost=True -> warning, otherwise silent
+    # if computational_cost provided, but no network_views -> skip "compute" and warn
+    # if computational_cost and network_views -> add "compute" column
+    #    and drop "iteration" if compare_iterations_and_computational_cost=False
     if computational_cost is None:
+        if compare_iterations_and_computational_cost:
+            LOGGER.warning(
+                "``computational_cost`` is None, cannot compute "
+                "total computational cost. Plotting against iterations instead."
+            )
         return frames
     if metrics_result.network_views is None:
         LOGGER.warning(
-            "Computational cost provided but network views are missing. Cannot compute "
+            "``computational_cost`` provided but network views are missing. Cannot compute "
             "total computational cost. Plotting against iterations instead."
         )
         return frames
 
     # get scaling factors
-    scaling = {algorithm: _calc_total_cost(list(network_views), computational_cost) * scale_x_axis
-               for algorithm, network_views in metrics_result.network_views.items()}
+    scaling = {
+        algorithm.name: _calc_total_cost(list(network_views), computational_cost) * scale_x_axis
+        for algorithm, network_views in metrics_result.network_views.items()
+    }
 
     # add "compute" column (scaled according to computational cost and scale_x_axis)
-    for metric, frame in frames.values():
-        frame["compute"] = frame["iteration"] * frame["algorithm"].map(scaling)
+    for metric, frame in frames.items():
+        frame["compute"] = frame["iteration"] * frame["algorithm"].map(scaling).astype(float)
         if not compare_iterations_and_computational_cost:
             frames[metric] = frame.drop(columns=["iteration"])
 
@@ -191,13 +197,16 @@ def _create_and_plot_figures(
     individual_plots: bool,
 ) -> list[tuple[Figure, list[SubPlot]]]:
     """Create figures, plot data, and return non-empty figures."""
+    if not frames_by_metrics:
+        return []
+
     metric_groups = _organize_metrics_into_groups(list(frames_by_metrics.keys()), individual_plots)
 
     sample_df = next(iter(frames_by_metrics.values()))
 
     algs = list(sample_df["algorithm"].unique())
-    use_cost = "compute" in sample_df
-    two_columns = {"iteration", "compute"}.issubset(sample_df.columns)
+    use_cost, use_iteration = "compute" in sample_df, "iteration" in sample_df
+    two_columns = use_cost and use_iteration
 
     all_figures: list[tuple[Figure, list[SubPlot]]] = []
 
@@ -215,21 +224,49 @@ def _create_and_plot_figures(
 
         for metric_index_in_group, metric in enumerate(metric_group):
             for alg_idx, alg_name in enumerate(algs):
-
-                y_mean = frames_by_metrics[metric]["mean"].tolist()
-                y_min = frames_by_metrics[metric]["min"].tolist()
-                y_max = frames_by_metrics[metric]["max"].tolist()
-
-                subplot_idx = metric_index_in_group * (2 if two_columns else 1)
+                frame = frames_by_metrics[metric].loc[frames_by_metrics[metric]["algorithm"] == alg_name]
+                y_mean, y_min, y_max = frame["mean"].tolist(), frame["min"].tolist(), frame["max"].tolist()
 
                 if two_columns:
-                    iter_idx = metric_index_in_group * 2 + 1
-                    _plot_subplot(metric_subplots[iter_idx],
-                                  frames_by_metrics[metric]["compute"].tolist(),
-                                  y_mean, y_min, y_max, alg_name, alg_idx)
+                    _plot_subplot(
+                        metric_subplots[metric_index_in_group * 2],
+                        frame["compute"].tolist(),
+                        y_mean,
+                        y_min,
+                        y_max,
+                        alg_name,
+                        alg_idx,
+                    )
 
-                _plot_subplot(metric_subplots[subplot_idx],
-                              frames_by_metrics[metric]["iteration"].tolist(), y_mean, y_min, y_max, alg_name, alg_idx)
+                    _plot_subplot(
+                        metric_subplots[metric_index_in_group * 2 + 1],
+                        frame["iteration"].tolist(),
+                        y_mean,
+                        y_min,
+                        y_max,
+                        alg_name,
+                        alg_idx,
+                    )
+                elif use_cost:
+                    _plot_subplot(
+                        metric_subplots[metric_index_in_group],
+                        frame["compute"].tolist(),
+                        y_mean,
+                        y_min,
+                        y_max,
+                        alg_name,
+                        alg_idx,
+                    )
+                else:
+                    _plot_subplot(
+                        metric_subplots[metric_index_in_group],
+                        frame["iteration"].tolist(),
+                        y_mean,
+                        y_min,
+                        y_max,
+                        alg_name,
+                        alg_idx,
+                    )
 
     return [
         (fig, metric_subplots)

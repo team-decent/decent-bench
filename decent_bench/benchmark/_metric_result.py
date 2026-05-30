@@ -5,7 +5,7 @@ from typing import Literal
 import pandas as pd
 
 from decent_bench.algorithms import Algorithm
-from decent_bench.benchmark.compute_metrics.compute_tables import aggregate_table_metrics
+from decent_bench.benchmark._compute.compute_tables import aggregate_table_metrics
 from decent_bench.metrics import Metric
 from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network

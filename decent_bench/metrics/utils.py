@@ -57,13 +57,6 @@ def _drifts(agents: Sequence[AgentMetricsView], server: AgentMetricsView, iterat
     return [float(iop.norm(agent.x_history[iteration] - server_x)) for agent in agents]
 
 
-def default_statistic(values: Sequence[float]) -> float:
-    """Return *values[0]* if it contains exactly one element, *mean(values)* otherwise."""
-    if len(values) == 1:
-        return values[0]
-    return np.average(values)
-
-
 @lru_cache(maxsize=CACHE_MAX_SIZE)
 def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
     """
@@ -365,7 +358,7 @@ def linear_convergence_rate(y: Sequence[float]) -> float:
         >>> for alg, results in metric_results.plot_results.items():
         >>>     for metric, stat_results in results.items():
         >>>         if type(metric) == metric_library.GradientNorm:
-        >>>             print(f"\t- {alg.name}: {metric_utils.linear_convergence_rate(stat_results[1])}")
+        >>>             print(f"\t- {alg.name}: {utils.linear_convergence_rate(stat_results[1])}")
 
     """
     y_array: NDArray[float64] = np.asarray(y, dtype=float64)

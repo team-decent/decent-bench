@@ -1,5 +1,4 @@
 import logging
-from copy import deepcopy
 from json import JSONDecodeError
 from typing import TYPE_CHECKING, Literal
 
@@ -7,12 +6,12 @@ from rich.status import Status
 
 from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
-from decent_bench.benchmark._metric_result import MetricResult
-from decent_bench.benchmark.compute_metrics.compute_plots import (
+from decent_bench.benchmark._compute.compute_plots import (
     aggregate_plot_metrics,
     compute_plot_metrics,
 )
-from decent_bench.benchmark.compute_metrics.compute_tables import aggregate_table_metrics, compute_table_metrics
+from decent_bench.benchmark._compute.compute_tables import aggregate_table_metrics, compute_table_metrics
+from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.metrics import Metric, utils
 from decent_bench.metrics import metric_library as ml
 from decent_bench.metrics._metrics_view import NetworkMetricsView
@@ -105,10 +104,6 @@ def compute_metrics(
 
     table_metrics, plot_metrics = _resolve_default_metrics(table_metrics, plot_metrics)
 
-    # work on independent metric instances
-    table_metrics = deepcopy(table_metrics)
-    plot_metrics = deepcopy(plot_metrics)
-
     # check metrics are unique
     _validate_unique_descriptions(table_metrics, "table")
     _validate_unique_descriptions(plot_metrics, "plot")
@@ -116,7 +111,6 @@ def compute_metrics(
     # remove unavailable metrics
     table_metrics = _remove_unavailable(table_metrics, benchmark_result.problem, "table")
     plot_metrics = _remove_unavailable(plot_metrics, benchmark_result.problem, "plot")
-
 
     # 2) compute table and plot metrics
     network_views: dict[Algorithm[Network], list[NetworkMetricsView]] = {}
@@ -127,11 +121,9 @@ def compute_metrics(
 
     # compute metrics
     raw_plot_results = compute_plot_metrics(network_views, benchmark_result.problem, plot_metrics, iterations)
-    raw_table_results = compute_table_metrics(network_views,
-                                               benchmark_result.problem,
-                                               table_metrics,
-                                               iterations,
-                                               raw_plot_results)
+    raw_table_results = compute_table_metrics(
+        network_views, benchmark_result.problem, table_metrics, iterations, raw_plot_results
+    )
 
     # aggregate metrics
     aggregated_plot_metrics = aggregate_plot_metrics(raw_plot_results)
@@ -145,7 +137,6 @@ def compute_metrics(
         table_results=aggregated_table_metrics,
         plot_results=aggregated_plot_metrics,
     )
-
 
     if checkpoint_manager is not None:
         with Status("Saving computed metrics..."):
@@ -193,6 +184,7 @@ def _remove_unavailable(
 
     return available_metrics
 
+
 def _all_iterations(network_views: dict[Algorithm[Network], list[NetworkMetricsView]]) -> list[int]:
     """Find all the iterations that were reached in at least one trial by at least one algorithm."""
     iterations: list[int] = []
@@ -200,4 +192,4 @@ def _all_iterations(network_views: dict[Algorithm[Network], list[NetworkMetricsV
         for network_view in network_views_by_trial:
             iterations += network_view.iterations
 
-    return list(set(iterations))
+    return sorted(set(iterations))

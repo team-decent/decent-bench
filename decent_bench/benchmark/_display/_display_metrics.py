@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING, Literal
 import pandas as pd
 from rich.status import Status
 
+from decent_bench.benchmark._display.display_plots import display_plots
+from decent_bench.benchmark._display.display_tables import display_tables
 from decent_bench.benchmark._metric_result import MetricResult
-from decent_bench.benchmark.display_metrics.display_plots import display_plots
-from decent_bench.benchmark.display_metrics.display_tables import display_tables
 from decent_bench.metrics import ComputationalCost, Metric
 from decent_bench.utils import logger
 from decent_bench.utils.logger import LOGGER
@@ -139,12 +139,14 @@ def display_metrics(  # noqa: PLR0912
 
     if not selected_table_metrics:
         LOGGER.warning("No available table metrics were selected, skipping table")
+        raw_table_results, table_results = None, None
     else:
         raw_table_results = _drop_metrics(selected_table_metrics, new_metrics_result.raw_table_results)
         table_results = _drop_df_rows(selected_table_metrics, new_metrics_result.table_results, "metric")
 
     if not selected_plot_metrics:
         LOGGER.warning("No available plot metrics were selected, skipping plots")
+        raw_plot_results, plot_results = None, None
     else:
         raw_plot_results = _drop_metrics(selected_plot_metrics, new_metrics_result.raw_plot_results)
         plot_results = _drop_df_rows(selected_plot_metrics, new_metrics_result.plot_results, "metric")
@@ -163,7 +165,6 @@ def display_metrics(  # noqa: PLR0912
     new_metrics_result.table_results = _drop_df_rows(selected_algorithms, table_results, "algorithm")
     new_metrics_result.raw_plot_results = _drop_algorithms(selected_algorithms, raw_plot_results)
     new_metrics_result.plot_results = _drop_df_rows(selected_algorithms, plot_results, "algorithm")
-
 
     if save_path is not None:
         save_path = Path(save_path)
@@ -204,7 +205,8 @@ def _filter_algorithms(metrics_result: MetricResult, algorithms: list["Algorithm
     return list(selected_algs & available_algs)
 
 
-def _filter_metrics(metrics_result: MetricResult,
+def _filter_metrics(
+    metrics_result: MetricResult,
     metrics: list[Metric | str] | None,
     type_: Literal["table", "plot"],
 ) -> list[str]:
@@ -228,21 +230,23 @@ def _get_name_or_value(value: object, attribute: str) -> str:
     return value if isinstance(value, str) else str(getattr(value, attribute))
 
 
-def _drop_metrics(selected_metrics: list[str],
-                  frames: Mapping[Metric, pd.DataFrame] | None
-                  ) -> Mapping[Metric, pd.DataFrame] | None:
+def _drop_metrics(
+    selected_metrics: list[str], frames: Mapping[Metric, pd.DataFrame] | None
+) -> Mapping[Metric, pd.DataFrame] | None:
     if not frames:
         return None
     return {metric: frame for metric, frame in frames.items() if metric.description in selected_metrics}
 
 
-def _drop_algorithms(selected_algs: list[str],
-                     frames: Mapping[Metric, pd.DataFrame] | None
-                     ) -> Mapping[Metric, pd.DataFrame] | None:
+def _drop_algorithms(
+    selected_algs: list[str], frames: Mapping[Metric, pd.DataFrame] | None
+) -> Mapping[Metric, pd.DataFrame] | None:
     if not frames:
         return None
     return {metric: frame[frame["algorithm"].isin(selected_algs)] for metric, frame in frames.items()}
 
 
-def _drop_df_rows(selected: list[str], frame: pd.DataFrame, column: str) -> pd.DataFrame:
+def _drop_df_rows(selected: list[str], frame: pd.DataFrame | None, column: str) -> pd.DataFrame | None:
+    if frame is None:
+        return None
     return frame[frame[column].isin(selected)].copy()

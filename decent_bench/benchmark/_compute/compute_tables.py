@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from decent_bench.algorithms import Algorithm
-from decent_bench.benchmark.compute_metrics.compute_metrics_at_iter import compute_metrics_at_iter
+from decent_bench.benchmark._compute.compute_metrics_at_iter import compute_metrics_at_iter
 from decent_bench.metrics import Metric, utils
 from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network
@@ -64,7 +64,7 @@ def compute_table_metrics(
     problem: "BenchmarkProblem",
     metrics: list[Metric],
     iterations: list[int],
-    plot_metrics_results: Mapping[Metric, pd.DataFrame] = {},
+    plot_metrics_results: Mapping[Metric, pd.DataFrame] | None = None,
 ) -> Mapping[Metric, pd.DataFrame]:
     """
     Compute metrics at the final iteration and return one DataFrame per metric.
@@ -73,25 +73,30 @@ def compute_table_metrics(
     ``plot_metrics_results`` instead of recomputing it.
     The DataFrame has columns (algorithm, trial, agent, value), since the iteration column is dropped.
     """
+    if not plot_metrics_results:
+        plot_metrics_results = {}
     frames_by_metric: dict[Metric, pd.DataFrame] = {}
-    already_computed: set[Metric] = set() if plot_metrics_results is None else set(metrics) & set(plot_metrics_results)
+    already_computed: set[Metric] = set() if not plot_metrics_results else set(metrics) & set(plot_metrics_results)
+    if not iterations:
+        return frames_by_metric
     final_iteration = max(iterations)
 
     with utils.MetricProgressBar() as progress:
-        plot_task = progress.add_task("Computing table metrics", total=len(metrics), status="")
+        table_task = progress.add_task("Computing table metrics", total=len(metrics), status="")
 
         for metric in metrics:
-            progress.update(plot_task, status=f"Task: {metric.description}")
+            progress.update(table_task, status=f"Task: {metric.description}")
 
             if metric in already_computed:
                 plot_frame = plot_metrics_results[metric]
                 frames_by_metric[metric] = plot_frame.loc[plot_frame["iteration"] == final_iteration]
             else:
                 frames_by_metric[metric] = compute_metrics_at_iter(network_views, problem, metric, final_iteration)
+            progress.advance(table_task)
 
             frames_by_metric[metric] = frames_by_metric[metric].drop("iteration", axis="columns")
 
-        progress.update(plot_task, status="Table computation complete")
+        progress.update(table_task, status="Table computation complete")
 
     return frames_by_metric
 
@@ -99,7 +104,7 @@ def compute_table_metrics(
 def aggregate_table_metrics(
     table_results: Mapping[Metric, pd.DataFrame],
     statistics: list[str] | None = None,
-) -> pd.DataFrame:
+) -> pd.DataFrame | None:
     """
     Aggregate table metrics by statistics across agents and by mean, std across trials.
 
@@ -110,47 +115,41 @@ def aggregate_table_metrics(
     frames_by_metric: list[pd.DataFrame] = []
 
     for metric, frame in table_results.items():
-
         # if there is a single value (agent is always 0), drop agent column and add a dummy statistic column
         if len(frame["agent"].unique()) == 1:
-            new_frame = (
-                frame.groupby(["algorithm", "trial"])["value"]
-                .reset_index()
-            )
+            new_frame = frame.loc[:, ["algorithm", "trial", "value"]].copy()
             new_frame["statistic"] = ""
-            new_frame = new_frame[["algorithm", "trial", "statistic", "stat_value"]]  # reorder columns
+            new_frame = new_frame[["algorithm", "trial", "statistic", "value"]]  # reorder columns
 
         # if there are per-agent values, compute statistics across them
         # gives DataFrame with columns (algorithm, trial, statistic, value)
         else:
             # compute statistics
-            new_frame = (
-                frame.groupby(["algorithm", "trial"])["value"]
-                .agg(**resolved_statistics)
-                .reset_index()
-            )
+            agg_spec = {name: ("value", func) for name, func in resolved_statistics.items()}
+            new_frame = frame.groupby(["algorithm", "trial"]).agg(**agg_spec).reset_index()
             # turn the statistics into a new column
-            new_frame = (
-                new_frame.melt(
-                    id_vars=["algorithm", "trial"],
-                    value_vars=list(resolved_statistics.keys()),
-                    var_name="statistic",
-                    value_name="value",
-                )
+            new_frame = new_frame.melt(
+                id_vars=["algorithm", "trial"],
+                value_vars=list(resolved_statistics.keys()),
+                var_name="statistic",
+                value_name="value",
             )
 
         # 3) compute mean and std across trials, gives DataFrame with (algorithm, statistic, mean, std)
         new_frame = (
             new_frame.groupby(["algorithm", "statistic"])["value"]
-                    .agg(mean="mean", std="std")
-                    .reset_index()
+            .agg(mean="mean", std=lambda x: x.std(ddof=0))
+            .reset_index()
         )
 
         # 4) add metric column
         new_frame = new_frame.assign(metric=metric.description)
         new_frame = new_frame[["metric", "algorithm", "statistic", "mean", "std"]]  # reorder columns
+        new_frame[["mean", "std"]] = new_frame[["mean", "std"]].astype("float32")
 
-        frames_by_metric.append(new_frame.astype("float32"))
+        frames_by_metric.append(new_frame)
 
     # 5) return concatenated frames
+    if not frames_by_metric:
+        return None
     return pd.concat(frames_by_metric, ignore_index=True)

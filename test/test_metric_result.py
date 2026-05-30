@@ -25,61 +25,60 @@ class _MetricStub(Metric):
 def test_metric_result_update_tables_computes_dataframe() -> None:
     pd = pytest.importorskip("pandas")
 
-    algorithm_a = _AlgorithmStub("A")
-    algorithm_b = _AlgorithmStub("B")
     metric_one = _MetricStub("one")
 
     metrics_result = MetricResult(
-        network_views={algorithm_a: [], algorithm_b: []},
-        table_metrics=[metric_one],
-        plot_metrics=None,
+        network_views={_AlgorithmStub("A"): [], _AlgorithmStub("B"): []},
         raw_table_results={
             metric_one: pd.DataFrame(
                 {
+                    "algorithm": ["A", "A", "A", "A"],
+                    "trial": [0, 0, 1, 1],
+                    "agent": [0, 1, 0, 1],
                     "value": [1.0, 2.0, 3.0, 5.0],
-                },
-                index=pd.MultiIndex.from_tuples(
-                    [("A", 0, 0), ("A", 0, 1), ("A", 1, 0), ("A", 1, 1)],
-                    names=["algorithm", "trial", "agent"],
-                ),
+                }
             ),
         },
+        raw_plot_results=None,
         table_results=None,
         plot_results=None,
     )
 
-    table_df = metrics_result.update_tables(["mean", "std"])
+    table_df = metrics_result.update_table_results(["mean", "std"])
 
     assert table_df is not None
-    assert list(table_df.columns) == ["mean", "std"]
-    assert table_df.index.names == ["metric", "statistic", "algorithm"]
+    assert list(table_df.columns) == ["metric", "algorithm", "statistic", "mean", "std"]
     assert table_df["mean"].dtype == "float32"
     assert table_df["std"].dtype == "float32"
-    assert float(table_df.loc[("one", "mean", "A"), "mean"]) == pytest.approx(2.75)
-    assert float(table_df.loc[("one", "std", "A"), "mean"]) == pytest.approx(0.75)
+    mean_row = table_df[
+        (table_df["metric"] == "one") & (table_df["statistic"] == "mean") & (table_df["algorithm"] == "A")
+    ].iloc[0]
+    std_row = table_df[
+        (table_df["metric"] == "one") & (table_df["statistic"] == "std") & (table_df["algorithm"] == "A")
+    ].iloc[0]
+    assert float(mean_row["mean"]) == pytest.approx(2.75)
+    assert float(std_row["mean"]) == pytest.approx(0.75)
 
 
-def test_metric_result_available_algorithms_uses_dataframe_indices() -> None:
+def test_metric_result_algorithms_uses_raw_frames_when_network_views_missing() -> None:
     pd = pytest.importorskip("pandas")
 
+    metric = _MetricStub("metric")
     result = MetricResult(
         network_views=None,
-        table_metrics=[],
-        plot_metrics=[],
-        raw_table_results=None,
+        raw_table_results={
+            metric: pd.DataFrame(
+                {
+                    "algorithm": ["A", "B"],
+                    "trial": [0, 0],
+                    "agent": [0, 0],
+                    "value": [1.0, 2.0],
+                }
+            )
+        },
         raw_plot_results=None,
-        table_results=pd.DataFrame(
-            {"mean": [1.0], "std": [0.1]},
-            index=pd.MultiIndex.from_tuples(
-                [("metric-a", "mean", "A")], names=["metric", "statistic", "algorithm"]
-            ),
-        ),
-        plot_results=pd.DataFrame(
-            {"y_mean": [1.0], "y_min": [0.9], "y_max": [1.1]},
-            index=pd.MultiIndex.from_tuples(
-                [("metric-b", "B", 1)], names=["metric", "algorithm", "iterations"]
-            ),
-        ),
+        table_results=None,
+        plot_results=None,
     )
 
-    assert sorted(result.available_algorithms) == ["A", "B"]
+    assert result.algorithms == ["A", "B"]

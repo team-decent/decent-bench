@@ -333,9 +333,8 @@ def test_save_and_load_metrics_result(tmp_path: Path) -> None:  # noqa: D103
     manager = CheckpointManager(ckpt_path)
     metrics_result = MetricResult(
         network_views=None,
-        table_metrics=None,
-        plot_metrics=None,
         raw_table_results=None,
+        raw_plot_results=None,
         table_results=None,
         plot_results=None,
     )
@@ -361,8 +360,6 @@ def test_save_metrics_result_does_not_mutate_network_views(
     network_views = {algorithms[0]: [NetworkMetricsView.from_network(problem.network)]}
     metrics_result = MetricResult(
         network_views=network_views,
-        table_metrics=None,
-        plot_metrics=None,
         raw_table_results=None,
         raw_plot_results=None,
         table_results=None,
@@ -388,20 +385,21 @@ def test_load_metrics_result_reconstructs_only_selected_algorithms(
     problem, algorithms = _build_problem_and_algorithms(iterations=3, cost_cls=LogisticRegressionCost)
     selected_algorithm = algorithms[0]
     other_algorithm = algorithms[1]
-    table_results = pd.DataFrame(
-        {"value": [1.0]},
-        index=pd.MultiIndex.from_tuples(
-            [(selected_algorithm.name, "metric")],
-            names=["algorithm", "metric"],
-        ),
-    )
+    raw_table_results = {
+        cast("Any", object()): pd.DataFrame(
+            {
+                "algorithm": [selected_algorithm.name],
+                "trial": [0],
+                "agent": [0],
+                "value": [1.0],
+            }
+        )
+    }
     metrics_result = MetricResult(
         network_views=None,
-        table_metrics=None,
-        plot_metrics=None,
-        raw_table_results=None,
+        raw_table_results=raw_table_results,
         raw_plot_results=None,
-        table_results=table_results,
+        table_results=None,
         plot_results=None,
     )
 

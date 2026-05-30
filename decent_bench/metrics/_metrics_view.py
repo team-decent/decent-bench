@@ -132,4 +132,4 @@ class NetworkMetricsView:
     @property
     def iterations(self) -> list[int]:
         """List of iterations reached by any agent (plus server) in the network."""
-        return utils.all_sorted_iterations(self.graph.nodes)
+        return utils.all_sorted_iterations(list(self.graph.nodes))

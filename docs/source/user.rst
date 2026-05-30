@@ -308,7 +308,7 @@ Configure settings for metrics, trials, logging, and multiprocessing.
     from logging import DEBUG
     import numpy as np
 
-    import decent_bench.metrics.metric_utils as utils
+    from decent_bench.metrics import utils
     from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
@@ -1044,7 +1044,7 @@ Create your own metrics to tabulate and/or plot.
     import numpy.linalg as la
     import decent_bench.utils.interoperability as iop
 
-    import decent_bench.metrics.metric_utils as utils
+    from decent_bench.metrics import utils
     from decent_bench import benchmark
     from decent_bench.agents import AgentMetricsView
     from decent_bench.benchmark import BenchmarkProblem
