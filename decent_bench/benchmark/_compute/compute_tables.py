@@ -14,9 +14,6 @@ from decent_bench.utils.logger import LOGGER
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
 
-if TYPE_CHECKING:
-    from decent_bench.benchmark import BenchmarkProblem
-
 
 STATISTICS: dict[str, Callable[[Sequence[float]], float]] = {
     "mean": np.mean,
