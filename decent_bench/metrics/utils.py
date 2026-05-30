@@ -1,5 +1,6 @@
+import operator
 from collections.abc import Sequence
-from functools import lru_cache
+from functools import lru_cache, reduce
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -73,7 +74,7 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
     if len(all_x_at_iter) == 0:
         raise ValueError(f"No agent reached iteration {iteration}")
 
-    return Array(sum(all_x_at_iter) / len(all_x_at_iter))
+    return reduce(operator.add, all_x_at_iter) / len(all_x_at_iter)
 
 
 def _regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
@@ -108,7 +109,7 @@ def _gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> f
     for a in agents:
         kwargs = {"indices": "all"} if isinstance(a.cost, EmpiricalRiskCost) else {}
         gradients.append(a.cost.gradient(mean_x, **kwargs))
-    grad_avg = Array(sum(gradients) / len(agents))
+    grad_avg = reduce(operator.add, gradients) / len(gradients)
     return float(iop.norm(grad_avg))
 
 
