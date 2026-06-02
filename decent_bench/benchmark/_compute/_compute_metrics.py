@@ -77,7 +77,7 @@ def compute_metrics(
         Metrics that return ``False`` from :meth:`~decent_bench.metrics.Metric.is_available` for the given problem are
         filtered out from the returned metric lists. Warnings are emitted with the omitted metric names.
 
-        Plot metrics can still be available even when their final table value is ``nan``: plot computation keeps the
+        Plot metrics can still be available even when their final table value is ``inf/nan``: plot computation keeps the
         finite part of a trajectory, while table metrics are evaluated at the final iteration.
 
     """

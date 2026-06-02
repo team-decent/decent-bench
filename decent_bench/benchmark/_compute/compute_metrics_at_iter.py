@@ -25,7 +25,7 @@ def compute_metrics_at_iter(
 
     The function returns a DataFrame with columns (algorithm, trial, agent, iteration, value) which are of types
     (str, uint16, uint16, uint32, float32); algorithm is categorical. The elements in the
-    value column are set to +/-inf if value>1e30/<-1e30.
+    value column are set to +/-inf if value>1e30/<-1e30, and NaN is set to inf.
     """
     # 1) compute metrics across algorithms and trials
     rows: list[dict[str, object]] = []

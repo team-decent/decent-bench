@@ -25,7 +25,7 @@ class MetricResult:
         each algorithm maps to a sequence of trials, with each trial containing a
         :class:`~decent_bench.metrics.NetworkMetricsView`.
     * `raw_table_results`: contains raw metric evaluations in a dictionary mapping Metric to pandas.DataFrame. Each
-        DataFrame has columns (algorithm, trial, agent, value). Table metrics are evaluated only at the *recentmost*
+        DataFrame has columns (algorithm, trial, agent, value). Table metrics are evaluated only at the *most recent*
         iteration reached during benchmarking.
     * `raw_plot_results`: contains raw metric evaluations in a dictionary mapping Metric to pandas.DataFrame. Each
         DataFrame has columns (algorithm, trial, agent, iteration, value). Plot metrics are evaluated at *all*

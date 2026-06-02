@@ -12,9 +12,6 @@ from decent_bench.networks import Network
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
 
-if TYPE_CHECKING:
-    from decent_bench.benchmark import BenchmarkProblem
-
 
 def compute_plot_metrics(
     network_views: dict[Algorithm[Network], list[NetworkMetricsView]],

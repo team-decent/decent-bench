@@ -879,7 +879,7 @@ Loading :class:`~decent_bench.benchmark.MetricResult` for displaying metrics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Similarly, you can load previously computed metrics by setting ``metrics_result`` to ``None`` in :func:`~decent_bench.benchmark.display_metrics` and providing the same checkpoint manager.
 The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``algorithms``,
-``available_table_metrics``, and ``available_plot_metrics`` to discover valid filter values.
+``table_metrics``, and ``plot_metrics`` to discover valid filter values.
 
 .. code-block:: python
 
@@ -894,8 +894,8 @@ The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``algorithms``,
             raise ValueError("No computed metrics found in checkpoint directory")
 
         print("Available algorithms:", metrics_result.algorithms)
-        print("Available table metrics:", metrics_result.available_table_metrics)
-        print("Available plot metrics:", metrics_result.available_plot_metrics)
+        print("Available table metrics:", metrics_result.table_metrics)
+        print("Available plot metrics:", metrics_result.plot_metrics)
 
         benchmark.display_metrics(
             metrics_result=metrics_result,
