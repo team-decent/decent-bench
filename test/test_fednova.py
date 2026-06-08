@@ -11,8 +11,8 @@ from decent_bench.schemes import DropScheme, NoDrops
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
-_NORMALIZER_LABEL = "normalizer"
-_CUMULATIVE_GRADIENT_LABEL = "cumulative_gradient"
+_NORMALIZER_CHANNEL = "normalizer"
+_CUMULATIVE_GRADIENT_CHANNEL = "cumulative_gradient"
 
 
 class TrackingCost(EmpiricalRiskCost):
@@ -351,14 +351,14 @@ def test_fednova_uploads_normalizer_then_cumulative_gradient() -> None:
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
     algorithm._run_local_updates(network, participating_clients)
 
-    np.testing.assert_allclose(network.server().message(clients[0], _NORMALIZER_LABEL), np.array([2.0]))
-    np.testing.assert_allclose(network.server().message(clients[1], _NORMALIZER_LABEL), np.array([1.0]))
+    np.testing.assert_allclose(network.server().message(clients[0], _NORMALIZER_CHANNEL), np.array([2.0]))
+    np.testing.assert_allclose(network.server().message(clients[1], _NORMALIZER_CHANNEL), np.array([1.0]))
 
     algorithm._collect_received_normalizers(network, participating_clients)
     algorithm._communicate_cumulative_gradients(network, participating_clients)
 
-    np.testing.assert_allclose(network.server().message(clients[0], _CUMULATIVE_GRADIENT_LABEL), np.array([4.0]))
-    np.testing.assert_allclose(network.server().message(clients[1], _CUMULATIVE_GRADIENT_LABEL), np.array([4.0]))
+    np.testing.assert_allclose(network.server().message(clients[0], _CUMULATIVE_GRADIENT_CHANNEL), np.array([4.0]))
+    np.testing.assert_allclose(network.server().message(clients[1], _CUMULATIVE_GRADIENT_CHANNEL), np.array([4.0]))
 
     assert network.server().aux_vars["received_a_i"] == {clients[0]: 2.0, clients[1]: 1.0}
 
@@ -388,7 +388,7 @@ def test_fednova_renormalizes_client_weights_over_received_subset() -> None:
     algorithm._communicate_cumulative_gradients(network, participating_clients)
     network.server()._received_messages.clear(  # noqa: SLF001
         sender=clients[1],
-        label=_CUMULATIVE_GRADIENT_LABEL,
+        channel=_CUMULATIVE_GRADIENT_CHANNEL,
     )
 
     algorithm.aggregate(network, participating_clients)

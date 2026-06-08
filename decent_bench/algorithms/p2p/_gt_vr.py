@@ -11,8 +11,8 @@ from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
 
-_STATE_LABEL = "state"
-_GRADIENT_TRACKER_LABEL = "gradient_tracker"
+_STATE_CHANNEL = "state"
+_GRADIENT_TRACKER_CHANNEL = "gradient_tracker"
 
 
 @tags("peer-to-peer", "gradient-tracking")
@@ -96,7 +96,7 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
         for i in network.active_agents():
             x_minus_eta_y = i.x - self.step_size * i.aux_vars["y"]
             i.aux_vars["x_minus_eta_y"] = x_minus_eta_y
-            network.broadcast(i, x_minus_eta_y, label=_STATE_LABEL)
+            network.broadcast(i, x_minus_eta_y, channel=_STATE_CHANNEL)
 
         # Step 1: Update local estimate of the solution (line 3)
         for i in network.active_agents():
@@ -117,7 +117,7 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
         for i in network.active_agents():
             y_plus_delta_v = i.aux_vars["y"] + i.aux_vars["v"] - i.aux_vars["v_old"]
             i.aux_vars["y_plus_delta_v"] = y_plus_delta_v
-            network.broadcast(i, y_plus_delta_v, label=_GRADIENT_TRACKER_LABEL)
+            network.broadcast(i, y_plus_delta_v, channel=_GRADIENT_TRACKER_CHANNEL)
 
         # Step 4: Update gradient tracker (line 7)
         for i in network.active_agents():
@@ -131,7 +131,7 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
 
         """
         weighted_sum = self.W[agent, agent] * agent.aux_vars["x_minus_eta_y"]
-        for j, x_minus_eta_y in agent.messages(_STATE_LABEL).items():
+        for j, x_minus_eta_y in agent.messages(_STATE_CHANNEL).items():
             weighted_sum += self.W[agent, j] * x_minus_eta_y
         agent.x = weighted_sum
 
@@ -193,6 +193,6 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
 
         """
         weighted_sum = self.W[agent, agent] * agent.aux_vars["y_plus_delta_v"]
-        for j, y_plus_delta_v in agent.messages(_GRADIENT_TRACKER_LABEL).items():
+        for j, y_plus_delta_v in agent.messages(_GRADIENT_TRACKER_CHANNEL).items():
             weighted_sum += self.W[agent, j] * y_plus_delta_v
         agent.aux_vars["y"] = weighted_sum

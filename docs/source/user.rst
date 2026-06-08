@@ -96,6 +96,9 @@ Benchmark executions will have outputs like these:
 Available algorithms
 --------------------
 
+Note: algorithms are slightly modified with respect to the corresponding papers to ensure that they work in a broader
+range of conditions (asynchorny/partial participation, loss of communications, etc) than the original papers.
+
 Peer-to-peer
 ~~~~~~~~~~~~
 .. tagged-list::

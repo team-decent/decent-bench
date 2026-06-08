@@ -128,13 +128,13 @@ class Agent:
         """Number of iterations between snapshots of the agent's state."""
         return self._state_snapshot_period
 
-    def messages(self, label: str = "default") -> Mapping[Agent, Array]:
-        """Received messages with ``label``, keyed by sender."""
-        return self._received_messages.by_label(label)
+    def messages(self, channel: str = "default") -> Mapping[Agent, Array]:
+        """Received messages with ``channel``, keyed by sender."""
+        return self._received_messages.by_channel(channel)
 
-    def message(self, sender: Agent, label: str = "default") -> Array:
-        """Received message from ``sender`` with ``label``."""
-        return self._received_messages.get(sender, label)
+    def message(self, sender: Agent, channel: str = "default") -> Array:
+        """Received message from ``sender`` with ``channel``."""
+        return self._received_messages.get(sender, channel)
 
     @property
     def aux_vars(self) -> dict[str, Any]:
@@ -294,59 +294,59 @@ class Agent:
 
 
 class ReceivedMessages:
-    """Container for received messages keyed by label and sender."""
+    """Container for received messages keyed by channel and sender."""
 
     def __init__(self) -> None:
         self._messages: dict[str, dict[Agent, Array]] = {}
 
-    def put(self, sender: Agent, msg: Array, label: str = "default") -> None:
-        """Store or overwrite a message from ``sender`` under ``label``."""
-        if label not in self._messages:
-            self._messages[label] = {}
-        self._messages[label][sender] = msg
+    def put(self, sender: Agent, msg: Array, channel: str = "default") -> None:
+        """Store or overwrite a message from ``sender`` under ``channel``."""
+        if channel not in self._messages:
+            self._messages[channel] = {}
+        self._messages[channel][sender] = msg
 
-    def get(self, sender: Agent, label: str = "default") -> Array:
-        """Return the message from ``sender`` under ``label``."""
-        return self._messages[label][sender]
+    def get(self, sender: Agent, channel: str = "default") -> Array:
+        """Return the message from ``sender`` under ``channel``."""
+        return self._messages[channel][sender]
 
-    def has(self, sender: Agent, label: str = "default") -> bool:
-        """Return ``True`` if a message from ``sender`` exists under ``label``."""
-        return label in self._messages and sender in self._messages[label]
+    def has(self, sender: Agent, channel: str = "default") -> bool:
+        """Return ``True`` if a message from ``sender`` exists under ``channel``."""
+        return channel in self._messages and sender in self._messages[channel]
 
-    def by_label(self, label: str = "default") -> Mapping[Agent, Array]:
-        """Return a read-only sender->message mapping for ``label``."""
-        return MappingProxyType(self._messages.get(label, {}))
+    def by_channel(self, channel: str = "default") -> Mapping[Agent, Array]:
+        """Return a read-only sender->message mapping for ``channel``."""
+        return MappingProxyType(self._messages.get(channel, {}))
 
-    def clear(self, sender: Agent | Sequence[Agent] | None = None, label: str | None = None) -> None:
-        """Clear messages with optional sender/label scoping."""
+    def clear(self, sender: Agent | Sequence[Agent] | None = None, channel: str | None = None) -> None:
+        """Clear messages with optional sender/channel scoping."""
         if sender is None:
-            if label is None:  # clear all messages
+            if channel is None:  # clear all messages
                 self._messages.clear()
-            else:  # clear by label (all senders)
-                self._messages.pop(label, None)
+            else:  # clear by channel (all senders)
+                self._messages.pop(channel, None)
             return
 
         sender_list = [sender] if isinstance(sender, Agent) else list(sender)
 
-        if label is None:  # clear by sender(s) (all labels)
-            empty_labels: list[str] = []
-            for msg_label, msg_bucket in self._messages.items():
+        if channel is None:  # clear by sender(s) (all channels)
+            empty_channels: list[str] = []
+            for msg_channel, msg_bucket in self._messages.items():
                 for s in sender_list:
                     msg_bucket.pop(s, None)
                 if len(msg_bucket) == 0:
-                    empty_labels.append(msg_label)
-            for empty_label in empty_labels:
-                self._messages.pop(empty_label, None)
+                    empty_channels.append(msg_channel)
+            for empty_channel in empty_channels:
+                self._messages.pop(empty_channel, None)
             return
 
-        # clear (label, sender(s)) pairs specifically
-        label_bucket = self._messages.get(label)
-        if label_bucket is None:
+        # clear (channel, sender(s)) pairs specifically
+        channel_bucket = self._messages.get(channel)
+        if channel_bucket is None:
             return
         for s in sender_list:
-            label_bucket.pop(s, None)
-        if not label_bucket:
-            self._messages.pop(label, None)
+            channel_bucket.pop(s, None)
+        if not channel_bucket:
+            self._messages.pop(channel, None)
 
 
 class AgentHistory:

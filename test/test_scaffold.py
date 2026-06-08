@@ -11,8 +11,8 @@ from decent_bench.schemes import ClientSelectionScheme, DropScheme, NoDrops
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
-_MODEL_DELTA_LABEL = "model_delta"
-_CONTROL_VARIATE_DELTA_LABEL = "control_variate_delta"
+_MODEL_DELTA_CHANNEL = "model_delta"
+_CONTROL_VARIATE_DELTA_CHANNEL = "control_variate_delta"
 
 
 class TrackingCost(Cost):
@@ -234,13 +234,13 @@ def test_scaffold_aggregation_uses_only_received_updates_for_model_and_control_d
         sender=clients[0],
         receiver=network.server(),
         msg=np.array([2.0]),
-        label=_MODEL_DELTA_LABEL,
+        channel=_MODEL_DELTA_CHANNEL,
     )
     network.send(
         sender=clients[0],
         receiver=network.server(),
         msg=np.array([4.0]),
-        label=_CONTROL_VARIATE_DELTA_LABEL,
+        channel=_CONTROL_VARIATE_DELTA_CHANNEL,
     )
 
     algorithm.aggregate(network, clients)

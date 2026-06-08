@@ -11,8 +11,8 @@ from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
 
-_GRADIENT_TRACKER_LABEL = "gradient_tracker"
-_STATE_LABEL = "state"
+_GRADIENT_TRACKER_CHANNEL = "gradient_tracker"
+_STATE_CHANNEL = "state"
 
 
 @tags("peer-to-peer", "gradient-tracking")
@@ -87,7 +87,7 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
             # Broadcast y_i + g_i - g_i^{-1}
             y_plus_delta_g = i.aux_vars["y"] + i.aux_vars["g"] - i.aux_vars["g_old"]
             i.aux_vars["y_plus_delta_g"] = y_plus_delta_g
-            network.broadcast(i, y_plus_delta_g, label=_GRADIENT_TRACKER_LABEL)
+            network.broadcast(i, y_plus_delta_g, channel=_GRADIENT_TRACKER_CHANNEL)
 
         for i in network.active_agents():
             self._update_gradient_tracker(i)
@@ -98,7 +98,7 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
             # Broadcast x_i - alpha*y_i to reduce communication
             x_minus_alpha_y = i.x - self.step_size * i.aux_vars["y"]
             i.aux_vars["x_minus_alpha_y"] = x_minus_alpha_y
-            network.broadcast(i, x_minus_alpha_y, label=_STATE_LABEL)
+            network.broadcast(i, x_minus_alpha_y, channel=_STATE_CHANNEL)
 
         for i in network.active_agents():
             self._consensus_update(i)
@@ -139,14 +139,14 @@ class GT_SAGA(P2PAlgorithm):  # noqa: N801
     def _update_gradient_tracker(self, agent: Agent) -> None:
         """Update local gradient tracker."""
         weighted_sum = self.W[agent, agent] * agent.aux_vars["y_plus_delta_g"]
-        for j, y_plus_delta_g in agent.messages(_GRADIENT_TRACKER_LABEL).items():
+        for j, y_plus_delta_g in agent.messages(_GRADIENT_TRACKER_CHANNEL).items():
             weighted_sum += self.W[agent, j] * y_plus_delta_g
         agent.aux_vars["y"] = weighted_sum
 
     def _consensus_update(self, agent: Agent) -> None:
         """Update local estimate via consensus."""
         weighted_sum = self.W[agent, agent] * agent.aux_vars["x_minus_alpha_y"]
-        for j, x_minus_alpha_y in agent.messages(_STATE_LABEL).items():
+        for j, x_minus_alpha_y in agent.messages(_STATE_CHANNEL).items():
             weighted_sum += self.W[agent, j] * x_minus_alpha_y
         agent.x = weighted_sum
 

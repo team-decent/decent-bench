@@ -91,32 +91,32 @@ class FedAlgorithm(Algorithm[FedNetwork]):
         self,
         network: FedNetwork,
         selected_clients: Sequence["Agent"],
-        label: str = "default",
+        channel: str = "default",
     ) -> None:
-        """Send the current server model to the selected clients under ``label``."""
-        network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x, label=label)
+        """Send the current server model to the selected clients under ``channel``."""
+        network.send(sender=network.server(), receiver=selected_clients, msg=network.server().x, channel=channel)
 
     def _clients_with_server_broadcast(
         self,
         network: FedNetwork,
         selected_clients: Sequence["Agent"],
-        label: str = "default",
+        channel: str = "default",
     ) -> list["Agent"]:
-        """Return selected clients that received :meth:`server_broadcast` under ``label``."""
-        return [client for client in selected_clients if network.server() in client.messages(label)]
+        """Return selected clients that received :meth:`server_broadcast` under ``channel``."""
+        return [client for client in selected_clients if network.server() in client.messages(channel)]
 
     @staticmethod
-    def _get_server_broadcast(client: "Agent", server: "Agent", label: str = "default") -> "Array":
+    def _get_server_broadcast(client: "Agent", server: "Agent", channel: str = "default") -> "Array":
         """
-        Return the current server broadcast received by the client under ``label``.
+        Return the current server broadcast received by the client under ``channel``.
 
         Raises:
             ValueError: if the client did not receive the current server broadcast.
 
         """
-        if server not in client.messages(label):
+        if server not in client.messages(channel):
             raise ValueError("Client did not receive the current server broadcast")
-        return iop.copy(client.message(server, label))
+        return iop.copy(client.message(server, channel))
 
     @staticmethod
     def _weighted_average(values: Sequence["Array"], weights: Sequence[float], total_weight: float) -> "Array":

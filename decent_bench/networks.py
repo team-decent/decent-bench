@@ -268,7 +268,7 @@ class Network(ABC):  # noqa: B024
         sender: Agent,
         receiver: Agent | Sequence[Agent] | None = None,
         msg: Array | None = None,
-        label: str = "default",
+        channel: str = "default",
     ) -> None:
         """
         Send message to one or more agents.
@@ -283,7 +283,7 @@ class Network(ABC):  # noqa: B024
             sender: sender agent
             receiver: receiver agent, sequence of receiver agents, or ``None`` to broadcast to connected agents.
             msg: array message to send
-            label: label used to identify the message stream.
+            channel: channel used to identify the message stream.
 
         Raises:
             ValueError: if ``msg`` is not provided, if agents are not part of the network, or if sender/receiver are not
@@ -325,7 +325,7 @@ class Network(ABC):  # noqa: B024
         # transmit messages
         for i, r in enumerate(confirmed_receivers):
             transmitted_msg = msg if noise is None else msg + noise[i]
-            r._received_messages.put(sender, transmitted_msg, label=label)  # noqa: SLF001
+            r._received_messages.put(sender, transmitted_msg, channel=channel)  # noqa: SLF001
             r._n_received_messages += counter_increment  # noqa: SLF001
 
     def _step(self, iteration: int) -> None:
@@ -486,9 +486,9 @@ class P2PNetwork(Network):
         """Alias for :meth:`~decent_bench.networks.Network.active_connected_agents`."""
         return super().active_connected_agents(agent)
 
-    def broadcast(self, sender: Agent, msg: Array, label: str = "default") -> None:
+    def broadcast(self, sender: Agent, msg: Array, channel: str = "default") -> None:
         """Send to all neighbors (alias for :meth:`~decent_bench.networks.Network.send` with ``receiver=None``)."""
-        self.send(sender=sender, receiver=None, msg=msg, label=label)
+        self.send(sender=sender, receiver=None, msg=msg, channel=channel)
 
 
 class FedNetwork(Network):
@@ -618,7 +618,7 @@ class FedNetwork(Network):
         sender: Agent,
         receiver: Agent | Sequence[Agent] | None = None,
         msg: Array | None = None,
-        label: str = "default",
+        channel: str = "default",
     ) -> None:
         """
         Send message(s) in a federated learning network.
@@ -636,22 +636,22 @@ class FedNetwork(Network):
                 raise ValueError("Server-to-server communication is not supported")
             if sender is not self.server() and receiver is not self.server():
                 raise ValueError("Client-to-client communication is not supported")
-            super().send(sender=sender, receiver=receiver, msg=msg, label=label)
+            super().send(sender=sender, receiver=receiver, msg=msg, channel=channel)
             return
 
         if receiver is None:
             if sender is not self.server():
-                super().send(sender=sender, receiver=self.server(), msg=msg, label=label)
+                super().send(sender=sender, receiver=self.server(), msg=msg, channel=channel)
                 return
-            super().send(sender=sender, receiver=receiver, msg=msg, label=label)
+            super().send(sender=sender, receiver=receiver, msg=msg, channel=channel)
             return
 
         if sender is not self.server():
             raise ValueError("Only the server can send to multiple receivers")
         if any(r is self.server() for r in receiver):
             raise ValueError("All receivers must be clients")
-        super().send(sender=sender, receiver=receiver, msg=msg, label=label)
+        super().send(sender=sender, receiver=receiver, msg=msg, channel=channel)
 
-    def broadcast(self, msg: Array, label: str = "default") -> None:
+    def broadcast(self, msg: Array, channel: str = "default") -> None:
         """Send the same message from the server to every client (synchronous FL push)."""
-        self.send(sender=self.server(), receiver=None, msg=msg, label=label)
+        self.send(sender=self.server(), receiver=None, msg=msg, channel=channel)

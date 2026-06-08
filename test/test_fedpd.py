@@ -15,8 +15,8 @@ from decent_bench.utils.types import (
 )
 
 
-_CENTER_CANDIDATE_LABEL = "center_candidate"
-_CENTER_UPDATE_LABEL = "center_update"
+_CENTER_CANDIDATE_CHANNEL = "center_candidate"
+_CENTER_UPDATE_CHANNEL = "center_update"
 
 
 class TrackingCost(Cost):
@@ -185,7 +185,7 @@ def test_fedpd_aggregate_uses_only_received_center_candidates() -> None:
         sender=clients[0],
         receiver=network.server(),
         msg=np.array([2.0]),
-        label=_CENTER_CANDIDATE_LABEL,
+        channel=_CENTER_CANDIDATE_CHANNEL,
     )
 
     algorithm.aggregate(network, clients)
@@ -225,8 +225,8 @@ def test_fedpd_does_not_synchronize_when_no_center_candidates_are_received() -> 
     np.testing.assert_allclose(network.server().x, np.array([0.0]))
     np.testing.assert_allclose(clients[0].aux_vars["center"], np.array([-2.0]))
     np.testing.assert_allclose(clients[1].aux_vars["center"], np.array([-6.0]))
-    assert network.server() not in clients[0].messages(_CENTER_UPDATE_LABEL)
-    assert network.server() not in clients[1].messages(_CENTER_UPDATE_LABEL)
+    assert network.server() not in clients[0].messages(_CENTER_UPDATE_CHANNEL)
+    assert network.server() not in clients[1].messages(_CENTER_UPDATE_CHANNEL)
 
 
 def test_fedpd_keeps_local_center_when_server_sync_message_is_dropped() -> None:

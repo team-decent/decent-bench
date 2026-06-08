@@ -16,8 +16,8 @@ if TYPE_CHECKING:
     from decent_bench.utils.array import Array
 
 
-_CENTER_CANDIDATE_LABEL = "center_candidate"
-_CENTER_UPDATE_LABEL = "center_update"
+_CENTER_CANDIDATE_CHANNEL = "center_candidate"
+_CENTER_UPDATE_CHANNEL = "center_update"
 
 
 @tags("federated")
@@ -150,7 +150,7 @@ class FedPD(FedAlgorithm):
                 sender=client,
                 receiver=network.server(),
                 msg=client.aux_vars["center"],
-                label=_CENTER_CANDIDATE_LABEL,
+                channel=_CENTER_CANDIDATE_CHANNEL,
             )
 
     def aggregate(
@@ -169,15 +169,15 @@ class FedPD(FedAlgorithm):
         """
         server = network.server()
         received_clients = [
-            client for client in participating_clients if client in server.messages(_CENTER_CANDIDATE_LABEL)
+            client for client in participating_clients if client in server.messages(_CENTER_CANDIDATE_CHANNEL)
         ]
         if not received_clients:
             return
-        center_candidates = [server.message(client, _CENTER_CANDIDATE_LABEL) for client in received_clients]
+        center_candidates = [server.message(client, _CENTER_CANDIDATE_CHANNEL) for client in received_clients]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))
         server.x = self._weighted_average(center_candidates, weights, total_weight)
-        network.send(sender=server, receiver=participating_clients, msg=server.x, label=_CENTER_UPDATE_LABEL)
+        network.send(sender=server, receiver=participating_clients, msg=server.x, channel=_CENTER_UPDATE_CHANNEL)
         for client in participating_clients:
-            if server in client.messages(_CENTER_UPDATE_LABEL):
-                client.aux_vars["center"] = client.message(server, _CENTER_UPDATE_LABEL)
+            if server in client.messages(_CENTER_UPDATE_CHANNEL):
+                client.aux_vars["center"] = client.message(server, _CENTER_UPDATE_CHANNEL)

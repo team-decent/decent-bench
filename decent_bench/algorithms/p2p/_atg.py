@@ -8,8 +8,8 @@ from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
 
-_Z_Y_LABEL = "z_y"
-_Z_S_LABEL = "z_s"
+_Z_Y_CHANNEL = "z_y"
+_Z_S_CHANNEL = "z_s"
 
 
 @tags("peer-to-peer", "gradient-tracking", "dual method", "ADMM")
@@ -107,12 +107,12 @@ class ATG(P2PAlgorithm):
                 idx = i.aux_vars["neighbor_to_idx"][j]
                 z_y_update = -i.aux_vars["z_y"][idx] + 2 * self.penalty * i.aux_vars["y"]
                 z_s_update = -i.aux_vars["z_s"][idx] + 2 * self.penalty * i.aux_vars["s"]
-                network.send(i, j, z_y_update, label=_Z_Y_LABEL)
-                network.send(i, j, z_s_update, label=_Z_S_LABEL)
+                network.send(i, j, z_y_update, channel=_Z_Y_CHANNEL)
+                network.send(i, j, z_s_update, channel=_Z_S_CHANNEL)
 
         for i in network.active_agents():
-            received_z_y_updates = i.messages(_Z_Y_LABEL)
-            received_z_s_updates = i.messages(_Z_S_LABEL)
+            received_z_y_updates = i.messages(_Z_Y_CHANNEL)
+            received_z_s_updates = i.messages(_Z_S_CHANNEL)
             received_both = set(received_z_y_updates).intersection(received_z_s_updates)
             for j in received_both:
                 idx = i.aux_vars["neighbor_to_idx"][j]

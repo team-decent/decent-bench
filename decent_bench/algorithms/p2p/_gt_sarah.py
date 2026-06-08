@@ -11,8 +11,8 @@ from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
 
-_GRADIENT_TRACKER_LABEL = "gradient_tracker"
-_STATE_LABEL = "state"
+_GRADIENT_TRACKER_CHANNEL = "gradient_tracker"
+_STATE_CHANNEL = "state"
 
 
 @tags("peer-to-peer", "gradient-tracking")
@@ -95,14 +95,14 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
 
         # Step 2: Update gradient tracker
         for i in network.active_agents():
-            network.broadcast(i, i.aux_vars["y"], label=_GRADIENT_TRACKER_LABEL)
+            network.broadcast(i, i.aux_vars["y"], channel=_GRADIENT_TRACKER_CHANNEL)
 
         for i in network.active_agents():
             self._update_gradient_tracker(i)
 
         # Step 3: Update state
         for i in network.active_agents():
-            network.broadcast(i, i.x, label=_STATE_LABEL)
+            network.broadcast(i, i.x, channel=_STATE_CHANNEL)
 
         for i in network.active_agents():
             self._state_update(i)
@@ -156,7 +156,7 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
 
         """
         weighted_sum = self.W[agent, agent] * agent.aux_vars["y"]
-        for j, y in agent.messages(_GRADIENT_TRACKER_LABEL).items():
+        for j, y in agent.messages(_GRADIENT_TRACKER_CHANNEL).items():
             weighted_sum += self.W[agent, j] * y
         agent.aux_vars["y"] = weighted_sum + agent.aux_vars["v"] - agent.aux_vars["v_prev"]
 
@@ -169,7 +169,7 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
         """
         agent.aux_vars["x_prev"] = agent.x
         weighted_sum = self.W[agent, agent] * agent.x
-        for j, x in agent.messages(_STATE_LABEL).items():
+        for j, x in agent.messages(_STATE_CHANNEL).items():
             weighted_sum += self.W[agent, j] * x
         agent.x = weighted_sum - self.step_size * agent.aux_vars["y"]
 
@@ -186,14 +186,14 @@ class GT_SARAH(P2PAlgorithm):  # noqa: N801
 
             # Step 5: Update gradient tracker (inner loop)
             for i in network.active_agents():
-                network.broadcast(i, i.aux_vars["y"], label=_GRADIENT_TRACKER_LABEL)
+                network.broadcast(i, i.aux_vars["y"], channel=_GRADIENT_TRACKER_CHANNEL)
 
             for i in network.active_agents():
                 self._update_gradient_tracker(i)  # line 9
 
             # Step 6: Update state (inner loop)
             for i in network.active_agents():
-                network.broadcast(i, i.x, label=_STATE_LABEL)
+                network.broadcast(i, i.x, channel=_STATE_CHANNEL)
 
             for i in network.active_agents():
                 self._state_update(i)
