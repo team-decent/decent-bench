@@ -47,7 +47,7 @@ def compute_metrics_at_iter(
 
     # 2) create dataframe, remove extreme values (or NaN), and cast columns to appropriate dtypes
     frame = pd.DataFrame.from_records(rows, columns=["algorithm", "trial", "agent", "iteration", "value"])
-    frame["value"] = frame["value"].astype("float64")  # guard against pandas inferring int incorrectly
+    frame["value"] = frame["value"].astype("float32")  # guard against pandas inferring int incorrectly
 
     frame.loc[
         frame["value"].isna() | (np.isfinite(frame["value"]) & (frame["value"] > MAX_ABS_METRIC_VALUE)), "value"

@@ -227,46 +227,19 @@ def _create_and_plot_figures(
                 frame = frames_by_metrics[metric].loc[frames_by_metrics[metric]["algorithm"] == alg_name]
                 y_mean, y_min, y_max = frame["mean"].tolist(), frame["min"].tolist(), frame["max"].tolist()
 
-                if two_columns:
-                    _plot_subplot(
-                        metric_subplots[metric_index_in_group * 2],
-                        frame["compute"].tolist(),
-                        y_mean,
-                        y_min,
-                        y_max,
-                        alg_name,
-                        alg_idx,
-                    )
+                subplot_refs = (
+                    (metric_subplots[metric_index_in_group * 2], metric_subplots[metric_index_in_group * 2 + 1])
+                    if two_columns
+                    else (metric_subplots[metric_index_in_group],)
+                )
+                x_axes = (
+                    (frame["compute"], frame["iteration"])
+                    if two_columns
+                    else (frame["compute"] if use_cost else frame["iteration"],)
+                )
 
-                    _plot_subplot(
-                        metric_subplots[metric_index_in_group * 2 + 1],
-                        frame["iteration"].tolist(),
-                        y_mean,
-                        y_min,
-                        y_max,
-                        alg_name,
-                        alg_idx,
-                    )
-                elif use_cost:
-                    _plot_subplot(
-                        metric_subplots[metric_index_in_group],
-                        frame["compute"].tolist(),
-                        y_mean,
-                        y_min,
-                        y_max,
-                        alg_name,
-                        alg_idx,
-                    )
-                else:
-                    _plot_subplot(
-                        metric_subplots[metric_index_in_group],
-                        frame["iteration"].tolist(),
-                        y_mean,
-                        y_min,
-                        y_max,
-                        alg_name,
-                        alg_idx,
-                    )
+                for subplot, x in zip(subplot_refs, x_axes, strict=True):
+                    _plot_subplot(subplot, x.tolist(), y_mean, y_min, y_max, alg_name, alg_idx)
 
     return [
         (fig, metric_subplots)
