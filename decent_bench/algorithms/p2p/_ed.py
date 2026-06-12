@@ -23,7 +23,7 @@ class ED(P2PAlgorithm):
 
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
-    :math:`\rho` is the step size,
+    :math:`\rho` is the step size (the corresponding argument is ``step_size``),
     :math:`f_i` is agent i's local cost function,
     j is a neighbor of i or i itself,
     and :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j.
@@ -66,7 +66,7 @@ class ED(P2PAlgorithm):
 
         for i in network.active_agents():
             s = self.W[i, i] * i.aux_vars["msg"]
-            for j, msg in i.messages.items():
+            for j, msg in i.messages().items():
                 s += self.W[i, j] * msg
             i.x = s
             i.aux_vars["y"] = i.aux_vars["y_new"]

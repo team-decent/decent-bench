@@ -8,6 +8,9 @@ from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
 
+_STATE_CHANNEL = "state"
+_PREVIOUS_STATE_CHANNEL = "previous_state"
+
 
 @tags("peer-to-peer", "gradient-tracking")
 @dataclass(eq=False)
@@ -65,12 +68,12 @@ class WangElia(P2PAlgorithm):
         for i in network.active_agents():
             msg = i.x + i.aux_vars["z"]
             i.aux_vars["msg"] = msg
-            network.broadcast(i, msg)
+            network.broadcast(i, msg, channel=_STATE_CHANNEL)
 
         # do consensus and local gradient step
         for i in network.active_agents():
             neighborhood_avg = self.K[i, i] * i.aux_vars["msg"]
-            for j, msg_j in i.messages.items():
+            for j, msg_j in i.messages(_STATE_CHANNEL).items():
                 neighborhood_avg += self.K[i, j] * msg_j
 
             i.aux_vars["x_old"] = i.x
@@ -78,11 +81,11 @@ class WangElia(P2PAlgorithm):
 
         # 2nd communication round
         for i in network.active_agents():
-            network.broadcast(i, i.aux_vars["x_old"])
+            network.broadcast(i, i.aux_vars["x_old"], channel=_PREVIOUS_STATE_CHANNEL)
 
         # update auxiliary variable
         for i in network.active_agents():
             neighborhood_avg = self.K[i, i] * i.aux_vars["x_old"]
-            for j, x_old_j in i.messages.items():
+            for j, x_old_j in i.messages(_PREVIOUS_STATE_CHANNEL).items():
                 neighborhood_avg += self.K[i, j] * x_old_j
             i.aux_vars["z"] += neighborhood_avg

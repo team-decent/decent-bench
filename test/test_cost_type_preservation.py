@@ -688,7 +688,7 @@ def test_composite_regularizer_proximal_is_unsupported_for_regularizer_sums() ->
     x = np.array([1.0, -2.0])
 
     with pytest.raises(NotImplementedError, match="Composite regularizers do not implement a generic proximal operator"):
-        (reg_l1 + reg_l2).proximal(x, rho=0.5)
+        (reg_l1 + reg_l2).proximal(x, penalty=0.5)
 
 
 def test_empirical_regularized_cost_proximal_is_explicitly_unsupported() -> None:
@@ -697,7 +697,7 @@ def test_empirical_regularized_cost_proximal_is_explicitly_unsupported() -> None
     x = np.array([0.25, -0.75])
 
     with pytest.raises(NotImplementedError, match="EmpiricalRegularizedCost does not implement a generic proximal"):
-        (risk + reg_l2).proximal(x, rho=0.5)
+        (risk + reg_l2).proximal(x, penalty=0.5)
 
 
 @pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available")

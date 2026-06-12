@@ -135,7 +135,7 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
 
         Update z_ij,k+1 according to equation (3b).
         """
-        for j, msg in agent.messages.items():
+        for j, msg in agent.messages().items():
             j_idx = agent.aux_vars["neighbor_to_idx"][j]
             z_update = (1 - self.alpha) * agent.aux_vars["z_i"][j_idx] - self.alpha * msg
             agent.aux_vars["z_i"][j_idx] = z_update

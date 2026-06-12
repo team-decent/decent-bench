@@ -61,7 +61,7 @@ class Agent:
         self._current_x: Array | None = None
         self._x_history: AgentHistory = AgentHistory()
         self._auxiliary_variables: dict[str, Any] = {}
-        self._received_messages: dict[Agent, Array] = {}
+        self._received_messages = ReceivedMessages()
         self._n_x_updates = 0
         self._n_sent_messages: float = 0
         self._n_received_messages: float = 0
@@ -128,10 +128,13 @@ class Agent:
         """Number of iterations between snapshots of the agent's state."""
         return self._state_snapshot_period
 
-    @property
-    def messages(self) -> Mapping[Agent, Array]:
-        """Messages received from neighbors, stored one per sender."""
-        return MappingProxyType(self._received_messages)
+    def messages(self, channel: str = "default") -> Mapping[Agent, Array]:
+        """Received messages with ``channel``, keyed by sender."""
+        return self._received_messages.by_channel(channel)
+
+    def message(self, sender: Agent, channel: str = "default") -> Array:
+        """Received message from ``sender`` with ``channel``."""
+        return self._received_messages.get(sender, channel)
 
     @property
     def aux_vars(self) -> dict[str, Any]:
@@ -157,7 +160,7 @@ class Agent:
         """
         self._x_history = AgentHistory()
         self._auxiliary_variables = {}
-        self._received_messages = {}
+        self._received_messages = ReceivedMessages()
         self._n_x_updates = 0
         self._n_sent_messages = 0
         self._n_received_messages = 0
@@ -231,8 +234,8 @@ class Agent:
             self._n_hessian_calls += 1
         return res
 
-    def _call_counting_proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        res = self._cost.__class__.proximal(self.cost, x, rho, *args, **kwargs)
+    def _call_counting_proximal(self, x: Array, penalty: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
+        res = self._cost.__class__.proximal(self.cost, x, penalty, *args, **kwargs)
         if self._no_count_depth > 0:
             return res
         if isinstance(self._cost, EmpiricalRiskCost):
@@ -288,6 +291,62 @@ class Agent:
         finally:
             for agent in agents:
                 agent._no_count_depth -= 1  # noqa: SLF001
+
+
+class ReceivedMessages:
+    """Container for received messages keyed by channel and sender."""
+
+    def __init__(self) -> None:
+        self._messages: dict[str, dict[Agent, Array]] = {}
+
+    def put(self, sender: Agent, msg: Array, channel: str = "default") -> None:
+        """Store or overwrite a message from ``sender`` under ``channel``."""
+        if channel not in self._messages:
+            self._messages[channel] = {}
+        self._messages[channel][sender] = msg
+
+    def get(self, sender: Agent, channel: str = "default") -> Array:
+        """Return the message from ``sender`` under ``channel``."""
+        return self._messages[channel][sender]
+
+    def has(self, sender: Agent, channel: str = "default") -> bool:
+        """Return ``True`` if a message from ``sender`` exists under ``channel``."""
+        return channel in self._messages and sender in self._messages[channel]
+
+    def by_channel(self, channel: str = "default") -> Mapping[Agent, Array]:
+        """Return a read-only sender->message mapping for ``channel``."""
+        return MappingProxyType(self._messages.get(channel, {}))
+
+    def clear(self, sender: Agent | Sequence[Agent] | None = None, channel: str | None = None) -> None:
+        """Clear messages with optional sender/channel scoping."""
+        if sender is None:
+            if channel is None:  # clear all messages
+                self._messages.clear()
+            else:  # clear by channel (all senders)
+                self._messages.pop(channel, None)
+            return
+
+        sender_list = [sender] if isinstance(sender, Agent) else list(sender)
+
+        if channel is None:  # clear by sender(s) (all channels)
+            empty_channels: list[str] = []
+            for msg_channel, msg_bucket in self._messages.items():
+                for s in sender_list:
+                    msg_bucket.pop(s, None)
+                if len(msg_bucket) == 0:
+                    empty_channels.append(msg_channel)
+            for empty_channel in empty_channels:
+                self._messages.pop(empty_channel, None)
+            return
+
+        # clear (channel, sender(s)) pairs specifically
+        channel_bucket = self._messages.get(channel)
+        if channel_bucket is None:
+            return
+        for s in sender_list:
+            channel_bucket.pop(s, None)
+        if not channel_bucket:
+            self._messages.pop(channel, None)
 
 
 class AgentHistory:

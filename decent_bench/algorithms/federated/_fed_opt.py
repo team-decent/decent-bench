@@ -22,7 +22,7 @@ class FedOpt(FedAlgorithm, ABC):
     Shared FedOpt template with client local SGD and server adaptive optimization :footcite:p:`Alg_FedOpt`.
 
     Each selected client starts from the broadcast global model :math:`\mathbf{x}_t` and performs
-    ``num_local_epochs`` local SGD steps with client step size ``step_size``:
+    ``num_local_steps`` local SGD steps with client step size ``step_size``:
 
     .. math::
         \mathbf{x}_{i, t}^{(k+1)} = \mathbf{x}_{i, t}^{(k)} - \eta_l
@@ -48,12 +48,14 @@ class FedOpt(FedAlgorithm, ABC):
 
     .. math::
         \mathbf{x}_{t+1} = \mathbf{x}_t + \eta
-        \frac{\mathbf{m}_t}{\sqrt{\mathbf{v}_t} + \tau}.
+        \frac{\mathbf{m}_t}{\sqrt{\mathbf{v}_t} + \epsilon}.
 
-    Here :math:`\eta_l` is the client learning rate (``step_size``), :math:`K` is the number of local SGD steps
-    (``num_local_epochs``), :math:`\eta` is the server learning rate (``server_step_size``), :math:`\beta_1` is the
-    first-moment coefficient, :math:`\tau` is the numerical stability term, and :math:`S_t` is the set of clients
-    whose uploads are actually received in round :math:`t`. The second-moment update :math:`\Phi` is
+    Here :math:`\eta_l` is the client learning rate (the corresponding argument is ``step_size``), :math:`K` is the
+    number of local SGD steps (the corresponding argument is ``num_local_steps``), :math:`\eta` is the server
+    learning rate (the corresponding argument is ``server_step_size``), :math:`\beta_1` is the first-moment
+    coefficient (the corresponding argument is ``beta_1``), :math:`\epsilon` is the numerical stability term (the
+    corresponding argument is ``epsilon``), and :math:`S_t` is the set of clients whose uploads are actually received
+    in round :math:`t`. The second-moment update :math:`\Phi` is
     variant-specific and is defined by subclasses. Aggregation is always uniform across the received clients.
     Costs that preserve the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use mini-batch local updates;
     generic costs use their usual full-gradient updates.
@@ -63,10 +65,10 @@ class FedOpt(FedAlgorithm, ABC):
 
     iterations: int = 100
     step_size: float = 0.001
-    num_local_epochs: int = 1
+    num_local_steps: int = 1
     server_step_size: float = 0.001
     beta_1: float = 0.9
-    tau: float = 1e-6
+    epsilon: float = 1e-6
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
     )
@@ -83,14 +85,14 @@ class FedOpt(FedAlgorithm, ABC):
         """
         if self.step_size <= 0:
             raise ValueError("`step_size` must be positive")
-        if self.num_local_epochs <= 0:
-            raise ValueError("`num_local_epochs` must be positive")
+        if self.num_local_steps <= 0:
+            raise ValueError("`num_local_steps` must be positive")
         if self.server_step_size <= 0:
             raise ValueError("`server_step_size` must be positive")
         if not (0 <= self.beta_1 < 1):
             raise ValueError("`beta_1` must satisfy 0 <= beta_1 < 1")
-        if self.tau <= 0:
-            raise ValueError("`tau` must be positive")
+        if self.epsilon <= 0:
+            raise ValueError("`epsilon` must be positive")
 
     def initialize(self, network: FedNetwork) -> None:
         self.x0 = initial_states(self.x0, network)
@@ -130,7 +132,7 @@ class FedOpt(FedAlgorithm, ABC):
         variants perform mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
         """
         local_x = self._get_server_broadcast(client, server)
-        for _ in range(self.num_local_epochs):
+        for _ in range(self.num_local_steps):
             grad = client.cost.gradient(local_x)
             local_x -= self.step_size * grad
         return local_x
@@ -146,11 +148,11 @@ class FedOpt(FedAlgorithm, ABC):
         This method assumes clients upload final local model deltas.
         """
         server = network.server()
-        received_clients = [client for client in participating_clients if client in server.messages]
+        received_clients = [client for client in participating_clients if client in server.messages()]
         if not received_clients:
             return
         server_x = iop.copy(server.x)
-        model_deltas = [server.messages[client] for client in received_clients]
+        model_deltas = [server.message(client) for client in received_clients]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))
         average_delta = self._weighted_average(model_deltas, weights, total_weight)
@@ -158,7 +160,7 @@ class FedOpt(FedAlgorithm, ABC):
         server.aux_vars["m"] = self.beta_1 * server.aux_vars["m"] + (1 - self.beta_1) * average_delta
         server.aux_vars["v"] = self._update_second_moment(server.aux_vars["v"], average_delta)
         server.x = server_x + (
-            self.server_step_size * server.aux_vars["m"] / (iop.sqrt(server.aux_vars["v"]) + self.tau)
+            self.server_step_size * server.aux_vars["m"] / (iop.sqrt(server.aux_vars["v"]) + self.epsilon)
         )
 
     @abstractmethod

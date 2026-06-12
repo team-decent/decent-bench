@@ -61,7 +61,7 @@ class SimpleGT(P2PAlgorithm):
             i.aux_vars["y_new"] = i.x - self.step_size * i.cost.gradient(i.x)
 
             neighborhood_avg = self.W[i, i] * i.x
-            for j, x_j in i.messages.items():
+            for j, x_j in i.messages().items():
                 neighborhood_avg += self.W[i, j] * x_j
 
             i.x = i.aux_vars["y_new"] - i.aux_vars["y"] + neighborhood_avg

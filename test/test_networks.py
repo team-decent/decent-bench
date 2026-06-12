@@ -331,11 +331,11 @@ def test_step_clears_messages() -> None:
     msg = iop.to_array([1.0, -1.0], framework=sender.cost.framework, device=sender.cost.device)
 
     net.send(sender=sender, receiver=receiver, msg=msg)
-    assert sender in receiver.messages
+    assert sender in receiver.messages()
 
     net._step(1)  # noqa: SLF001
 
-    assert sender not in receiver.messages
+    assert sender not in receiver.messages()
 
 
 def test_send_applies_drop_compression_and_noise_schemes() -> None:
@@ -364,7 +364,7 @@ def test_send_applies_drop_compression_and_noise_schemes() -> None:
     msg = iop.to_array([1.0, 2.0], framework=sender.cost.framework, device=sender.cost.device)
 
     net.send(sender=sender, receiver=receiver, msg=msg)
-    np_received = iop.to_numpy(receiver.messages[sender])
+    np_received = iop.to_numpy(receiver.message(sender))
     np_expected = np.array([5.0, 7.0])
     assert np_received.shape == np_expected.shape
     assert np_received.tolist() == pytest.approx(np_expected.tolist())
@@ -373,6 +373,6 @@ def test_send_applies_drop_compression_and_noise_schemes() -> None:
     assert receiver._n_received_messages == pytest.approx(1.0)  # noqa: SLF001
 
     net.send(sender=dropped_sender, receiver=receiver, msg=msg)
-    assert dropped_sender not in receiver.messages
+    assert dropped_sender not in receiver.messages()
     assert dropped_sender._n_sent_messages == pytest.approx(1.0)  # noqa: SLF001
     assert dropped_sender._n_sent_messages_dropped == pytest.approx(1.0)  # noqa: SLF001

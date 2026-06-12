@@ -9,6 +9,9 @@ from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
 
+_STATE_CHANNEL = "state"
+_GRADIENT_TRACKER_CHANNEL = "gradient_tracker"
+
 
 @tags("peer-to-peer", "gradient-based")
 @dataclass(eq=False)
@@ -89,8 +92,8 @@ class KGT(P2PAlgorithm):
             msg = i.aux_vars["x_before_local"] - multiplier * i.aux_vars["z_i"]
             i.aux_vars["msg"] = msg
             # Step 3: Communication phase
-            message = iop.stack([msg, i.aux_vars["z_i"]])
-            network.broadcast(i, message)
+            network.broadcast(i, msg, channel=_STATE_CHANNEL)
+            network.broadcast(i, i.aux_vars["z_i"], channel=_GRADIENT_TRACKER_CHANNEL)
 
         # Step 5: Update tracking variable and model parameters (lines 9-10)
         for i in network.active_agents():
@@ -130,8 +133,11 @@ class KGT(P2PAlgorithm):
         # Line 10: Update model parameters
         weighted_neighbor_z = self.W[agent, agent] * z_i
         weighted_sum = self.W[agent, agent] * agent.aux_vars["msg"]
-        for j, msg in agent.messages.items():
-            weighted_neighbor_z += self.W[agent, j] * msg[1]
-            weighted_sum += self.W[agent, j] * msg[0]
+        received_state_updates = agent.messages(_STATE_CHANNEL)
+        received_tracking_updates = agent.messages(_GRADIENT_TRACKER_CHANNEL)
+        received_both = set(received_state_updates).intersection(received_tracking_updates)
+        for j in received_both:
+            weighted_sum += self.W[agent, j] * received_state_updates[j]
+            weighted_neighbor_z += self.W[agent, j] * received_tracking_updates[j]
         agent.aux_vars["c"] = agent.aux_vars["c"] - z_i + weighted_neighbor_z
         agent.x = weighted_sum

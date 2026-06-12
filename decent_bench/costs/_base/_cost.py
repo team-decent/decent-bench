@@ -142,7 +142,7 @@ class Cost(ABC):
         """Hessian at x."""
 
     @abstractmethod
-    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
+    def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ANN401
         r"""
         Proximal at x.
 

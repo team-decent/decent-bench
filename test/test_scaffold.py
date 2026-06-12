@@ -11,6 +11,10 @@ from decent_bench.schemes import ClientSelectionScheme, DropScheme, NoDrops
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
+_MODEL_DELTA_CHANNEL = "model_delta"
+_CONTROL_VARIATE_DELTA_CHANNEL = "control_variate_delta"
+
+
 class TrackingCost(Cost):
     def __init__(self, gradient_value: float = 1.0):
         self.gradient_kwargs: list[dict[str, Any]] = []
@@ -77,11 +81,11 @@ def _run_scaffold_local_update(
     cost: Cost,
     *,
     step_size: float = 1.0,
-    num_local_epochs: int = 1,
+    num_local_steps: int = 1,
     client_control: float = 0.0,
     server_control: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    algorithm = Scaffold(iterations=1, step_size=step_size, num_local_epochs=num_local_epochs)
+    algorithm = Scaffold(iterations=1, step_size=step_size, num_local_steps=num_local_steps)
     client = Agent(cost)
     server = Agent(ZeroCost(cost.shape))
     client.initialize(
@@ -89,8 +93,9 @@ def _run_scaffold_local_update(
         aux_vars={"c_i": np.array([client_control], dtype=float)},
     )
     server.initialize(x=np.zeros(cost.shape, dtype=float))
-    client._received_messages[server] = np.stack(  # noqa: SLF001
-        [np.zeros(cost.shape, dtype=float), np.array([server_control], dtype=float)]
+    client._received_messages.put(  # noqa: SLF001
+        server,
+        np.stack([np.zeros(cost.shape, dtype=float), np.array([server_control], dtype=float)]),
     )
     local_x, _, control_delta = algorithm._compute_local_update(client, server)
     return local_x, client.aux_vars["c_i"], control_delta
@@ -138,7 +143,7 @@ def test_control_variate_correction_changes_the_local_step() -> None:
 
     updated, client_control, control_delta = _run_scaffold_local_update(
         cost,
-        num_local_epochs=2,
+        num_local_steps=2,
         client_control=1.5,
         server_control=0.5,
     )
@@ -152,7 +157,7 @@ def test_scaffold_persists_control_variates_across_rounds() -> None:
     algorithm = Scaffold(
         iterations=2,
         step_size=1.0,
-        num_local_epochs=1,
+        num_local_steps=1,
         server_step_size=1.0,
     )
     clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))]
@@ -177,7 +182,7 @@ def test_scaffold_persists_control_variates_across_rounds() -> None:
 
 
 def test_scaffold_uses_uniform_aggregation() -> None:
-    algorithm = Scaffold(iterations=1, step_size=1.0, num_local_epochs=1)
+    algorithm = Scaffold(iterations=1, step_size=1.0, num_local_steps=1)
     network = FedNetwork(clients=[Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))])
 
     algorithm.initialize(network)
@@ -192,13 +197,13 @@ def test_server_step_size_scales_only_the_server_model_update() -> None:
     full_step_algorithm = Scaffold(
         iterations=1,
         step_size=1.0,
-        num_local_epochs=1,
+        num_local_steps=1,
         server_step_size=1.0,
     )
     damped_step_algorithm = Scaffold(
         iterations=1,
         step_size=1.0,
-        num_local_epochs=1,
+        num_local_steps=1,
         server_step_size=0.25,
     )
     full_step_network = FedNetwork(clients=[Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))])
@@ -219,7 +224,7 @@ def test_server_step_size_scales_only_the_server_model_update() -> None:
 
 
 def test_scaffold_aggregation_uses_only_received_updates_for_model_and_control_deltas() -> None:
-    algorithm = Scaffold(iterations=1, step_size=1.0, num_local_epochs=1)
+    algorithm = Scaffold(iterations=1, step_size=1.0, num_local_steps=1)
     clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(2.0))]
     network = FedNetwork(clients=clients)
     algorithm.initialize(network)
@@ -228,7 +233,14 @@ def test_scaffold_aggregation_uses_only_received_updates_for_model_and_control_d
     network.send(
         sender=clients[0],
         receiver=network.server(),
-        msg=np.stack([np.array([2.0]), np.array([4.0])]),
+        msg=np.array([2.0]),
+        channel=_MODEL_DELTA_CHANNEL,
+    )
+    network.send(
+        sender=clients[0],
+        receiver=network.server(),
+        msg=np.array([4.0]),
+        channel=_CONTROL_VARIATE_DELTA_CHANNEL,
     )
 
     algorithm.aggregate(network, clients)
@@ -241,7 +253,7 @@ def test_scaffold_partial_participation_persists_control_variates_across_rounds(
     algorithm = Scaffold(
         iterations=3,
         step_size=1.0,
-        num_local_epochs=1,
+        num_local_steps=1,
         server_step_size=1.0,
         selection_scheme=ScheduledSelection({0: [1, 2], 1: [2], 2: [3]}),
     )
@@ -286,7 +298,7 @@ def test_scaffold_partial_participation_persists_control_variates_across_rounds(
 
 
 def test_scaffold_skips_participation_when_broadcast_is_dropped() -> None:
-    algorithm = Scaffold(iterations=2, step_size=1.0, num_local_epochs=1)
+    algorithm = Scaffold(iterations=2, step_size=1.0, num_local_steps=1)
     client = Agent(TrackingCost(gradient_value=0.0))
     server = Agent(ZeroCost((1,)))
     network = FedNetwork(
@@ -313,7 +325,7 @@ def test_scaffold_skips_participation_when_broadcast_is_dropped() -> None:
 
 
 def test_scaffold_dropped_server_broadcasts_do_not_make_clients_participate() -> None:
-    algorithm = Scaffold(iterations=2, step_size=1.0, num_local_epochs=1)
+    algorithm = Scaffold(iterations=2, step_size=1.0, num_local_steps=1)
     clients = [Agent(TrackingCost(1.0)), Agent(TrackingCost(3.0))]
     server = Agent(ZeroCost((1,)))
     network = FedNetwork(

@@ -23,7 +23,7 @@ class EXTRA(P2PAlgorithm):
 
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
-    :math:`\rho` is the step size,
+    :math:`\rho` is the step size (the corresponding argument is ``step_size``),
     :math:`f_i` is agent i's local cost function,
     j is a neighbor of i or i itself,
     :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j,
@@ -68,7 +68,7 @@ class EXTRA(P2PAlgorithm):
 
             for i in network.active_agents():
                 neighborhood_avg = self.W[i, i] * i.x
-                for j, x_j in i.messages.items():
+                for j, x_j in i.messages().items():
                     neighborhood_avg += self.W[i, j] * x_j
                 i.aux_vars["x_cons"] = neighborhood_avg  # store W x_k
                 i.aux_vars["x_old"] = i.x  # store x_0
@@ -80,7 +80,7 @@ class EXTRA(P2PAlgorithm):
 
             for i in network.active_agents():
                 neighborhood_avg = self.W[i, i] * i.x
-                for j, x_j in i.messages.items():
+                for j, x_j in i.messages().items():
                     neighborhood_avg += self.W[i, j] * x_j
                 i.aux_vars["x_old_old"] = i.aux_vars["x_old"]  # store x_{k-1}
                 i.aux_vars["x_old"] = i.x  # store x_k

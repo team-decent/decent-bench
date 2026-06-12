@@ -96,6 +96,9 @@ Benchmark executions will have outputs like these:
 Available algorithms
 --------------------
 
+Note: algorithms are slightly modified with respect to the corresponding papers to ensure that they work in a broader
+range of conditions (asynchorny/partial participation, loss of communications, etc) than the original papers.
+
 Peer-to-peer
 ~~~~~~~~~~~~
 .. tagged-list::
@@ -114,8 +117,9 @@ model with the uniform average of the received final client models.
 
 :class:`~decent_bench.algorithms.federated.FedProx` extends
 :class:`~decent_bench.algorithms.federated.FedAvg` with a proximal coefficient
-``mu`` that penalizes local drift away from the round's broadcast server model.
-Setting ``mu=0`` reduces :class:`~decent_bench.algorithms.federated.FedProx`
+``penalty``. In the FedProx equations, the symbol :math:`\mu` is used for this
+coefficient, and the corresponding argument is ``penalty``. Setting
+``penalty=0`` reduces :class:`~decent_bench.algorithms.federated.FedProx`
 to :class:`~decent_bench.algorithms.federated.FedAvg`.
 
 :class:`~decent_bench.algorithms.federated.FedAdagrad`,
@@ -163,7 +167,7 @@ participation fraction.
 primal-dual update. Clients keep persistent local primal variables, dual
 variables, and centre candidates. Each round uses ``num_local_steps`` local
 gradient steps on the augmented Lagrangian, with ``step_size`` controlling the
-local learning rate and ``eta`` controlling the FedPD quadratic
+local learning rate and ``penalty`` controlling the FedPD quadratic
 penalty/dual-update parameter. The ``skip_probability`` argument controls the
 paper's optional communication skipping: ``0`` aggregates every round and ``1``
 always keeps local centre candidates without server aggregation. Like
@@ -173,9 +177,11 @@ supported.
 
 :class:`~decent_bench.algorithms.federated.FedDyn` implements Federated Dynamic
 Regularization. Clients keep a persistent dynamic state ``g`` and the server
-keeps an auxiliary vector ``h``. Selected clients run ``num_local_epochs`` local
+keeps an auxiliary vector ``h``. Selected clients run ``num_local_steps`` local
 gradient steps on the dynamic-regularized local objective using ``step_size`` as
-the local learning rate and ``alpha`` as the regularization coefficient.
+the local learning rate and ``penalty`` as the regularization coefficient. In
+the FedDyn equations, the symbol :math:`\alpha` denotes this regularization,
+and the corresponding argument is ``penalty``.
 
 Federated aggregation
 ^^^^^^^^^^^^^^^^^^^^^
@@ -201,8 +207,10 @@ aggregates the client cumulative SGD updates using the FedNova rescaling factor
 and applies the resulting descent step at the server. With the default flags,
 this is the plain no-momentum FedNova variant. Enabling ``use_momentum``,
 ``use_prox``, or ``use_server_momentum`` extends the local and server updates
-to the corresponding FedNova variants controlled by ``beta``, ``mu``, and
-``gamma``. Plain FedNova matches
+to the corresponding FedNova variants controlled by ``momentum``, ``penalty``,
+and ``server_momentum``. In the FedNova equations, symbols :math:`\beta`,
+:math:`\mu`, and :math:`\gamma` map to those arguments respectively. Plain
+FedNova matches
 :class:`~decent_bench.algorithms.federated.FedAvg` only when the participating
 clients use the same number of local steps and
 :class:`~decent_bench.algorithms.federated.FedNova` and
@@ -321,7 +329,7 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
         gradient_calls = GradientCalls([min, np.average, max, sum])
 
         benchmark_result = benchmark.benchmark(
-            algorithms=[DGD(iterations=1000, step_size=0.01), ADMM(iterations=1000, rho=10, alpha=0.3)],
+            algorithms=[DGD(iterations=1000, step_size=0.01), ADMM(iterations=1000, penalty=10, relaxation=0.3)],
             benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
             n_trials=10,
             max_processes=1,
@@ -435,7 +443,7 @@ This also speeds up metric calulation and plotting, which can be significant for
             algorithms=[
                 DGD(iterations=1000, step_size=0.01),
                 ED(iterations=1000, step_size=0.01),
-                ADMM(iterations=1000, rho=10, alpha=0.3),
+                ADMM(iterations=1000, penalty=10, relaxation=0.3),
             ],
             benchmark_problem=problem,
         )
@@ -475,7 +483,7 @@ Change the settings of an already created benchmark problem, for example, the ne
             algorithms=[
                 DGD(iterations=1000, step_size=0.01),
                 ED(iterations=1000, step_size=0.01),
-                ADMM(iterations=1000, rho=10, alpha=0.3),
+                ADMM(iterations=1000, penalty=10, relaxation=0.3),
             ],
             benchmark_problem=problem,
         )
@@ -533,7 +541,7 @@ Create a custom benchmark problem using existing resources.
             algorithms=[
                 DGD(iterations=1000, step_size=0.01),
                 ED(iterations=1000, step_size=0.01),
-                ADMM(iterations=1000, rho=10, alpha=0.3),
+                ADMM(iterations=1000, penalty=10, relaxation=0.3),
             ],
             benchmark_problem=problem,
         )
@@ -713,7 +721,7 @@ where 3. and 4. are true if ``save_path`` is set to the checkpoint manager's res
         benchmark_result = benchmark.benchmark(
             algorithms=[
                 DGD(iterations=10000, step_size=0.001),
-                ADMM(iterations=10000, rho=10, alpha=0.3),
+                ADMM(iterations=10000, penalty=10, relaxation=0.3),
             ],
             benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
             checkpoint_manager=checkpoint_manager,
@@ -1025,7 +1033,7 @@ being optimized. If you want to optimize a weighted objective :math:`\min \sum_i
             algorithms=[
                 MyNewAlgorithm(iterations=1000, step_size=0.01),
                 DGD(iterations=1000, step_size=0.01),
-                ADMM(iterations=1000, rho=10, alpha=0.3),
+                ADMM(iterations=1000, penalty=10, relaxation=0.3),
             ],
             benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
         )
@@ -1086,7 +1094,7 @@ Create your own metrics to tabulate and/or plot.
         benchmark_result = benchmark.benchmark(
             algorithms=[
                 DGD(iterations=1000, step_size=0.01),
-                ADMM(iterations=1000, rho=10, alpha=0.3),
+                ADMM(iterations=1000, penalty=10, relaxation=0.3),
             ],
             benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
         )

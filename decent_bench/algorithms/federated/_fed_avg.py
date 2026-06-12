@@ -28,8 +28,9 @@ class FedAvg(FedAlgorithm):
         \mathbf{x}_{k+1} = \frac{1}{|S_k|} \sum_{i \in S_k} \mathbf{x}_{i, k}^{(E)}
 
     where :math:`t` indexes the local training epochs on each client and :math:`E` is the number of local epochs per
-    round (``num_local_epochs``), :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients at
-    round :math:`k`. In FedAvg, each selected client performs ``num_local_epochs`` local SGD epochs, then the server
+    round (the corresponding argument is ``num_local_steps``), :math:`\eta` is the step size (the corresponding
+    argument is ``step_size``), and :math:`S_k` is the set of participating clients at round :math:`k`. In FedAvg,
+    each selected client performs ``num_local_steps`` local SGD epochs, then the server
     aggregates the final local models to form :math:`\mathbf{x}_{k+1}` using uniform averaging over the participating
     clients. Client selection (subsampling) defaults to uniform sampling with fraction 1.0 (all active clients) and can
     be customized via ``selection_scheme``. Costs that preserve the
@@ -44,7 +45,7 @@ class FedAvg(FedAlgorithm):
     # E= 5/20 (num local epochs).
     iterations: int = 100
     step_size: float = 0.001
-    num_local_epochs: int = 1
+    num_local_steps: int = 1
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
     )
@@ -61,8 +62,8 @@ class FedAvg(FedAlgorithm):
         """
         if self.step_size <= 0:
             raise ValueError("`step_size` must be positive")
-        if self.num_local_epochs <= 0:
-            raise ValueError("`num_local_epochs` must be positive")
+        if self.num_local_steps <= 0:
+            raise ValueError("`num_local_steps` must be positive")
 
     def initialize(self, network: FedNetwork) -> None:
         self.x0 = initial_states(self.x0, network)
@@ -95,7 +96,7 @@ class FedAvg(FedAlgorithm):
         performs mini-batch local updates automatically. Generic costs keep their usual full-gradient behavior.
         """
         local_x = self._get_server_broadcast(client, server)
-        for _ in range(self.num_local_epochs):
+        for _ in range(self.num_local_steps):
             grad = client.cost.gradient(local_x)
             local_x -= self.step_size * grad
         return local_x

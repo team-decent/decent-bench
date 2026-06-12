@@ -199,7 +199,7 @@ class EmpiricalRiskCost(Cost, ABC):
 
         """
 
-    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
+    def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ANN401
         """
         Proximal at x using the full dataset.
 
