@@ -309,14 +309,14 @@ efficient option compared with native framework-specific regularization.
 
 Execution settings
 ------------------
-Configure settings for metrics, trials, statistical confidence level, logging, and multiprocessing.
+Configure settings for metrics, trials, logging, and multiprocessing.
 
 .. code-block:: python
 
     from logging import DEBUG
     import numpy as np
 
-    import decent_bench.metrics.metric_utils as utils
+    from decent_bench.metrics import utils
     from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.distributed_algorithms import ADMM, DGD
@@ -346,7 +346,6 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
             benchmark_result, 
             table_metrics=[regret, gradient_calls],
             plot_metrics=[regret],
-            confidence_level=0.9,
             log_level=DEBUG,
         )
 
@@ -887,8 +886,8 @@ The new metrics will be saved to the checkpoint directory as described above.
 Loading :class:`~decent_bench.benchmark.MetricResult` for displaying metrics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Similarly, you can load previously computed metrics by setting ``metrics_result`` to ``None`` in :func:`~decent_bench.benchmark.display_metrics` and providing the same checkpoint manager.
-The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``available_algorithms``,
-``available_table_metrics``, and ``available_plot_metrics`` to discover valid filter values.
+The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``algorithms``,
+``table_metrics``, and ``plot_metrics`` to discover valid filter values.
 
 .. code-block:: python
 
@@ -902,9 +901,9 @@ The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``available_alg
         if metrics_result is None:
             raise ValueError("No computed metrics found in checkpoint directory")
 
-        print("Available algorithms:", metrics_result.available_algorithms)
-        print("Available table metrics:", metrics_result.available_table_metrics)
-        print("Available plot metrics:", metrics_result.available_plot_metrics)
+        print("Available algorithms:", metrics_result.algorithms)
+        print("Available table metrics:", metrics_result.table_metrics)
+        print("Available plot metrics:", metrics_result.plot_metrics)
 
         benchmark.display_metrics(
             metrics_result=metrics_result,
@@ -1053,7 +1052,7 @@ Create your own metrics to tabulate and/or plot.
     import numpy.linalg as la
     import decent_bench.utils.interoperability as iop
 
-    import decent_bench.metrics.metric_utils as utils
+    from decent_bench.metrics import utils
     from decent_bench import benchmark
     from decent_bench.agents import AgentMetricsView
     from decent_bench.benchmark import BenchmarkProblem
@@ -1065,7 +1064,7 @@ Create your own metrics to tabulate and/or plot.
 
         description: str = "x error"
 
-        def get_data_from_trial(  # noqa: D102
+        def compute(  # noqa: D102
             self,
             agents: Sequence[AgentMetricsView],
             problem: BenchmarkProblem,

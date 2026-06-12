@@ -19,7 +19,6 @@ dependencies = [
   "rich",
   "scipy",
   "scikit-learn",
-  "tabulate",
   "zstandard",
 ]
 
@@ -36,7 +35,6 @@ dev = [
   "ruff",
   "scipy-stubs",
   "types-networkx",
-  "types-tabulate",
   "torch",
   "torchvision",
   "types-tensorflow",

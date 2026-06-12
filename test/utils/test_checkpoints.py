@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import networkx as nx
 import numpy as np
+import pandas as pd
 import pytest
 import zstandard as zstd
 
@@ -19,6 +20,7 @@ from decent_bench.agents import Agent
 from decent_bench.algorithms import Algorithm
 from decent_bench.algorithms.p2p import ADMM, ATC, DGD
 from decent_bench.benchmark import (
+    BenchmarkResult,
     BenchmarkProblem,
     MetricResult,
     benchmark,
@@ -26,6 +28,7 @@ from decent_bench.benchmark import (
     resume_benchmark,
 )
 from decent_bench.costs import LogisticRegressionCost, PyTorchCost
+from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network, P2PNetwork
 from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
 from decent_bench.utils.checkpoint_manager import _ZSTD_MAGIC, CheckpointManager  # noqa: PLC2701
@@ -329,9 +332,9 @@ def test_save_and_load_metrics_result(tmp_path: Path) -> None:  # noqa: D103
     ckpt_path.mkdir(parents=True, exist_ok=True)
     manager = CheckpointManager(ckpt_path)
     metrics_result = MetricResult(
-        agent_metrics=None,
-        table_metrics=None,
-        plot_metrics=None,
+        network_views=None,
+        raw_table_results=None,
+        raw_plot_results=None,
         table_results=None,
         plot_results=None,
     )
@@ -343,6 +346,78 @@ def test_save_and_load_metrics_result(tmp_path: Path) -> None:  # noqa: D103
     with (ckpt_path / "metric_computation.pkl.zst").open("rb") as f:
         assert f.read(4) == _ZSTD_MAGIC
     assert (ckpt_path / "metric_computation_complete.json").exists()
+
+
+def test_save_metrics_result_does_not_mutate_network_views(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # noqa: D103
+    ckpt_path = tmp_path / "ckpt"
+    ckpt_path.mkdir(parents=True, exist_ok=True)
+    manager = CheckpointManager(ckpt_path)
+
+    problem, algorithms = _build_problem_and_algorithms(iterations=3, cost_cls=LogisticRegressionCost)
+    network_views = {algorithms[0]: [NetworkMetricsView.from_network(problem.network)]}
+    metrics_result = MetricResult(
+        network_views=network_views,
+        raw_table_results=None,
+        raw_plot_results=None,
+        table_results=None,
+        plot_results=None,
+    )
+
+    monkeypatch.setattr(manager, "is_benchmark_completed", lambda: True)
+    manager.save_metrics_result(metrics_result)
+    loaded = manager.load_metrics_result(skip_network_views=True)
+
+    assert metrics_result.network_views is network_views
+    assert loaded.network_views is None
+
+
+def test_load_metrics_result_reconstructs_only_selected_algorithms(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # noqa: D103
+    ckpt_path = tmp_path / "ckpt"
+    ckpt_path.mkdir(parents=True, exist_ok=True)
+    manager = CheckpointManager(ckpt_path)
+
+    problem, algorithms = _build_problem_and_algorithms(iterations=3, cost_cls=LogisticRegressionCost)
+    selected_algorithm = algorithms[0]
+    other_algorithm = algorithms[1]
+    raw_table_results = {
+        cast("Any", object()): pd.DataFrame(
+            {
+                "algorithm": [selected_algorithm.name],
+                "trial": [0],
+                "agent": [0],
+                "value": [1.0],
+            }
+        )
+    }
+    metrics_result = MetricResult(
+        network_views=None,
+        raw_table_results=raw_table_results,
+        raw_plot_results=None,
+        table_results=None,
+        plot_results=None,
+    )
+
+    manager.save_metrics_result(metrics_result)
+
+    benchmark_result = BenchmarkResult(
+        problem=problem,
+        states={
+            selected_algorithm: [problem.network],
+            other_algorithm: [problem.network],
+        },
+    )
+    monkeypatch.setattr(manager, "load_benchmark_result", lambda: benchmark_result)
+
+    loaded = manager.load_metrics_result()
+
+    assert loaded.network_views is not None
+    assert {algorithm.name for algorithm in loaded.network_views} == {selected_algorithm.name}
 
 
 def test_create_backup_and_clear(tmp_path: Path) -> None:  # noqa: D103

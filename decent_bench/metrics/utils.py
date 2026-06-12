@@ -1,5 +1,6 @@
+import operator
 from collections.abc import Sequence
-from functools import lru_cache
+from functools import lru_cache, reduce
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -11,8 +12,8 @@ from rich.table import Column
 from sklearn import metrics as sk_metrics
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.agents import AgentMetricsView
 from decent_bench.costs import Cost, EmpiricalRiskCost
+from decent_bench.metrics._metrics_view import AgentMetricsView
 from decent_bench.utils.array import Array
 from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import Dataset
@@ -49,33 +50,12 @@ def _clear_caches() -> None:
     """Clear module-level functools caches used by metric utilities."""
     x_mean.cache_clear()
     _predict_agent.cache_clear()
-    _non_server_views.cache_clear()
-    _server_view.cache_clear()
-
-
-@lru_cache(maxsize=CACHE_MAX_SIZE)
-def _non_server_views(agents: tuple[AgentMetricsView, ...]) -> tuple[AgentMetricsView, ...]:
-    """Return all non-server agent views."""
-    return tuple(agent for agent in agents if not agent.is_server)
-
-
-@lru_cache(maxsize=CACHE_MAX_SIZE)
-def _server_view(agents: tuple[AgentMetricsView, ...]) -> AgentMetricsView:
-    """Return the federated server view."""
-    return next(agent for agent in agents if agent.is_server)
 
 
 def _drifts(agents: Sequence[AgentMetricsView], server: AgentMetricsView, iteration: int) -> list[float]:
     """Calculate each agent's distance from the server state at *iteration*."""
     server_x = server.x_history[iteration]
     return [float(iop.norm(agent.x_history[iteration] - server_x)) for agent in agents]
-
-
-def default_statistic(values: Sequence[float]) -> float:
-    """Return *values[0]* if it contains exactly one element, *mean(values)* otherwise."""
-    if len(values) == 1:
-        return values[0]
-    return np.average(values)
 
 
 @lru_cache(maxsize=CACHE_MAX_SIZE)
@@ -94,7 +74,7 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
     if len(all_x_at_iter) == 0:
         raise ValueError(f"No agent reached iteration {iteration}")
 
-    return iop.mean(iop.stack(all_x_at_iter), dim=0)
+    return reduce(operator.add, all_x_at_iter) / len(all_x_at_iter)
 
 
 def _regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
@@ -128,9 +108,9 @@ def _gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> f
     gradients = []
     for a in agents:
         kwargs = {"indices": "all"} if isinstance(a.cost, EmpiricalRiskCost) else {}
-        gradients.append(iop.to_numpy(a.cost.gradient(mean_x, **kwargs)))
-    grad_avg = sum(gradients) / len(agents)
-    return float(la.norm(grad_avg))
+        gradients.append(a.cost.gradient(mean_x, **kwargs))
+    grad_avg = reduce(operator.add, gradients) / len(gradients)
+    return float(iop.norm(grad_avg))
 
 
 def _x_error(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
@@ -379,7 +359,7 @@ def linear_convergence_rate(y: Sequence[float]) -> float:
         >>> for alg, results in metric_results.plot_results.items():
         >>>     for metric, stat_results in results.items():
         >>>         if type(metric) == metric_library.GradientNorm:
-        >>>             print(f"\t- {alg.name}: {metric_utils.linear_convergence_rate(stat_results[1])}")
+        >>>             print(f"\t- {alg.name}: {utils.linear_convergence_rate(stat_results[1])}")
 
     """
     y_array: NDArray[float64] = np.asarray(y, dtype=float64)

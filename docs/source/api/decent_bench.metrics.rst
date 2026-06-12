@@ -11,4 +11,4 @@ decent\_bench.metrics
 
    decent_bench.metrics.metric_library
    decent_bench.metrics.runtime_library
-   decent_bench.metrics.metric_utils
+   decent_bench.metrics.utils
