@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from functools import cached_property
+from math import prod
 from numbers import Real
 from typing import Any
 
@@ -8,7 +10,7 @@ from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
-class Cost(ABC):  # noqa: PLR0904
+class Cost(ABC):
     """Used by agents to evaluate the cost and its derivatives at a certain x."""
 
     def _validate_cost_operation(
@@ -44,6 +46,11 @@ class Cost(ABC):  # noqa: PLR0904
     def domain_shape(self) -> tuple[int, ...]:
         """Alias for :attr:`shape`."""
         return self.shape
+
+    @cached_property
+    def size(self) -> int:
+        """Number of elements in x."""
+        return prod(self.shape)
 
     @property
     @abstractmethod
@@ -135,7 +142,7 @@ class Cost(ABC):  # noqa: PLR0904
         """Hessian at x."""
 
     @abstractmethod
-    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
+    def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ANN401
         r"""
         Proximal at x.
 

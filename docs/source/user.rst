@@ -48,7 +48,7 @@ Note:
 
         costs, x_optimal = create_quadratic_problem(10, n_agents)
 
-        agents = [Agent(i, cost) for i, cost in enumerate(costs)]
+        agents = [Agent(cost) for i, cost in enumerate(costs)]
         graph = nx.complete_graph(n_agents)
         
         net = P2PNetwork(
@@ -179,6 +179,9 @@ For example:
 Available algorithms
 --------------------
 
+Note: algorithms are slightly modified with respect to the corresponding papers to ensure that they work in a broader
+range of conditions (asynchorny/partial participation, loss of communications, etc) than the original papers.
+
 Peer-to-peer
 ~~~~~~~~~~~~
 .. tagged-list::
@@ -197,8 +200,9 @@ model with the uniform average of the received final client models.
 
 :class:`~decent_bench.algorithms.federated.FedProx` extends
 :class:`~decent_bench.algorithms.federated.FedAvg` with a proximal coefficient
-``mu`` that penalizes local drift away from the round's broadcast server model.
-Setting ``mu=0`` reduces :class:`~decent_bench.algorithms.federated.FedProx`
+``penalty``. In the FedProx equations, the symbol :math:`\mu` is used for this
+coefficient, and the corresponding argument is ``penalty``. Setting
+``penalty=0`` reduces :class:`~decent_bench.algorithms.federated.FedProx`
 to :class:`~decent_bench.algorithms.federated.FedAvg`.
 
 :class:`~decent_bench.algorithms.federated.FedAdagrad`,
@@ -246,7 +250,7 @@ participation fraction.
 primal-dual update. Clients keep persistent local primal variables, dual
 variables, and centre candidates. Each round uses ``num_local_steps`` local
 gradient steps on the augmented Lagrangian, with ``step_size`` controlling the
-local learning rate and ``eta`` controlling the FedPD quadratic
+local learning rate and ``penalty`` controlling the FedPD quadratic
 penalty/dual-update parameter. The ``skip_probability`` argument controls the
 paper's optional communication skipping: ``0`` aggregates every round and ``1``
 always keeps local centre candidates without server aggregation. Like
@@ -256,9 +260,11 @@ supported.
 
 :class:`~decent_bench.algorithms.federated.FedDyn` implements Federated Dynamic
 Regularization. Clients keep a persistent dynamic state ``g`` and the server
-keeps an auxiliary vector ``h``. Selected clients run ``num_local_epochs`` local
+keeps an auxiliary vector ``h``. Selected clients run ``num_local_steps`` local
 gradient steps on the dynamic-regularized local objective using ``step_size`` as
-the local learning rate and ``alpha`` as the regularization coefficient.
+the local learning rate and ``penalty`` as the regularization coefficient. In
+the FedDyn equations, the symbol :math:`\alpha` denotes this regularization,
+and the corresponding argument is ``penalty``.
 
 Federated aggregation
 ^^^^^^^^^^^^^^^^^^^^^
@@ -284,8 +290,10 @@ aggregates the client cumulative SGD updates using the FedNova rescaling factor
 and applies the resulting descent step at the server. With the default flags,
 this is the plain no-momentum FedNova variant. Enabling ``use_momentum``,
 ``use_prox``, or ``use_server_momentum`` extends the local and server updates
-to the corresponding FedNova variants controlled by ``beta``, ``mu``, and
-``gamma``. Plain FedNova matches
+to the corresponding FedNova variants controlled by ``momentum``, ``penalty``,
+and ``server_momentum``. In the FedNova equations, symbols :math:`\beta`,
+:math:`\mu`, and :math:`\gamma` map to those arguments respectively. Plain
+FedNova matches
 :class:`~decent_bench.algorithms.federated.FedAvg` only when the participating
 clients use the same number of local steps and
 :class:`~decent_bench.algorithms.federated.FedNova` and
@@ -384,14 +392,14 @@ efficient option compared with native framework-specific regularization.
 
 Execution settings
 ------------------
-Configure settings for metrics, trials, statistical confidence level, logging, and multiprocessing.
+Configure settings for metrics, trials, logging, and multiprocessing.
 
 .. code-block:: python
 
     from logging import DEBUG
     import numpy as np
 
-    import decent_bench.metrics.metric_utils as utils
+    from decent_bench.metrics import utils
     from decent_bench import benchmark
     from decent_bench.costs import LinearRegressionCost
     from decent_bench.algorithms.p2p import ADMM, DGD
@@ -400,11 +408,11 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
     from decent_bench.metrics.runtime_library import RuntimeLoss, RuntimeRegret
 
     if __name__ == "__main__":
-        regret = Regret([utils.single], x_log=False, y_log=True)
+        regret = Regret(x_log=False, y_log=True)
         gradient_calls = GradientCalls([min, np.average, max, sum])
 
         benchmark_result = benchmark.benchmark(
-            algorithms=[DGD(iterations=1000, step_size=0.01), ADMM(iterations=1000, rho=10, alpha=0.3)],
+            algorithms=[DGD(iterations=1000, step_size=0.01), ADMM(iterations=1000, penalty=10, relaxation=0.3)],
             benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
             n_trials=10,
             max_processes=1,
@@ -421,7 +429,6 @@ Configure settings for metrics, trials, statistical confidence level, logging, a
             benchmark_result, 
             table_metrics=[regret, gradient_calls],
             plot_metrics=[regret],
-            confidence_level=0.9,
             log_level=DEBUG,
         )
 
@@ -442,8 +449,6 @@ If you set ``individual_plots = True`` then each plot metric will be displayed i
 otherwise groups of up to 3 plot metrics will be displayed together in the same figure as subplots.
 If you set ``compare_iterations_and_computational_cost = True``, then an additional column of subplots will be added to each figure comparing iterations and computational cost, 
 which can be useful to understand the trade-off between faster convergence and higher computational cost for different algorithms.
-If you set ``plot_metrics`` to a list of lists of :class:`~decent_bench.metrics.Metric` objects (`list[list[Metric]]`), then each inner list will be plotted together in the same figure as subplots,
-allowing you to control which metrics are plotted together.
 
 
 Interpreting Metric Warnings
@@ -520,7 +525,7 @@ This also speeds up metric calulation and plotting, which can be significant for
             algorithms=[
                 DGD(iterations=1000, step_size=0.01),
                 ED(iterations=1000, step_size=0.01),
-                ADMM(iterations=1000, rho=10, alpha=0.3),
+                ADMM(iterations=1000, penalty=10, relaxation=0.3),
             ],
             benchmark_problem=problem,
         )
@@ -560,7 +565,7 @@ Change the settings of an already created benchmark problem, for example, the ne
             algorithms=[
                 DGD(iterations=1000, step_size=0.01),
                 ED(iterations=1000, step_size=0.01),
-                ADMM(iterations=1000, rho=10, alpha=0.3),
+                ADMM(iterations=1000, penalty=10, relaxation=0.3),
             ],
             benchmark_problem=problem,
         )
@@ -635,7 +640,7 @@ Create a custom benchmark problem using existing resources.
             algorithms=[
                 DGD(iterations=1000, step_size=0.01),
                 ED(iterations=1000, step_size=0.01),
-                ADMM(iterations=1000, rho=10, alpha=0.3),
+                ADMM(iterations=1000, penalty=10, relaxation=0.3),
             ],
             benchmark_problem=problem,
         )
@@ -831,7 +836,7 @@ where 3. and 4. are true if ``save_path`` is set to the checkpoint manager's res
         benchmark_result = benchmark.benchmark(
             algorithms=[
                 DGD(iterations=10000, step_size=0.001),
-                ADMM(iterations=10000, rho=10, alpha=0.3),
+                ADMM(iterations=10000, penalty=10, relaxation=0.3),
             ],
             benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
             checkpoint_manager=checkpoint_manager,
@@ -997,8 +1002,8 @@ The new metrics will be saved to the checkpoint directory as described above.
 Loading :class:`~decent_bench.benchmark.MetricResult` for displaying metrics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Similarly, you can load previously computed metrics by setting ``metrics_result`` to ``None`` in :func:`~decent_bench.benchmark.display_metrics` and providing the same checkpoint manager.
-The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``available_algorithms``,
-``available_table_metrics``, and ``available_plot_metrics`` to discover valid filter values.
+The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``algorithms``,
+``table_metrics``, and ``plot_metrics`` to discover valid filter values.
 
 .. code-block:: python
 
@@ -1012,9 +1017,9 @@ The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``available_alg
         if metrics_result is None:
             raise ValueError("No computed metrics found in checkpoint directory")
 
-        print("Available algorithms:", metrics_result.available_algorithms)
-        print("Available table metrics:", metrics_result.available_table_metrics)
-        print("Available plot metrics:", metrics_result.available_plot_metrics)
+        print("Available algorithms:", metrics_result.algorithms)
+        print("Available table metrics:", metrics_result.table_metrics)
+        print("Available plot metrics:", metrics_result.plot_metrics)
 
         benchmark.display_metrics(
             metrics_result=metrics_result,
@@ -1143,7 +1148,7 @@ being optimized. If you want to optimize a weighted objective :math:`\min \sum_i
             algorithms=[
                 MyNewAlgorithm(iterations=1000, step_size=0.01),
                 DGD(iterations=1000, step_size=0.01),
-                ADMM(iterations=1000, rho=10, alpha=0.3),
+                ADMM(iterations=1000, penalty=10, relaxation=0.3),
             ],
             benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
         )
@@ -1163,7 +1168,7 @@ Create your own metrics to tabulate and/or plot.
     import numpy.linalg as la
     import decent_bench.utils.interoperability as iop
 
-    import decent_bench.metrics.metric_utils as utils
+    from decent_bench.metrics import utils
     from decent_bench import benchmark
     from decent_bench.agents import AgentMetricsView
     from decent_bench.benchmark import BenchmarkProblem
@@ -1173,10 +1178,9 @@ Create your own metrics to tabulate and/or plot.
 
     class XError(Metric):
 
-        table_description: str = "x error"
-        plot_description: str = "x error"
+        description: str = "x error"
 
-        def get_data_from_trial(  # noqa: D102
+        def compute(  # noqa: D102
             self,
             agents: Sequence[AgentMetricsView],
             problem: BenchmarkProblem,
@@ -1205,7 +1209,7 @@ Create your own metrics to tabulate and/or plot.
         benchmark_result = benchmark.benchmark(
             algorithms=[
                 DGD(iterations=1000, step_size=0.01),
-                ADMM(iterations=1000, rho=10, alpha=0.3),
+                ADMM(iterations=1000, penalty=10, relaxation=0.3),
             ],
             benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
         )

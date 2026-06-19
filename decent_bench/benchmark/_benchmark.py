@@ -133,13 +133,13 @@ def resume_benchmark(  # noqa: PLR0912
             if metadata is None or "n_trials" not in metadata:
                 raise ValueError("Invalid or missing metadata in checkpoint directory")
 
-            algorithms = checkpoint_manager.load_initial_algorithms()
-            if algorithms is None:
-                raise ValueError("Initial algorithms not found in checkpoint metadata")
-
             problem = checkpoint_manager.load_benchmark_problem()
             if problem is None:
                 raise ValueError("Benchmark problem not found in checkpoint metadata")
+
+            algorithms = checkpoint_manager.load_initial_algorithms(network=problem.network)
+            if algorithms is None:
+                raise ValueError("Initial algorithms not found in checkpoint metadata")
 
             log_listener, manager, mp_context = _init_logging_and_multiprocessing(log_level, max_processes, problem)
 
@@ -385,7 +385,7 @@ def _benchmark(
         checkpoint_manager,
         runtime_metrics,
     )
-    LOGGER.info("Benchmark execution complete, thanks for using decent-bench")
+    LOGGER.info("Benchmark execution complete")
     return BenchmarkResult(problem=benchmark_problem, states=resulting_nw_states)
 
 
@@ -427,7 +427,7 @@ def _is_multiprocessing_main_guard_error(exc: RuntimeError) -> bool:
     return "start a new process before the" in msg and "bootstrapping phase" in msg
 
 
-def _run_trials(  # noqa: PLR0917
+def _run_trials(
     algorithms: list[Algorithm[Network]],
     n_trials: int,
     problem: BenchmarkProblem,
@@ -538,7 +538,7 @@ def _derive_trial_seed(base_seed: int | None, algorithm_index: int, trial: int) 
     return int((base_seed + 0x9E3779B9 * (algorithm_index + 1) + 0x85EBCA6B * (trial + 1)) % (2**32))
 
 
-def _run_trial(  # noqa: PLR0917
+def _run_trial(
     algorithm: Algorithm[Network],
     problem: BenchmarkProblem,
     progress_bar_handle: "ProgressBarHandle",

@@ -157,7 +157,7 @@ def test_sum_cost_proximal_raises_for_unsupported_nonsmooth_sum() -> None:
         NotImplementedError,
         match="SumCost.proximal uses centralized_algorithms.proximal_solver",
     ):
-        summed.proximal(x, rho=0.5)
+        summed.proximal(x, penalty=0.5)
 
 
 def test_cost_radd_supports_sum() -> None:

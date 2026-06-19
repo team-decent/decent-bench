@@ -64,7 +64,7 @@ class DropOnCalls(DropScheme):
 
 
 def _make_fed_network(*costs: Cost) -> tuple[FedNetwork, list[Agent]]:
-    clients = [Agent(i, cost) for i, cost in enumerate(costs)]
+    clients = [Agent(cost) for cost in costs]
     network = FedNetwork(clients=clients)
     for client in clients:
         client.initialize(x=np.zeros(client.cost.shape, dtype=float))
@@ -141,8 +141,8 @@ def test_aggregation_keeps_server_state_when_no_updates_are_received(
 def test_clients_without_server_broadcast_do_not_participate(
     algorithm_cls: type, kwargs: dict[str, float | int]
 ) -> None:
-    client = Agent(0, TrackingCost(1.0))
-    server = Agent(1, TrackingCost(0.0))
+    client = Agent(TrackingCost(1.0))
+    server = Agent(TrackingCost(0.0))
     network = FedNetwork(
         clients=[client],
         server=server,
@@ -166,7 +166,7 @@ def test_clients_without_server_broadcast_do_not_participate(
     [
         pytest.param(
             FedAdagrad,
-            {"iterations": 1, "step_size": 1.0, "server_step_size": 1.0, "beta_1": 0.0, "tau": 1.0},
+            {"iterations": 1, "step_size": 1.0, "server_step_size": 1.0, "beta_1": 0.0, "epsilon": 1.0},
             id="fedadagrad",
         ),
         pytest.param(
@@ -177,7 +177,7 @@ def test_clients_without_server_broadcast_do_not_participate(
                 "server_step_size": 1.0,
                 "beta_1": 0.0,
                 "beta_2": 0.25,
-                "tau": 1.0,
+                "epsilon": 1.0,
             },
             id="fedyogi",
         ),
@@ -189,7 +189,7 @@ def test_clients_without_server_broadcast_do_not_participate(
                 "server_step_size": 1.0,
                 "beta_1": 0.0,
                 "beta_2": 0.25,
-                "tau": 1.0,
+                "epsilon": 1.0,
             },
             id="fedadam",
         ),
@@ -217,7 +217,7 @@ def test_fedopt_aggregation_is_uniform(algorithm_cls: type, kwargs: dict[str, fl
     [
         pytest.param(
             FedAdagrad,
-            {"iterations": 1, "step_size": 1.0, "server_step_size": 1.0, "beta_1": 0.0, "tau": 1.0},
+            {"iterations": 1, "step_size": 1.0, "server_step_size": 1.0, "beta_1": 0.0, "epsilon": 1.0},
             4.0,
             id="fedadagrad",
         ),
@@ -229,7 +229,7 @@ def test_fedopt_aggregation_is_uniform(algorithm_cls: type, kwargs: dict[str, fl
                 "server_step_size": 1.0,
                 "beta_1": 0.0,
                 "beta_2": 0.25,
-                "tau": 1.0,
+                "epsilon": 1.0,
             },
             3.0,
             id="fedyogi",
@@ -242,7 +242,7 @@ def test_fedopt_aggregation_is_uniform(algorithm_cls: type, kwargs: dict[str, fl
                 "server_step_size": 1.0,
                 "beta_1": 0.0,
                 "beta_2": 0.25,
-                "tau": 1.0,
+                "epsilon": 1.0,
             },
             3.0,
             id="fedadam",
@@ -270,7 +270,7 @@ def test_fedopt_aggregation_uses_only_received_client_deltas(
     [
         pytest.param(
             FedAdagrad,
-            {"iterations": 1, "step_size": 1.0, "server_step_size": 1.0, "beta_1": 0.25, "tau": 1.0},
+            {"iterations": 1, "step_size": 1.0, "server_step_size": 1.0, "beta_1": 0.25, "epsilon": 1.0},
             id="fedadagrad",
         ),
         pytest.param(
@@ -281,7 +281,7 @@ def test_fedopt_aggregation_uses_only_received_client_deltas(
                 "server_step_size": 1.0,
                 "beta_1": 0.25,
                 "beta_2": 0.25,
-                "tau": 1.0,
+                "epsilon": 1.0,
             },
             id="fedyogi",
         ),
@@ -293,7 +293,7 @@ def test_fedopt_aggregation_uses_only_received_client_deltas(
                 "server_step_size": 1.0,
                 "beta_1": 0.25,
                 "beta_2": 0.25,
-                "tau": 1.0,
+                "epsilon": 1.0,
             },
             id="fedadam",
         ),
@@ -322,7 +322,7 @@ def test_fedopt_aggregation_keeps_server_state_when_no_updates_are_received(
     [
         pytest.param(
             FedAdagrad,
-            {"iterations": 1, "step_size": 1.0, "server_step_size": 2.0, "beta_1": 0.5, "tau": 1.0},
+            {"iterations": 1, "step_size": 1.0, "server_step_size": 2.0, "beta_1": 0.5, "epsilon": 1.0},
             2.0,
             4.0,
             13.0,
@@ -336,7 +336,7 @@ def test_fedopt_aggregation_keeps_server_state_when_no_updates_are_received(
                 "server_step_size": 2.0,
                 "beta_1": 0.5,
                 "beta_2": 0.25,
-                "tau": 1.0,
+                "epsilon": 1.0,
             },
             2.0,
             16.0,
@@ -351,7 +351,7 @@ def test_fedopt_aggregation_keeps_server_state_when_no_updates_are_received(
                 "server_step_size": 2.0,
                 "beta_1": 0.5,
                 "beta_2": 0.25,
-                "tau": 1.0,
+                "epsilon": 1.0,
             },
             2.0,
             4.0,
@@ -391,7 +391,7 @@ def test_fedopt_server_state_updates_follow_variant_formula(
     [
         pytest.param(
             FedAdagrad,
-            {"iterations": 2, "step_size": 1.0, "server_step_size": 1.0, "beta_1": 0.0, "tau": 1.0},
+            {"iterations": 2, "step_size": 1.0, "server_step_size": 1.0, "beta_1": 0.0, "epsilon": 1.0},
             id="fedadagrad",
         ),
         pytest.param(
@@ -402,7 +402,7 @@ def test_fedopt_server_state_updates_follow_variant_formula(
                 "server_step_size": 1.0,
                 "beta_1": 0.0,
                 "beta_2": 0.25,
-                "tau": 1.0,
+                "epsilon": 1.0,
             },
             id="fedyogi",
         ),
@@ -414,7 +414,7 @@ def test_fedopt_server_state_updates_follow_variant_formula(
                 "server_step_size": 1.0,
                 "beta_1": 0.0,
                 "beta_2": 0.25,
-                "tau": 1.0,
+                "epsilon": 1.0,
             },
             id="fedadam",
         ),
@@ -423,8 +423,8 @@ def test_fedopt_server_state_updates_follow_variant_formula(
 def test_fedopt_clients_without_server_broadcast_do_not_participate(
     algorithm_cls: type, kwargs: dict[str, float | int]
 ) -> None:
-    client = Agent(0, TrackingCost(1.0))
-    server = Agent(1, TrackingCost(0.0))
+    client = Agent(TrackingCost(1.0))
+    server = Agent(TrackingCost(0.0))
     network = FedNetwork(
         clients=[client],
         server=server,
@@ -466,5 +466,5 @@ def test_fedopt_local_uploads_are_model_deltas(algorithm_cls: type, kwargs: dict
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
     algorithm._run_local_updates(network, participating_clients)
 
-    np.testing.assert_allclose(network.server().messages[clients[0]], np.array([-1.0]))
-    np.testing.assert_allclose(network.server().messages[clients[1]], np.array([-2.0]))
+    np.testing.assert_allclose(network.server().message(clients[0]), np.array([-1.0]))
+    np.testing.assert_allclose(network.server().message(clients[1]), np.array([-2.0]))

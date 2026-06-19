@@ -81,9 +81,8 @@ except RuntimeError:
 def test_in_place_operations_history(framework: SupportedFrameworks, device: SupportedDevices):
     """Test that in-place operations on agent.x properly update the history."""
     agent = Agent(
-        0,
         LinearRegressionCost([(np.array([1.0, 1.0, 1.0]), np.array([1.0]))]),
-        None,
+        activation=None,
         state_snapshot_period=1,
     )
 
@@ -228,9 +227,8 @@ def test_agent_state_snapshot_period(
 ):
     """Test that agent history is recorded according to the specified history period."""
     agent = Agent(
-        0,
         LinearRegressionCost([(np.array([1.0, 1.0, 1.0]), np.array([1.0]))]),
-        None,
+        activation=None,
         state_snapshot_period=state_snapshot_period,
     )
 
@@ -288,13 +286,13 @@ def _make_quadratic_agent() -> Agent:
     """Return an agent with a simple 2-D quadratic cost f(x) = x^T x."""
     A = np.eye(2) * 2.0
     b = np.zeros(2)
-    return Agent(0, QuadraticCost(A, b, 0.0), None, state_snapshot_period=1)
+    return Agent(QuadraticCost(A, b, 0.0), activation=None, state_snapshot_period=1)
 
 
 def _make_empirical_agent(batch_size="all") -> Agent:
     """Return an agent backed by a 4-sample LinearRegressionCost."""
     dataset = [(np.array([float(i)]), np.array([float(i)])) for i in range(1, 5)]
-    return Agent(0, LinearRegressionCost(dataset, batch_size=batch_size), None, state_snapshot_period=1)
+    return Agent(LinearRegressionCost(dataset, batch_size=batch_size), activation=None, state_snapshot_period=1)
 
 
 def _initialized_quadratic_agent() -> Agent:
@@ -361,7 +359,7 @@ class TestCallCounting:
         """
         base_cost = QuadraticCost(np.eye(2) * 2.0, np.zeros(2), 0.0)
         wrapper = make_wrapper(base_cost)
-        agent = Agent(0, base_cost, None, state_snapshot_period=1)
+        agent = Agent(base_cost, activation=None, state_snapshot_period=1)
         agent.initialize(x=np.zeros(2))
 
         agent.cost.function(agent.x)
@@ -380,7 +378,7 @@ class TestCallCounting:
         """Deep-copying a wrapper breaks the shared reference to the patched base cost."""
         base_cost = QuadraticCost(np.eye(2) * 2.0, np.zeros(2), 0.0)
         wrapper = copy.deepcopy(make_wrapper(base_cost))
-        agent = Agent(0, base_cost, None, state_snapshot_period=1)
+        agent = Agent(base_cost, activation=None, state_snapshot_period=1)
         agent.initialize(x=np.zeros(2))
 
         wrapper.function(agent.x)
@@ -403,8 +401,8 @@ class TestCallCounting:
         """
         base_cost = QuadraticCost(np.eye(2) * 2.0, np.zeros(2), 0.0)
         wrapped_cost = make_wrapper(base_cost)
-        base_agent = Agent(0, base_cost, None, state_snapshot_period=1)
-        wrapped_agent = Agent(1, wrapped_cost, None, state_snapshot_period=1)
+        base_agent = Agent(base_cost, activation=None, state_snapshot_period=1)
+        wrapped_agent = Agent(wrapped_cost, activation=None, state_snapshot_period=1)
         base_agent.initialize(x=np.zeros(2))
         wrapped_agent.initialize(x=np.zeros(2))
 

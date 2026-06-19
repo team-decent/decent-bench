@@ -7,7 +7,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.utils.types import ArrayKey, SupportedArrayTypes
 
 
-class Array:  # noqa: PLR0904
+class Array:
     """
     A wrapper class for :data:`~decent_bench.utils.types.SupportedArrayTypes` objects to enable operator overloading.
 
@@ -326,7 +326,7 @@ class Array:  # noqa: PLR0904
             raise TypeError("Scalar values are not iterable.")
         return iter(self.value)
 
-    def __array__(self) -> SupportedArrayTypes:  # noqa: PLW3201
+    def __array__(self) -> SupportedArrayTypes:
         """
         Return the underlying array-like object.
 

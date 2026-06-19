@@ -1,15 +1,14 @@
 """Collection of pre-defined table and plot metrics."""
 
-from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-import decent_bench.metrics.metric_utils as utils
 import decent_bench.utils.interoperability as iop
-from decent_bench.agents import AgentMetricsView
 from decent_bench.costs import Cost, EmpiricalRiskCost
+from decent_bench.metrics import utils
 from decent_bench.metrics._metric import Metric
+from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import FedNetwork
 
 if TYPE_CHECKING:
@@ -35,8 +34,7 @@ class Regret(Metric):
 
     """
 
-    table_description: str = "regret"
-    plot_description: str = "regret"
+    description: str = "regret"
 
     def is_available(  # noqa: D102
         self,
@@ -46,14 +44,13 @@ class Regret(Metric):
             return False, "requires problem.x_optimal"
         return True, None
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
-    ) -> tuple[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return (utils._regret(agent_views, problem, iteration),)  # noqa: SLF001
+    ) -> list[float]:
+        return [utils._regret(network.agents(), problem, iteration)]  # noqa: SLF001
 
 
 class GradientNorm(Metric):
@@ -72,17 +69,15 @@ class GradientNorm(Metric):
 
     """
 
-    table_description: str = "gradient norm"
-    plot_description: str = "gradient norm"
+    description: str = "gradient norm"
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         iteration: int,
-    ) -> tuple[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return (utils._gradient_norm(agent_views, iteration),)  # noqa: SLF001
+    ) -> list[float]:
+        return [utils._gradient_norm(network.agents(), iteration)]  # noqa: SLF001
 
 
 class XError(Metric):
@@ -90,27 +85,26 @@ class XError(Metric):
     Distance to optimal solution.
 
     Table:
-        Distance to optimal solution using the agents'/clients' final x.
+        Distance to optimal solution using the mean of the agents'/clients' final x.
 
     Plot:
         Distance to optimal solution (y-axis) per iteration (x-axis).
 
-    X error per agent/client is defined as:
+    X error is defined as:
 
     .. math::
-        \{ \|\mathbf{x}_i - \mathbf{x}^\star\|, \|\mathbf{x}_j - \mathbf{x}^\star\|, ... \}
+        \|\mathbf{\bar{x}} - \mathbf{x}^\star\|
 
-    where :math:`\mathbf{x}_i` is agent/client i's final x,
-    :math:`\mathbf{x}_j` is agent/client j's final x,
-    and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
+    where  :math:`\mathbf{\bar{x}}` is the mean x across all agents/clients, and
+    :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
+
 
     Note:
         Available only when ``problem.x_optimal`` is provided.
 
     """
 
-    table_description: str = "x error"
-    plot_description: str = "x error"
+    description: str = "x error"
 
     def is_available(  # noqa: D102
         self,
@@ -120,13 +114,13 @@ class XError(Metric):
             return False, "requires problem.x_optimal"
         return True, None
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        return [utils._x_error(a, problem, iteration) for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
+        return [utils._x_error(network.agents(), problem, iteration)]  # noqa: SLF001
 
 
 class ConsensusError(Metric):
@@ -152,17 +146,15 @@ class ConsensusError(Metric):
 
     """
 
-    table_description: str = "consensus error"
-    plot_description: str = "consensus error"
+    description: str = "consensus error"
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+        agent_views = network.agents()
         x_mean = utils.x_mean(tuple(agent_views), iteration)
         return [float(iop.norm(x_mean - a.x_history[iteration])) for a in agent_views]
 
@@ -181,16 +173,15 @@ class XUpdates(Metric):
 
     """
 
-    table_description: str = "nr x updates"
-    plot_description: str = "nr x updates"
+    description: str = "nr x updates"
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[int]:
-        return [a.n_x_updates for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
+        return [a.n_x_updates for a in network.agents()]
 
 
 class FunctionCalls(Metric):
@@ -211,16 +202,15 @@ class FunctionCalls(Metric):
 
     """
 
-    table_description: str = "nr function calls"
-    plot_description: str = "nr function calls"
+    description: str = "nr function calls"
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_function_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
+        return [a.n_function_calls for a in network.agents()]
 
 
 class GradientCalls(Metric):
@@ -241,16 +231,15 @@ class GradientCalls(Metric):
 
     """
 
-    table_description: str = "nr gradient calls"
-    plot_description: str = "nr gradient calls"
+    description: str = "nr gradient calls"
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_gradient_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
+        return [a.n_gradient_calls for a in network.agents()]
 
 
 class HessianCalls(Metric):
@@ -271,16 +260,15 @@ class HessianCalls(Metric):
 
     """
 
-    table_description: str = "nr Hessian calls"
-    plot_description: str = "nr Hessian calls"
+    description: str = "nr Hessian calls"
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_hessian_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
+        return [a.n_hessian_calls for a in network.agents()]
 
 
 class ProximalCalls(Metric):
@@ -297,16 +285,15 @@ class ProximalCalls(Metric):
 
     """
 
-    table_description: str = "nr proximal calls"
-    plot_description: str = "nr proximal calls"
+    description: str = "nr proximal calls"
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
     ) -> list[float]:
-        return [a.n_proximal_calls for a in utils._non_server_views(tuple(agents))]  # noqa: SLF001
+        return [a.n_proximal_calls for a in network.agents()]
 
 
 class SentMessages(Metric):
@@ -323,16 +310,15 @@ class SentMessages(Metric):
 
     """
 
-    table_description: str = "nr sent messages"
-    plot_description: str = "nr sent messages"
+    description: str = "nr sent messages"
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
-    ) -> list[int]:
-        return [a.n_sent_messages for a in agents]
+    ) -> list[float]:
+        return [a.n_sent_messages for a in network.graph.nodes]
 
 
 class ReceivedMessages(Metric):
@@ -349,16 +335,15 @@ class ReceivedMessages(Metric):
 
     """
 
-    table_description: str = "nr received messages"
-    plot_description: str = "nr received messages"
+    description: str = "nr received messages"
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
-    ) -> list[int]:
-        return [a.n_received_messages for a in agents]
+    ) -> list[float]:
+        return [a.n_received_messages for a in network.graph.nodes]
 
 
 class SentMessagesDropped(Metric):
@@ -375,16 +360,15 @@ class SentMessagesDropped(Metric):
 
     """
 
-    table_description: str = "nr sent messages dropped"
-    plot_description: str = "nr sent messages dropped"
+    description: str = "nr sent messages dropped"
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
-    ) -> list[int]:
-        return [a.n_sent_messages_dropped for a in agents]
+    ) -> list[float]:
+        return [a.n_sent_messages_dropped for a in network.graph.nodes]
 
 
 class Accuracy(Metric):
@@ -419,9 +403,7 @@ class Accuracy(Metric):
 
     """
 
-    table_description: str = "accuracy"
-    plot_description: str = "accuracy"
-    can_diverge: bool = False
+    description: str = "accuracy"
 
     def is_available(  # noqa: D102
         self,
@@ -436,14 +418,13 @@ class Accuracy(Metric):
             return False, f"accuracy only applies for integer targets, dtype {test_y.dtype} found"
         return True, None
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return utils._accuracy(agent_views, problem, iteration)  # noqa: SLF001
+        return utils._accuracy(network.agents(), problem, iteration)  # noqa: SLF001
 
 
 class MSE(Metric):
@@ -476,9 +457,7 @@ class MSE(Metric):
 
     """
 
-    table_description: str = "mse"
-    plot_description: str = "mse"
-    can_diverge: bool = False
+    description: str = "mse"
 
     def is_available(  # noqa: D102
         self,
@@ -490,14 +469,13 @@ class MSE(Metric):
             return False, "MSE only applies if all agents have EmpiricalRiskCost"
         return True, None
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return utils._mse(agent_views, problem, iteration)  # noqa: SLF001
+        return utils._mse(network.agents(), problem, iteration)  # noqa: SLF001
 
 
 class Precision(Metric):
@@ -532,9 +510,7 @@ class Precision(Metric):
 
     """
 
-    table_description: str = "precision"
-    plot_description: str = "precision"
-    can_diverge: bool = False
+    description: str = "precision"
 
     def is_available(  # noqa: D102
         self,
@@ -549,14 +525,13 @@ class Precision(Metric):
             return False, f"precision only applies for integer targets, dtype {test_y.dtype} found"
         return True, None
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return utils._precision(agent_views, problem, iteration)  # noqa: SLF001
+        return utils._precision(network.agents(), problem, iteration)  # noqa: SLF001
 
 
 class Recall(Metric):
@@ -591,9 +566,7 @@ class Recall(Metric):
 
     """
 
-    table_description: str = "recall"
-    plot_description: str = "recall"
-    can_diverge: bool = False
+    description: str = "recall"
 
     def is_available(  # noqa: D102
         self,
@@ -608,14 +581,13 @@ class Recall(Metric):
             return False, f"recall only applies for integer targets, dtype {test_y.dtype} found"
         return True, None
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return utils._recall(agent_views, problem, iteration)  # noqa: SLF001
+        return utils._recall(network.agents(), problem, iteration)  # noqa: SLF001
 
 
 class Loss(Metric):
@@ -633,18 +605,15 @@ class Loss(Metric):
 
     """
 
-    table_description: str = "loss"
-    plot_description: str = "loss"
-    can_diverge: bool = False
+    description: str = "loss"
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         iteration: int,
     ) -> list[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return utils._losses(agent_views, iteration)  # noqa: SLF001
+        return utils._losses(network.agents(), iteration)  # noqa: SLF001
 
 
 def _requires_fednetwork(problem: "BenchmarkProblem", metric_name: str) -> tuple[bool, str | None]:
@@ -653,8 +622,8 @@ def _requires_fednetwork(problem: "BenchmarkProblem", metric_name: str) -> tuple
     return True, None
 
 
-def _server_metric_cost(agents: Sequence[AgentMetricsView], metric_name: str) -> Cost:
-    agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+def _server_metric_cost(network: NetworkMetricsView, metric_name: str) -> Cost:
+    agent_views = network.agents()
     if not agent_views:
         raise ValueError(f"{metric_name} requires at least one client metrics view")
     return agent_views[0].cost
@@ -682,36 +651,21 @@ class ClientDriftFromServer(Metric):
 
     """
 
-    table_description: str = "client drift from server"
-    plot_description: str = "client drift from server"
+    description: str = "client drift from server"
 
     def is_available(  # noqa: D102
         self,
         problem: "BenchmarkProblem",
     ) -> tuple[bool, str | None]:
-        return _requires_fednetwork(problem, self.table_description)
+        return _requires_fednetwork(problem, self.description)
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",  # noqa: ARG002
         iteration: int,
     ) -> list[float]:
-        server = utils._server_view(tuple(agents))  # noqa: SLF001
-        return utils._drifts(utils._non_server_views(tuple(agents)), server, iteration)  # noqa: SLF001
-
-    def get_plot_data(
-        self,
-        agents: Sequence[AgentMetricsView],
-        _: "BenchmarkProblem",
-    ) -> list[tuple[float, float]]:
-        """Extract client drift trajectory."""
-        server = utils._server_view(tuple(agents))  # noqa: SLF001
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
-        return [
-            (i, float(np.mean(utils._drifts(agent_views, server, i))))  # noqa: SLF001
-            for i in utils.all_sorted_iterations([server])
-        ]
+        return utils._drifts(network.clients(), network.server(), iteration)  # noqa: SLF001
 
 
 class FractionSelectedClients(Metric):
@@ -726,27 +680,25 @@ class FractionSelectedClients(Metric):
 
     """
 
-    table_description: str = "fraction selected clients"
-    plot_description: str = "fraction selected clients"
-    can_diverge: bool = False
+    description: str = "fraction selected clients"
 
     def is_available(  # noqa: D102
         self,
         problem: "BenchmarkProblem",
     ) -> tuple[bool, str | None]:
-        return _requires_fednetwork(problem, self.table_description)
+        return _requires_fednetwork(problem, self.description)
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         _: "BenchmarkProblem",
         __: int,
-    ) -> tuple[float]:
-        agent_views = utils._non_server_views(tuple(agents))  # noqa: SLF001
+    ) -> list[float]:
+        agent_views = network.clients()
         n_rounds = utils._observed_rounds(agent_views)  # noqa: SLF001
         if n_rounds == 0 or not agent_views:
-            return (np.nan,)
-        return (sum(agent.n_times_selected for agent in agent_views) / (n_rounds * len(agent_views)),)
+            return [np.nan]
+        return [sum(agent.n_times_selected for agent in agent_views) / (n_rounds * len(agent_views))]
 
 
 class ServerMSE(Metric):
@@ -765,15 +717,13 @@ class ServerMSE(Metric):
 
     """
 
-    table_description: str = "server mse"
-    plot_description: str = "server mse"
-    can_diverge: bool = False
+    description: str = "server mse"
 
     def is_available(  # noqa: D102
         self,
         problem: "BenchmarkProblem",
     ) -> tuple[bool, str | None]:
-        available, reason = _requires_fednetwork(problem, self.table_description)
+        available, reason = _requires_fednetwork(problem, self.description)
         if not available:
             return False, reason
         if getattr(problem, "test_data", None) is None:
@@ -782,24 +732,14 @@ class ServerMSE(Metric):
             return False, "server MSE only applies if all clients have EmpiricalRiskCost"
         return True, None
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
-    ) -> tuple[float]:
-        server = utils._server_view(tuple(agents))  # noqa: SLF001
-        cost = _server_metric_cost(agents, self.table_description)
-        return (utils._mse_at_x(cost, server.x_history[iteration], problem),)  # noqa: SLF001
-
-    def get_plot_data(
-        self,
-        agents: Sequence[AgentMetricsView],
-        problem: "BenchmarkProblem",
-    ) -> list[tuple[float, float]]:
-        """Extract server MSE trajectory."""
-        server = utils._server_view(tuple(agents))  # noqa: SLF001
-        return [(i, self.get_data_from_trial(agents, problem, i)[0]) for i in utils.all_sorted_iterations([server])]
+    ) -> list[float]:
+        cost = _server_metric_cost(network, self.description)
+        return [utils._mse_at_x(cost, network.server().x_history[iteration], problem)]  # noqa: SLF001
 
 
 class ServerAccuracy(Metric):
@@ -818,15 +758,13 @@ class ServerAccuracy(Metric):
 
     """
 
-    table_description: str = "server accuracy"
-    plot_description: str = "server accuracy"
-    can_diverge: bool = False
+    description: str = "server accuracy"
 
     def is_available(  # noqa: D102
         self,
         problem: "BenchmarkProblem",
     ) -> tuple[bool, str | None]:
-        available, reason = _requires_fednetwork(problem, self.table_description)
+        available, reason = _requires_fednetwork(problem, self.description)
         if not available:
             return False, reason
         if getattr(problem, "test_data", None) is None:
@@ -838,61 +776,51 @@ class ServerAccuracy(Metric):
             return False, f"server accuracy only applies for integer targets, dtype {test_y.dtype} found"
         return True, None
 
-    def get_data_from_trial(  # noqa: D102
+    def compute(  # noqa: D102
         self,
-        agents: Sequence[AgentMetricsView],
+        network: NetworkMetricsView,
         problem: "BenchmarkProblem",
         iteration: int,
-    ) -> tuple[float]:
-        server = utils._server_view(tuple(agents))  # noqa: SLF001
-        cost = _server_metric_cost(agents, self.table_description)
-        return (utils._accuracy_at_x(cost, server.x_history[iteration], problem),)  # noqa: SLF001
-
-    def get_plot_data(
-        self,
-        agents: Sequence[AgentMetricsView],
-        problem: "BenchmarkProblem",
-    ) -> list[tuple[float, float]]:
-        """Extract server accuracy trajectory."""
-        server = utils._server_view(tuple(agents))  # noqa: SLF001
-        return [(i, self.get_data_from_trial(agents, problem, i)[0]) for i in utils.all_sorted_iterations([server])]
+    ) -> list[float]:
+        cost = _server_metric_cost(network, self.description)
+        return [utils._accuracy_at_x(cost, network.server().x_history[iteration], problem)]  # noqa: SLF001
 
 
 _BASE_TABLE_METRICS: list[Metric] = [
-    Regret([utils.single]),
-    GradientNorm([utils.single]),
-    XError([min, np.average, max]),
-    ConsensusError([min, np.average, max]),
-    Loss([min, np.average, max]),
-    XUpdates([np.average, sum]),
-    FunctionCalls([np.average, sum]),
-    GradientCalls([np.average, sum]),
-    HessianCalls([np.average, sum]),
-    ProximalCalls([np.average, sum]),
-    SentMessages([np.average, sum]),
-    ReceivedMessages([np.average, sum]),
-    SentMessagesDropped([np.average, sum]),
+    Regret(),
+    GradientNorm(),
+    XError(),
+    ConsensusError(),
+    Loss(),
+    XUpdates(),
+    FunctionCalls(),
+    GradientCalls(),
+    HessianCalls(),
+    ProximalCalls(),
+    SentMessages(),
+    ReceivedMessages(),
+    SentMessagesDropped(),
 ]
 """
-- :class:`Regret` - :func:`~.metric_utils.single`
-- :class:`GradientNorm` - :func:`~.metric_utils.single`
-- :class:`XError` - :func:`min`, :func:`~numpy.average`, :func:`max`
-- :class:`ConsensusError` - :func:`min`, :func:`~numpy.average`, :func:`max`
-- :class:`Loss` - :func:`min`, :func:`~numpy.average`, :func:`max`
-- :class:`XUpdates` - :func:`~numpy.average`, :func:`sum`
-- :class:`FunctionCalls` - :func:`~numpy.average`, :func:`sum`
-- :class:`GradientCalls` - :func:`~numpy.average`, :func:`sum`
-- :class:`HessianCalls` - :func:`~numpy.average`, :func:`sum`
-- :class:`ProximalCalls` - :func:`~numpy.average`, :func:`sum`
-- :class:`SentMessages` - :func:`~numpy.average`, :func:`sum`
-- :class:`ReceivedMessages` - :func:`~numpy.average`, :func:`sum`
-- :class:`SentMessagesDropped` - :func:`~numpy.average`, :func:`sum`
+- :class:`Regret`
+- :class:`GradientNorm`
+- :class:`XError`
+- :class:`ConsensusError`
+- :class:`Loss`
+- :class:`XUpdates`
+- :class:`FunctionCalls`
+- :class:`GradientCalls`
+- :class:`HessianCalls`
+- :class:`ProximalCalls`
+- :class:`SentMessages`
+- :class:`ReceivedMessages`
+- :class:`SentMessagesDropped`
 
 :meta hide-value:
 """
 
 _REGRESSION_TABLE_METRICS: list[Metric] = [
-    MSE([min, np.average, max], x_log=False, y_log=True),
+    MSE(x_log=False, y_log=True),
 ]
 """
 - :class:`MSE` - :func:`min`, :func:`~numpy.average`, :func:`max`
@@ -901,14 +829,14 @@ _REGRESSION_TABLE_METRICS: list[Metric] = [
 """
 
 _CLASSIFICATION_TABLE_METRICS: list[Metric] = [
-    Accuracy([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
-    Precision([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
-    Recall([min, np.average, max], fmt=".2%", x_log=False, y_log=False),
+    Accuracy(fmt=".2%", x_log=False, y_log=False),
+    Precision(fmt=".2%", x_log=False, y_log=False),
+    Recall(fmt=".2%", x_log=False, y_log=False),
 ]
 """
-- :class:`Accuracy` - :func:`min`, :func:`~numpy.average`, :func:`max` with percentage format
-- :class:`Precision` - :func:`min`, :func:`~numpy.average`, :func:`max` with percentage format
-- :class:`Recall` - :func:`min`, :func:`~numpy.average`, :func:`max` with percentage format
+- :class:`Accuracy` - with percentage format
+- :class:`Precision` - with percentage format
+- :class:`Recall` - with percentage format
 
 :meta hide-value:
 """
@@ -917,10 +845,10 @@ _CLASSIFICATION_TABLE_METRICS: list[Metric] = [
 # used for table metrics, if you were to use the same Metric object
 # for both, you would need to specify statistics
 _BASE_PLOT_METRICS: list[Metric] = [
-    Regret([], x_log=False, y_log=True),
-    GradientNorm([], x_log=False, y_log=True),
-    ConsensusError([], x_log=False, y_log=True),
-    Loss([], x_log=False, y_log=False),
+    Regret(x_log=False, y_log=True),
+    GradientNorm(x_log=False, y_log=True),
+    ConsensusError(x_log=False, y_log=True),
+    Loss(x_log=False, y_log=False),
 ]
 """
 - :class:`Regret` (semi-log)
@@ -949,18 +877,18 @@ _CLASSIFICATION_PLOT_METRICS: list[Metric] = _CLASSIFICATION_TABLE_METRICS
 """
 
 _FEDERATED_TABLE_METRICS: list[Metric] = [
-    ClientDriftFromServer([min, np.average, max]),
-    FractionSelectedClients([utils.single], fmt=".2%", x_log=False, y_log=False),
+    ClientDriftFromServer(),
+    FractionSelectedClients(fmt=".2%", x_log=False, y_log=False),
 ]
 """
-- :class:`ClientDriftFromServer` - min, average, max
-- :class:`FractionSelectedClients` - single value with percentage format
+- :class:`ClientDriftFromServer`
+- :class:`FractionSelectedClients` - with percentage format
 
 :meta hide-value:
 """
 
 _FEDERATED_PLOT_METRICS: list[Metric] = [
-    ClientDriftFromServer([], x_log=False, y_log=True),
+    ClientDriftFromServer(x_log=False, y_log=True),
 ]
 """
 - :class:`ClientDriftFromServer` (semi-log)
@@ -969,16 +897,16 @@ _FEDERATED_PLOT_METRICS: list[Metric] = [
 """
 
 _FEDERATED_REGRESSION_TABLE_METRICS: list[Metric] = [
-    ServerMSE([utils.single], x_log=False, y_log=True),
+    ServerMSE(x_log=False, y_log=True),
 ]
 """
-- :class:`ServerMSE` - single value
+- :class:`ServerMSE`
 
 :meta hide-value:
 """
 
 _FEDERATED_REGRESSION_PLOT_METRICS: list[Metric] = [
-    ServerMSE([], x_log=False, y_log=True),
+    ServerMSE(x_log=False, y_log=True),
 ]
 """
 - :class:`ServerMSE` (semi-log)
@@ -987,16 +915,16 @@ _FEDERATED_REGRESSION_PLOT_METRICS: list[Metric] = [
 """
 
 _FEDERATED_CLASSIFICATION_TABLE_METRICS: list[Metric] = [
-    ServerAccuracy([utils.single], fmt=".2%", x_log=False, y_log=False),
+    ServerAccuracy(fmt=".2%", x_log=False, y_log=False),
 ]
 """
-- :class:`ServerAccuracy` - single value with percentage format
+- :class:`ServerAccuracy` - with percentage format
 
 :meta hide-value:
 """
 
 _FEDERATED_CLASSIFICATION_PLOT_METRICS: list[Metric] = [
-    ServerAccuracy([], fmt=".2%", x_log=False, y_log=False),
+    ServerAccuracy(fmt=".2%", x_log=False, y_log=False),
 ]
 """
 - :class:`ServerAccuracy` (linear)

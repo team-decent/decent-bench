@@ -71,13 +71,11 @@ class DLM(P2PAlgorithm):
             for i in network.active_agents():
                 s = self._sum_messages(i)
                 if s is not None:
-                    i.aux_vars["s"] = len(i.messages) * i.x - s
+                    i.aux_vars["s"] = len(i.messages()) * i.x - s
         else:
             # step 1: update primal variable
             for i in network.active_agents():
-                i.x = i.x - self.step_size * (  # noqa: PLR6104
-                    i.cost.gradient(i.x) + self.penalty * i.aux_vars["s"] + i.aux_vars["y"]
-                )
+                i.x = i.x - self.step_size * (i.cost.gradient(i.x) + self.penalty * i.aux_vars["s"] + i.aux_vars["y"])
 
             # step 2: communication round
             for i in network.active_agents():
@@ -87,7 +85,7 @@ class DLM(P2PAlgorithm):
             for i in network.active_agents():
                 s = self._sum_messages(i)
                 if s is not None:
-                    i.aux_vars["s"] = len(i.messages) * i.x - s
+                    i.aux_vars["s"] = len(i.messages()) * i.x - s
 
             # step 3: update dual variable
             for i in network.active_agents():
@@ -95,7 +93,7 @@ class DLM(P2PAlgorithm):
 
     def _sum_messages(self, i: "Agent") -> "Array | None":
         s = None
-        for val in i.messages.values():
+        for val in i.messages().values():
             if s is None:
                 s = val
             else:

@@ -421,7 +421,7 @@ class PyTorchCost(EmpiricalRiskCost):
         raise NotImplementedError("Hessian computation is not implemented for PyTorchCost.")
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.proximal)
-    def proximal(self, x: torch.Tensor, rho: float) -> torch.Tensor:
+    def proximal(self, x: torch.Tensor, penalty: float) -> torch.Tensor:
         """
         Compute the proximal operator.
 

@@ -35,13 +35,13 @@ else:
 Type variable for algorithms operating on a :class:`~decent_bench.networks.Network`.
 """
 
-type InitialStates = Union["Array", "dict[Agent, Array]", None]  # noqa: TC008, UP007
+type InitialStates = Union["Array", "dict[Agent, Array]", None]  # noqa: UP007
 """
 Type alias for what can be passed to
 :func:`~decent_bench.algorithms.utils.initial_states`.
 """
 
-type LocalSteps = int | dict["Agent", int]  # noqa: TC008
+type LocalSteps = int | dict["Agent", int]
 """
 Type alias for specifying local step counts in federated algorithms.
 
@@ -75,7 +75,7 @@ Type alias for specifying batch size in empirical risk initialization.
 Can be an integer for mini-batch size or the string "all" for full dataset.
 """
 
-type Datapoint = tuple["Array", "Array"]  # noqa: TC008
+type Datapoint = tuple["Array", "Array"]
 """Tuple of (x, y) representing one datapoint where x are features and y is the target."""
 
 type Dataset = list[Datapoint]

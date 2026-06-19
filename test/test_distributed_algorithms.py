@@ -56,8 +56,8 @@ all_p2p_algs = pytest.mark.parametrize(
         (EXTRA, {"iterations": 10, "step_size": 0.1}),
         (ATC_Tracking, {"iterations": 10, "step_size": 0.1}),
         (NIDS, {"iterations": 10, "step_size": 0.1}),
-        (ADMM, {"iterations": 10, "rho": 1.0, "alpha": 0.5}),
-        (ATG, {"iterations": 10, "rho": 1.0, "alpha": 0.5}),
+        (ADMM, {"iterations": 10, "penalty": 1.0, "relaxation": 0.5}),
+        (ATG, {"iterations": 10, "penalty": 1.0, "relaxation": 0.5}),
         (DLM, {"iterations": 10, "step_size": 0.1, "penalty": 1.0}),
         (DiNNO, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5}),
         (GT_VR, {"iterations": 10, "step_size": 0.1, "snapshot_prob": 0.5}),
@@ -108,7 +108,6 @@ def _create_p2p_network(impairments: bool, cost_cls: type) -> P2PNetwork:
         )
     agents = [
         Agent(
-            i,
             cost,
             activation=UniformActivationRate(0.8) if impairments else None,
         )
@@ -117,7 +116,7 @@ def _create_p2p_network(impairments: bool, cost_cls: type) -> P2PNetwork:
     return P2PNetwork(
         graph=nx.complete_graph(len(agents)),
         agents=agents,
-        message_compression=Quantization(8) if impairments else None,
+        message_compression=Quantization(quantization_step=1e-2) if impairments else None,
         message_noise=GaussianNoise(0.0, 0.01) if impairments else None,
         message_drop=UniformDropRate(0.1) if impairments else None,
     )
@@ -142,7 +141,6 @@ def _create_fed_network(impairments: bool, cost_cls: type) -> FedNetwork:
         )
     agents = [
         Agent(
-            i,
             cost,
             activation=UniformActivationRate(0.8) if impairments else None,
         )
@@ -150,7 +148,7 @@ def _create_fed_network(impairments: bool, cost_cls: type) -> FedNetwork:
     ]
     return FedNetwork(
         clients=agents,
-        message_compression=Quantization(8) if impairments else None,
+        message_compression=Quantization(quantization_step=1e-2) if impairments else None,
         message_noise=GaussianNoise(0.0, 0.01) if impairments else None,
         message_drop=UniformDropRate(0.1) if impairments else None,
     )

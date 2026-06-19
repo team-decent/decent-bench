@@ -8,6 +8,9 @@ from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
 
+_STATE_CHANNEL = "state"
+_GRADIENT_TRACKER_CHANNEL = "gradient_tracker"
+
 
 @tags("peer-to-peer", "gradient-tracking")
 @dataclass(eq=False)
@@ -71,12 +74,12 @@ class ATC_Tracking(P2PAlgorithm):  # noqa: N801
             i.aux_vars["s"] = i.x - self.step_size * i.aux_vars["y"]
 
         for i in network.active_agents():
-            network.broadcast(i, i.aux_vars["s"])
+            network.broadcast(i, i.aux_vars["s"], channel=_STATE_CHANNEL)
 
         #     step 2: update state and compute new local gradient
         for i in network.active_agents():
             neighborhood_avg = self.W[i, i] * i.aux_vars["s"]
-            for j, s_j in i.messages.items():
+            for j, s_j in i.messages(_STATE_CHANNEL).items():
                 neighborhood_avg += self.W[i, j] * s_j
             i.x = neighborhood_avg
             i.aux_vars["g_new"] = i.cost.gradient(i.x)
@@ -84,12 +87,12 @@ class ATC_Tracking(P2PAlgorithm):  # noqa: N801
         # 2nd communication round
         #     step 1: transmit local gradient tracker
         for i in network.active_agents():
-            network.broadcast(i, i.aux_vars["y"])
+            network.broadcast(i, i.aux_vars["y"], channel=_GRADIENT_TRACKER_CHANNEL)
 
         #     step 2: update y (global gradient estimator)
         for i in network.active_agents():
             neighborhood_avg = self.W[i, i] * i.aux_vars["y"]
-            for j, q_j in i.messages.items():
+            for j, q_j in i.messages(_GRADIENT_TRACKER_CHANNEL).items():
                 neighborhood_avg += self.W[i, j] * q_j
             i.aux_vars["y"] = neighborhood_avg + i.aux_vars["g_new"] - i.aux_vars["g"]
             i.aux_vars["g"] = i.aux_vars["g_new"]

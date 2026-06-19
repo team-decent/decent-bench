@@ -8,6 +8,9 @@ from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
 
+_Z_Y_CHANNEL = "z_y"
+_Z_S_CHANNEL = "z_s"
+
 
 @tags("peer-to-peer", "gradient-tracking", "dual method", "ADMM")
 @dataclass(eq=False)
@@ -34,9 +37,11 @@ class ATG(P2PAlgorithm):
     and :math:`\mathbf{z}_{ij,k} \in \mathbb{R}^{2n}` are auxiliary variables,
     :math:`N_i` is the number of neighbors of i,
     :math:`f_i` is i's local cost function,
-    j is a neighbor of i. The parameters are: the penalty :math:`\rho > 0`, the relaxation :math:`\alpha \in (0, 1)`,
-    the step-size :math:`\delta > 0`, and the mixing parameter :math:`\gamma > 0`. Notice that the convergence of
-    the algorithm is guaranteed provided that :math:`\delta, \ \gamma` are below certain thresholds.
+    j is a neighbor of i. The parameters are: the penalty :math:`\rho > 0` (the corresponding argument is
+    ``penalty``), the relaxation :math:`\alpha \in (0, 1)` (the corresponding argument is ``relaxation``), the
+    step-size :math:`\delta > 0` (the corresponding argument is ``delta``), and the mixing parameter
+    :math:`\gamma > 0` (the corresponding argument is ``gamma``). Notice that the convergence of the algorithm is
+    guaranteed provided that :math:`\delta, \ \gamma` are below certain thresholds.
 
     The idea of the algorithm is to apply distributed ADMM to perform gradient tracking,
     instead of the usual average consensus.
@@ -48,8 +53,8 @@ class ATG(P2PAlgorithm):
     """
 
     iterations: int = 100
-    rho: float = 1
-    alpha: float = 0.5
+    penalty: float = 1
+    relaxation: float = 0.5
     gamma: float = 0.1
     delta: float = 0.001
     x0: InitialStates = None
@@ -64,17 +69,17 @@ class ATG(P2PAlgorithm):
             ValueError: if hyperparameters are invalid.
 
         """
-        if self.rho <= 0:
-            raise ValueError("`rho` must be positive")
-        if not (0 < self.alpha < 1):
-            raise ValueError("`alpha` must be in (0, 1)")
+        if self.penalty <= 0:
+            raise ValueError("`penalty` must be positive")
+        if not (0 < self.relaxation < 1):
+            raise ValueError("`relaxation` must be in (0, 1)")
         if self.gamma <= 0:
             raise ValueError("`gamma` must be positive")
         if self.delta <= 0:
             raise ValueError("`delta` must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:
-        self.pN = {i: self.rho * len(network.neighbors(i)) for i in network.agents()}
+        self.pN = {i: self.penalty * len(network.neighbors(i)) for i in network.agents()}
         self.x0 = initial_states(self.x0, network)
         self.z0 = initial_states(self.z0, network)
         for i in network.agents():
@@ -99,22 +104,24 @@ class ATG(P2PAlgorithm):
         # step 2: communicate and update z_{ij} variables
         for i in network.active_agents():
             for j in network.active_neighbors(i):
-                # transmit the messages as a single message, stacking along the first axis
                 idx = i.aux_vars["neighbor_to_idx"][j]
-                s = iop.stack(
-                    (
-                        -i.aux_vars["z_y"][idx] + 2 * self.rho * i.aux_vars["y"],
-                        -i.aux_vars["z_s"][idx] + 2 * self.rho * i.aux_vars["s"],
-                    ),
-                    dim=0,
-                )
-                network.send(i, j, s)
+                z_y_update = -i.aux_vars["z_y"][idx] + 2 * self.penalty * i.aux_vars["y"]
+                z_s_update = -i.aux_vars["z_s"][idx] + 2 * self.penalty * i.aux_vars["s"]
+                network.send(i, j, z_y_update, channel=_Z_Y_CHANNEL)
+                network.send(i, j, z_s_update, channel=_Z_S_CHANNEL)
 
         for i in network.active_agents():
-            for j, msg in i.messages.items():
+            received_z_y_updates = i.messages(_Z_Y_CHANNEL)
+            received_z_s_updates = i.messages(_Z_S_CHANNEL)
+            received_both = set(received_z_y_updates).intersection(received_z_s_updates)
+            for j in received_both:
                 idx = i.aux_vars["neighbor_to_idx"][j]
-                i.aux_vars["z_y"][idx] = (1 - self.alpha) * i.aux_vars["z_y"][idx] + self.alpha * msg[0]
-                i.aux_vars["z_s"][idx] = (1 - self.alpha) * i.aux_vars["z_s"][idx] + self.alpha * msg[1]
+                i.aux_vars["z_y"][idx] = (1 - self.relaxation) * i.aux_vars["z_y"][
+                    idx
+                ] + self.relaxation * received_z_y_updates[j]
+                i.aux_vars["z_s"][idx] = (1 - self.relaxation) * i.aux_vars["z_s"][
+                    idx
+                ] + self.relaxation * received_z_s_updates[j]
 
 
 ADMM_Tracking = ATG  # alias

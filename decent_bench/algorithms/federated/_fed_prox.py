@@ -37,8 +37,9 @@ class FedProx(FedAlgorithm):
         \mathbf{x}_{k+1} = \frac{1}{|S_k|} \sum_{i \in S_k} \mathbf{x}_{i, k}^{(E)}
 
     where :math:`\mathbf{w}^t` is the server model broadcast at the start of round :math:`k`, held fixed
-    throughout each selected client's local epochs, :math:`\mu \geq 0` is the proximal coefficient,
-    :math:`\eta` is the step size, and :math:`S_k` is the set of participating clients. Setting ``mu=0.0``
+    throughout each selected client's local epochs, :math:`\mu \geq 0` is the proximal coefficient (the
+    corresponding argument is ``penalty``), :math:`\eta` is the step size (the corresponding argument is
+    ``step_size``), and :math:`S_k` is the set of participating clients. Setting ``penalty=0.0``
     recovers :class:`FedAvg <decent_bench.algorithms.federated.FedAvg>` exactly. Aggregation uses uniform averaging
     over the participating clients. Client selection defaults to uniform sampling with fraction 1.0. For
     :class:`~decent_bench.costs.EmpiricalRiskCost`, local updates use mini-batches of size
@@ -50,8 +51,8 @@ class FedProx(FedAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    num_local_epochs: int = 1
-    mu: float = 0.01
+    num_local_steps: int = 1
+    penalty: float = 0.01
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
     )
@@ -68,10 +69,10 @@ class FedProx(FedAlgorithm):
         """
         if self.step_size <= 0:
             raise ValueError("`step_size` must be positive")
-        if self.num_local_epochs <= 0:
-            raise ValueError("`num_local_epochs` must be positive")
-        if self.mu < 0:
-            raise ValueError("`mu` must be non-negative")
+        if self.num_local_steps <= 0:
+            raise ValueError("`num_local_steps` must be positive")
+        if self.penalty < 0:
+            raise ValueError("`penalty` must be non-negative")
 
     def initialize(self, network: FedNetwork) -> None:
         self.x0 = initial_states(self.x0, network)
@@ -105,7 +106,7 @@ class FedProx(FedAlgorithm):
         """
         reference_x = self._get_server_broadcast(client, server)
         local_x = iop.copy(reference_x)
-        for _ in range(self.num_local_epochs):
-            grad = client.cost.gradient(local_x) + self.mu * (local_x - reference_x)
+        for _ in range(self.num_local_steps):
+            grad = client.cost.gradient(local_x) + self.penalty * (local_x - reference_x)
             local_x -= self.step_size * grad
         return local_x

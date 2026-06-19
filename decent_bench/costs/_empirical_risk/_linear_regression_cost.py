@@ -7,7 +7,6 @@ from numpy import float64
 from numpy.typing import NDArray
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._empirical_risk._empirical_risk_cost import EmpiricalRiskCost
 from decent_bench.utils._tags import tags
 from decent_bench.utils.types import (
@@ -282,7 +281,7 @@ class LinearRegressionCost(EmpiricalRiskCost):
         return res
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.proximal)
-    def proximal(self, x: NDArray[float64], rho: float) -> NDArray[float64]:
+    def proximal(self, x: NDArray[float64], penalty: float) -> NDArray[float64]:
         r"""
         Proximal at x using the full dataset.
 
@@ -296,8 +295,8 @@ class LinearRegressionCost(EmpiricalRiskCost):
         """
         A, ATA, b = self._get_batch_data("all")  # noqa: N806
         scale = 1 / self.n_samples
-        lhs = rho * scale * ATA + np.eye(A.shape[1])
-        rhs = x + rho * scale * A.T @ b
+        lhs = penalty * scale * ATA + np.eye(A.shape[1])
+        rhs = x + penalty * scale * A.T @ b
         return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
 
     def _get_batch_data(
@@ -314,30 +313,9 @@ class LinearRegressionCost(EmpiricalRiskCost):
                 self.ATA = self.A.T @ self.A
             return self.A, self.ATA, self.b
 
-        A_list, b_list = [], []  # noqa: N806
-        for idx in indices:
+        A, b = np.empty((len(indices), *self.shape)), np.empty(len(indices))  # noqa: N806
+        for i, idx in enumerate(indices):
             x_i, y_i = self._dataset[idx]
-            A_list.append(iop.to_numpy(x_i))
-            b_list.append(iop.to_numpy(y_i))
-        A = np.stack(A_list)  # noqa: N806
-        b = np.stack(b_list).squeeze()
+            A[i, :] = iop.to_numpy(x_i)
+            b[i] = iop.to_numpy(y_i).item()
         return A, A.T @ A, b
-
-    def __add__(self, other: Cost) -> Cost:
-        """Add another cost function."""
-        self._validate_cost_operation(other)
-        if isinstance(other, LinearRegressionCost):
-            if self.batch_size == self.n_samples and other.batch_size == other.n_samples:
-                combined_batch_size = self.n_samples + other.n_samples
-            elif self.batch_size == self.n_samples:
-                combined_batch_size = other.batch_size
-            elif other.batch_size == other.n_samples:
-                combined_batch_size = self.batch_size
-            else:
-                combined_batch_size = max(self.batch_size, other.batch_size)
-
-            return LinearRegressionCost(
-                dataset=self.dataset + other.dataset,
-                batch_size=combined_batch_size,
-            )
-        return super().__add__(other)

@@ -171,7 +171,7 @@ class DropOnCalls(DropScheme):
 
 
 def _make_network(*costs: Cost) -> FedNetwork:
-    return FedNetwork(clients=[Agent(i, cost) for i, cost in enumerate(costs)])
+    return FedNetwork(clients=[Agent(cost) for cost in costs])
 
 
 @pytest.mark.parametrize("local_solver", ["gd", "nesterov"])
@@ -180,7 +180,7 @@ def test_fedlt_runs_with_default_and_nesterov_local_updates(local_solver: str) -
         QuadraticCost(A=np.array([[1.0]]), b=np.array([-1.0])),
         QuadraticCost(A=np.array([[2.0]]), b=np.array([1.0])),
     )
-    algorithm = FedLT(iterations=3, step_size=0.2, num_local_epochs=2, rho=1.0, local_solver=local_solver)
+    algorithm = FedLT(iterations=3, step_size=0.2, num_local_steps=2, penalty=1.0, local_solver=local_solver)
 
     algorithm.run(network)
 
@@ -193,7 +193,7 @@ def test_fedlt_accepts_adam_local_solver() -> None:
         QuadraticCost(A=np.array([[1.0]]), b=np.array([-1.0])),
         QuadraticCost(A=np.array([[2.0]]), b=np.array([1.0])),
     )
-    algorithm = FedLT(iterations=3, step_size=0.2, num_local_epochs=2, rho=1.0, local_solver="adam")
+    algorithm = FedLT(iterations=3, step_size=0.2, num_local_steps=2, penalty=1.0, local_solver="adam")
 
     algorithm.run(network)
 
@@ -212,8 +212,8 @@ def test_fedlt_sets_default_solver_args() -> None:
 @pytest.mark.parametrize(
     ("kwargs", "error"),
     [
-        ({"rho": 0.0}, "`rho` must be positive"),
-        ({"num_local_epochs": 0}, "`num_local_epochs` must be positive"),
+        ({"penalty": 0.0}, "`penalty` must be positive"),
+        ({"num_local_steps": 0}, "`num_local_steps` must be positive"),
         ({"step_size": 0.0}, "`step_size` must be positive"),
         ({"local_solver": "bad"}, "`local_solver` must be one of"),
         (
@@ -268,19 +268,19 @@ def test_fedlt_initializes_auxiliary_variables_from_z0() -> None:
 
 
 def test_fedlt_nesterov_update_uses_step_size_and_momentum() -> None:
-    client = Agent(0, ConstantGradientCost(gradient_value=2.0))
-    server = Agent(1, ZeroCost((1,)))
+    client = Agent(ConstantGradientCost(gradient_value=2.0))
+    server = Agent(ZeroCost((1,)))
     algorithm = FedLT(
         iterations=1,
         step_size=0.25,
-        num_local_epochs=2,
-        rho=1.0,
+        num_local_steps=2,
+        penalty=1.0,
         local_solver="nesterov",
         solver_args={"momentum": 0.5},
     )
     client.initialize(x=np.array([1.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
-    client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+    client._received_messages.put(server, np.array([0.0]))  # noqa: SLF001
 
     local_x, z_next = algorithm._compute_local_update(client, server)
 
@@ -289,18 +289,18 @@ def test_fedlt_nesterov_update_uses_step_size_and_momentum() -> None:
 
 
 def test_fedlt_nesterov_default_momentum_is_used() -> None:
-    client = Agent(0, ConstantGradientCost(gradient_value=2.0))
-    server = Agent(1, ZeroCost((1,)))
+    client = Agent(ConstantGradientCost(gradient_value=2.0))
+    server = Agent(ZeroCost((1,)))
     algorithm = FedLT(
         iterations=1,
         step_size=0.25,
-        num_local_epochs=2,
-        rho=1.0,
+        num_local_steps=2,
+        penalty=1.0,
         local_solver="nesterov",
     )
     client.initialize(x=np.array([1.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
-    client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+    client._received_messages.put(server, np.array([0.0]))  # noqa: SLF001
 
     local_x, z_next = algorithm._compute_local_update(client, server)
 
@@ -309,12 +309,12 @@ def test_fedlt_nesterov_default_momentum_is_used() -> None:
 
 
 def test_fedlt_local_gradient_step_uses_penalty_term() -> None:
-    client = Agent(0, ConstantGradientCost(gradient_value=1.0))
-    server = Agent(1, ZeroCost((1,)))
-    algorithm = FedLT(iterations=1, step_size=1.0, num_local_epochs=2, rho=1.0)
+    client = Agent(ConstantGradientCost(gradient_value=1.0))
+    server = Agent(ZeroCost((1,)))
+    algorithm = FedLT(iterations=1, step_size=1.0, num_local_steps=2, penalty=1.0)
     client.initialize(x=np.array([0.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
-    client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+    client._received_messages.put(server, np.array([0.0]))  # noqa: SLF001
 
     local_x, z_next = algorithm._compute_local_update(client, server)
 
@@ -323,12 +323,12 @@ def test_fedlt_local_gradient_step_uses_penalty_term() -> None:
 
 
 def test_fedlt_adam_one_step_matches_formula() -> None:
-    client = Agent(0, ConstantGradientCost(gradient_value=2.0))
-    server = Agent(1, ZeroCost((1,)))
-    algorithm = FedLT(iterations=1, step_size=0.5, num_local_epochs=1, rho=1.0, local_solver="adam")
+    client = Agent(ConstantGradientCost(gradient_value=2.0))
+    server = Agent(ZeroCost((1,)))
+    algorithm = FedLT(iterations=1, step_size=0.5, num_local_steps=1, penalty=1.0, local_solver="adam")
     client.initialize(x=np.array([0.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
-    client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+    client._received_messages.put(server, np.array([0.0]))  # noqa: SLF001
 
     local_x, z_next = algorithm._compute_local_update(client, server)
 
@@ -360,19 +360,19 @@ def _manual_adam_steps(
 
 
 def test_fedlt_adam_multi_step_matches_formula_on_quadratic() -> None:
-    client = Agent(0, QuadraticCost(A=np.array([[1.0]]), b=np.array([0.0])))
-    server = Agent(1, ZeroCost((1,)))
+    client = Agent(QuadraticCost(A=np.array([[1.0]]), b=np.array([0.0])))
+    server = Agent(ZeroCost((1,)))
     algorithm = FedLT(
         iterations=1,
         step_size=0.1,
-        num_local_epochs=3,
-        rho=1.0,
+        num_local_steps=3,
+        penalty=1.0,
         local_solver="adam",
         solver_args={"beta1": 0.8, "beta2": 0.9, "epsilon": 1e-6},
     )
     client.initialize(x=np.array([1.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
-    client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+    client._received_messages.put(server, np.array([0.0]))  # noqa: SLF001
 
     local_x, z_next = algorithm._compute_local_update(client, server)
 
@@ -382,21 +382,21 @@ def test_fedlt_adam_multi_step_matches_formula_on_quadratic() -> None:
         beta1=algorithm.solver_args["beta1"],
         beta2=algorithm.solver_args["beta2"],
         epsilon=algorithm.solver_args["epsilon"],
-        num_steps=algorithm.num_local_epochs,
+        num_steps=algorithm.num_local_steps,
     )
     np.testing.assert_allclose(local_x, np.array([expected_x]))
     np.testing.assert_allclose(z_next, np.array([2 * expected_x]))
 
 
 def test_fedlt_adam_moments_reset_each_local_solve() -> None:
-    client = Agent(0, QuadraticCost(A=np.array([[1.0]]), b=np.array([0.0])))
-    server = Agent(1, ZeroCost((1,)))
-    algorithm = FedLT(iterations=1, step_size=0.1, num_local_epochs=2, rho=1.0, local_solver="adam")
+    client = Agent(QuadraticCost(A=np.array([[1.0]]), b=np.array([0.0])))
+    server = Agent(ZeroCost((1,)))
+    algorithm = FedLT(iterations=1, step_size=0.1, num_local_steps=2, penalty=1.0, local_solver="adam")
     server.initialize(x=np.array([0.0]))
 
     def run_local_solve() -> tuple[np.ndarray, np.ndarray]:
         client.initialize(x=np.array([1.0]), aux_vars={"z": np.array([0.0])})
-        client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+        client._received_messages.put(server, np.array([0.0]))  # noqa: SLF001
         return algorithm._compute_local_update(client, server)
 
     local_x_1, z_next_1 = run_local_solve()
@@ -409,10 +409,10 @@ def test_fedlt_adam_moments_reset_each_local_solve() -> None:
 
 def test_fedlt_server_step_uses_server_cost_proximal_for_optional_global_regularizer() -> None:
     server_cost = ShiftProxCost(shift=0.5)
-    clients = [Agent(0, ConstantGradientCost(0.0)), Agent(1, ConstantGradientCost(0.0))]
-    server = Agent(2, server_cost)
+    clients = [Agent(ConstantGradientCost(0.0)), Agent(ConstantGradientCost(0.0))]
+    server = Agent(server_cost)
     network = FedNetwork(clients=clients, server=server)
-    algorithm = FedLT(iterations=1, step_size=0.1, num_local_epochs=1, rho=2.0)
+    algorithm = FedLT(iterations=1, step_size=0.1, num_local_steps=1, penalty=2.0)
     algorithm.initialize(network)
     server.aux_vars["z_by_client"][clients[0]] = np.array([1.0])
     server.aux_vars["z_by_client"][clients[1]] = np.array([3.0])
@@ -424,10 +424,10 @@ def test_fedlt_server_step_uses_server_cost_proximal_for_optional_global_regular
 
 
 def test_fedlt_server_step_supports_regularizer_server_cost() -> None:
-    clients = [Agent(0, ConstantGradientCost(0.0)), Agent(1, ConstantGradientCost(0.0))]
-    server = Agent(2, L1RegularizerCost(shape=(1,)))
+    clients = [Agent(ConstantGradientCost(0.0)), Agent(ConstantGradientCost(0.0))]
+    server = Agent(L1RegularizerCost(shape=(1,)))
     network = FedNetwork(clients=clients, server=server)
-    algorithm = FedLT(iterations=1, step_size=0.1, num_local_epochs=1, rho=2.0)
+    algorithm = FedLT(iterations=1, step_size=0.1, num_local_steps=1, penalty=2.0)
     algorithm.initialize(network)
     server.aux_vars["z_by_client"][clients[0]] = np.array([3.0])
     server.aux_vars["z_by_client"][clients[1]] = np.array([1.0])
@@ -439,12 +439,12 @@ def test_fedlt_server_step_supports_regularizer_server_cost() -> None:
 
 def test_fedlt_empirical_cost_uses_existing_minibatch_gradient_default() -> None:
     cost = TrackingEmpiricalCost(n_samples=5, batch_size=2)
-    client = Agent(0, cost)
-    server = Agent(1, ZeroCost((1,)))
-    algorithm = FedLT(iterations=1, step_size=1.0, num_local_epochs=3, rho=1.0)
+    client = Agent(cost)
+    server = Agent(ZeroCost((1,)))
+    algorithm = FedLT(iterations=1, step_size=1.0, num_local_steps=3, penalty=1.0)
     client.initialize(x=np.array([0.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
-    client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+    client._received_messages.put(server, np.array([0.0]))  # noqa: SLF001
 
     algorithm._compute_local_update(client, server)
 
@@ -455,12 +455,12 @@ def test_fedlt_empirical_cost_uses_existing_minibatch_gradient_default() -> None
 
 def test_fedlt_generic_cost_uses_full_gradient_call_default() -> None:
     cost = ConstantGradientCost(gradient_value=1.0)
-    client = Agent(0, cost)
-    server = Agent(1, ZeroCost((1,)))
-    algorithm = FedLT(iterations=1, step_size=1.0, num_local_epochs=2, rho=1.0)
+    client = Agent(cost)
+    server = Agent(ZeroCost((1,)))
+    algorithm = FedLT(iterations=1, step_size=1.0, num_local_steps=2, penalty=1.0)
     client.initialize(x=np.array([0.0]), aux_vars={"z": np.array([0.0])})
     server.initialize(x=np.array([0.0]))
-    client._received_messages[server] = np.array([0.0])  # noqa: SLF001
+    client._received_messages.put(server, np.array([0.0]))  # noqa: SLF001
 
     algorithm._compute_local_update(client, server)
 
@@ -472,8 +472,8 @@ def test_fedlt_supports_partial_participation_and_keeps_stale_server_z() -> None
     algorithm = FedLT(
         iterations=1,
         step_size=1.0,
-        num_local_epochs=1,
-        rho=1.0,
+        num_local_steps=1,
+        penalty=1.0,
         selection_scheme=FirstClientSelection(),
     )
 
@@ -487,12 +487,12 @@ def test_fedlt_supports_partial_participation_and_keeps_stale_server_z() -> None
 
 
 def test_fedlt_keeps_stale_server_z_when_client_upload_is_dropped() -> None:
-    clients = [Agent(0, ConstantGradientCost(1.0)), Agent(1, ConstantGradientCost(3.0))]
+    clients = [Agent(ConstantGradientCost(1.0)), Agent(ConstantGradientCost(3.0))]
     network = FedNetwork(
         clients=clients,
         message_drop={clients[0]: DropOnCalls({1}), clients[1]: NoDrops()},
     )
-    algorithm = FedLT(iterations=1, step_size=1.0, num_local_epochs=1, rho=1.0)
+    algorithm = FedLT(iterations=1, step_size=1.0, num_local_steps=1, penalty=1.0)
     algorithm.initialize(network)
 
     network._step(0)  # noqa: SLF001
@@ -508,11 +508,11 @@ def test_fedlt_keeps_stale_server_z_when_client_upload_is_dropped() -> None:
 
 def test_fedlt_smoke_with_network_noise_and_compression() -> None:
     network = FedNetwork(
-        clients=[Agent(0, ConstantGradientCost(1.0)), Agent(1, ConstantGradientCost(2.0))],
+        clients=[Agent(ConstantGradientCost(1.0)), Agent(ConstantGradientCost(2.0))],
         message_noise=GaussianNoise(0.0, 0.0),
-        message_compression=Quantization(6),
+        message_compression=Quantization(quantization_step=1e-2),
     )
-    algorithm = FedLT(iterations=2, step_size=0.1, num_local_epochs=1, rho=1.0)
+    algorithm = FedLT(iterations=2, step_size=0.1, num_local_steps=1, penalty=1.0)
 
     algorithm.run(network)
 

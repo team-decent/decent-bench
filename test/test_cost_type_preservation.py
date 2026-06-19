@@ -427,37 +427,21 @@ def test_empirical_risk_plus_scaled_regularizer_matches_lambda_expression() -> N
     np.testing.assert_allclose(actual_per_sample.mean(axis=0), iop.to_numpy(objective.gradient(x, indices="all")))
 
 
-def test_same_type_empirical_addition_preserves_concrete_type_and_metadata() -> None:
+def test_same_type_empirical_addition_falls_back_to_sumcost_with_correct_numerics() -> None:
     risk_a = _simple_linear_regression_cost()
     risk_b = _second_linear_regression_cost()
     x = np.array([0.25, -0.75])
-    prediction_data = [np.array([1.0, 0.0]), np.array([0.0, 1.0])]
 
     combined = risk_a + risk_b
-    total_samples = risk_a.n_samples + risk_b.n_samples
 
-    assert isinstance(combined, LinearRegressionCost)
-    assert combined.n_samples == total_samples
-    assert combined.batch_size == combined.n_samples
-    np.testing.assert_allclose(iop.to_numpy(combined.predict(x, prediction_data)), iop.to_numpy(risk_a.predict(x, prediction_data)))
+    assert isinstance(combined, SumCost)
     _assert_cost_matches_expression(
         actual_function=combined.function(x, indices="all"),
-        expected_function=(
-            risk_a.n_samples * risk_a.function(x, indices="all") + risk_b.n_samples * risk_b.function(x, indices="all")
-        )
-        / total_samples,
+        expected_function=risk_a.function(x, indices="all") + risk_b.function(x, indices="all"),
         actual_gradient=iop.to_numpy(combined.gradient(x, indices="all")),
-        expected_gradient=(
-            risk_a.n_samples * iop.to_numpy(risk_a.gradient(x, indices="all"))
-            + risk_b.n_samples * iop.to_numpy(risk_b.gradient(x, indices="all"))
-        )
-        / total_samples,
+        expected_gradient=iop.to_numpy(risk_a.gradient(x, indices="all")) + iop.to_numpy(risk_b.gradient(x, indices="all")),
         actual_hessian=iop.to_numpy(combined.hessian(x, indices="all")),
-        expected_hessian=(
-            risk_a.n_samples * iop.to_numpy(risk_a.hessian(x, indices="all"))
-            + risk_b.n_samples * iop.to_numpy(risk_b.hessian(x, indices="all"))
-        )
-        / total_samples,
+        expected_hessian=iop.to_numpy(risk_a.hessian(x, indices="all")) + iop.to_numpy(risk_b.hessian(x, indices="all")),
     )
 
 
@@ -704,7 +688,7 @@ def test_composite_regularizer_proximal_is_unsupported_for_regularizer_sums() ->
     x = np.array([1.0, -2.0])
 
     with pytest.raises(NotImplementedError, match="Composite regularizers do not implement a generic proximal operator"):
-        (reg_l1 + reg_l2).proximal(x, rho=0.5)
+        (reg_l1 + reg_l2).proximal(x, penalty=0.5)
 
 
 def test_empirical_regularized_cost_proximal_is_explicitly_unsupported() -> None:
@@ -713,7 +697,7 @@ def test_empirical_regularized_cost_proximal_is_explicitly_unsupported() -> None
     x = np.array([0.25, -0.75])
 
     with pytest.raises(NotImplementedError, match="EmpiricalRegularizedCost does not implement a generic proximal"):
-        (risk + reg_l2).proximal(x, rho=0.5)
+        (risk + reg_l2).proximal(x, penalty=0.5)
 
 
 @pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available")

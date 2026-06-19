@@ -65,19 +65,19 @@ class ZeroCost(Cost):
         self._check_shape(x)
         return iop.zeros(shape=self.shape + self.shape, framework=self.framework, device=self.device)
 
-    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
+    def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         """
         Return ``x`` unchanged.
 
         Since :class:`ZeroCost` is identically zero, its proximal operator is the identity map. The method still
-        validates that ``rho`` is positive and that ``x`` has the expected shape.
+        validates that ``penalty`` is positive and that ``x`` has the expected shape.
 
         Raises:
-            ValueError: if ``rho`` is not positive or ``x`` has the wrong shape.
+            ValueError: if ``penalty`` is not positive or ``x`` has the wrong shape.
 
         """
-        if rho <= 0:
-            raise ValueError("The penalty parameter rho must be positive.")
+        if penalty <= 0:
+            raise ValueError("The penalty parameter penalty must be positive.")
         self._check_shape(x)
         return x
 

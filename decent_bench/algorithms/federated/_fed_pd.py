@@ -16,6 +16,10 @@ if TYPE_CHECKING:
     from decent_bench.utils.array import Array
 
 
+_CENTER_CANDIDATE_CHANNEL = "center_candidate"
+_CENTER_UPDATE_CHANNEL = "center_update"
+
+
 @tags("federated")
 @dataclass(eq=False)
 class FedPD(FedAlgorithm):
@@ -44,6 +48,8 @@ class FedPD(FedAlgorithm):
         \qquad
         \mathbf{x}_{0,i}^+ = \mathbf{x}_i^+ + \eta \lambda_i^+.
 
+    Here :math:`\eta` is the quadratic-penalty and dual-update scale (the corresponding argument is ``penalty``).
+
     With probability ``1 - skip_probability``, clients upload their local centre candidates and the server uniformly
     averages the candidates it actually receives. If at least one candidate is received, the server centre is then
     sent back to all active clients; clients that do not receive the server's synchronized centre keep their local
@@ -59,7 +65,7 @@ class FedPD(FedAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    eta: float = 1.0
+    penalty: float = 1.0
     skip_probability: float = 0.0
     num_local_steps: LocalSteps = 1
     x0: InitialStates = None
@@ -76,8 +82,8 @@ class FedPD(FedAlgorithm):
         """
         if self.step_size <= 0:
             raise ValueError("`step_size` must be positive")
-        if self.eta <= 0:
-            raise ValueError("`eta` must be positive")
+        if self.penalty <= 0:
+            raise ValueError("`penalty` must be positive")
         if not (0 <= self.skip_probability <= 1):
             raise ValueError("`skip_probability` must satisfy 0 <= skip_probability <= 1")
         self._validate_num_local_steps()
@@ -113,10 +119,10 @@ class FedPD(FedAlgorithm):
         for client in participating_clients:
             previous_center = iop.copy(client.aux_vars["center"])
             local_x = self._compute_local_update(client)
-            new_dual = client.aux_vars["lambda"] + (local_x - previous_center) / self.eta
+            new_dual = client.aux_vars["lambda"] + (local_x - previous_center) / self.penalty
             client.x = local_x
             client.aux_vars["lambda"] = new_dual
-            client.aux_vars["center"] = local_x + self.eta * new_dual
+            client.aux_vars["center"] = local_x + self.penalty * new_dual
 
     def _compute_local_update(self, client: "Agent") -> "Array":
         """
@@ -130,7 +136,7 @@ class FedPD(FedAlgorithm):
         center = iop.copy(client.aux_vars["center"])
         dual = iop.copy(client.aux_vars["lambda"])
         for _ in range(self._num_local_steps_by_client[client]):
-            grad = client.cost.gradient(local_x) + dual + (local_x - center) / self.eta
+            grad = client.cost.gradient(local_x) + dual + (local_x - center) / self.penalty
             local_x -= self.step_size * grad
         return local_x
 
@@ -140,7 +146,12 @@ class FedPD(FedAlgorithm):
         participating_clients: Sequence["Agent"],
     ) -> None:
         for client in participating_clients:
-            network.send(sender=client, receiver=network.server(), msg=client.aux_vars["center"])
+            network.send(
+                sender=client,
+                receiver=network.server(),
+                msg=client.aux_vars["center"],
+                channel=_CENTER_CANDIDATE_CHANNEL,
+            )
 
     def aggregate(
         self,
@@ -157,14 +168,16 @@ class FedPD(FedAlgorithm):
         If no centre candidates are received, the server state is left unchanged and no synchronization is sent.
         """
         server = network.server()
-        received_clients = [client for client in participating_clients if client in network.server().messages]
+        received_clients = [
+            client for client in participating_clients if client in server.messages(_CENTER_CANDIDATE_CHANNEL)
+        ]
         if not received_clients:
             return
-        center_candidates = [server.messages[client] for client in received_clients]
+        center_candidates = [server.message(client, _CENTER_CANDIDATE_CHANNEL) for client in received_clients]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))
         server.x = self._weighted_average(center_candidates, weights, total_weight)
-        self.server_broadcast(network, participating_clients)
+        network.send(sender=server, receiver=participating_clients, msg=server.x, channel=_CENTER_UPDATE_CHANNEL)
         for client in participating_clients:
-            if server in client.messages:
-                client.aux_vars["center"] = self._get_server_broadcast(client, server)
+            if server in client.messages(_CENTER_UPDATE_CHANNEL):
+                client.aux_vars["center"] = client.message(server, _CENTER_UPDATE_CHANNEL)

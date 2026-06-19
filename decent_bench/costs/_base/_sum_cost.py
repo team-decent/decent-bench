@@ -97,7 +97,7 @@ class SumCost(Cost):
         """Sum the :meth:`Cost.hessian <decent_bench.costs.Cost.hessian>` of each cost function."""
         return iop.sum(iop.stack([cf.hessian(x, *args, **kwargs) for cf in self.costs]), dim=0)
 
-    def proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
+    def proximal(self, x: Array, penalty: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
         """
         Approximate the proximal of the full summed objective.
 
@@ -111,7 +111,7 @@ class SumCost(Cost):
         """
         del args, kwargs
         try:
-            return ca.proximal_solver(self, x, rho)
+            return ca.proximal_solver(self, x, penalty)
         except NotImplementedError as exc:
             raise NotImplementedError(
                 "SumCost.proximal uses centralized_algorithms.proximal_solver and requires the summed objective to be "

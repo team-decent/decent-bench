@@ -54,10 +54,20 @@ def solve(
         stop_criteria += f" Will raise if ||x_new - x_old||^2 > {max_tol} at the end."
 
     # quadratic
-    from decent_bench.costs import QuadraticCost  # noqa: PLC0415
+    from decent_bench.costs import LinearRegressionCost, QuadraticCost, SumCost  # noqa: PLC0415
 
     if isinstance(cost, QuadraticCost):
         x_optimal = Array(np.linalg.solve(cost.A, -cost.b))
+    # linear regression
+    elif isinstance(cost, SumCost) and all(isinstance(c, LinearRegressionCost) for c in cost.costs):
+        z = iop.zeros(framework=cost.costs[0].framework, device=cost.costs[0].device, shape=cost.costs[0].shape)
+        Q = np.asarray(sum(c.hessian(z, indices="all") for c in cost.costs))  # noqa: N806
+        r = np.asarray(sum(c.gradient(z, indices="all") for c in cost.costs))
+        try:
+            x_optimal_np = np.linalg.solve(Q, -r)
+        except np.linalg.LinAlgError:
+            x_optimal_np = np.linalg.lstsq(Q, -r, rcond=None)[0]
+        x_optimal = Array(x_optimal_np)
     # exclude costs with m_smooth = 0
     elif np.isfinite(cost.m_smooth) and np.isfinite(cost.m_cvx) and cost.m_smooth == 0:
         raise ValueError("Costs with m_smooth = 0 are not supported.")
@@ -262,7 +272,7 @@ class AcceleratedGradientDescent(Solver):
         self.y = self.x + self.momentum(iteration) * (self.x - self.x_old)
 
 
-def proximal_solver(cost: "Cost", y: Array, rho: float, max_iter: int = 100) -> Array:
+def proximal_solver(cost: "Cost", y: Array, penalty: float, max_iter: int = 100) -> Array:
     """
     Approximate the cost's proximal at y using accelerated gradient descent.
 
@@ -275,25 +285,25 @@ def proximal_solver(cost: "Cost", y: Array, rho: float, max_iter: int = 100) -> 
     Args:
         cost: cost function to compute the proximal of.
         y: point at which to evaluate the proximal.
-        rho: penalty parameter.
+        penalty: penalty parameter.
         max_iter: maximum number of iterations of the solver.
 
     Returns:
         Approximate proximal at `y`.
 
     Raises:
-        ValueError: if cost's domain and `y` do not have the same shape, or if `rho` is not positive.
+        ValueError: if cost's domain and `y` do not have the same shape, or if `penalty` is not positive.
         NotImplementedError: if the cost is not differentiable, L-smooth, and convex.
 
     """
     if cost.shape != iop.shape(y):
         raise ValueError("Cost function domain and y need to have the same shape")
-    if rho <= 0:
-        raise ValueError("Penalty term `rho` must be greater than 0")
+    if penalty <= 0:
+        raise ValueError("Penalty term `penalty` must be greater than 0")
 
     from decent_bench.costs import QuadraticCost  # noqa: PLC0415
 
-    proximal_cost = QuadraticCost(A=iop.eye_like(y) / rho, b=-y / rho) + cost
+    proximal_cost = QuadraticCost(A=iop.eye_like(y) / penalty, b=-y / penalty) + cost
     if proximal_cost.m_smooth == np.inf or np.isnan(proximal_cost.m_smooth) or np.isnan(proximal_cost.m_cvx):
         raise NotImplementedError("Proximal solver requires the cost to be differentiable, L-smooth, and convex.")
     return AcceleratedGradientDescent(proximal_cost, x0=y).run(

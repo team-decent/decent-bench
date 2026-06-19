@@ -10,7 +10,6 @@ from scipy import special
 
 import decent_bench.centralized_algorithms as ca
 import decent_bench.utils.interoperability as iop
-from decent_bench.costs._base._cost import Cost
 from decent_bench.utils._tags import tags
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import (
@@ -298,7 +297,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         return res
 
     @iop.autodecorate_cost_method(EmpiricalRiskCost.proximal)
-    def proximal(self, x: Array, rho: float) -> Array:
+    def proximal(self, x: Array, penalty: float) -> Array:
         """
         Proximal at x solved using an iterative method.
 
@@ -312,7 +311,7 @@ class LogisticRegressionCost(EmpiricalRiskCost):
         """
         prev_batch_size = self.batch_size
         self._batch_size = self.n_samples  # Use full dataset for proximal
-        approx = ca.proximal_solver(self, x, rho)
+        approx = ca.proximal_solver(self, x, penalty)
         self._batch_size = prev_batch_size  # Restore previous batch size
         return approx
 
@@ -329,32 +328,11 @@ class LogisticRegressionCost(EmpiricalRiskCost):
                     self.b[np.where(self.b == self._label_mapping[k])] = k
             return self.A, self.b
 
-        A_list, b_list = [], []  # noqa: N806
-        for idx in indices:
+        A, b = np.empty((len(indices), *self.shape)), np.empty(len(indices))  # noqa: N806
+        for i, idx in enumerate(indices):
             x_i, y_i = self._dataset[idx]
-            A_list.append(iop.to_numpy(x_i))
-            b_list.append(iop.to_numpy(y_i))
-        A = np.stack(A_list)  # noqa: N806
-        b = np.stack(b_list).squeeze()
+            A[i, :] = iop.to_numpy(x_i)
+            b[i] = iop.to_numpy(y_i).item()
         for k in self._label_mapping:
             b[np.where(b == self._label_mapping[k])] = k
         return A, b
-
-    def __add__(self, other: Cost) -> Cost:
-        """Add another cost function."""
-        self._validate_cost_operation(other)
-        if isinstance(other, LogisticRegressionCost):
-            if self.batch_size == self.n_samples and other.batch_size == other.n_samples:
-                combined_batch_size = self.n_samples + other.n_samples
-            elif self.batch_size == self.n_samples:
-                combined_batch_size = other.batch_size
-            elif other.batch_size == other.n_samples:
-                combined_batch_size = self.batch_size
-            else:
-                combined_batch_size = max(self.batch_size, other.batch_size)
-
-            return LogisticRegressionCost(
-                dataset=self._dataset + other._dataset,
-                batch_size=combined_batch_size,
-            )
-        return super().__add__(other)

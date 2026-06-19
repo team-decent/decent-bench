@@ -115,7 +115,7 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
     def hessian(self, x: Array, indices: EmpiricalRiskIndices = "batch", **kwargs: Any) -> Array:  # noqa: ANN401
         return self.empirical_cost.hessian(x, indices=indices, **kwargs) + self.regularizer.hessian(x)
 
-    def proximal(self, x: Array, rho: float, **kwargs: Any) -> Array:  # noqa: ANN401
+    def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ANN401
         """
         Raise ``NotImplementedError`` for the generic proximal of an empirical cost plus regularizer.
 

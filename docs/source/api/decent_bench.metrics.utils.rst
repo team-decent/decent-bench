@@ -1,7 +1,7 @@
-decent\_bench.metrics.metric\_utils
+decent\_bench.metrics.utils
 ===================================
 
-.. automodule:: decent_bench.metrics.metric_utils
+.. automodule:: decent_bench.metrics.utils
    :members:
    :show-inheritance:
    :undoc-members:

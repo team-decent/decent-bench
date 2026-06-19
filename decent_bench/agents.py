@@ -3,9 +3,9 @@ from __future__ import annotations
 import bisect
 import contextlib
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, cast
+from typing import Any, Self, cast
+from uuid import UUID, uuid4
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs import Cost, EmpiricalRiskCost
@@ -15,10 +15,13 @@ from decent_bench.utils.array import Array
 
 class Agent:
     """
-    Agent with unique id, local cost function, activation scheme and state snapshot period.
+    Agent with local cost function, activation scheme, state snapshot period, and optional data.
+
+    At initialization, the agent is assigned a unique id (accessible via ``Agent.id``) which serves as its hash. The
+    agent can also be assigned an index (``Agent.index``). This assignment is performed when initializing a network,
+    and is useful to index arrays by Agent or for user-friendly representation of Agents.
 
     Args:
-        agent_id: agent's identifier
         cost: local cost function; once assigned, it should not be modified
         activation: activation scheme to model synchrony/asynchrony; defaults to synchrony (activate at all iterations)
         state_snapshot_period: how often to record the agent's state when executing an algorithm
@@ -29,9 +32,18 @@ class Agent:
 
     """
 
+    _id: UUID
+    _index: int
+
+    def __new__(cls, *_: object, _id: UUID | None = None, **__: object) -> Self:
+        """Ensure agent id and index are defined early (including during unpickling/deepcopy)."""
+        obj = super().__new__(cls)
+        obj._id = uuid4() if _id is None else _id
+        obj._index = -1
+        return obj
+
     def __init__(
         self,
-        agent_id: int,
         cost: Cost,
         activation: AgentActivationScheme | None = None,
         state_snapshot_period: int = 1,
@@ -40,7 +52,7 @@ class Agent:
         if state_snapshot_period <= 0:
             raise ValueError("state_snapshot_period must be a positive integer")
 
-        self._id = agent_id
+        self._index = -1
         self._cost = cost
         self._activation = AlwaysActive() if activation is None else activation
         self._state_snapshot_period = state_snapshot_period
@@ -48,11 +60,11 @@ class Agent:
         self._current_x: Array | None = None
         self._x_history: AgentHistory = AgentHistory()
         self._auxiliary_variables: dict[str, Any] = {}
-        self._received_messages: dict[Agent, Array] = {}
+        self._received_messages = ReceivedMessages()
         self._n_x_updates = 0
-        self._n_sent_messages = 0
-        self._n_received_messages = 0
-        self._n_sent_messages_dropped = 0
+        self._n_sent_messages: float = 0
+        self._n_received_messages: float = 0
+        self._n_sent_messages_dropped: float = 0
         self._n_times_selected = 0
         self._is_server = False
         self._n_function_calls: float = 0
@@ -66,9 +78,18 @@ class Agent:
         cost.proximal = self._call_counting_proximal  # type: ignore[method-assign]
 
     @property
-    def id(self) -> int:
+    def id(self) -> UUID:
         """Unique id for the agent."""
         return self._id
+
+    @property
+    def index(self) -> int:
+        """Agent index within a network, -1 if unassigned."""
+        return self._index
+
+    @index.setter
+    def index(self, value: int) -> None:
+        self._index = value
 
     @property
     def cost(self) -> Cost:
@@ -106,10 +127,13 @@ class Agent:
         """Number of iterations between snapshots of the agent's state."""
         return self._state_snapshot_period
 
-    @property
-    def messages(self) -> Mapping[Agent, Array]:
-        """Messages received from neighbors, stored one per sender."""
-        return MappingProxyType(self._received_messages)
+    def messages(self, channel: str = "default") -> Mapping[Agent, Array]:
+        """Received messages with ``channel``, keyed by sender."""
+        return self._received_messages.by_channel(channel)
+
+    def message(self, sender: Agent, channel: str = "default") -> Array:
+        """Received message from ``sender`` with ``channel``."""
+        return self._received_messages.get(sender, channel)
 
     @property
     def aux_vars(self) -> dict[str, Any]:
@@ -135,7 +159,7 @@ class Agent:
         """
         self._x_history = AgentHistory()
         self._auxiliary_variables = {}
-        self._received_messages = {}
+        self._received_messages = ReceivedMessages()
         self._n_x_updates = 0
         self._n_sent_messages = 0
         self._n_received_messages = 0
@@ -209,8 +233,8 @@ class Agent:
             self._n_hessian_calls += 1
         return res
 
-    def _call_counting_proximal(self, x: Array, rho: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
-        res = self._cost.__class__.proximal(self.cost, x, rho, *args, **kwargs)
+    def _call_counting_proximal(self, x: Array, penalty: float, *args: Any, **kwargs: Any) -> Array:  # noqa: ANN401
+        res = self._cost.__class__.proximal(self.cost, x, penalty, *args, **kwargs)
         if self._no_count_depth > 0:
             return res
         if isinstance(self._cost, EmpiricalRiskCost):
@@ -220,12 +244,26 @@ class Agent:
         return res
 
     def __index__(self) -> int:
-        """Enable using agent as index, for example ``W[a1, a2]`` instead of ``W[a1.id, a2.id]``."""
-        return self._id
+        """Enable using agent as index, for example ``W[a1, a2]`` instead of ``W[a1.index, a2.index]``."""
+        return self._index
 
     def __repr__(self) -> str:
         """Human readable representation of the agent."""
-        return f"Agent(id={self._id}, instance_id={id(self)})"
+        return f"Agent {hash(self._id) if self._index == -1 else self._index} (instance_id={id(self)})"
+
+    def __getnewargs_ex__(self) -> tuple[tuple[()], dict[str, UUID]]:
+        """Preserve Agent._id in pickle/deepcopy by passing it to :meth:`__new__`."""
+        return (), {"_id": self._id}
+
+    def __hash__(self) -> int:
+        """Hash of the agent, which coincides with the unique identifier."""
+        return hash(self._id)
+
+    def __eq__(self, other: object) -> bool:
+        """Agent instances are equal if they have the same id."""
+        if not isinstance(other, Agent):
+            return NotImplemented
+        return self._id == other._id
 
     @staticmethod
     @contextlib.contextmanager
@@ -252,6 +290,62 @@ class Agent:
         finally:
             for agent in agents:
                 agent._no_count_depth -= 1  # noqa: SLF001
+
+
+class ReceivedMessages:
+    """Container for received messages keyed by channel and sender."""
+
+    def __init__(self) -> None:
+        self._messages: dict[str, dict[Agent, Array]] = {}
+
+    def put(self, sender: Agent, msg: Array, channel: str = "default") -> None:
+        """Store or overwrite a message from ``sender`` under ``channel``."""
+        if channel not in self._messages:
+            self._messages[channel] = {}
+        self._messages[channel][sender] = msg
+
+    def get(self, sender: Agent, channel: str = "default") -> Array:
+        """Return the message from ``sender`` under ``channel``."""
+        return self._messages[channel][sender]
+
+    def has(self, sender: Agent, channel: str = "default") -> bool:
+        """Return ``True`` if a message from ``sender`` exists under ``channel``."""
+        return channel in self._messages and sender in self._messages[channel]
+
+    def by_channel(self, channel: str = "default") -> Mapping[Agent, Array]:
+        """Return a read-only sender->message mapping for ``channel``."""
+        return MappingProxyType(self._messages.get(channel, {}))
+
+    def clear(self, sender: Agent | Sequence[Agent] | None = None, channel: str | None = None) -> None:
+        """Clear messages with optional sender/channel scoping."""
+        if sender is None:
+            if channel is None:  # clear all messages
+                self._messages.clear()
+            else:  # clear by channel (all senders)
+                self._messages.pop(channel, None)
+            return
+
+        sender_list = [sender] if isinstance(sender, Agent) else list(sender)
+
+        if channel is None:  # clear by sender(s) (all channels)
+            empty_channels: list[str] = []
+            for msg_channel, msg_bucket in self._messages.items():
+                for s in sender_list:
+                    msg_bucket.pop(s, None)
+                if len(msg_bucket) == 0:
+                    empty_channels.append(msg_channel)
+            for empty_channel in empty_channels:
+                self._messages.pop(empty_channel, None)
+            return
+
+        # clear (channel, sender(s)) pairs specifically
+        channel_bucket = self._messages.get(channel)
+        if channel_bucket is None:
+            return
+        for s in sender_list:
+            channel_bucket.pop(s, None)
+        if not channel_bucket:
+            self._messages.pop(channel, None)
 
 
 class AgentHistory:
@@ -384,39 +478,3 @@ class AgentHistory:
     def __repr__(self) -> str:
         """Human readable representation of the history."""
         return self._x_history.__repr__()
-
-
-@dataclass(frozen=True, eq=False)
-class AgentMetricsView:
-    """Immutable view of agent that exposes useful properties for calculating metrics."""
-
-    cost: Cost
-    x_history: AgentHistory
-    n_x_updates: int
-    n_function_calls: float
-    n_gradient_calls: float
-    n_hessian_calls: float
-    n_proximal_calls: float
-    n_sent_messages: int
-    n_received_messages: int
-    n_sent_messages_dropped: int
-    n_times_selected: int
-    is_server: bool
-
-    @staticmethod
-    def from_agent(agent: Agent) -> AgentMetricsView:
-        """Create from agent."""
-        return AgentMetricsView(
-            cost=agent.cost,
-            x_history=agent._x_history,  # noqa: SLF001
-            n_x_updates=agent._n_x_updates,  # noqa: SLF001
-            n_function_calls=agent._n_function_calls,  # noqa: SLF001
-            n_gradient_calls=agent._n_gradient_calls,  # noqa: SLF001
-            n_hessian_calls=agent._n_hessian_calls,  # noqa: SLF001
-            n_proximal_calls=agent._n_proximal_calls,  # noqa: SLF001
-            n_sent_messages=agent._n_sent_messages,  # noqa: SLF001
-            n_received_messages=agent._n_received_messages,  # noqa: SLF001
-            n_sent_messages_dropped=agent._n_sent_messages_dropped,  # noqa: SLF001
-            n_times_selected=agent._n_times_selected,  # noqa: SLF001
-            is_server=agent._is_server,  # noqa: SLF001
-        )

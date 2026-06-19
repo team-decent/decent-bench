@@ -9,7 +9,7 @@ def test_l1_regularizer_basics() -> None:
 
     assert cost.function(x) == 3.0
     np.testing.assert_allclose(cost.gradient(x), np.array([1.0, -1.0, 0.0]))
-    np.testing.assert_allclose(cost.proximal(x, rho=0.5), np.array([0.5, -1.5, 0.0]))
+    np.testing.assert_allclose(cost.proximal(x, penalty=0.5), np.array([0.5, -1.5, 0.0]))
     np.testing.assert_allclose(cost.hessian(x), np.zeros((3, 3)))
     assert np.isnan(cost.m_smooth)
     assert cost.m_cvx == 0.0
@@ -21,7 +21,7 @@ def test_l2_regularizer_basics() -> None:
 
     assert cost.function(x) == 2.5
     np.testing.assert_allclose(cost.gradient(x), x)
-    np.testing.assert_allclose(cost.proximal(x, rho=1.0), x / 2.0)
+    np.testing.assert_allclose(cost.proximal(x, penalty=1.0), x / 2.0)
     np.testing.assert_allclose(cost.hessian(x), np.eye(3))
     assert cost.m_smooth == 1.0
     assert cost.m_cvx == 1.0
@@ -41,7 +41,7 @@ def test_fractional_quadratic_regularizer_basics() -> None:
     )
     assert cost.m_smooth == 2.0
     assert np.isnan(cost.m_cvx)
-    prox = cost.proximal(x, rho=0.5)
+    prox = cost.proximal(x, penalty=0.5)
     assert prox.shape == x.shape
     assert np.all(np.isfinite(prox))
 

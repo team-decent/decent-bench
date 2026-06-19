@@ -16,6 +16,10 @@ if TYPE_CHECKING:
     from decent_bench.utils.array import Array
 
 
+_MODEL_DELTA_CHANNEL = "model_delta"
+_CONTROL_VARIATE_DELTA_CHANNEL = "control_variate_delta"
+
+
 @tags("federated")
 @dataclass(eq=False)
 class Scaffold(FedAlgorithm):
@@ -25,7 +29,8 @@ class Scaffold(FedAlgorithm):
     When the server control variate :math:`\mathbf{c}` and all client control variates :math:`\mathbf{c}_i`
     are zero, the local updates reduce to :class:`FedAvg <decent_bench.algorithms.federated.FedAvg>`.
 
-    Here, :math:`\eta_l` is the local client step size, :math:`\eta_g` is the global server step size,
+    Here, :math:`\eta_l` is the local client step size (the corresponding argument is ``step_size``),
+    :math:`\eta_g` is the global server step size (the corresponding argument is ``server_step_size``),
     :math:`S` is the set of selected clients, and :math:`|S|` its size.
 
     Selected clients perform local steps with the correction
@@ -35,7 +40,8 @@ class Scaffold(FedAlgorithm):
         \left(\nabla f_i(\mathbf{y}_{i}^{(t)}) - \mathbf{c}_i + \mathbf{c}\right)
 
     and update their control variates using the practical SCAFFOLD rule, where :math:`K` is the number of
-    local steps and :math:`\mathbf{y}_i` is the final local model after those :math:`K` steps:
+    local steps (the corresponding argument is ``num_local_steps``) and :math:`\mathbf{y}_i` is the final local model
+    after those :math:`K` steps:
 
     .. math::
         \mathbf{c}_i^+ = \mathbf{c}_i - \mathbf{c}
@@ -70,7 +76,7 @@ class Scaffold(FedAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    num_local_epochs: int = 1
+    num_local_steps: int = 1
     server_step_size: float = 1.0
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
@@ -89,8 +95,8 @@ class Scaffold(FedAlgorithm):
         """
         if self.step_size <= 0:
             raise ValueError("`step_size` must be positive")
-        if self.num_local_epochs <= 0:
-            raise ValueError("`num_local_epochs` must be positive")
+        if self.num_local_steps <= 0:
+            raise ValueError("`num_local_steps` must be positive")
         if self.server_step_size <= 0:
             raise ValueError("`server_step_size` must be positive")
 
@@ -122,16 +128,31 @@ class Scaffold(FedAlgorithm):
         self._run_local_updates(network, participating_clients)
         self.aggregate(network, participating_clients)
 
-    def server_broadcast(self, network: FedNetwork, selected_clients: Sequence["Agent"]) -> None:
-        """Send the current server model and control variate."""
+    def server_broadcast(
+        self,
+        network: FedNetwork,
+        selected_clients: Sequence["Agent"],
+        channel: str = "default",
+    ) -> None:
+        """Send the current server model and control variate under ``channel``."""
         payload = iop.stack([network.server().x, network.server().aux_vars["c"]], dim=0)
-        network.send(sender=network.server(), receiver=selected_clients, msg=payload)
+        network.send(sender=network.server(), receiver=selected_clients, msg=payload, channel=channel)
 
     def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:
         for client in participating_clients:
             client.x, model_delta, client.aux_vars["delta_c"] = self._compute_local_update(client, network.server())
-            payload = iop.stack([model_delta, client.aux_vars["delta_c"]], dim=0)
-            network.send(sender=client, receiver=network.server(), msg=payload)
+            network.send(
+                sender=client,
+                receiver=network.server(),
+                msg=model_delta,
+                channel=_MODEL_DELTA_CHANNEL,
+            )
+            network.send(
+                sender=client,
+                receiver=network.server(),
+                msg=client.aux_vars["delta_c"],
+                channel=_CONTROL_VARIATE_DELTA_CHANNEL,
+            )
 
     def _compute_local_update(self, client: "Agent", server: "Agent") -> tuple["Array", "Array", "Array"]:
         """
@@ -146,12 +167,12 @@ class Scaffold(FedAlgorithm):
         client_control = client.aux_vars["c_i"]
         server_control = iop.copy(server_broadcast[1])
 
-        for _ in range(self.num_local_epochs):
+        for _ in range(self.num_local_steps):
             grad = client.cost.gradient(local_x)
             local_x -= self.step_size * (grad - client_control + server_control)
 
         new_client_control = (
-            client_control - server_control + ((reference_x - local_x) / (self.num_local_epochs * self.step_size))
+            client_control - server_control + ((reference_x - local_x) / (self.num_local_steps * self.step_size))
         )
         model_delta = local_x - reference_x
         control_variate_delta = new_client_control - client_control
@@ -169,18 +190,23 @@ class Scaffold(FedAlgorithm):
         Only current-round client deltas received by the server are aggregated.
         """
         server = network.server()
-        received_clients = [client for client in participating_clients if client in server.messages]
+        received_model_delta_clients = set(server.messages(_MODEL_DELTA_CHANNEL))
+        received_control_delta_clients = set(server.messages(_CONTROL_VARIATE_DELTA_CHANNEL))
+        received_clients = [
+            client
+            for client in participating_clients
+            if client in received_model_delta_clients and client in received_control_delta_clients
+        ]
         if not received_clients:
             return
-        uploads = [server.messages[client] for client in received_clients]
-        model_deltas = [upload[0] for upload in uploads]
+        model_deltas = [server.message(client, _MODEL_DELTA_CHANNEL) for client in received_clients]
         weights = [1.0] * len(received_clients)
         total_weight = float(len(received_clients))
         average_model_delta = self._weighted_average(model_deltas, weights, total_weight)
         server_x = iop.copy(server.x)
         server.x = server_x + self.server_step_size * average_model_delta
 
-        control_deltas = [upload[1] for upload in uploads]
+        control_deltas = [server.message(client, _CONTROL_VARIATE_DELTA_CHANNEL) for client in received_clients]
         average_control_delta = self._weighted_average(control_deltas, weights, total_weight)
         participation_fraction = len(received_clients) / len(network.clients())
         server.aux_vars["c"] += participation_fraction * average_control_delta

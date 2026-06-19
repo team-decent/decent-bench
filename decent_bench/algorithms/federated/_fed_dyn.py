@@ -31,7 +31,7 @@ class FedDyn(FedAlgorithm):
         + \frac{\alpha}{2}\|\theta - \theta^t\|^2
 
     In practice, and following the local SGD device update used in the paper's experiments, this implementation
-    approximates that minimization by running ``num_local_epochs`` gradient steps
+    approximates that minimization by running ``num_local_steps`` gradient steps
     from the received server model, with local gradient
 
     .. math::
@@ -50,6 +50,9 @@ class FedDyn(FedAlgorithm):
         \qquad
         \theta^+ = \frac{1}{|R_t|}\sum_{i \in R_t}\theta_i^+ - \frac{1}{\alpha}h^+.
 
+    Here :math:`\alpha` is the dynamic regularization coefficient (the corresponding argument is ``penalty``), and the
+    local step size is the scalar used in local SGD (the corresponding argument is ``step_size``).
+
     If no selected client model is received, the server model and ``h`` remain unchanged. Unselected clients and
     selected clients that miss the server broadcast keep their previous local model and dynamic state. Costs that
     preserve the :class:`~decent_bench.costs.EmpiricalRiskCost` abstraction use mini-batch local updates; generic costs
@@ -60,8 +63,8 @@ class FedDyn(FedAlgorithm):
 
     iterations: int = 100
     step_size: float = 0.001
-    alpha: float = 0.01
-    num_local_epochs: int = 1
+    penalty: float = 0.01
+    num_local_steps: int = 1
     selection_scheme: ClientSelectionScheme | None = field(
         default_factory=lambda: UniformSelection(fraction_selected_clients=1.0)
     )
@@ -78,10 +81,10 @@ class FedDyn(FedAlgorithm):
         """
         if self.step_size <= 0:
             raise ValueError("`step_size` must be positive")
-        if self.alpha <= 0:
-            raise ValueError("`alpha` must be positive")
-        if self.num_local_epochs <= 0:
-            raise ValueError("`num_local_epochs` must be positive")
+        if self.penalty <= 0:
+            raise ValueError("`penalty` must be positive")
+        if self.num_local_steps <= 0:
+            raise ValueError("`num_local_steps` must be positive")
 
     def initialize(self, network: FedNetwork) -> None:
         self.x0 = initial_states(self.x0, network)
@@ -109,7 +112,7 @@ class FedDyn(FedAlgorithm):
             reference_x = self._get_server_broadcast(client, network.server())
             local_x = self._compute_local_update(client, reference_x)
             client.x = local_x
-            client.aux_vars["g"] -= self.alpha * (local_x - reference_x)
+            client.aux_vars["g"] -= self.penalty * (local_x - reference_x)
             network.send(sender=client, receiver=network.server(), msg=client.x)
 
     def _compute_local_update(self, client: "Agent", reference_x: "Array") -> "Array":
@@ -121,8 +124,8 @@ class FedDyn(FedAlgorithm):
         """
         local_x = iop.copy(reference_x)
         dynamic_state = iop.copy(client.aux_vars["g"])
-        for _ in range(self.num_local_epochs):
-            grad = client.cost.gradient(local_x) - dynamic_state + self.alpha * (local_x - reference_x)
+        for _ in range(self.num_local_steps):
+            grad = client.cost.gradient(local_x) - dynamic_state + self.penalty * (local_x - reference_x)
             local_x -= self.step_size * grad
         return local_x
 
@@ -137,16 +140,18 @@ class FedDyn(FedAlgorithm):
         Only client models received in the current round are aggregated.
         """
         server = network.server()
-        received_clients = [client for client in participating_clients if client in server.messages]
+        received_clients = [client for client in participating_clients if client in server.messages()]
         if not received_clients:
             return
         reference_x = iop.copy(server.x)
-        client_models = [server.messages[client] for client in received_clients]
+        client_models = [server.message(client) for client in received_clients]
         average_model = self._weighted_average(
             client_models,
             weights=[1.0] * len(received_clients),
             total_weight=float(len(received_clients)),
         )
-        model_delta_sum = iop.sum(iop.stack([model - reference_x for model in client_models], dim=0), dim=0)
-        server.aux_vars["h"] -= self.alpha * model_delta_sum / len(network.clients())
-        server.x = average_model - server.aux_vars["h"] / self.alpha
+        model_delta_sum = iop.zeros_like(reference_x)
+        for model in client_models:
+            model_delta_sum += model - reference_x
+        server.aux_vars["h"] -= self.penalty * model_delta_sum / len(network.clients())
+        server.x = average_model - server.aux_vars["h"] / self.penalty

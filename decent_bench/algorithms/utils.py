@@ -60,7 +60,11 @@ def initial_states(x0: InitialStates, network: Network) -> "dict[Agent, Array]":
         if isinstance(network, FedNetwork):
             server = network.server()
             if server.id not in x0_by_id:
-                x0s[server] = iop.mean(iop.stack([x0s[a] for a in network.clients()], dim=0), dim=0)
+                client_initial_states = [x0s[a] for a in network.clients()]
+                client_state_sum = iop.zeros_like(client_initial_states[0])
+                for client_initial_state in client_initial_states:
+                    client_state_sum += client_initial_state
+                x0s[server] = client_state_sum / len(client_initial_states)
             else:
                 x0s[server] = x0_by_id[server.id]
     elif iop.is_supported_array_type(x0):

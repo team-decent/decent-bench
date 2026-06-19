@@ -9,7 +9,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
-from decent_bench.metrics._plots import _get_marker_style_color
+from decent_bench.benchmark._display.display_plots import _get_marker_style_color
 from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:
@@ -62,7 +62,7 @@ class RuntimeMetricPlotter:
         # Set matplotlib to use a backend that works in a separate process
         plt.ion()
 
-        try:  # noqa: PLR1702
+        try:
             while True:
                 processed = 0
                 try:

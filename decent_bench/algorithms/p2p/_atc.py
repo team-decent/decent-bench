@@ -21,7 +21,7 @@ class ATC(P2PAlgorithm):
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
     j is a neighbor of i or i itself,
     :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j,
-    :math:`\rho` is the step size,
+    :math:`\rho` is the step size (the corresponding argument is ``step_size``),
     and :math:`f_i` is agent i's local cost function.
 
     Alias: :class:`AdaptThenCombine`
@@ -65,7 +65,7 @@ class ATC(P2PAlgorithm):
         # consensus (a.k.a. combine step)
         for i in network.active_agents():
             neighborhood_avg = self.W[i, i] * i.x
-            for j, x_j in i.messages.items():
+            for j, x_j in i.messages().items():
                 neighborhood_avg += self.W[i, j] * x_j
             i.x = neighborhood_avg
 
