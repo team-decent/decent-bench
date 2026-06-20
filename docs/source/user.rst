@@ -90,23 +90,25 @@ Benchmark executions will have outputs like these:
           :height: 350px
 
 
-Datasets and partitioners
+Datasets and partitioning
 -------------------------
-Dataset handlers expose the same two methods regardless of where the data
-comes from:
+Dataset handlers expose the same operations regardless of where the data comes
+from:
 
-- :meth:`~decent_bench.datasets.DatasetHandler.get_partitions` returns one
-  local dataset per agent.
-- :meth:`~decent_bench.datasets.DatasetHandler.get_datapoints` returns the
-  flattened dataset, which is useful for test data or centralized evaluation.
+- :meth:`~decent_bench.datasets.DatasetHandler.get_datapoints` returns the full
+  dataset, which is useful for test data or centralized evaluation.
+- :meth:`~decent_bench.datasets.DatasetHandler.get_labels` returns one label per
+  datapoint for label-aware splitting utilities.
+- :meth:`~decent_bench.datasets.DatasetHandler.split` materializes index
+  partitions as local datasets.
 
-Partitioners decide which datapoint indices belong to each partition. If no
-partitioner is provided, handlers create a single IID partition containing all
-available datapoints.
+Partitioning utilities decide which datapoint indices belong to each local
+dataset. This keeps the split policy separate from the dataset handler and lets
+users inspect, save, modify, or provide their own index partitions.
 
 .. code-block:: python
 
-    from decent_bench.datasets import IidPartitioner, SyntheticClassificationDatasetHandler
+    from decent_bench.datasets import SyntheticClassificationDatasetHandler, split_iid
     from decent_bench.utils.types import SupportedFrameworks
 
     n_agents = 10
@@ -116,35 +118,38 @@ available datapoints.
         n_targets=2,
         n_features=3,
         n_samples=n_agents * samples_per_agent,
-        partitioner=IidPartitioner(n_partitions=n_agents),
         framework=SupportedFrameworks.NUMPY,
     )
 
-    local_datasets = dataset.get_partitions()
+    idx_partitions = split_iid(dataset, n_partitions=n_agents)
+    local_datasets = dataset.split(partitions=idx_partitions)
     all_datapoints = dataset.get_datapoints()
 
-``n_samples`` is the number of datapoints generated or loaded before
-partitioning. ``dataset.n_samples`` counts the datapoints returned by the
-partitions, so it can be smaller when a partitioner intentionally drops
-datapoints.
+For a default IID split, the shorter ``dataset.split(n_partitions=n_agents)``
+form is equivalent. Calling ``dataset.split()`` creates one IID partition.
 
-The built-in partitioners cover common decentralized and federated splits:
+``dataset.n_samples`` always reports the number of datapoints in the source
+dataset. Explicit index partitions may intentionally cover only a subset of
+those datapoints.
 
-- :class:`~decent_bench.datasets.IidPartitioner`: random IID split. By default
+The built-in partitioning utilities cover common decentralized and federated
+splits:
+
+- :func:`~decent_bench.datasets.split_iid`: random IID split. By default
   it uses an even split. Pass ``samples_per_partition`` as an integer for equal
   fixed-size partitions, or as a sequence for explicit per-partition sizes.
-- :class:`~decent_bench.datasets.StratifiedIidPartitioner`: label-balanced IID
+- :func:`~decent_bench.datasets.split_stratified_iid`: label-balanced IID
   split. It requires labels and distributes every label as evenly as possible
   across partitions.
-- :class:`~decent_bench.datasets.SizePartitioner`: quantity skew with explicit
+- :func:`~decent_bench.datasets.split_size`: quantity skew with explicit
   partition sizes.
-- :class:`~decent_bench.datasets.DirichletLabelPartitioner`: label skew sampled
+- :func:`~decent_bench.datasets.split_dirichlet_label`: label skew sampled
   from a Dirichlet distribution. Smaller ``alpha`` values create stronger label
   imbalance.
-- :class:`~decent_bench.datasets.ShardPartitioner`: pathological label split
+- :func:`~decent_bench.datasets.split_shard`: pathological label split
   that sorts by label, cuts the dataset into shards, and assigns
   ``shards_per_partition`` shards to each partition.
-- :class:`~decent_bench.datasets.LabelQuantityPartitioner`: restricts every
+- :func:`~decent_bench.datasets.split_label_quantity`: restricts every
   partition to ``classes_per_partition`` labels. ``classes_per_partition=1``
   creates single-label clients when the data allow it.
 
@@ -153,20 +158,26 @@ For example:
 .. code-block:: python
 
     from decent_bench.datasets import (
-        DirichletLabelPartitioner,
-        IidPartitioner,
-        LabelQuantityPartitioner,
-        ShardPartitioner,
-        SizePartitioner,
-        StratifiedIidPartitioner,
+        split_dirichlet_label,
+        split_iid,
+        split_label_quantity,
+        split_shard,
+        split_size,
+        split_stratified_iid,
     )
 
-    iid = IidPartitioner(n_partitions=10)
-    stratified = StratifiedIidPartitioner(n_partitions=10)
-    quantity_skew = SizePartitioner(partition_sizes=[50, 75, 100, 125])
-    label_skew = DirichletLabelPartitioner(n_partitions=10, alpha=0.1, samples_per_partition=100)
-    shard_skew = ShardPartitioner(n_partitions=10, shards_per_partition=2)
-    label_quantity = LabelQuantityPartitioner(
+    iid = split_iid(dataset, n_partitions=10)
+    stratified = split_stratified_iid(dataset, n_partitions=10)
+    quantity_skew = split_size(dataset, partition_sizes=[50, 75, 100, 125])
+    label_skew = split_dirichlet_label(
+        dataset,
+        n_partitions=10,
+        alpha=0.1,
+        samples_per_partition=100,
+    )
+    shard_skew = split_shard(dataset, n_partitions=10, shards_per_partition=2)
+    label_quantity = split_label_quantity(
+        dataset,
         n_partitions=10,
         classes_per_partition=2,
         samples_per_partition=100,
@@ -590,7 +601,7 @@ Create a custom benchmark problem using existing resources.
     from decent_bench.algorithms.p2p import ADMM, DGD, ED
     from decent_bench.benchmark import BenchmarkProblem
     from decent_bench.costs import LogisticRegressionCost
-    from decent_bench.datasets import IidPartitioner, SyntheticClassificationDatasetHandler
+    from decent_bench.datasets import SyntheticClassificationDatasetHandler, split_iid
     from decent_bench.networks import P2PNetwork
     from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
     from decent_bench.utils.types import SupportedFrameworks
@@ -602,11 +613,14 @@ Create a custom benchmark problem using existing resources.
         n_targets=2,
         n_features=3,
         n_samples=n_agents * samples_per_agent,
-        partitioner=IidPartitioner(n_partitions=n_agents),
         framework=SupportedFrameworks.NUMPY,
     )
 
-    costs = [LogisticRegressionCost(dataset=partition) for partition in dataset.get_partitions()]
+    idx_partitions = split_iid(dataset, n_partitions=n_agents)
+    costs = [
+        LogisticRegressionCost(dataset=partition)
+        for partition in dataset.split(partitions=idx_partitions)
+    ]
 
     sum_cost = reduce(add, costs)
     x_optimal = ca.solve(
@@ -752,7 +766,7 @@ corresponding abstracts.
 
     n_agents = 100
 
-    costs = [MyCost(dataset=partition) for partition in MyDataset().get_partitions()]
+    costs = [MyCost(dataset=partition) for partition in MyDataset().split(n_partitions=n_agents)]
 
     sum_cost = sum(costs[1:], start=costs[0])
     x_optimal = ca.solve(

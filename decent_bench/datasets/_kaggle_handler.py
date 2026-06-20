@@ -17,7 +17,6 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.utils.types import Dataset, SupportedDevices, SupportedFrameworks
 
 from ._dataset_handler import DatasetHandler
-from ._partitioners import IidPartitioner, Partitioner
 
 
 class KaggleDatasetHandler(DatasetHandler):
@@ -31,7 +30,6 @@ class KaggleDatasetHandler(DatasetHandler):
         framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
         device: SupportedDevices = SupportedDevices.CPU,
         dtype: DTypeLike = np.float64,
-        partitioner: Partitioner | None = None,
         partition_label_column: str | None = None,
     ) -> None:
         """
@@ -45,15 +43,13 @@ class KaggleDatasetHandler(DatasetHandler):
             framework: Framework to use for data representation
             device: Device to use for data representation
             dtype: Data type of the returned arrays
-            partitioner: Optional partitioner defining the row split. If omitted, a single IID partition
-                containing all samples is created.
-            partition_label_column: Column used by label-based partitioners. Defaults to the only
+            partition_label_column: Column exposed to label-based splitting utilities. Defaults to the only
                 target column when exactly one target column is configured.
 
         Raises:
             ImportError: If kagglehub or pandas is not installed
             RuntimeError: If the dataset fails to load from Kaggle
-            ValueError: If the label column needed by the partitioner cannot be inferred or found.
+            ValueError: If the configured partition label column is not found.
 
         Note:
             If you need to authenticate with Kaggle, ensure that your Kaggle API credentials
@@ -75,7 +71,6 @@ class KaggleDatasetHandler(DatasetHandler):
         self.framework = framework
         self.device = device
         self.dtype = dtype
-        self._partitions: Sequence[Dataset] | None = None
 
         self._df: pd.DataFrame = kagglehub.dataset_load(  # pyright: ignore[reportPossiblyUnboundVariable]
             kagglehub.KaggleDatasetAdapter.PANDAS,  # pyright: ignore[reportPossiblyUnboundVariable]
@@ -85,23 +80,12 @@ class KaggleDatasetHandler(DatasetHandler):
         if self._df is None:
             raise RuntimeError(f"Failed to load dataset from Kaggle handle: {self.kaggle_handle}, path: {self.path}")
 
-        self.partitioner = IidPartitioner(n_partitions=1) if partitioner is None else partitioner
-
-        if self.partitioner.requires_labels:
-            if self.partition_label_column is None:
-                if len(self.target_columns) != 1:
-                    raise ValueError("partition_label_column is required when using multiple target columns")
-                self.partition_label_column = self.target_columns[0]
-            if self.partition_label_column not in self._df.columns:
-                raise ValueError(f"partition_label_column ({self.partition_label_column}) is not in the dataframe")
+        if self.partition_label_column is not None and self.partition_label_column not in self._df.columns:
+            raise ValueError(f"partition_label_column ({self.partition_label_column}) is not in the dataframe")
 
     @property
     def n_samples(self) -> int:
-        return sum(len(partition) for partition in self.get_partitions())
-
-    @property
-    def n_partitions(self) -> int:
-        return self.partitioner.n_partitions
+        return len(self._df)
 
     @property
     def n_features(self) -> int:
@@ -112,37 +96,31 @@ class KaggleDatasetHandler(DatasetHandler):
         return len(self.target_columns)
 
     def get_datapoints(self) -> Dataset:
-        return [sample for partition in self.get_partitions() for sample in partition]
+        return self._create_partition(self._df)
 
-    def get_partitions(self) -> Sequence[Dataset]:
+    def get_labels(self) -> list[object]:
+        """Return labels from the configured partition label column."""
+        label_column = self.partition_label_column
+        if label_column is None:
+            if len(self.target_columns) != 1:
+                raise ValueError("partition_label_column is required when using multiple target columns")
+            label_column = self.target_columns[0]
+        return list(self._df[label_column])
+
+    def split(
+        self,
+        n_partitions: int | None = None,
+        *,
+        partitions: Sequence[Sequence[int]] | None = None,
+    ) -> Sequence[Dataset]:
         """
-        Return the dataset divided into partitions for distribution among agents.
+        Materialize dataframe rows from index partitions.
 
-        This method provides the core partitioning functionality for decentralized
-        optimization. Each partition represents the local dataset of an agent in
-        the network.
-
-        The exact split is controlled by ``self.partitioner``. By default this is a single
-        IID partition containing all samples.
-
-        Returns:
-            Sequence[Dataset]: Sequence of Dataset objects, where each partition is a list of
-            (features, targets) tuples.
+        If explicit ``partitions`` are omitted, create ``n_partitions`` IID partitions.
 
         """
-        if self._partitions is None:
-            self._partitions = self._partitioner_split(self._df)
-        return self._partitions
-
-    def _partitioner_split(self, df: pd.DataFrame) -> Sequence[Dataset]:
-        labels = None
-        if self.partitioner.requires_labels:
-            if self.partition_label_column is None:
-                raise RuntimeError("partition_label_column is not set")
-            labels = list(df[self.partition_label_column])
-
-        idx_partitions = self.partitioner.partition(len(df), labels=labels)
-        return [self._create_partition(df.iloc[indices]) for indices in idx_partitions]
+        idx_partitions = self._resolve_partitions(n_partitions, partitions)
+        return [self._create_partition(self._df.iloc[indices]) for indices in idx_partitions]
 
     def _create_partition(self, df_partition: pd.DataFrame) -> Dataset:
         partition: Dataset = []

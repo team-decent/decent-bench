@@ -8,9 +8,9 @@ import decent_bench.utils.interoperability as iop
 from decent_bench import centralized_algorithms as ca
 from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCost, PyTorchCost, QuadraticCost
 from decent_bench.datasets import (
-    IidPartitioner,
     SyntheticClassificationDatasetHandler,
     SyntheticRegressionDatasetHandler,
+    split_iid,
 )
 from decent_bench.utils import logger
 from decent_bench.utils.array import Array
@@ -60,7 +60,6 @@ def create_classification_problem(
         n_targets=2,
         n_samples=n_agents * 10,
         n_features=3,
-        partitioner=IidPartitioner(n_partitions=n_agents),
         framework=SupportedFrameworks.PYTORCH if cost_cls is PyTorchCost else SupportedFrameworks.NUMPY,
         device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
@@ -75,6 +74,7 @@ def create_classification_problem(
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         squeeze_targets=cost_cls is PyTorchCost,
     )
+    local_datasets = dataset.split(partitions=split_iid(dataset, n_partitions=n_agents))
 
     x_optimal = None
     if cost_cls is PyTorchCost:
@@ -103,13 +103,13 @@ def create_classification_problem(
                 batch_size=batch_size,
                 device=device,
             )
-            for p in dataset.get_partitions()
+            for p in local_datasets
         ]
         LOGGER.info("... done!")
         costs: Sequence[Cost] = pytorch_costs
     elif cost_cls is LogisticRegressionCost:
         classification_costs: list[LogisticRegressionCost] = [
-            LogisticRegressionCost(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()
+            LogisticRegressionCost(dataset=p, batch_size=batch_size) for p in local_datasets
         ]
         LOGGER.info("... done!")
         if compute_x_optimal:
@@ -165,7 +165,6 @@ def create_regression_problem(
         n_targets=1,
         n_samples=n_agents * 10,
         n_features=1,
-        partitioner=IidPartitioner(n_partitions=n_agents),
         framework=SupportedFrameworks.PYTORCH if cost_cls is PyTorchCost else SupportedFrameworks.NUMPY,
         device=device,
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
@@ -180,6 +179,7 @@ def create_regression_problem(
         feature_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
         target_dtype=np.float32 if cost_cls is PyTorchCost else np.float64,
     )
+    local_datasets = dataset.split(partitions=split_iid(dataset, n_partitions=n_agents))
 
     x_optimal = None
     if cost_cls is PyTorchCost:
@@ -200,13 +200,13 @@ def create_regression_problem(
 
         pytorch_costs: list[PyTorchCost] = [
             PyTorchCost(dataset=p, model=model_gen(), loss_fn=torch.nn.MSELoss(), batch_size=batch_size, device=device)
-            for p in dataset.get_partitions()
+            for p in local_datasets
         ]
         LOGGER.info("... done!")
         costs: Sequence[Cost] = pytorch_costs
     elif cost_cls is LinearRegressionCost:
         regression_costs: list[LinearRegressionCost] = [
-            LinearRegressionCost(dataset=p, batch_size=batch_size) for p in dataset.get_partitions()
+            LinearRegressionCost(dataset=p, batch_size=batch_size) for p in local_datasets
         ]
         LOGGER.info("... done!")
 

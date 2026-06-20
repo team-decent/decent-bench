@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+from functools import cached_property
 from typing import Any
 
 import numpy as np
@@ -8,7 +10,6 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.utils.types import Dataset, SupportedDevices, SupportedFrameworks
 
 from ._dataset_handler import DatasetHandler
-from ._partitioners import IidPartitioner, Partitioner
 
 
 class SyntheticRegressionDatasetHandler(DatasetHandler):
@@ -23,7 +24,6 @@ class SyntheticRegressionDatasetHandler(DatasetHandler):
         feature_dtype: DTypeLike = np.float64,
         target_dtype: DTypeLike = np.float64,
         squeeze_targets: bool = False,
-        partitioner: Partitioner | None = None,
     ) -> None:
         """
         Dataset with synthetic regression data.
@@ -37,8 +37,6 @@ class SyntheticRegressionDatasetHandler(DatasetHandler):
             feature_dtype: Data type of the features in the returned arrays
             target_dtype: Data type of the targets in the returned arrays
             squeeze_targets: If true, empty dimensions are removed from the targets, e.g. shape (1,) becomes ()
-            partitioner: Optional partitioner defining the split of one generated global dataset. If omitted, a single
-                IID partition containing all samples is created.
 
         """
         self._n_targets = n_targets
@@ -49,16 +47,10 @@ class SyntheticRegressionDatasetHandler(DatasetHandler):
         self.feature_dtype = feature_dtype
         self.target_dtype = target_dtype
         self.squeeze_targets = squeeze_targets
-        self.partitioner = IidPartitioner(n_partitions=1) if partitioner is None else partitioner
-        self._partitions: list[Dataset] | None = None
 
     @property
     def n_samples(self) -> int:
-        return sum(len(partition) for partition in self.get_partitions())
-
-    @property
-    def n_partitions(self) -> int:
-        return self.partitioner.n_partitions
+        return self._n_samples
 
     @property
     def n_features(self) -> int:
@@ -69,15 +61,26 @@ class SyntheticRegressionDatasetHandler(DatasetHandler):
         return self._n_targets
 
     def get_datapoints(self) -> Dataset:
-        return [sample for partition in self.get_partitions() for sample in partition]
+        features, targets = self._raw_data
+        return self._create_partition(features, targets, list(range(self.n_samples)))
 
-    def get_partitions(self) -> list[Dataset]:
-        if self._partitions is None:
-            self._partitions = self._partitioner_split()
+    def get_labels(self) -> list[Any]:
+        """Return generated regression targets."""
+        return [self._raw_data[1][index] for index in range(self.n_samples)]
 
-        return self._partitions
+    def split(
+        self,
+        n_partitions: int | None = None,
+        *,
+        partitions: Sequence[Sequence[int]] | None = None,
+    ) -> list[Dataset]:
+        """Materialize generated samples from index partitions."""
+        features, targets = self._raw_data
+        idx_partitions = self._resolve_partitions(n_partitions, partitions)
+        return [self._create_partition(features, targets, indices) for indices in idx_partitions]
 
-    def _partitioner_split(self) -> list[Dataset]:
+    @cached_property
+    def _raw_data(self) -> tuple[NDArray[Any], NDArray[Any]]:
         partition = sk_datasets.make_regression(
             n_samples=self._n_samples,
             n_features=self.n_features,
@@ -86,11 +89,9 @@ class SyntheticRegressionDatasetHandler(DatasetHandler):
             random_state=iop.get_seed(),
             tail_strength=0.0,
         )
-        A = partition[0].astype(self.feature_dtype)  # noqa: N806
-        b = partition[1].astype(self.target_dtype)
-        labels = [b[j] for j in range(self._n_samples)] if self.partitioner.requires_labels else None
-        idx_partitions = self.partitioner.partition(self._n_samples, labels=labels)
-        return [self._create_partition(A, b, indices) for indices in idx_partitions]
+        features = partition[0].astype(self.feature_dtype)
+        targets = partition[1].astype(self.target_dtype)
+        return features, targets
 
     def _create_partition(self, features: NDArray[Any], targets: NDArray[Any], indices: list[int]) -> Dataset:
         return [
