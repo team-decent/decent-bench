@@ -19,7 +19,7 @@ _STATE_CHANNEL = "state"
 @dataclass(eq=False)
 class GT_SAGA(P2PAlgorithm):  # noqa: N801
     """
-    Gradient Tracking with SAGA variance reduction :footcite:p:`Alg_GT_SAGA_2020` :footcite:p:`Alg_GT_SAGA_2022`.
+    Gradient Tracking with SAGA variance reduction :footcite:p:`Alg_GT_SAGA_2020, Alg_GT_SAGA_2022`.
 
     Args:
         iterations: Total number of iterations

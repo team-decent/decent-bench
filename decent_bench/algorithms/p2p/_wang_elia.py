@@ -16,7 +16,9 @@ _PREVIOUS_STATE_CHANNEL = "previous_state"
 @dataclass(eq=False)
 class WangElia(P2PAlgorithm):
     r"""
-    Wang-Elia gradient tracking algorithm characterized by the updates below, see :footcite:p:`Alg_Wang_1, Alg_Wang_2`.
+    Wang-Elia gradient tracking algorithm :footcite:p:`Alg_Wang_1, Alg_Wang_2`.
+
+    The algorithm is characterized by the updates:
 
     .. math::
         \mathbf{x}_{i, k+1} = \mathbf{x}_{i, k} - \sum_j \mathbf{K}_{ij} (\mathbf{x}_{j, k} + \mathbf{z}_{j, k})

@@ -16,7 +16,9 @@ _Z_S_CHANNEL = "z_s"
 @dataclass(eq=False)
 class ATG(P2PAlgorithm):
     r"""
-    ADMM-Tracking Gradient (ATG) :footcite:p:`Alg_ATG` characterized by the update steps below.
+    ADMM-Tracking Gradient (ATG) :footcite:p:`Alg_ATG`.
+
+    The algorithm is characterized by the updates:
 
     .. math::
         \begin{bmatrix} \mathbf{y}_{i,k} \\ \mathbf{s}_{i,k} \end{bmatrix} = \frac{1}{1 + \rho N_i}

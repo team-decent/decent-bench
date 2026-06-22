@@ -13,7 +13,9 @@ from ._p2p_algorithm import P2PAlgorithm
 @dataclass(eq=False)
 class NIDS(P2PAlgorithm):
     r"""
-    NIDS :footcite:p:`Alg_NIDS` gradient tracking algorithm characterized by the update steps below.
+    NIDS :footcite:p:`Alg_NIDS` gradient tracking algorithm.
+
+    The algorithm is characterized by the update:
 
     .. math::
         \mathbf{x}_{i, k+1}

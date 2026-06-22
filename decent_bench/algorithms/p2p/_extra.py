@@ -13,7 +13,9 @@ from ._p2p_algorithm import P2PAlgorithm
 @dataclass(eq=False)
 class EXTRA(P2PAlgorithm):
     r"""
-    EXTRA :footcite:p:`Alg_EXTRA` gradient tracking algorithm characterized by the update steps below.
+    EXTRA :footcite:p:`Alg_EXTRA` gradient tracking algorithm.
+
+    The algorithm is characterized by the update:
 
     .. math::
         \mathbf{x}_{i, k+1}

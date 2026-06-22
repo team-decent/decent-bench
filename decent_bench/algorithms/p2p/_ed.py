@@ -13,7 +13,9 @@ from ._p2p_algorithm import P2PAlgorithm
 @dataclass(eq=False)
 class ED(P2PAlgorithm):
     r"""
-    Gradient tracking algorithm characterized by the update step below.
+    Exact diffusion gradient tracking algorithm :footcite:p:`Alg_ED_1, Alg_ED_2`.
+
+    The algorithm is characterized by the updates:
 
     .. math::
         \mathbf{y}_{i, k+1} = \mathbf{x}_{i, k} - \rho \nabla f_i(\mathbf{x}_{i,k})

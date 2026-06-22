@@ -12,7 +12,9 @@ from ._p2p_algorithm import P2PAlgorithm
 @dataclass(eq=False)
 class ATC(P2PAlgorithm):
     r"""
-    Adapt-Then-Combine (ATC) distributed gradient descent characterized by the update below :footcite:p:`Alg_ATC`.
+    Adapt-Then-Combine (ATC) distributed gradient descent :footcite:p:`Alg_ATC`.
+
+    The algorithm is characterized by the update:
 
     .. math::
         \mathbf{x}_{i, k+1} = (\sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k} - \rho \nabla f_j(\mathbf{x}_{j,k}))

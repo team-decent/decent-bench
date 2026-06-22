@@ -18,7 +18,7 @@ class AugDGM(P2PAlgorithm):
     r"""
     Aug-DGM :footcite:p:`Alg_Aug_DMG` or ATC-DIGing :footcite:p:`Alg_ATC_DIG` gradient tracking algorithm.
 
-    The algorithm is characterized by the updates below.
+    The algorithm is characterized by the updates:
 
     .. math::
         \mathbf{x}_{i, k+1} = \sum_j \mathbf{W}_{ij} (\mathbf{x}_{j, k} - \rho \mathbf{y}_{j, k})

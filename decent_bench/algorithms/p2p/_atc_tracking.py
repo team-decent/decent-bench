@@ -18,7 +18,7 @@ class ATC_Tracking(P2PAlgorithm):  # noqa: N801
     r"""
     ATC-Tracking :footcite:p:`Alg_ATCT_1, Alg_ATCT_2, Alg_ATCT_3` gradient tracking algorithm.
 
-    The algorithm is characterized by the updates below.
+    The algorithm is characterized by the updates:
 
     .. math::
         \mathbf{x}_{i, k+1} = \sum_j \mathbf{W}_{ij} (\mathbf{x}_{j, k} - \rho \mathbf{y}_{j, k})

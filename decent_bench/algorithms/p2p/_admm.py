@@ -13,7 +13,9 @@ from ._p2p_algorithm import P2PAlgorithm
 @dataclass(eq=False)
 class ADMM(P2PAlgorithm):
     r"""
-    Distributed Alternating Direction Method of Multipliers characterized by the update step below.
+    Distributed Alternating Direction Method of Multipliers (ADMM) :footcite:p:`Alg_ADMM_1, Alg_ADMM_2`.
+
+    The algorithm is characterized by the updates:
 
     .. math::
         \mathbf{x}_{i, k+1} = \operatorname{prox}_{\frac{1}{\rho N_i} f_i}
@@ -43,6 +45,8 @@ class ADMM(P2PAlgorithm):
 
         The :math:`\mathbf{z}_{ij}` variables of an agent are all initialized to
         the same value specified in ``z0`` (if any).
+
+    .. footbibliography::
 
     """
 
