@@ -7,15 +7,12 @@ Welcome to decent-bench!
    :start-after: <!-- include in index.rst below this point -->
 
 
-Docs index
-----------
+Index
+-----
 
 .. toctree::
    :maxdepth: 1
 
-   background
-   user
+   user/index
    API Reference <api/decent_bench>
-   developer
-   advanced
-   (TEMP) PyTorch Optimizer Integration <advanced_pytorch_optimizer>
+   developer/index

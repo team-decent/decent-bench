@@ -82,10 +82,10 @@ Benchmark executions will have outputs like these:
 
 .. list-table::
 
-   * - .. image:: _static/table.png
+   * - .. image:: ../_static/table.png
           :align: center
           :height: 350px
-     - .. image:: _static/plot.png
+     - .. image:: ../_static/plot.png
           :align: center
           :height: 350px
 

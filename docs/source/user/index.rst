@@ -1,5 +1,6 @@
-Background
+User Guide
 ==========
+
 
 Decentralized optimization is a paradigm in the field of mathematical optimization. It addresses several of the
 challenges posed by traditional, centralized optimization. In centralized optimization, all training data is transferred
@@ -22,3 +23,12 @@ network sparsity, and agent heterogeneity may all impact the optimization proces
 considered when evaluating an algorithm's performance. This is where decent-bench comes in. By
 benchmarking algorithms in different settings with different communication constraints, decent-bench provides you with
 realistic algorithm comparisons in a user-friendly and highly configurable manner.
+
+
+Index
+-----
+
+.. toctree::
+   :maxdepth: 1
+
+   user
