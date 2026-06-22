@@ -615,8 +615,8 @@ def _run_trial(
                     network=network,
                     rng_state=iop.get_rng_state(used_frameworks),
                 )
-            # Now that checkpoint is saved, we can cleanup to clean up memory
-            alg.cleanup(network)
+            # Now that checkpoint is saved, we can _cleanup to clean up memory
+            alg._cleanup(network)  # noqa: SLF001
         except Exception as e:
             LOGGER.exception(f"An error or warning occurred when running {alg.name}: {type(e).__name__}: {e}")
 
