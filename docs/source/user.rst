@@ -125,9 +125,6 @@ users inspect, save, modify, or provide their own index partitions.
     local_datasets = dataset.split(partitions=idx_partitions)
     all_datapoints = dataset.get_datapoints()
 
-For a default IID split, the shorter ``dataset.split(n_partitions=n_agents)``
-form is equivalent. Calling ``dataset.split()`` creates one IID partition.
-
 ``dataset.n_samples`` always reports the number of datapoints in the source
 dataset. Explicit index partitions may intentionally cover only a subset of
 those datapoints.
@@ -748,7 +745,7 @@ corresponding abstracts.
     from decent_bench.algorithms.p2p import DGD, SimpleGT
     from decent_bench.benchmark import BenchmarkProblem
     from decent_bench.costs import Cost
-    from decent_bench.datasets import DatasetHandler
+    from decent_bench.datasets import DatasetHandler, split_iid
     from decent_bench.networks import P2PNetwork
     from decent_bench.schemes import AgentActivationScheme, CompressionScheme, DropScheme, NoiseScheme
 
@@ -766,7 +763,12 @@ corresponding abstracts.
 
     n_agents = 100
 
-    costs = [MyCost(dataset=partition) for partition in MyDataset().split(n_partitions=n_agents)]
+    dataset = MyDataset()
+    idx_partitions = split_iid(dataset, n_partitions=n_agents)
+    costs = [
+        MyCost(dataset=partition)
+        for partition in dataset.split(partitions=idx_partitions)
+    ]
 
     sum_cost = sum(costs[1:], start=costs[0])
     x_optimal = ca.solve(

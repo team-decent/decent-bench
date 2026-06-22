@@ -83,16 +83,9 @@ class PyTorchDatasetHandler(DatasetHandler):
 
     def split(
         self,
-        n_partitions: int | None = None,
-        *,
-        partitions: Sequence[Sequence[int]] | None = None,
+        partitions: Sequence[Sequence[int]],
     ) -> list[Dataset]:
-        """
-        Materialize index partitions as lazy PyTorch subsets.
-
-        If explicit ``partitions`` are omitted, create ``n_partitions`` IID subsets.
-
-        """
-        idx_partitions = self._resolve_partitions(n_partitions, partitions)
+        """Materialize index partitions as lazy PyTorch subsets."""
+        idx_partitions = self._resolve_partitions(partitions)
         materialized_partitions = [TorchSubset(self.torch_dataset, indices) for indices in idx_partitions]
         return cast("list[Dataset]", materialized_partitions)

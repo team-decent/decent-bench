@@ -109,17 +109,10 @@ class KaggleDatasetHandler(DatasetHandler):
 
     def split(
         self,
-        n_partitions: int | None = None,
-        *,
-        partitions: Sequence[Sequence[int]] | None = None,
+        partitions: Sequence[Sequence[int]],
     ) -> Sequence[Dataset]:
-        """
-        Materialize dataframe rows from index partitions.
-
-        If explicit ``partitions`` are omitted, create ``n_partitions`` IID partitions.
-
-        """
-        idx_partitions = self._resolve_partitions(n_partitions, partitions)
+        """Materialize dataframe rows from index partitions."""
+        idx_partitions = self._resolve_partitions(partitions)
         return [self._create_partition(self._df.iloc[indices]) for indices in idx_partitions]
 
     def _create_partition(self, df_partition: pd.DataFrame) -> Dataset:

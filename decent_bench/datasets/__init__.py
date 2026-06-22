@@ -5,8 +5,8 @@ from ._synthetic_classification_handler import SyntheticClassificationDatasetHan
 from ._synthetic_regression_handler import SyntheticRegressionDatasetHandler
 from .partitioners import (
     split_dirichlet_label,
-    split_label_quantity,
     split_iid,
+    split_label_quantity,
     split_shard,
     split_size,
     split_stratified_iid,

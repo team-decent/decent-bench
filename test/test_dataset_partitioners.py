@@ -43,11 +43,9 @@ class ListDatasetHandler(DatasetHandler):
 
     def split(
         self,
-        n_partitions: int | None = None,
-        *,
-        partitions: Sequence[Sequence[int]] | None = None,
+        partitions: Sequence[Sequence[int]],
     ) -> list[Dataset]:
-        idx_partitions = self._resolve_partitions(n_partitions, partitions)
+        idx_partitions = self._resolve_partitions(partitions)
         return [[self._dataset[index] for index in partition] for partition in idx_partitions]
 
 
@@ -280,21 +278,9 @@ def test_dataset_split_materializes_explicit_indices() -> None:
     assert len(dataset.get_datapoints()) == 4
 
 
-def test_dataset_split_defaults_to_one_iid_partition() -> None:
-    dataset = _dataset([0, 1, 0, 1])
-
-    partitions = dataset.split()
-
-    assert len(partitions) == 1
-    assert len(partitions[0]) == 4
-
-
-def test_dataset_split_can_create_iid_partitions_directly() -> None:
-    dataset = _dataset([0, 1, 0, 1])
-
-    partitions = dataset.split(n_partitions=2)
-
-    assert [len(partition) for partition in partitions] == [2, 2]
+def test_dataset_split_requires_explicit_partitions() -> None:
+    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        _dataset([0, 1]).split()  # type: ignore[call-arg]
 
 
 @pytest.mark.parametrize(
@@ -312,11 +298,6 @@ def test_dataset_split_validates_explicit_indices(
 ) -> None:
     with pytest.raises(error_type, match=match):
         _dataset([0, 1, 0, 1]).split(partitions=partitions)
-
-
-def test_dataset_split_rejects_both_partition_arguments() -> None:
-    with pytest.raises(ValueError, match="Only one"):
-        _dataset([0, 1]).split(n_partitions=2, partitions=[[0], [1]])
 
 
 def test_synthetic_classification_handler_works_with_label_quantity_split() -> None:

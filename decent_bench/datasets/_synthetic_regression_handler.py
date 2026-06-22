@@ -70,13 +70,11 @@ class SyntheticRegressionDatasetHandler(DatasetHandler):
 
     def split(
         self,
-        n_partitions: int | None = None,
-        *,
-        partitions: Sequence[Sequence[int]] | None = None,
+        partitions: Sequence[Sequence[int]],
     ) -> list[Dataset]:
         """Materialize generated samples from index partitions."""
         features, targets = self._raw_data
-        idx_partitions = self._resolve_partitions(n_partitions, partitions)
+        idx_partitions = self._resolve_partitions(partitions)
         return [self._create_partition(features, targets, indices) for indices in idx_partitions]
 
     @cached_property
