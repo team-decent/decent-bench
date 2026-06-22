@@ -1,2 +1,3 @@
 pydata-sphinx-theme
 sphinxcontrib-bibtex
+myst-parser
