@@ -84,13 +84,22 @@ def _fix_missing_ref(app, env, node, contnode):
             return nodes.reference(
                 "", "ArrayLike", refuri="https://numpy.org/doc/stable/reference/typing.html#numpy.typing.ArrayLike"
             )
-        if target in {"NDArray", "numpy.typing.NDArray"}:
+        if target in {
+            "NDArray",
+            "numpy.typing.NDArray",
+            "numpy._typing._array_like.NDArray",
+        }:
             return nodes.reference(
                 "",
                 "NDArray",
                 refuri="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray",
             )
-        if target in {"DTypeLike", "numpy.typing.DTypeLike", "numpy._typing.DTypeLike"}:
+        if target in {
+            "DTypeLike",
+            "numpy.typing.DTypeLike",
+            "numpy._typing.DTypeLike",
+            "numpy._typing._dtype_like.DTypeLike",
+        }:
             return nodes.reference(
                 "", "DTypeLike", refuri="https://numpy.org/doc/stable/reference/typing.html#numpy.typing.DTypeLike"
             )
