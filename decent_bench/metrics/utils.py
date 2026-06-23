@@ -179,6 +179,36 @@ def _accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", i
     return ret
 
 
+def _balanced_accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
+    """
+    Calculate the balanced accuracy per agent.
+
+    Balanced accuracy is only applicable for problems using
+    :class:`~decent_bench.costs.EmpiricalRiskCost` with integer targets.
+
+    Args:
+        agents: sequence of agents to calculate balanced accuracy for
+        problem: benchmark problem containing test data
+        iteration: iteration to calculate balanced accuracy at, or -1 to use the agents' final x
+
+    Returns:
+        list of balanced accuracies per agent at *iteration*
+
+    """
+    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
+    ret: list[float] = []
+    for agent in agents:
+        preds = _predict_agent(agent, iteration, problem)
+        if np.any(~np.isfinite(preds)):
+            LOGGER.warning(
+                "Predictions contain NaN or Inf values, which are not valid for Balanced Accuracy calculation, "
+                "returning NaN for Balanced Accuracy"
+            )
+            return [np.nan for _ in agents]
+        ret.append(float(sk_metrics.balanced_accuracy_score(test_y, preds)))
+    return ret
+
+
 def _mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
     Calculate the mean squared error (MSE) per agent.
@@ -224,6 +254,19 @@ def _accuracy_at_x(cost: Cost, x: Array, problem: "BenchmarkProblem") -> float:
         )
         return np.nan
     return float(sk_metrics.accuracy_score(test_y, preds))
+
+
+def _balanced_accuracy_at_x(cost: Cost, x: Array, problem: "BenchmarkProblem") -> float:
+    """Calculate balanced accuracy from *cost* predictions at an arbitrary model state *x*."""
+    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
+    preds = _predict_cost_at_x(cost, x, problem)
+    if np.any(~np.isfinite(preds)):
+        LOGGER.warning(
+            "Predictions contain NaN or Inf values, which are not valid for Balanced Accuracy calculation, "
+            "returning NaN for Balanced Accuracy"
+        )
+        return np.nan
+    return float(sk_metrics.balanced_accuracy_score(test_y, preds))
 
 
 def _mse_at_x(cost: Cost, x: Array, problem: "BenchmarkProblem") -> float:

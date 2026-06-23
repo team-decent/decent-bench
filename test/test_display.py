@@ -9,6 +9,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from pathlib import Path
+from sklearn.metrics import balanced_accuracy_score
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -29,7 +30,7 @@ from decent_bench.benchmark._display.display_plots import (
     _select_legend_mode,
 )
 from decent_bench.benchmark._display.display_tables import display_tables
-from decent_bench.metrics.metric_library import Accuracy, MSE, Precision, Recall, Regret, XError
+from decent_bench.metrics.metric_library import Accuracy, BalancedAccuracy, MSE, Precision, Recall, Regret, XError
 from decent_bench.networks import FedNetwork
 
 display_plots_module = importlib.import_module("decent_bench.benchmark._display.display_plots")
@@ -59,6 +60,19 @@ class _MetricStub(Metric):
 
     def compute(self, agents, problem, iteration):  # noqa: D102
         return [0.0]
+
+
+class _PredictCostStub:
+    def __init__(self, predictions: list[int]) -> None:
+        self.predictions = predictions
+
+    def predict(self, x: object, data: list[object]) -> list[int]:  # noqa: ARG002
+        return self.predictions
+
+
+class _ProblemStub:
+    def __init__(self, labels: list[int]) -> None:
+        self.test_data = [(np.array([index]), label) for index, label in enumerate(labels)]
 
 
 def _agent_metrics_view(x_value: float) -> AgentMetricsView:
@@ -484,7 +498,6 @@ def test_display_metrics_shows_only_plots_when_table_metrics_empty(monkeypatch) 
     assert "table" not in captured
 
 
-
 def test_display_tables_scales_compute_metrics_in_shared_layout(monkeypatch, tmp_path: Path) -> None:  # noqa: D103
     alg_a = _AlgorithmStub("A")
     metric = ml.FunctionCalls()
@@ -901,7 +914,13 @@ def test_regret_unavailable_without_x_optimal() -> None:  # noqa: D103
 
 def test_metrics_unavailable_without_test_data() -> None:  # noqa: D103
     problem = SimpleNamespace(test_data=None)
-    metrics = [Accuracy([np.average]), MSE([np.average]), Precision([np.average]), Recall([np.average])]
+    metrics = [
+        Accuracy([np.average]),
+        BalancedAccuracy([np.average]),
+        MSE([np.average]),
+        Precision([np.average]),
+        Recall([np.average]),
+    ]
 
     for metric in metrics:
         available, reason = metric.is_available(problem)
@@ -912,7 +931,13 @@ def test_metrics_unavailable_without_test_data() -> None:  # noqa: D103
 def test_metrics_unavailable_without_empirical_risk_cost() -> None:  # noqa: D103
     network = SimpleNamespace(agents=lambda: [SimpleNamespace(cost=object())])
     problem = SimpleNamespace(test_data=[(np.array([1.0]), 0)], network=network)
-    metrics = [Accuracy([np.average]), MSE([np.average]), Precision([np.average]), Recall([np.average])]
+    metrics = [
+        Accuracy([np.average]),
+        BalancedAccuracy([np.average]),
+        MSE([np.average]),
+        Precision([np.average]),
+        Recall([np.average]),
+    ]
 
     for metric in metrics:
         available, reason = metric.is_available(problem)
@@ -925,10 +950,52 @@ def test_classification_metrics_unavailable_with_float_targets() -> None:  # noq
     network = SimpleNamespace(agents=lambda: [SimpleNamespace(cost=lr_cost)])
     problem = SimpleNamespace(test_data=[(np.array([0.0]), 0.1)], network=network)
 
-    for metric in [Accuracy([np.average]), Precision([np.average]), Recall([np.average])]:
+    for metric in [
+        Accuracy([np.average]),
+        BalancedAccuracy([np.average]),
+        Precision([np.average]),
+        Recall([np.average]),
+    ]:
         available, reason = metric.is_available(problem)
         assert not available
         assert "integer targets" in reason
+
+
+def test_balanced_accuracy_uses_per_class_recall() -> None:  # noqa: D103
+    labels = [0, 0, 1, 1, 2, 2]
+    predictions = [0, 1, 1, 1, 2, 0]
+    problem = _ProblemStub(labels)
+    agent = AgentMetricsView(
+        id=uuid4(),
+        cost=_PredictCostStub(predictions),
+        x_history={0: np.array([0.0])},
+        n_x_updates=0,
+        n_function_calls=0.0,
+        n_gradient_calls=0.0,
+        n_hessian_calls=0.0,
+        n_proximal_calls=0.0,
+        n_sent_messages=0,
+        n_received_messages=0,
+        n_sent_messages_dropped=0,
+        n_times_selected=0,
+    )
+    network_view = _network_metrics_view([agent])
+
+    result = ml.BalancedAccuracy().compute(network_view, problem, 0)
+
+    assert result == [balanced_accuracy_score(labels, predictions)]
+
+
+def test_balanced_accuracy_metrics_are_not_registered_by_default() -> None:  # noqa: D103
+    default_table_descriptions = {metric.description for metric in ml._DEFAULT_TABLE_METRICS}  # noqa: SLF001
+    default_plot_descriptions = {metric.description for metric in ml._DEFAULT_PLOT_METRICS}  # noqa: SLF001
+
+    assert ml.BalancedAccuracy().description == "balanced accuracy"
+    assert ml.ServerBalancedAccuracy().description == "server balanced accuracy"
+    assert "balanced accuracy" not in default_table_descriptions
+    assert "balanced accuracy" not in default_plot_descriptions
+    assert "server balanced accuracy" not in default_table_descriptions
+    assert "server balanced accuracy" not in default_plot_descriptions
 
 
 def test_server_mse_availability_and_values() -> None:  # noqa: D103
@@ -1040,6 +1107,70 @@ def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
     )
     assert metric.compute(network_view, problem, 0) == [0.5]
     assert metric.compute(network_view, problem, 1) == [1.0]
+
+
+def test_server_balanced_accuracy_availability_and_values() -> None:  # noqa: D103
+    train_data = [(np.array([1.0]), np.array([1])), (np.array([-1.0]), np.array([0]))]
+    test_data = [(np.array([1.0]), 1), (np.array([-1.0]), 0)]
+    cost = LogisticRegressionCost(train_data)
+    client = Agent(cost)
+    client.initialize(x=np.array([0.0]))
+    problem = BenchmarkProblem(network=FedNetwork([client]), test_data=test_data)
+
+    client_for_float_targets = Agent(cost)
+    client_for_float_targets.initialize(x=np.array([0.0]))
+
+    float_target_problem = BenchmarkProblem(
+        network=FedNetwork([client_for_float_targets]),
+        test_data=[(np.array([1.0]), 1.0), (np.array([-1.0]), 0.0)],
+    )
+    metric = ml.ServerBalancedAccuracy([np.average])
+    available, reason = metric.is_available(float_target_problem)
+    assert not available
+    assert "integer targets" in reason
+
+    available, reason = metric.is_available(problem)
+    assert available
+    assert reason is None
+
+    labels = [0, 0, 1, 1, 2, 2]
+    predictions = [0, 1, 1, 1, 2, 0]
+    stub_problem = _ProblemStub(labels)
+    client_view = AgentMetricsView(
+        id=uuid4(),
+        cost=_PredictCostStub(predictions),
+        x_history={0: np.array([0.0])},
+        n_x_updates=0,
+        n_function_calls=0.0,
+        n_gradient_calls=0.0,
+        n_hessian_calls=0.0,
+        n_proximal_calls=0.0,
+        n_sent_messages=0,
+        n_received_messages=0,
+        n_sent_messages_dropped=0,
+        n_times_selected=0,
+    )
+    server_view = AgentMetricsView(
+        id=uuid4(),
+        cost=_PredictCostStub([]),
+        x_history={0: np.array([0.0])},
+        n_x_updates=0,
+        n_function_calls=0.0,
+        n_gradient_calls=0.0,
+        n_hessian_calls=0.0,
+        n_proximal_calls=0.0,
+        n_sent_messages=0,
+        n_received_messages=0,
+        n_sent_messages_dropped=0,
+        n_times_selected=0,
+    )
+    network_view = _network_metrics_view(
+        [client_view, server_view],
+        network_type=NetworkType.FEDERATED,
+        server=server_view,
+    )
+
+    assert metric.compute(network_view, stub_problem, 0) == [balanced_accuracy_score(labels, predictions)]
 
 
 def test_is_available_default_returns_true() -> None:  # noqa: D103

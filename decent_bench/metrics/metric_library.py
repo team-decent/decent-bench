@@ -427,6 +427,54 @@ class Accuracy(Metric):
         return utils._accuracy(network.agents(), problem, iteration)  # noqa: SLF001
 
 
+class BalancedAccuracy(Metric):
+    r"""
+    Balanced accuracy of the agents'/clients' predictions.
+
+    Table:
+        Balanced accuracy of the agents'/clients' final x.
+
+    Plot:
+        Balanced accuracy (y-axis) per iteration (x-axis).
+
+        Balanced accuracy is calculated as the mean recall obtained on each class. This makes it more informative than
+        plain accuracy for imbalanced classification datasets.
+
+    Only available for :class:`~decent_bench.costs.EmpiricalRiskCost` and integer targets.
+
+    Note:
+        Available only when:
+
+        - ``problem.test_data`` is provided,
+        - all agent costs are :class:`~decent_bench.costs.EmpiricalRiskCost`,
+        - target labels are integer-valued.
+
+    """
+
+    description: str = "balanced accuracy"
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        if getattr(problem, "test_data", None) is None:
+            return False, "requires problem.test_data"
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
+            return False, "balanced accuracy only applies if all agents have EmpiricalRiskCost"
+        _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type]  # noqa: SLF001
+        if test_y.dtype.kind not in {"i", "u"}:
+            return False, f"balanced accuracy only applies for integer targets, dtype {test_y.dtype} found"
+        return True, None
+
+    def compute(  # noqa: D102
+        self,
+        network: NetworkMetricsView,
+        problem: "BenchmarkProblem",
+        iteration: int,
+    ) -> list[float]:
+        return utils._balanced_accuracy(network.agents(), problem, iteration)  # noqa: SLF001
+
+
 class MSE(Metric):
     r"""
     Mean squared error of the agents'/clients' predictions.
@@ -784,6 +832,50 @@ class ServerAccuracy(Metric):
     ) -> list[float]:
         cost = _server_metric_cost(network, self.description)
         return [utils._accuracy_at_x(cost, network.server().x_history[iteration], problem)]  # noqa: SLF001
+
+
+class ServerBalancedAccuracy(Metric):
+    r"""
+    Balanced accuracy of the server model's predictions.
+
+    Table:
+        Balanced accuracy of the final server x.
+
+    Plot:
+        Server balanced accuracy (y-axis) per iteration (x-axis).
+
+    Note:
+        Available only for :class:`~decent_bench.networks.FedNetwork` with ``problem.test_data``, empirical-risk
+        client costs, and integer-valued targets.
+
+    """
+
+    description: str = "server balanced accuracy"
+
+    def is_available(  # noqa: D102
+        self,
+        problem: "BenchmarkProblem",
+    ) -> tuple[bool, str | None]:
+        available, reason = _requires_fednetwork(problem, self.description)
+        if not available:
+            return False, reason
+        if getattr(problem, "test_data", None) is None:
+            return False, "requires problem.test_data"
+        if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
+            return False, "server balanced accuracy only applies if all clients have EmpiricalRiskCost"
+        _, test_y = utils._split_dataset(problem.test_data)  # type: ignore[arg-type]  # noqa: SLF001
+        if test_y.dtype.kind not in {"i", "u"}:
+            return False, f"server balanced accuracy only applies for integer targets, dtype {test_y.dtype} found"
+        return True, None
+
+    def compute(  # noqa: D102
+        self,
+        network: NetworkMetricsView,
+        problem: "BenchmarkProblem",
+        iteration: int,
+    ) -> list[float]:
+        cost = _server_metric_cost(network, self.description)
+        return [utils._balanced_accuracy_at_x(cost, network.server().x_history[iteration], problem)]  # noqa: SLF001
 
 
 _BASE_TABLE_METRICS: list[Metric] = [
