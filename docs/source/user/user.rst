@@ -10,27 +10,20 @@ range of conditions (asynchorny/partial participation, loss of communications, e
 
 Peer-to-peer
 ~~~~~~~~~~~~
-.. tagged-list::
-            :tag: peer-to-peer
-            :module: decent_bench.algorithms.p2p
+P2P algorithms: :tagged:`peer-to-peer`
 
 
-.. tagged-list::
-            :tag: peer-to-peer, ADMM
-            :module: decent_bench.algorithms.p2p
+ADMM+P2P: :tagged:`peer-to-peer, ADMM`
 
+metrics: :tagged:`metric`
+runtime metrics: :tagged:`runtime metric`
 
-.. tagged-list::
-    :tag: metric
-
-.. tagged-list::
-    :tag: runtime metric
 
 Federated
 ~~~~~~~~~
-.. tagged-list::
-            :tag: federated
-            :module: decent_bench.algorithms.federated
+
+federated algorithms: :tagged:`federated`
+
 
 :class:`~decent_bench.algorithms.federated.FedAvg` performs local client
 gradient steps from the broadcast server model and then replaces the server
@@ -193,15 +186,11 @@ Available costs
 
 Regression
 ~~~~~~~~~~
-.. tagged-list::
-           :tag: regression
-           :module: decent_bench.costs
+:tagged:`cost, regression`
 
 Classification
 ~~~~~~~~~~~~~~
-.. tagged-list::
-           :tag: classification
-           :module: decent_bench.costs
+:tagged:`cost, regression`
 
 
 PyTorchCost regularization
