@@ -14,6 +14,18 @@ Peer-to-peer
             :tag: peer-to-peer
             :module: decent_bench.algorithms.p2p
 
+
+.. tagged-list::
+            :tag: peer-to-peer, ADMM
+            :module: decent_bench.algorithms.p2p
+
+
+.. tagged-list::
+    :tag: metric
+
+.. tagged-list::
+    :tag: runtime metric
+
 Federated
 ~~~~~~~~~
 .. tagged-list::

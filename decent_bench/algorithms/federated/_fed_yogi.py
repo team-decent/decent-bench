@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.utils._tags import tags
+from decent_bench.utils._tags import Tag, tags
 
 from ._fed_opt import FedOpt
 
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from decent_bench.utils.array import Array
 
 
-@tags("federated")
+@tags(Tag.ALGORITHM, Tag.FEDERATED)
 @dataclass(eq=False)
 class FedYogi(FedOpt):
     r"""

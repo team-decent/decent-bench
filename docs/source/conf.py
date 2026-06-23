@@ -37,6 +37,8 @@ tagged_list_modules = [
     "decent_bench.algorithms.p2p",
     "decent_bench.algorithms.federated",
     "decent_bench.costs",
+    "decent_bench.metrics.metric_library",
+    "decent_bench.metrics.runtime_library",
 ]
 
 bibtex_bibfiles = ["references.bib"]
