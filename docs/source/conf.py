@@ -31,6 +31,7 @@ extensions = [
     "sphinxcontrib.bibtex",  # For bibliography in API docs
     "class_tagger",  # Tag-based class list directives
     "myst_parser",  # To parse markdown and convert to rst
+    "sphinxcontrib.mermaid",  # To display diagrams
 ]
 
 tagged_list_modules = [

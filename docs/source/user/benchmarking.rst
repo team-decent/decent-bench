@@ -1,17 +1,34 @@
 Benchmarking
 ============
 
-TODO: This page covers the standard benchmark workflow and the most important settings.
-:doc:`customizing <customizing>` will show how to customize each component of the benchmark
+This page covers the standard benchmark workflow and the most important settings. :doc:`customizing <customizing>`
+shows how to customize each component of the benchmark (from problem to algorithms to results).
+
 
 Running a benchmark
 -------------------
+A typical benchmark run is characterized by four steps:
 
-A typical run has three phases:
+1. **Benchmark problem definition**: where the local costs :math:`f_i` (see :eq:`decentralized-problem`) and the network architecture are defined. This includes defining practical constraints such as limited communications/computational power. The benchmark problem is defined as a :class:`~decent_bench.benchmark.BenchmarkProblem` object.
+2. **Benchmark**: where a set of algorithms is tested on the benchmark problem; see :func:`~decent_bench.benchmark.benchmark`. The results are contained in a :class:`~decent_bench.benchmark.BenchmarkResult` object.
+3. **Compute metrics**: where selected performance metrics are computed based on the benchmark results; see :func:`~decent_bench.benchmark.compute_metrics`. The computed metrics are contained in a :class:`~decent_bench.benchmark.MetricResult` object.
+4. **Display metrics**: where the metrics computed in step 3. are displayed as both tables and figures; see :func:`~decent_bench.benchmark.display_metrics`.
 
-1. Execute algorithms with :func:`~decent_bench.benchmark.benchmark`.
-2. Compute metrics with :func:`~decent_bench.benchmark.compute_metrics`.
-3. Display or save outputs with :func:`~decent_bench.benchmark.display_metrics`.
+The worflow is 
+
+
+
+.. mermaid::
+
+   flowchart TB
+       START(( )):::empty -->|BenchmarkProblem| A[benchmark]
+       A -->|BenchmarkResult| B[compute_metrics]
+       B -->|MetricResult| C[display_metrics]
+
+       classDef empty width:0px,height:0px,fill:transparent,stroke:transparent,color:transparent;
+
+
+
 
 .. literalinclude:: ../../../test/user-guide/benchmarking_minimal.py
    :language: python
