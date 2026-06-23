@@ -4,8 +4,11 @@ from decent_bench.algorithms.federated import FedAvg, Scaffold
 from decent_bench.benchmark import create_quadratic_problem
 from decent_bench.metrics import metric_library
 from decent_bench.networks import FedNetwork
+from decent_bench.utils.checkpoint_manager import CheckpointManager
 
 if __name__ == "__main__":
+
+    cm = CheckpointManager("./results")
 
     ## Problem definition ------------------------------------------------
     n_agents = 10
@@ -26,6 +29,7 @@ if __name__ == "__main__":
         ],
         benchmark_problem=problem,
         n_trials=1,
+        checkpoint_manager=cm,
         )
 
     ## Computing & displaying results ------------------------------------
@@ -35,6 +39,7 @@ if __name__ == "__main__":
         benchmark_result=results,
         table_metrics=metrics_to_compute,
         plot_metrics=metrics_to_compute,
+        checkpoint_manager=cm,
         )
 
-    benchmark.display_metrics(metrics_results)
+    benchmark.display_metrics(metrics_results, checkpoint_manager=cm)

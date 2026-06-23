@@ -47,21 +47,28 @@ Note:
 
 .. code-block:: text
 
-    algorithm                             FedAvg             Scaffold                                                                                                                                                                                                                                   
-    metric        statistic                                                                                                                                                                                                                                                                             
-    gradient norm            1.58e-01 ± 0.00e+00  2.37e-15 ± 0.00e+00                                                                                                                                                                                                                                   
-    x error                  1.54e-02 ± 0.00e+00  1.95e-16 ± 0.00e+00 
+    algorithm      FedAvg               Scaffold                                                                                                                                                                                                                                             
+    metric                                                                                                                                                                                                                                                                                              
+    gradient norm  3.01e-01 ± 0.00e+00  1.95e-15 ± 0.00e+00                                                                                                                                                                                                                                             
+    x error        2.46e-02 ± 0.00e+00  2.40e-16 ± 0.00e+00
 
+
+.. code-block:: text
+
+    algorithm      ADMM                 DGD                  ED                                                                                                                                                                                                              
+    metric                                                                                                                                                                                                                                                                                 
+    gradient norm  2.38e-15 ± 0.00e+00  4.30e-02 ± 0.00e+00  5.43e-11 ± 0.00e+00                                                                                                                                                                                                              
+    x error        2.51e-16 ± 0.00e+00  4.25e-03 ± 0.00e+00  5.56e-12 ± 0.00e+00 
 
 
 Benchmark executions will have outputs like these:
 
 .. list-table::
 
-   * - .. image:: ../_static/table.png
+   * - .. image:: ../_static/basic_p2p_example_plots.png
           :align: center
           :height: 350px
-     - .. image:: ../_static/plot.png
+     - .. image:: ../_static/basic_fed_example_plots.png
           :align: center
           :height: 350px
 

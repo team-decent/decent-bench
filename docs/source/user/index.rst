@@ -2,6 +2,9 @@ User Guide
 ==========
 
 
+
+
+
 Decentralized optimization is a paradigm in the field of mathematical optimization. It addresses several of the
 challenges posed by traditional, centralized optimization. In centralized optimization, all training data is transferred
 to a central server that employs an optimization algorithm. In addition to increased network and power consumption,
