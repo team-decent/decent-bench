@@ -30,52 +30,28 @@ Note:
 
 **The following is a working example. The remainder of the user guide will be updated soon.**
 
-.. code-block:: python
 
-    from decent_bench.agents import Agent
-    from decent_bench import benchmark
-    from decent_bench.metrics import runtime_library
-    from decent_bench.utils.checkpoint_manager import CheckpointManager
-    from decent_bench.distributed_algorithms import DGD, ATC
-    from decent_bench.networks import P2PNetwork
-    from decent_bench.benchmark import create_quadratic_problem
 
-    import networkx as nx
 
-    if __name__ == "__main__":
-        ## problem definition
-        n_agents = 10
+.. literalinclude:: ../../examples/basic_p2p_example.py
+    :language: python
+    :linenos:
 
-        costs, x_optimal = create_quadratic_problem(10, n_agents)
 
-        agents = [Agent(cost) for i, cost in enumerate(costs)]
-        graph = nx.complete_graph(n_agents)
-        
-        net = P2PNetwork(
-            graph=graph,
-            agents=agents,
-        )
+.. literalinclude:: ../../examples/basic_p2p_example.py
+    :language: python
+    :linenos:
+    :lineno-start: 12
+    :lines: 12-28
 
-        bp = benchmark.BenchmarkProblem(net, x_optimal)
 
-        ## benchmarking
-        cm = CheckpointManager(checkpoint_dir="results/benchmark_1", checkpoint_step=100, keep_n_checkpoints=2)
+.. code-block:: text
 
-        num_iter = 1000
-        step = 0.001
+    algorithm                             FedAvg             Scaffold                                                                                                                                                                                                                                   
+    metric        statistic                                                                                                                                                                                                                                                                             
+    gradient norm            1.58e-01 ± 0.00e+00  2.37e-15 ± 0.00e+00                                                                                                                                                                                                                                   
+    x error                  1.54e-02 ± 0.00e+00  1.95e-16 ± 0.00e+00 
 
-        res = benchmark.benchmark(algorithms=[
-                DGD(iterations=num_iter, step_size=step),
-                ATC(iterations=num_iter, step_size=step),
-            ],
-            benchmark_problem=bp,
-            checkpoint_manager=cm,
-            n_trials=1,
-            )
-
-        metr = benchmark.compute_metrics(res, checkpoint_manager=cm)
-
-        benchmark.display_metrics(metr, checkpoint_manager=cm)
 
 
 Benchmark executions will have outputs like these:

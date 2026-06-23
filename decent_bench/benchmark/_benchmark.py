@@ -213,7 +213,7 @@ def benchmark(
     algorithms: list[Algorithm[Network]],
     benchmark_problem: BenchmarkProblem,
     *,
-    n_trials: int = 30,
+    n_trials: int = 1,
     max_processes: int | None = 1,
     progress_step: int | None = 100,
     show_speed: bool = False,

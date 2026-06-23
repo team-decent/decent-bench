@@ -46,10 +46,17 @@ def display_tables(
     table_results["value"] = table_results["mean"] + " \u00b1 " + table_results["std"]
     table_results = table_results.drop(columns=["mean", "std"])
 
+    # drop statistics column if it's empty
+    if table_results["statistic"].eq("").all():
+        table_results = table_results.drop(columns=["statistic"])
+        index = ["metric"]
+    else:
+        index = ["metric", "statistic"]
+
     # reorganize the DataFrame so that it has a MultiIndex (metric, statistic)
     # and algorithms as the columns; each value in a column is mean +/- std (formatted)
     table_results = table_results.pivot_table(
-        index=["metric", "statistic"],
+        index=index,
         columns="algorithm",
         values="value",
         aggfunc="first",

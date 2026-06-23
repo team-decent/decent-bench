@@ -98,7 +98,7 @@ commands = [["mypy", "decent_bench"]]
 
 [tool.tox.env.pytest]
 description = "Run pytest (test executor)"
-deps = ["pytest"]
+deps = ["pytest", "jinja2"]
 commands = [["pytest"]]
 
 [tool.tox.env.ruff]
