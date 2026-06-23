@@ -1,9 +1,6 @@
 User Guide
 ==========
 
-Index
------
-
 .. toctree::
    :maxdepth: 1
 
