@@ -6,6 +6,6 @@ User Guide
 
    user
    introduction
-   benchmarking
+   benchmarking/index
    customizing
    utils
