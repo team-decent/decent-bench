@@ -34,6 +34,32 @@ When implementing a custom algorithm, provide:
 Always update agent states through the network and interoperability abstractions so metrics and communication schemes
 remain consistent.
 
+
+Available algorithms
+--------------------
+
+Note: algorithms are slightly modified with respect to the corresponding papers to ensure that they work in a broader
+range of conditions (asynchorny/partial participation, loss of communications, etc) than the original papers.
+
+Peer-to-peer
+~~~~~~~~~~~~
+P2P algorithms: :tagged:`peer-to-peer`
+
+
+ADMM+P2P: :tagged:`peer-to-peer, ADMM`
+
+metrics: :tagged:`metric`
+runtime metrics: :tagged:`runtime metric`
+
+
+Federated
+~~~~~~~~~
+
+federated algorithms: :tagged:`federated`
+
+
+
+
 Cost Function
 -------------
 

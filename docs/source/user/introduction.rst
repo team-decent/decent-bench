@@ -76,15 +76,15 @@ practical constraints, which include:
 It is therefore necessary to account for these challenges at the design stage.
 
 
-Why `decent-bench`
+Why decent-bench
 ------------------
-The objective of `decent-bench` (for *decentralized-benchmarking*) is to support the design of decentralized algorithms that can be deployed in a wide range
-of challenging scenarios. In particular, `decent-bench` offers the following functionalities:
+The objective of decent-bench (for *decentralized-benchmarking*) is to support the design of decentralized algorithms that can be deployed in a wide range
+of challenging scenarios. In particular, decent-bench offers the following functionalities:
 
-* **Simulating deployment scenarios**: `decent-bench` allows to define realistic scenarios in which to test decentralized algorithms (both federated and peer-to-peer); this includes simulating unreliable communications and limited/heterogeneous computational power.
-* **Benchmarking**: `decent-bench` defines a simple benchmarking pipeline to test and compare different decentralized algorithms in the same scenario. Additionally, it provides a library of state-of-the-art algorithms ready to use.
-* **Reproducibility**: as part of the benchmarking pipeline, `decent-bench` allows setting random seeds to ensure that results are easily reproducible.
-* **Paper-ready results**: `decent-bench` provides the results of a benchmark run in a format that can be directly pasted into papers (with several customization options). The raw results are also available as `pandas.DataFrame`s for easy inspection.
+* **Simulating deployment scenarios**: decent-bench allows to define realistic scenarios in which to test decentralized algorithms (both federated and peer-to-peer); this includes simulating unreliable communications and limited/heterogeneous computational power.
+* **Benchmarking**: decent-bench defines a simple benchmarking pipeline to test and compare different decentralized algorithms in the same scenario. Additionally, it provides a library of state-of-the-art algorithms ready to use.
+* **Reproducibility**: as part of the benchmarking pipeline, decent-bench allows setting random seeds to ensure that results are easily reproducible.
+* **Paper-ready results**: decent-bench provides the results of a benchmark run in a format that can be directly pasted into papers (with several customization options). The raw results are also available as ``pandas.DataFrame`` for easy inspection.
 
 
 References

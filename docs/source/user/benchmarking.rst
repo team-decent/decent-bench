@@ -1,7 +1,7 @@
 Benchmarking
 ============
 
-This page covers the standard benchmark workflow and the most important settings. :doc:`customizing <customizing>`
+This page covers the standard benchmark workflow and the most important settings. :doc:`This page <customizing>`
 shows how to customize each component of the benchmark (from problem to algorithms to results).
 
 
@@ -176,7 +176,7 @@ These steps can be customized in several ways. For :func:`~decent_bench.benchmar
 
 * ``table_metrics`` and ``plot_metrics``: these can be different, since some metrics cannot be plotted (*e.g.* :class:`~decent_bench.metrics.metric_library.GradientCalls`, which counts the number of total gradient calls at the end of the simulation). Passing ``None`` to both arguments will use all the available metrics (already divided by table and plot metrics); see :mod:`~decent_bench.metrics.metric_library` for the list of available metrics. These arguments can also be an empty list to avoid computing either table or plot metrics.
 * ``statistics_across_agents``: as discussed later in :ref:`this section <reproducibility>`, the benchmark can run several trials and average over the results. Additionally, several metrics yield one value for each agent (this is the case of :class:`~decent_bench.metrics.metric_library.GradientCalls`), and aggregation over the per-agent metrics is required. This can be controlled via the ``statistics_across_agents`` argument, which accepts a list of statistics to be computed across agents (options are: "mean", "std", "max", "min", "median"; "mean", "std" are used by default).
-* Output: the function returns a :class:`~decent_bench.benchmark.MetricResult` object, which contains four ``pandas.DataFrame``s with the computed metrics (the raw data and the aggregated data across trials and agents). The results can thus be easily inspected.
+* Output: the function returns a :class:`~decent_bench.benchmark.MetricResult` object, which contains four ``pandas.DataFrame`` with the computed metrics (the raw data and the aggregated data across trials and agents). The results can thus be easily inspected.
 
 For :func:`~decent_bench.benchmark.display_metrics`:
 
@@ -360,130 +360,85 @@ where:
 * If any of the algorithms diverges (*e.g.* the selected step-size is too large), then inf or nan values will be displayed in the table. For the plots, the sequences of metrics values are truncated at the first occurrence of inf/nan.
 
 
-Customizing benchmark scenario
-------------------------------
-
-
-
-
-
 .. _reproducibility:
+
 Reproducibility
 ---------------
-Many decentralized algorithms and network scenarios have stochstic features.
+Many decentralized algorithms and network scenarios have stochastic features. An example are algorithms that make use of
+stochastic gradients computed on a subset :math:`\mathcal{B} \subset \{ 1, \ldots, m_i \}` of the available data:
+
+.. math::
+    \hat{\nabla} f_i(x) = \frac{1}{|\mathcal{B}|} \sum_{h \in \mathcal{B}} \ell(x, d_i^h).
+
+See instead :doc:`this page <customizing>` for how to create networks with stochastic features.
+
+The following example creates the same linear regression problem as before, but setting ``batch_size=2``, which means
+that agents compute stochastic gradients with two datapoints.
+
+.. literalinclude:: ../../examples/stochastic_fed_example.py
+    :language: python
+    :linenos:
+
+Since the datapoints to use during computation are chosen at random, the algorithms are now stochastic. In order to run
+reproducible simulations, one can use :func:`~decent_bench.utils.interoperability.set_seed` to set a seed before the
+benchmark is run.
+
+Additionally, the benchmark runs several trials (``n_trials=10`` in :func:`~decent_bench.benchmark.benchmark`) and
+averages across them, to provide more informative results. Importantly, a different seed
+*derived deterministically from the main seed* is used for each trial. This means that each trial is distinct (making
+aggregation across trials meaningful), while maintaining reproducibility. The following figures show the results with
+and without stochastic gradients.
+
+.. list-table::
+   :widths: 1 1
+
+   * - .. figure:: ../_static/basic_fed_example_plots.png
+          :align: center
+
+          Using full gradients
+     - .. figure:: ../_static/stochastic_fed_example.png
+          :align: center
+
+          Using stochastic gradients
+
+The plots on the left are fully deterministic, which means that even if multiple trials are run, their outputs will
+be exactly the same. The plots on the right, instead, are stochastic, and different trials yield different results.
+This means that when aggregating over trials, there is some variation. This is highlighted by plotting the mean as a
+solid line, and the minimum and maximum as the envelope around it. This is done by default by decent-bench.
 
 
-
-
-For reproducible experiments, set seeds consistently for all random sources you use.
-
-- Python random module
-- NumPy
-- framework-specific RNGs (for example PyTorch)
-- graph generation utilities that accept ``seed``
-
-.. code-block:: python
-    import random
-    import numpy as np
-    import networkx as nx
-    random.seed(0)
-    np.random.seed(0)
-    graph = nx.random_regular_graph(d=3, n=100, seed=0)
-
-If your benchmark uses framework-level randomness, also set that framework's seed at startup.
-Use a fixed seed per experiment when comparing algorithms, and change the seed between experiment batches when you
-want robustness checks.
-
-
-
-
-
-
-
-
-
-Available algorithms
---------------------
-
-Note: algorithms are slightly modified with respect to the corresponding papers to ensure that they work in a broader
-range of conditions (asynchorny/partial participation, loss of communications, etc) than the original papers.
-
-Peer-to-peer
-~~~~~~~~~~~~
-P2P algorithms: :tagged:`peer-to-peer`
-
-
-ADMM+P2P: :tagged:`peer-to-peer, ADMM`
-
-metrics: :tagged:`metric`
-runtime metrics: :tagged:`runtime metric`
-
-
-Federated
-~~~~~~~~~
-
-federated algorithms: :tagged:`federated`
-
-
-
+Note:
+    How is it possible to set a seed? The functionality to set a seed is provided by the interoperability package
+    :mod:`decent_bench.utils.interoperability`. This package provides a wrapper around a number of widely used
+    frameworks (NumPy, PyTorch, TensorFlow, JAX), exposing a common API for all of them. Implementing all parts of the
+    benchmarking pipeline using the functions in the interoperability API allows to implement each item once, while
+    allowing to select different framework for the backend. ``set_seed`` is part of this interoperability API,
+    and it takes care of setting the seed for whichever framework is selected. More details on interoperability in :doc:`this page <customizing>`.
+    The seed is set for the built-in python ``random`` module as well.
 
 
 .. _checkpointing:
+
 Storing results and checkpointing
-----------------------------------
-By default, benchmark progress and results (plots and tables) are only displayed but not saved to disk. To save results and enable
-resumption of interrupted benchmarks, use the checkpoint functionality.
+---------------------------------
+As discussed above, defining a :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager` instance and passing it
+to the ``checkpoint_manager`` argument of :func:`~decent_bench.benchmark.benchmark`, :func:`~decent_bench.benchmark.compute_metrics`, :func:`~decent_bench.benchmark.display_metrics`
+allows to store all the results.
 
-Basic checkpointing
-~~~~~~~~~~~~~~~~~~~
-Enable checkpointing by providing a :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager` instance. This automatically saves:
+In particular, these are stored in the folder specified at init of :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager`
+(folder ``results`` in the examples above). The folder, after a full execution of the benchmarking workflow, includes:
 
-1. Progress checkpoints allowing benchmark resumption if interrupted
-2. Metric computation results to ``{checkpoint_dir}/metric_computation.pkl``
-3. Plots to ``{checkpoint_dir}/results/plots_figX.png``
-4. Tables to ``{checkpoint_dir}/results/table.txt`` and ``{checkpoint_dir}/results/table.tex``
+1. Becnchmark problem definition in ``{checkpoint_dir}/benchmark_problem.pkl``.
+2. Progress checkpoints allowing benchmark resumption if interrupted; each algorithms gets a subfolder containing the checkpoints ``{checkpoint_dir}/algorithm_X``.
+3. Metric computation results in ``{checkpoint_dir}/metric_computation.pkl``.
+4. Plots in ``{checkpoint_dir}/results/plots_figX.png``.
+5. Tables in ``{checkpoint_dir}/results/table.txt`` and ``{checkpoint_dir}/results/table.tex``.
 
-where 3. and 4. are true if ``save_path`` is set to the checkpoint manager's results path in :func:`~decent_bench.benchmark.display_metrics`.
-
-.. code-block:: python
-
-    from decent_bench import benchmark
-    from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import ADMM, DGD
-    from decent_bench.metrics.runtime_library import RuntimeLoss, RuntimeRegret
-    from decent_bench.utils.checkpoint_manager import CheckpointManager
-
-    if __name__ == "__main__":
-        checkpoint_manager = CheckpointManager(checkpoint_dir="benchmark_results/my_experiment")
-
-        # Saves step 1.
-        benchmark_result = benchmark.benchmark(
-            algorithms=[
-                DGD(iterations=10000, step_size=0.001),
-                ADMM(iterations=10000, penalty=10, relaxation=0.3),
-            ],
-            benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
-            checkpoint_manager=checkpoint_manager,
-            runtime_metrics=[
-                RuntimeLoss(update_interval=100, save_path=checkpoint_manager.get_results_path()),
-                RuntimeRegret(update_interval=100, save_path=checkpoint_manager.get_results_path()),
-            ],
-        )
-
-        # Saves step 2.
-        metrics_result = benchmark.compute_metrics(benchmark_result, checkpoint_manager)
-
-        # Save step 3. and 4. if save_path is set to checkpoint_manager.get_results_path(), can be any other path as well.
-        benchmark.display_metrics(
-            metrics_result,
-            save_path=checkpoint_manager.get_results_path(),
-        )
-
-The checkpoint directory structure:
+The complete folder structure looks like this:
 
 .. code-block:: text
 
-    benchmark_results/my_experiment/
+    checkpoint_dir
     ├── metadata.json                   # Run configuration and algorithm metadata
     ├── benchmark_problem.pkl           # Initial benchmark problem state (before any trials)
     ├── initial_algorithms.pkl          # Initial algorithm states (before any trials)
@@ -505,45 +460,29 @@ The checkpoint directory structure:
         └── table.txt                   # Final text file with table results
 
 
-Checkpoint parameters
-~~~~~~~~~~~~~~~~~~~~~
-Control checkpoint behavior with these parameters:
+Checkpointing options
+^^^^^^^^^^^^^^^^^^^^^
+The checkpointing behavior can be controlled via these parameters passed to the init of :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager`:
 
-- **checkpoint_dir**: Directory path to save checkpoints. Must be empty or non-existent when starting a new benchmark.
-- **checkpoint_step**: Number of iterations between checkpoints within each trial. If ``None``, only saves at trial completion. For long-running algorithms, use a value like 1000 to checkpoint during execution.
-- **keep_n_checkpoints**: Maximum number of iteration checkpoints to keep per trial. Older checkpoints are automatically deleted to save disk space. Default is 3.
-- **benchmark_metadata**: Optional dictionary to store custom metadata about the benchmark run (e.g., descriptions, system info, notes). This is saved in ``metadata.json`` and can be used for tracking and analysis.
+- ``checkpoint_dir``: directory where the checkpoint manager should save results. The folder must be non-existent or empty at init.
+- ``checkpoint_step``: the frequency with which checkpoints are stored; that is, a new checkpoint is stored every ``checkpoint_step`` iterations of an algorithm. If set to ``None``, the algorithms are checkpointed only at the end of the benchmark run.
+- ``keep_n_checkpoints``: as checkpoints are potentially large, this option allows to specify how many of them should be stored at any given time. Defaults to 3.
+- ``benchmark_metadata``: optional dictionary to store custom metadata about the benchmark run; this is saved in ``metadata.json``.
 
-.. code-block:: python
+Combine a large ``checkpoint_step`` and small ``keep_n_checkpoints`` to reduce both the computational and storage load
+of checkpoints.
 
-    import platform
-
-    from decent_bench import benchmark
-    from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import DGD
-    from decent_bench.utils.checkpoint_manager import CheckpointManager
-
-    if __name__ == "__main__":
-        benchmark.benchmark(
-            algorithms=[DGD(iterations=50000, step_size=0.001)],
-            benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
-            checkpoint_manager=CheckpointManager(
-                checkpoint_dir="benchmark_results/long_run",
-                checkpoint_step=5000,      # Checkpoint every 5000 iterations
-                keep_n_checkpoints=5,      # Keep 5 most recent checkpoints
-                benchmark_metadata={
-                    "description": "Testing DGD step size sensitivity",
-                    "system": platform.system(),
-                    "python_version": platform.python_version(),
-                    "notes": "Baseline run for paper experiments",
-                },
-            ),
-        )
+The following example shows a benchmark run with a fully customized :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager`.
+   
+.. literalinclude:: ../../examples/checkpointing_fed_custom_options.py
+    :language: python
+    :linenos:
 
 
 Resuming benchmarks
-~~~~~~~~~~~~~~~~~~~
-If a benchmark is interrupted, resume from the most recent checkpoint:
+^^^^^^^^^^^^^^^^^^^
+If the previous benchmark is interrupted at any time, using :func:`~decent_bench.benchmark.resume_benchmark`. This will
+complete to run all the trials (``n_trials``) for the specified number of iterations (``iterations`` argument of algorithms).
 
 .. code-block:: python
 
@@ -551,12 +490,16 @@ If a benchmark is interrupted, resume from the most recent checkpoint:
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
     if __name__ == "__main__":
-        benchmark_result = benchmark.resume_benchmark(
-            checkpoint_dir=CheckpointManager(checkpoint_dir="benchmark_results/my_experiment"),
-            create_backup=True,  # Creates a backup zip before resuming
+
+        cm = CheckpointManager(checkpoint_dir="results")  # the folder created by the interrupted benchmark run
+
+        results = benchmark.resume_benchmark(
+            checkpoint_manager=cm,
+            create_backup=True,  # creates a backup zip before resuming
         )
 
-Extend an existing benchmark with more iterations or trials:
+
+If more iterations and/or trials are needed, these can be performed starting from the output of a previous benchmark run.
 
 .. code-block:: python
 
@@ -564,50 +507,25 @@ Extend an existing benchmark with more iterations or trials:
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
     if __name__ == "__main__":
-        benchmark_result = benchmark.resume_benchmark(
-            checkpoint_dir=CheckpointManager(checkpoint_dir="benchmark_results/my_experiment"),
-            increase_iterations=5000,  # Run 5000 additional iterations
-            increase_trials=10,        # Run 10 additional trials
-            create_backup=True,
+
+        cm = CheckpointManager(checkpoint_dir="results")  # the folder created by the previous benchmark run
+
+        results = benchmark.resume_benchmark(
+            checkpoint_manager=cm,
+            create_backup=True,       # creates a backup zip before resuming
+            increase_iterations=150,  # run 150 additional iterations
+            increase_trials=10,       # run 10 additional trials
         )
 
-The optional parameters ``checkpoint_step`` and ``keep_n_checkpoints`` in :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager` 
-can be changed when resuming to control how frequently checkpoints are saved and how many are kept, allowing you to manage disk space for long-running benchmarks.
 
+Computing and displaying metrics later
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+decent-bench allows to compute and display metrics at different times. This is especially useful when :func:`~decent_bench.benchmark.benchmark`
+takes a long time: one can run the benchmark in one script, and then apply :func:`~decent_bench.benchmark.compute_metrics`
+and :func:`~decent_bench.benchmark.display_metrics` in another script, or in two separate scripts.
 
-Saving metric computations
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-By default, computed metrics are not saved unless a :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager` is provided.
-If provided, computed metrics are saved to ``{checkpoint_dir}/metric_computation.pkl`` after all trials complete. 
-This allows you to preserve the results of expensive metric computations for later analysis without needing to recompute them.
-This is useful when you want to modify plot settings, table formatting or :class:`~decent_bench.metrics.ComputationalCost` values after the benchmark has completed, without needing to rerun the entire benchmark or metric computation.
-
-.. code-block:: python
-
-    from decent_bench import benchmark
-    from decent_bench.costs import LinearRegressionCost
-    from decent_bench.distributed_algorithms import DGD
-    from decent_bench.utils.checkpoint_manager import CheckpointManager
-    import platform
-
-    if __name__ == "__main__":
-        checkpoint_manager = CheckpointManager(checkpoint_dir="benchmark_results/my_experiment")
-
-        benchmark_result = benchmark.benchmark(
-            algorithms=[DGD(iterations=1000, step_size=0.001)],
-            benchmark_problem=benchmark.create_regression_problem(LinearRegressionCost),
-            checkpoint_manager=checkpoint_manager,
-        )
-
-        metrics_result = benchmark.compute_metrics(benchmark_result, checkpoint_manager)
-
-
-Loading :class:`~decent_bench.benchmark._benchmark_result.BenchmarkResult` for metric computations
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Furthermore, the checkpoint manager can be used to load previous benchmark results by setting ``benchmark_result`` to ``None`` in :func:`~decent_bench.benchmark.compute_metrics`,
-making sure that the checkpoint manager is pointing to at least a partially completed benchmark. 
-This allows you to compute new metrics from previously completed benchmarks or to modify existing metrics without needing to rerun the entire benchmark.
-The new metrics will be saved to the checkpoint directory as described above.
+Loading a previously computed :class:`~decent_bench.benchmark._benchmark_result.BenchmarkResult` for metrics
+computation can be done by:
 
 .. code-block:: python
 
@@ -615,19 +533,18 @@ The new metrics will be saved to the checkpoint directory as described above.
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
     if __name__ == "__main__":
-        checkpoint_manager = CheckpointManager(checkpoint_dir="benchmark_results/my_experiment")
+
+        cm = CheckpointManager(checkpoint_dir="results")  # the folder created by the benchmark run
 
         metrics_result = benchmark.compute_metrics(
             benchmark_result=None,
-            checkpoint_manager=checkpoint_manager
+            checkpoint_manager=cm
         )
 
+where setting ``benchmark_result=None`` tells `compute_metrics` to load previously computed results. As discussed before,
+the set of metrics to be computed can be customized via the ``table_metrics`` and ``plot_metrics`` arguments.
 
-Loading :class:`~decent_bench.benchmark.MetricResult` for displaying metrics
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-Similarly, you can load previously computed metrics by setting ``metrics_result`` to ``None`` in :func:`~decent_bench.benchmark.display_metrics` and providing the same checkpoint manager.
-The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``algorithms``,
-``table_metrics``, and ``plot_metrics`` to discover valid filter values.
+Loading a previously computed :class:`~decent_bench.benchmark.MetricResult` for display can be done similarly by:
 
 .. code-block:: python
 
@@ -635,11 +552,27 @@ The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``algorithms``,
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
     if __name__ == "__main__":
-        checkpoint_manager = CheckpointManager(checkpoint_dir="benchmark_results/my_experiment")
 
-        metrics_result = checkpoint_manager.load_metrics_result()
-        if metrics_result is None:
-            raise ValueError("No computed metrics found in checkpoint directory")
+        cm = CheckpointManager(checkpoint_dir="results")  # the folder where compute_metrics stored its results
+
+        benchmark.display_metrics(
+            metrics_result=None,
+            checkpoint_manager=cm,
+        )
+
+Additionally, the :class:`~decent_bench.benchmark.MetricResult` can be loaded beforehand for inspection, via its
+``table_metrics``, ``plot_metrics``, ``algorithms`` properties, which return a list of available metrics/algorithms.
+
+.. code-block:::: python
+
+    from decent_bench import benchmark
+    from decent_bench.utils.checkpoint_manager import CheckpointManager
+
+    if __name__ == "__main__":
+
+        cm = CheckpointManager(checkpoint_dir="results")  # the folder where compute_metrics stored its results
+
+        metrics_result = cm.load_metrics_result()
 
         print("Available algorithms:", metrics_result.algorithms)
         print("Available table metrics:", metrics_result.table_metrics)
@@ -647,9 +580,8 @@ The loaded :class:`~decent_bench.benchmark.MetricResult` exposes ``algorithms``,
 
         benchmark.display_metrics(
             metrics_result=metrics_result,
-            checkpoint_manager=checkpoint_manager,
-            algorithms=["DGD"],
-            table_metrics=["nr gradient calls"],
-            plot_metrics=["regret"],
-            save_path=checkpoint_manager.get_results_path(),
+            checkpoint_manager=cm,
+            table_metrics=["x error"],          # select only some metrics
+            plot_metrics=["gradient norm"],     # or
+            algorithms=["Scaffold"],            # algorithms
         )
