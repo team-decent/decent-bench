@@ -22,7 +22,7 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
         step_size: Local step size (gamma)
         aux_step_size: Local step size (beta)
         penalty: Penalty parameter (rho)
-        alpha: Relaxation parameter (alpha)
+        relaxation: Relaxation parameter (alpha)
         x0: Initial parameters (optional)
         name: Algorithm name (default "LT-ADMM")
 
@@ -35,7 +35,7 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
     step_size: float = 0.01  # Local step size (gamma)
     aux_step_size: float = 0.01  # Local step size (beta)
     penalty: float = 1.0  # Penalty parameter (rho)
-    alpha: float = 0.5  # Relaxation parameter (alpha)
+    relaxation: float = 0.5  # Relaxation parameter (alpha)
     x0: InitialStates = None  # Initial parameters (optional)
     name: str = "LT-ADMM"
 
@@ -45,7 +45,7 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
 
         Raises:
             ValueError: If any of the parameters are invalid (e.g., non-positive iterations, local_steps,
-            step_size, penalty, or alpha).
+            step_size, penalty, or relaxation).
 
         """
         if self.num_local_steps <= 0:
@@ -56,8 +56,8 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
             raise ValueError("aux_step_size must be positive")
         if self.penalty <= 0:
             raise ValueError("penalty must be positive")
-        if self.alpha <= 0:
-            raise ValueError("alpha must be positive")
+        if self.relaxation <= 0:
+            raise ValueError("relaxation must be positive")
 
     def initialize(self, network: P2PNetwork) -> None:
         x0 = initial_states(self.x0, network)
@@ -137,5 +137,5 @@ class LT_ADMM(P2PAlgorithm):  # noqa: N801
         """
         for j, msg in agent.messages().items():
             j_idx = agent.aux_vars["neighbor_to_idx"][j]
-            z_update = (1 - self.alpha) * agent.aux_vars["z_i"][j_idx] - self.alpha * msg
+            z_update = (1 - self.relaxation) * agent.aux_vars["z_i"][j_idx] - self.relaxation * msg
             agent.aux_vars["z_i"][j_idx] = z_update

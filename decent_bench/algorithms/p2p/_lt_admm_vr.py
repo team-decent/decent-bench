@@ -27,7 +27,7 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
         step_size: Local step size (gamma)
         aux_step_size: Local step size (beta)
         penalty: Penalty parameter (rho)
-        alpha: Relaxation parameter (alpha)
+        relaxation: Relaxation parameter (alpha)
         x0: Initial parameters (optional)
         v2: Whether to use the LT-ADMM-VR-2 variant with improved
             variance reduction techniques which is less computational heavy (default True).
