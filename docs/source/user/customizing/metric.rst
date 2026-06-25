@@ -12,8 +12,6 @@ You can create your own metrics by subclassing :class:`~decent_bench.metrics.Met
 
 
 
-Metrics
--------
 
 Table and plot metrics
 ~~~~~~~~~~~~~~~~~~~~~~

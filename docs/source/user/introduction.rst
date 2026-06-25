@@ -46,6 +46,7 @@ trained, and the local *cost* or *loss* functions :math:`f_i : \mathbb{R}^n \to 
 and empirical risk minimization structure:
 
 .. math::
+   :label: empirical-risk
 
    f_i(x_i) = \sum_{h = 1}^{m_i} \ell(x_i, d_i^h)
 

@@ -236,8 +236,8 @@ being optimized. If you want to optimize a weighted objective :math:`\min \sum_i
 
 .. _interoperability:
 
-Interoperability requirement
-----------------------------
+Interoperability
+^^^^^^^^^^^^^^^^
 Decent-Bench is designed to interoperate with multiple array/tensor frameworks (NumPy, PyTorch, JAX, etc.). To keep
 algorithms framework-agnostic, always use the interoperability layer :class:`~decent_bench.utils.interoperability`, aliased as
 `iop`, and the :class:`~decent_bench.utils.array.Array` wrapper when creating, manipulating, and exchanging values:
