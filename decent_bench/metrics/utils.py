@@ -358,7 +358,7 @@ def linear_convergence_rate(y: Sequence[float]) -> float:
         >>> xerror = metrics_results.plot_results[metrics_results.plot_results["metric"] == "x error"]
         >>> for alg in metrics_results.algorithms:
                 xerror_over_time = xerror[xerror["algorithm"] == alg]["mean"]
-        >>>     print(f"Convergence rate of {alg} = {linear_convergence_rate(xerror[xerror["algorithm"] == alg]["mean"])}")  # noqa: E501
+        >>>     print(f"Rate for {alg} = {linear_convergence_rate(xerror[xerror["algorithm"] == alg]["mean"])}")
 
     """
     y_array: NDArray[float64] = np.asarray(y, dtype=float64)
