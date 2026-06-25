@@ -1,5 +1,5 @@
-Algorithm
----------
+Algorithms
+----------
 
 Use built-in algorithms from :mod:`~decent_bench.distributed_algorithms`, or implement your own by subclassing
 :class:`~decent_bench.distributed_algorithms.Algorithm`.
@@ -15,7 +15,7 @@ remain consistent.
 
 
 Available algorithms
---------------------
+^^^^^^^^^^^^^^^^^^^^
 
 Note: algorithms are slightly modified with respect to the corresponding papers to ensure that they work in a broader
 range of conditions (asynchorny/partial participation, loss of communications, etc) than the original papers.

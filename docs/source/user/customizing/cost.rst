@@ -1,5 +1,5 @@
-Cost Function
--------------
+Costs
+-----
 
 You can use built-in costs or implement a custom cost by subclassing :class:`~decent_bench.costs.Cost`.
 
