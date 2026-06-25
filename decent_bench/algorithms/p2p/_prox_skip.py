@@ -5,13 +5,13 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import P2PNetwork
-from decent_bench.utils._tags import tags
+from decent_bench.utils._tags import Tag, tags
 from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
 
 
-@tags("peer-to-peer", "gradient-based")
+@tags(Tag.ALGORITHM, Tag.PEER_TO_PEER, Tag.GRADIENT_BASED)
 @dataclass(eq=False)
 class ProxSkip(P2PAlgorithm):
     """

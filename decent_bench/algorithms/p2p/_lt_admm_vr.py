@@ -6,12 +6,12 @@ from decent_bench.agents import Agent
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.networks import P2PNetwork
-from decent_bench.utils._tags import tags
+from decent_bench.utils._tags import Tag, tags
 
 from ._lt_admm import LT_ADMM
 
 
-@tags("peer-to-peer", "gradient-based", "dual method", "ADMM", "variance-reduction")
+@tags(Tag.ALGORITHM, Tag.PEER_TO_PEER, Tag.ADMM, Tag.VARIANCE_REDUCTION, Tag.GRADIENT_BASED)
 @dataclass(eq=False)
 class LT_ADMM_VR(LT_ADMM):  # noqa: N801
     """
@@ -27,7 +27,7 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
         step_size: Local step size (gamma)
         aux_step_size: Local step size (beta)
         penalty: Penalty parameter (rho)
-        alpha: Relaxation parameter (alpha)
+        relaxation: Relaxation parameter (alpha)
         x0: Initial parameters (optional)
         v2: Whether to use the LT-ADMM-VR-2 variant with improved
             variance reduction techniques which is less computational heavy (default True).

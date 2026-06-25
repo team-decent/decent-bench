@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import P2PNetwork
-from decent_bench.utils._tags import tags
+from decent_bench.utils._tags import Tag, tags
 from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
@@ -12,11 +12,13 @@ _STATE_CHANNEL = "state"
 _PREVIOUS_STATE_CHANNEL = "previous_state"
 
 
-@tags("peer-to-peer", "gradient-tracking")
+@tags(Tag.ALGORITHM, Tag.PEER_TO_PEER, Tag.GRADIENT_TRACKING)
 @dataclass(eq=False)
 class WangElia(P2PAlgorithm):
     r"""
-    Wang-Elia gradient tracking algorithm characterized by the updates below, see :footcite:p:`Alg_Wang_1, Alg_Wang_2`.
+    Wang-Elia gradient tracking algorithm :footcite:p:`Alg_Wang_1, Alg_Wang_2`.
+
+    The algorithm is characterized by the updates:
 
     .. math::
         \mathbf{x}_{i, k+1} = \mathbf{x}_{i, k} - \sum_j \mathbf{K}_{ij} (\mathbf{x}_{j, k} + \mathbf{z}_{j, k})

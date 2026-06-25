@@ -6,7 +6,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformSelection
-from decent_bench.utils._tags import tags
+from decent_bench.utils._tags import Tag, tags
 from decent_bench.utils.types import InitialStates
 
 from ._fed_algorithm import FedAlgorithm
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from decent_bench.utils.array import Array
 
 
-@tags("federated")
+@tags(Tag.ALGORITHM, Tag.FEDERATED)
 @dataclass(eq=False)
 class FedDyn(FedAlgorithm):
     r"""

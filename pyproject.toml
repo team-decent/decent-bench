@@ -53,6 +53,7 @@ sphinx-tools = [
   "sphinx",
   "pydata-sphinx-theme",
   "sphinxcontrib-bibtex",
+  "myst-parser",
 ]
 
 
@@ -84,7 +85,7 @@ deps = [
 
 [tool.tox.env.sphinx]
 description = "Generate rst and html files using sphinx"
-deps = [".[sphinx-tools]"]
+deps = ["-rdocs/requirements.txt"]
 commands = [
   ["sphinx-apidoc", "-o", "docs/source/api", "decent_bench", "--separate", "--no-toc", "--templatedir=docs/source/_templates"],
   ["sphinx-build", "-W", "-E", "-b", "html", "docs/source", "docs/build/html"]
@@ -97,7 +98,7 @@ commands = [["mypy", "decent_bench"]]
 
 [tool.tox.env.pytest]
 description = "Run pytest (test executor)"
-deps = ["pytest"]
+deps = ["pytest", "jinja2"]
 commands = [["pytest"]]
 
 [tool.tox.env.ruff]

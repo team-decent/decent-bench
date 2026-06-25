@@ -3,17 +3,19 @@ from dataclasses import dataclass
 import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import P2PNetwork
-from decent_bench.utils._tags import tags
+from decent_bench.utils._tags import Tag, tags
 from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
 
 
-@tags("peer-to-peer", "dual method", "ADMM")
+@tags(Tag.ALGORITHM, Tag.PEER_TO_PEER, Tag.DUAL_METHOD, Tag.ADMM)
 @dataclass(eq=False)
 class ADMM(P2PAlgorithm):
     r"""
-    Distributed Alternating Direction Method of Multipliers characterized by the update step below.
+    Distributed Alternating Direction Method of Multipliers (ADMM) :footcite:p:`Alg_ADMM_1, Alg_ADMM_2`.
+
+    The algorithm is characterized by the updates:
 
     .. math::
         \mathbf{x}_{i, k+1} = \operatorname{prox}_{\frac{1}{\rho N_i} f_i}
@@ -43,6 +45,8 @@ class ADMM(P2PAlgorithm):
 
         The :math:`\mathbf{z}_{ij}` variables of an agent are all initialized to
         the same value specified in ``z0`` (if any).
+
+    .. footbibliography::
 
     """
 

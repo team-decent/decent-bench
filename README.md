@@ -5,9 +5,11 @@
 https://decent-bench.readthedocs.io/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/decent-bench?label=PyPI%20downloads)](
 https://pypi.org/project/decent-bench/)
+<!-- include in index.rst below this point -->
 
-decent-bench allows you to benchmark decentralized optimization algorithms under various communication constraints,
-providing realistic algorithm comparisons in a user-friendly and highly configurable setting.
+decent-bench allows you to benchmark decentralized algorithms (both peer-to-peer and federated) under realistic
+constraints (including limited communications and computational power). The code base provides a 
+highly configurable benchmarking pipeline and a library of state-of-the-art algorithms already implemented.
 
 
 ## Installation
@@ -20,3 +22,8 @@ pip install decent-bench
 ## Contributors
 decent-bench is developed by [Elias Ram](https://github.com/elramen/), [Simon Granström](https://github.com/Simpag/), [Adriana Rodriguez](https://github.com/adrianardv/) under the supervision of 
 [Dr. Nicola Bastianello](https://bastianello.me/).
+
+
+## Contact
+Contact [Dr. Nicola Bastianello](https://bastianello.me/) if you have any questions or would like to contribute
+to the project.

@@ -6,7 +6,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformSelection
-from decent_bench.utils._tags import tags
+from decent_bench.utils._tags import Tag, tags
 from decent_bench.utils.agent_utils import infer_client_data_size
 from decent_bench.utils.types import InitialStates, LocalSteps
 
@@ -21,7 +21,7 @@ _NORMALIZER_CHANNEL = "normalizer"
 _CUMULATIVE_GRADIENT_CHANNEL = "cumulative_gradient"
 
 
-@tags("federated")
+@tags(Tag.ALGORITHM, Tag.FEDERATED)
 @dataclass(eq=False)
 class FedNova(FedAlgorithm):
     r"""

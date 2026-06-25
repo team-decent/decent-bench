@@ -1,5 +1,5 @@
-PyTorch Optimizer Integration
-=============================
+Advanced Algorithm Implementation
+=================================
 
 Following is a short example of how to use a PyTorch optimizer for local training in the LT-ADMM algorithm. 
 This example defines a new algorithm class LT_ADMM_TORCH that inherits from LTADMM and overrides the local training step to use a PyTorch optimizer. 

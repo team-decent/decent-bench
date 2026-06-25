@@ -1,6 +1,5 @@
 import logging
 from collections.abc import Mapping
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import pandas as pd
@@ -19,7 +18,7 @@ if TYPE_CHECKING:
     from decent_bench.utils.checkpoint_manager import CheckpointManager
 
 
-def display_metrics(  # noqa: PLR0912
+def display_metrics(
     metrics_result: MetricResult | None = None,
     checkpoint_manager: "CheckpointManager | None" = None,
     *,
@@ -33,7 +32,6 @@ def display_metrics(  # noqa: PLR0912
     scale_x_axis: float = 1e-4,
     scale_compute: float = 1.0,
     compare_iterations_and_computational_cost: bool = False,
-    save_path: str | Path | None = None,
     plot_format: Literal["png", "pdf", "svg"] = "png",
     show_plots: bool = True,
     log_level: int = logging.INFO,
@@ -44,7 +42,8 @@ def display_metrics(  # noqa: PLR0912
     Args:
         metrics_result: result of metrics computation containing the metrics to display. If not provided,
             the result will be loaded from the checkpoint manager
-        checkpoint_manager: if provided, will be used to load metrics result.
+        checkpoint_manager: if provided, will be used to load metrics result and store the displayed tables and plots.
+            Tables will be saved as ``table.txt`` and ``table.tex`` while plots will be saved as ``plot_{#}.{format}``.
         table_metrics: metrics to tabulate. Entries can be :class:`~decent_bench.metrics.Metric` objects or strings
             (matching :attr:`~decent_bench.metrics.Metric.description`).
             If ``None`` all table metrics in metrics_result are displayed.
@@ -71,13 +70,6 @@ def display_metrics(  # noqa: PLR0912
             raw count into more manageable units for display.
         compare_iterations_and_computational_cost: whether to plot both metric vs computational cost and
             metric vs iterations. Only used if ``computational_cost`` is provided.
-        save_path: optional directory path to save the tables and plots to. Tables will be saved as ``table.txt`` and
-            ``table.tex`` while plots will be saved as ``plot_{#}.{format}`` in the specified directory.
-            If checkpoint_manager is provided then the default save path will be the results path in the checkpoint
-            manager, which is determined by
-            :meth:`~decent_bench.utils.checkpoint_manager.CheckpointManager.get_results_path`. If both are provided,
-            the provided ``save_path`` will be used. If neither a checkpoint manager or a save path is provided,
-            the tables and plots are not saved to disk.
         plot_format: format to save plots in, defaults to ``png``. Can be ``png``, ``pdf``, or ``svg``.
         show_plots: whether to show the plots after creating them, defaults to ``True``. Can be useful to set to
             ``False`` when running in a non-interactive environment or when only saving the plots without displaying.
@@ -163,10 +155,7 @@ def display_metrics(  # noqa: PLR0912
 
     new_metrics_result = MetricResult(network_views, raw_table_results, raw_plot_results, table_results, plot_results)
 
-    if save_path is not None:
-        save_path = Path(save_path)
-    elif save_path is None and checkpoint_manager is not None:
-        save_path = checkpoint_manager.get_results_path()
+    save_path = checkpoint_manager.get_results_path() if checkpoint_manager is not None else None
 
     # display tables and/or plots
     if selected_table_metrics:

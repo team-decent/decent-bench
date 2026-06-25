@@ -6,8 +6,10 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+from datetime import date
+
 project = "decent-bench"
-copyright = "2026, Team Decent"
+copyright = f"{date.today().year}, Team Decent"
 author = "team-decent"
 
 # -- General configuration ---------------------------------------------------
@@ -28,12 +30,16 @@ extensions = [
     "sphinx.ext.viewcode",  # View source code
     "sphinxcontrib.bibtex",  # For bibliography in API docs
     "class_tagger",  # Tag-based class list directives
+    "myst_parser",  # To parse markdown and convert to rst
+    "sphinxcontrib.mermaid",  # To display diagrams
 ]
 
 tagged_list_modules = [
     "decent_bench.algorithms.p2p",
     "decent_bench.algorithms.federated",
     "decent_bench.costs",
+    "decent_bench.metrics.metric_library",
+    "decent_bench.metrics.runtime_library",
 ]
 
 bibtex_bibfiles = ["references.bib"]
@@ -54,7 +60,7 @@ nitpick_ignore = [
     ("py:class", "T"),
 ]
 
-suppress_warnings = ["toc.duplicate"]
+suppress_warnings = ["toc.duplicate", "myst.header"]
 
 intersphinx_mapping = {
     "networkx": ("https://networkx.org/documentation/stable/", None),
