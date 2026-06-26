@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import decent_bench.utils.interoperability as iop
@@ -17,9 +17,6 @@ class FedAlgorithm(Algorithm[FedNetwork]):
 
     selection_scheme: ClientSelectionScheme | None = None
     num_local_steps: LocalSteps = 1
-
-    def cleanup_agents(self, network: FedNetwork) -> Iterable["Agent"]:
-        return [network.server(), *network.clients()]
 
     def _validate_num_local_steps(self) -> None:
         """
