@@ -84,12 +84,7 @@ deps = [
 
 [tool.tox.env.sphinx]
 description = "Generate rst and html files using sphinx"
-deps = [
-  ".[dev]",
-  ".[dev-cpu]",
-  ".[sphinx-tools]",
-  "git+https://github.com/microsoft/python-type-stubs.git@main",
-]
+deps = [".[sphinx-tools]"]
 commands = [
   ["sphinx-apidoc", "-o", "docs/source/api", "decent_bench", "--separate", "--no-toc", "--templatedir=docs/source/_templates"],
   ["sphinx-build", "-W", "-E", "-b", "html", "docs/source", "docs/build/html"]
