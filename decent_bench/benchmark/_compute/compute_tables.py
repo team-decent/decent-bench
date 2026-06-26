@@ -15,12 +15,36 @@ if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
 
 
+# these are the aggregation function that pandas should use; if they are defined as np.mean etc only, they trigger
+# warnings. the current behavior is for pandas to use np.mean as an alias of the pandas-native mean, and not to apply
+# np.mean to the sequence. this behavior is changing in pandas>=3, so let's revisit this later to see if the code
+# here can be refactored
+def mean_(x: Sequence[float]) -> float:
+    return float(np.mean(x))
+
+
+def std_(x: Sequence[float]) -> float:
+    return float(np.std(x, ddof=0))
+
+
+def max_(x: Sequence[float]) -> float:
+    return float(np.max(x))
+
+
+def min_(x: Sequence[float]) -> float:
+    return float(np.min(x))
+
+
+def median_(x: Sequence[float]) -> float:
+    return float(np.median(x))
+
+
 STATISTICS: dict[str, Callable[[Sequence[float]], float]] = {
-    "mean": np.mean,
-    "std": np.std,
-    "max": np.max,
-    "min": np.min,
-    "median": np.median,
+    "mean": mean_,
+    "std": std_,
+    "max": max_,
+    "min": min_,
+    "median": median_,
 }
 STATISTICS_ALIASES = {
     "average": "mean",
@@ -123,7 +147,7 @@ def aggregate_table_metrics(
         else:
             # compute statistics
             agg_spec = {name: ("value", func) for name, func in resolved_statistics.items()}
-            new_frame = frame.groupby(["algorithm", "trial"]).agg(**agg_spec).reset_index()
+            new_frame = frame.groupby(["algorithm", "trial"], observed=False).agg(**agg_spec).reset_index()
             # turn the statistics into a new column
             new_frame = new_frame.melt(
                 id_vars=["algorithm", "trial"],
@@ -134,8 +158,8 @@ def aggregate_table_metrics(
 
         # 3) compute mean and std across trials, gives DataFrame with (algorithm, statistic, mean, std)
         new_frame = (
-            new_frame.groupby(["algorithm", "statistic"])["value"]
-            .agg(mean="mean", std=lambda x: x.std(ddof=0))
+            new_frame.groupby(["algorithm", "statistic"], observed=False)["value"]
+            .agg(mean="mean", std=std_)
             .reset_index()
         )
 
