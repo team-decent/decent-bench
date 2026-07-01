@@ -879,21 +879,21 @@ def test_add_legend_and_save_creates_missing_parent_directory(monkeypatch) -> No
 
 
 def test_xerror_unavailable_without_x_optimal() -> None:  # noqa: D103
-    x_error = XError([np.average])
+    x_error = XError()
     available, reason = x_error.is_available(SimpleNamespace(x_optimal=None))
     assert not available
     assert reason == "requires problem.x_optimal"
 
 
 def test_xerror_available_with_x_optimal() -> None:  # noqa: D103
-    x_error = XError([np.average])
+    x_error = XError()
     available, reason = x_error.is_available(SimpleNamespace(x_optimal=np.array([0.0])))
     assert available
     assert reason is None
 
 
 def test_regret_unavailable_without_x_optimal() -> None:  # noqa: D103
-    regret = Regret([np.average])
+    regret = Regret()
     available, reason = regret.is_available(SimpleNamespace(x_optimal=None))
     assert not available
     assert reason == "requires problem.x_optimal"
@@ -901,7 +901,7 @@ def test_regret_unavailable_without_x_optimal() -> None:  # noqa: D103
 
 def test_metrics_unavailable_without_test_data() -> None:  # noqa: D103
     problem = SimpleNamespace(test_data=None)
-    metrics = [Accuracy([np.average]), MSE([np.average]), Precision([np.average]), Recall([np.average])]
+    metrics = [Accuracy(), MSE(), Precision(), Recall()]
 
     for metric in metrics:
         available, reason = metric.is_available(problem)
@@ -912,7 +912,7 @@ def test_metrics_unavailable_without_test_data() -> None:  # noqa: D103
 def test_metrics_unavailable_without_empirical_risk_cost() -> None:  # noqa: D103
     network = SimpleNamespace(agents=lambda: [SimpleNamespace(cost=object())])
     problem = SimpleNamespace(test_data=[(np.array([1.0]), 0)], network=network)
-    metrics = [Accuracy([np.average]), MSE([np.average]), Precision([np.average]), Recall([np.average])]
+    metrics = [Accuracy(), MSE(), Precision(), Recall()]
 
     for metric in metrics:
         available, reason = metric.is_available(problem)
@@ -925,7 +925,7 @@ def test_classification_metrics_unavailable_with_float_targets() -> None:  # noq
     network = SimpleNamespace(agents=lambda: [SimpleNamespace(cost=lr_cost)])
     problem = SimpleNamespace(test_data=[(np.array([0.0]), 0.1)], network=network)
 
-    for metric in [Accuracy([np.average]), Precision([np.average]), Recall([np.average])]:
+    for metric in [Accuracy(), Precision(), Recall()]:
         available, reason = metric.is_available(problem)
         assert not available
         assert "integer targets" in reason
@@ -941,7 +941,7 @@ def test_server_mse_availability_and_values() -> None:  # noqa: D103
         test_data=test_data,
         network=SimpleNamespace(agents=lambda: [client]),
     )
-    available, reason = ml.ServerMSE([np.average]).is_available(unavailable_problem)
+    available, reason = ml.ServerMSE().is_available(unavailable_problem)
     assert not available
     assert "FedNetwork" in reason
 
@@ -949,7 +949,7 @@ def test_server_mse_availability_and_values() -> None:  # noqa: D103
     client.initialize(x=np.array([0.0]))
 
     fed_problem_without_test_data = BenchmarkProblem(network=FedNetwork([client]))
-    available, reason = ml.ServerMSE([np.average]).is_available(fed_problem_without_test_data)
+    available, reason = ml.ServerMSE().is_available(fed_problem_without_test_data)
     assert not available
     assert reason == "requires problem.test_data"
 
@@ -957,7 +957,7 @@ def test_server_mse_availability_and_values() -> None:  # noqa: D103
     client.initialize(x=np.array([0.0]))
 
     problem = BenchmarkProblem(network=FedNetwork([client]), test_data=test_data)
-    metric = ml.ServerMSE([np.average])
+    metric = ml.ServerMSE()
     available, reason = metric.is_available(problem)
     assert available
     assert reason is None
@@ -1005,7 +1005,7 @@ def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
         network=FedNetwork([client_for_float_targets]),
         test_data=[(np.array([1.0]), 1.0), (np.array([-1.0]), 0.0)],
     )
-    metric = ml.ServerAccuracy([np.average])
+    metric = ml.ServerAccuracy()
     available, reason = metric.is_available(float_target_problem)
     assert not available
     assert "integer targets" in reason
