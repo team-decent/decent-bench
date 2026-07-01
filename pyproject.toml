@@ -30,9 +30,9 @@ Issues = "https://github.com/team-decent/decent-bench/issues"
 [project.optional-dependencies]
 dev = [
   "hatch>=1.14,<2",
-  "mypy>=1.11,<2",
-  "pytest>=8,<9",
-  "ruff>=0.7,<1",
+  "mypy==2.1.0",
+  "pytest>=9,<10",
+  "ruff==0.15.20",
   "scipy-stubs>=1.18,<2",
   "types-networkx>=3.4,<4",
   "torch>=2.5,<3",
@@ -50,7 +50,7 @@ dev-gpu = [
   "jax[cuda12]>=0.4,<1",
 ]
 sphinx-tools = [
-  "sphinx>=9.1.0,<10",
+  "sphinx==9.1.0",
   "pydata-sphinx-theme>=0.16,<1",
   "sphinxcontrib-bibtex>=2.6,<3",
 ]
