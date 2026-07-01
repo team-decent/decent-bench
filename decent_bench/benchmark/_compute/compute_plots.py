@@ -60,11 +60,13 @@ def aggregate_plot_metrics(
 
     for metric, frame in plot_results.items():
         # 1) take mean of values across agents
-        new_frame = frame.groupby(["algorithm", "trial", "iteration"])["value"].mean().reset_index()
+        new_frame = frame.groupby(["algorithm", "trial", "iteration"], observed=False)["value"].mean().reset_index()
 
         # 2) compute mean, min, max across trials
         new_frame = (
-            new_frame.groupby(["algorithm", "iteration"])["value"].agg(mean="mean", min="min", max="max").reset_index()
+            new_frame.groupby(["algorithm", "iteration"], observed=False)["value"]
+            .agg(mean="mean", min="min", max="max")
+            .reset_index()
         )
 
         # 3) add metric column

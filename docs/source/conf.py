@@ -151,6 +151,12 @@ def _fix_missing_ref(app, env, node, contnode):
                 "networkx.Graph",
                 refuri="https://networkx.org/documentation/stable/reference/classes/graph.html#networkx.Graph",
             )
+        if target in {"DataFrame", "pandas.DataFrame", "pandas.core.frame.DataFrame"}:
+            return nodes.reference(
+                "",
+                "DataFrame",
+                refuri="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html",
+            )
     return None
 
 
