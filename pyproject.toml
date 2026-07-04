@@ -28,18 +28,25 @@ Source = "https://github.com/team-decent/decent-bench"
 Issues = "https://github.com/team-decent/decent-bench/issues"
 
 [project.optional-dependencies]
-dev = [
-  "hatch>=1.14,<2",
-  "mypy==2.1.0",
-  "pytest>=9,<10",
-  "ruff==0.15.20",
-  "scipy-stubs>=1.18,<2",
-  "types-networkx>=3.4,<4",
+torch = [
   "torch>=2.5,<3",
   "torchvision>=0.20,<1",
+]
+kaggle = ["kagglehub>=0.3,<1"]
+
+[dependency-groups]
+lint = ["ruff==0.15.20"]
+typecheck = [
+  "mypy==2.1.0",
+  "scipy-stubs>=1.18,<2",
+  "types-networkx>=3.4,<4",
   "types-tensorflow>=2.18,<3",
   "pandas-stubs>=2.3.3,<3",
-  "kagglehub>=0.3,<1",
+  "microsoft-python-type-stubs @ git+https://github.com/microsoft/python-type-stubs.git@main",
+]
+test = [
+  "pytest>=9,<10",
+  "jinja2>=3.1,<4",
 ]
 dev-cpu = [
   "tensorflow>=2.18,<3",
@@ -49,13 +56,12 @@ dev-gpu = [
   "tensorflow[and-cuda]>=2.18,<3",
   "jax[cuda12]>=0.4,<1",
 ]
-sphinx-tools = [
-  "sphinx==9.1.0",
-  "pydata-sphinx-theme>=0.16,<1",
-  "sphinxcontrib-bibtex>=2.6,<3",
-  "myst-parser>=5.10,<6",
+dev = [
+  "hatch>=1.14,<2",
+  {include-group = "lint"},
+  {include-group = "typecheck"},
+  {include-group = "test"},
 ]
-
 
 [build-system]
 requires = ["hatchling>=1.26,<2"]
@@ -66,21 +72,17 @@ envlist = ["dev", "mypy", "pytest", "ruff", "sphinx"]
 
 [tool.tox.env.dev]
 description = "Generate dev venv with all dependencies, active with `source .tox/dev/bin/activate`"
-deps = [
-  ".[dev]",
-  ".[dev-cpu]",
-  ".[sphinx-tools]",
-  "git+https://github.com/microsoft/python-type-stubs.git@main"
+deps = ["-rdocs/requirements.txt"]
+commands_pre = [
+  ["python", "-m", "pip", "install", ".", "--group", "dev", "--group", "dev-cpu"],
 ]
 
 [tool.tox.env.dev-gpu]
 description = "Generate dev venv with all dependencies including GPU support, active with `source .tox/dev-gpu/bin/activate`"
 set_env = { PIP_EXTRA_INDEX_URL = "https://download.pytorch.org/whl/cu128" } # torch 2.11 uses CUDA 13.0 which seems to have broken linalg.norm, use cuda 12.8 for now
-deps = [
-  ".[dev]",
-  ".[dev-gpu]",
-  ".[sphinx-tools]",
-  "git+https://github.com/microsoft/python-type-stubs.git@main"
+deps = ["-rdocs/requirements.txt"]
+commands_pre = [
+  ["python", "-m", "pip", "install", ".", "--group", "dev", "--group", "dev-gpu"],
 ]
 
 [tool.tox.env.sphinx]
@@ -93,17 +95,27 @@ commands = [
 
 [tool.tox.env.mypy]
 description = "Run mypy (static type checker)"
-deps = [".[dev]", ".[dev-cpu]", "git+https://github.com/microsoft/python-type-stubs.git@main"]
+deps = []
+commands_pre = [
+  ["python", "-m", "pip", "install", ".", "--group", "typecheck", "--group", "dev-cpu"],
+  ["python", "-m", "pip", "install", ".[torch,kaggle]"],
+]
 commands = [["mypy", "decent_bench"]]
 
 [tool.tox.env.pytest]
 description = "Run pytest (test executor)"
-deps = ["pytest", "jinja2"]
+deps = []
+commands_pre = [
+  ["python", "-m", "pip", "install", ".", "--group", "test"],
+]
 commands = [["pytest"]]
 
 [tool.tox.env.ruff]
 description = "Run ruff (format and style checker)"
-deps = ["ruff"]
+deps = []
+commands_pre = [
+  ["python", "-m", "pip", "install", ".", "--group", "lint"],
+]
 commands = [
   ["ruff", "check", "decent_bench"],
   ["ruff", "format", "decent_bench", "--check"]

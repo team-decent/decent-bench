@@ -13,7 +13,7 @@ benchmark problem. In turn these are subclasses of :class:`~decent_bench.algorit
 
 .. literalinclude:: ../../../../decent_bench/algorithms/_algorithm.py
     :language: python
-    :lines: 11-17, 36-64, 100-144
+    :lines: 8-13, 33-60, 83-125
 
 Algorithms are thus characterized by the following:
 
