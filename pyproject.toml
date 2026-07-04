@@ -12,14 +12,14 @@ classifiers = [
 ]
 license = "AGPL-3.0-only"
 dependencies = [
-  "matplotlib",
-  "networkx",
-  "numpy",
-  "pandas",
-  "rich",
-  "scipy",
-  "scikit-learn",
-  "zstandard",
+  "matplotlib>=3.9,<4",
+  "networkx>=3.4,<4",
+  "numpy>=2.0,<3",
+  "pandas>=2.3.3,<3",
+  "rich>=13,<14",
+  "scipy>=1.14,<2",
+  "scikit-learn>=1.5,<2",
+  "zstandard>=0.23,<1",
 ]
 
 [project.urls]
@@ -29,35 +29,35 @@ Issues = "https://github.com/team-decent/decent-bench/issues"
 
 [project.optional-dependencies]
 dev = [
-  "hatch",
-  "mypy",
-  "pytest",
-  "ruff",
-  "scipy-stubs",
-  "types-networkx",
-  "torch",
-  "torchvision",
-  "types-tensorflow",
-  "pandas-stubs",
-  "kagglehub",
+  "hatch>=1.14,<2",
+  "mypy==2.1.0",
+  "pytest>=9,<10",
+  "ruff==0.15.20",
+  "scipy-stubs>=1.18,<2",
+  "types-networkx>=3.4,<4",
+  "torch>=2.5,<3",
+  "torchvision>=0.20,<1",
+  "types-tensorflow>=2.18,<3",
+  "pandas-stubs>=2.3.3,<3",
+  "kagglehub>=0.3,<1",
 ]
 dev-cpu = [
-  "tensorflow",
-  "jax",
+  "tensorflow>=2.18,<3",
+  "jax>=0.4,<1",
 ]
 dev-gpu = [
-  "tensorflow[and-cuda]",
-  "jax[cuda12]",
+  "tensorflow[and-cuda]>=2.18,<3",
+  "jax[cuda12]>=0.4,<1",
 ]
 sphinx-tools = [
-  "sphinx",
-  "pydata-sphinx-theme",
-  "sphinxcontrib-bibtex",
+  "sphinx==9.1.0",
+  "pydata-sphinx-theme>=0.16,<1",
+  "sphinxcontrib-bibtex>=2.6,<3",
 ]
 
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.26,<2"]
 build-backend = "hatchling.build"
 
 [tool.tox]
