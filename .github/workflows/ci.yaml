@@ -61,6 +61,8 @@ jobs:
     
   pytest-windows-latest:
     runs-on: "windows-latest"
+    env:
+      USERNAME: github-actions
 
     steps:
       - name: Check out code
