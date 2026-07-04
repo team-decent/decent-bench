@@ -88,7 +88,6 @@ commands_pre = [
 
 [tool.tox.env.sphinx]
 description = "Generate rst and html files using sphinx"
-skip_install = true
 deps = ["-rdocs/requirements.txt"]
 commands = [
   ["sphinx-apidoc", "-o", "docs/source/api", "decent_bench", "--separate", "--no-toc", "--templatedir=docs/source/_templates"],
