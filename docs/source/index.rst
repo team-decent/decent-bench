@@ -15,4 +15,5 @@ Index
 
    user/index
    API Reference <api/decent_bench>
+   benchmarks
    developer/index
