@@ -1,5 +1,6 @@
 import copy
 import pickle  # noqa: S403
+import sys
 from typing import Any
 
 import pytest
@@ -182,7 +183,13 @@ def test_chunked_and_unchunked_costs_match_with_identical_model_snapshot(device:
         {"use_dataloader": True},
         {"use_dataloader": True, "dataloader_kwargs": {"num_workers": 2, "pin_memory": True}},
         {"load_dataset": False},
-        {"compile_model": True},
+        pytest.param(
+            {"compile_model": True},
+            marks=pytest.mark.skipif(
+                sys.platform == "win32",
+                reason="torch.compile on Windows CI requires MSVC cl.exe",
+            ),
+        ),
     ],
 )
 @pytest.mark.filterwarnings(
