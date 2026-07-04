@@ -287,7 +287,7 @@ def sum(  # noqa: A001
     value = array.value if isinstance(array, Array) else array
 
     if isinstance(value, np.ndarray | np.generic):
-        return _return_array(np.sum(value, axis=dim, keepdims=keepdims))
+        return _return_array(np.sum(value, axis=dim, keepdims=keepdims))  # type: ignore[call-overload]
     if torch and isinstance(value, torch.Tensor):
         return _return_array(torch.sum(value, dim=dim, keepdim=keepdims))
     if tf and isinstance(value, tf.Tensor):
@@ -322,7 +322,7 @@ def mean(
     value = array.value if isinstance(array, Array) else array
 
     if isinstance(value, np.ndarray | np.generic):
-        return _return_array(np.mean(value, axis=dim, keepdims=keepdims))
+        return _return_array(np.mean(value, axis=dim, keepdims=keepdims))  # type: ignore[call-overload]
     if torch and isinstance(value, torch.Tensor):
         return _return_array(torch.mean(value, dim=dim, keepdim=keepdims))
     if tf and isinstance(value, tf.Tensor):
@@ -357,7 +357,7 @@ def min(  # noqa: A001
     value = array.value if isinstance(array, Array) else array
 
     if isinstance(value, np.ndarray | np.generic):
-        return _return_array(np.min(value, axis=dim, keepdims=keepdims))
+        return _return_array(np.min(value, axis=dim, keepdims=keepdims))  # type: ignore[call-overload]
     if torch and isinstance(value, torch.Tensor):
         return _return_array(torch.amin(value, dim=dim, keepdim=keepdims))  # pyright: ignore[reportArgumentType]
     if tf and isinstance(value, tf.Tensor):
@@ -392,7 +392,7 @@ def max(  # noqa: A001
     value = array.value if isinstance(array, Array) else array
 
     if isinstance(value, np.ndarray | np.generic):
-        return _return_array(np.max(value, axis=dim, keepdims=keepdims))
+        return _return_array(np.max(value, axis=dim, keepdims=keepdims))  # type: ignore[call-overload]
     if torch and isinstance(value, torch.Tensor):
         return _return_array(torch.amax(value, dim=dim, keepdim=keepdims))  # pyright: ignore[reportArgumentType]
     if tf and isinstance(value, tf.Tensor):
@@ -422,7 +422,7 @@ def argmax(array: Array, dim: int | None = None, keepdims: bool = False) -> Arra
     value = array.value if isinstance(array, Array) else array
 
     if isinstance(value, np.ndarray | np.generic):
-        return _return_array(np.argmax(value, axis=dim, keepdims=keepdims))
+        return _return_array(np.argmax(value, axis=dim, keepdims=keepdims))  # type: ignore[call-overload]
     if torch and isinstance(value, torch.Tensor):
         return _return_array(torch.argmax(value, dim=dim, keepdim=keepdims))
     if tf and isinstance(value, tf.Tensor):
@@ -464,7 +464,7 @@ def argmin(array: Array, dim: int | None = None, keepdims: bool = False) -> Arra
     value = array.value if isinstance(array, Array) else array
 
     if isinstance(value, np.ndarray | np.generic):
-        return _return_array(np.argmin(value, axis=dim, keepdims=keepdims))
+        return _return_array(np.argmin(value, axis=dim, keepdims=keepdims))  # type: ignore[call-overload]
     if torch and isinstance(value, torch.Tensor):
         return _return_array(torch.argmin(value, dim=dim, keepdim=keepdims))
     if tf and isinstance(value, tf.Tensor):
@@ -894,7 +894,12 @@ def norm(
     value = array.value if isinstance(array, Array) else array
 
     if isinstance(value, np.ndarray | np.generic):
-        return _return_array(cast("SupportedArrayTypes", np.linalg.norm(value, ord=p, axis=dim, keepdims=keepdims)))
+        return _return_array(
+            cast(
+                "SupportedArrayTypes",
+                np.linalg.norm(value, ord=p, axis=dim, keepdims=keepdims),  # type: ignore[arg-type]
+            )
+        )
     if torch and isinstance(value, torch.Tensor):
         return _return_array(torch.linalg.norm(value, ord=p, dim=dim, keepdim=keepdims))
     if tf and isinstance(value, tf.Tensor):

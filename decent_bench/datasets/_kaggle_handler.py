@@ -26,12 +26,11 @@ class KaggleDatasetHandler(DatasetHandler):
         path: str,
         feature_columns: list[str],
         target_columns: list[str],
-        n_partitions: int = 1,
         *,
         framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
         device: SupportedDevices = SupportedDevices.CPU,
         dtype: DTypeLike = np.float64,
-        samples_per_partition: int | None = None,
+        partition_label_column: str | None = None,
     ) -> None:
         """
         Dataset wrapper for Kaggle datasets.
@@ -41,16 +40,16 @@ class KaggleDatasetHandler(DatasetHandler):
             path: Path to the dataset file within the Kaggle dataset
             feature_columns: List of feature column names
             target_columns: List of target column names
-            n_partitions: Number of partitions to split the dataset into
             framework: Framework to use for data representation
             device: Device to use for data representation
             dtype: Data type of the returned arrays
-            samples_per_partition: Number of samples per partition
+            partition_label_column: Column exposed to label-based splitting utilities. Defaults to the only
+                target column when exactly one target column is configured.
 
         Raises:
             ImportError: If kagglehub or pandas is not installed
             RuntimeError: If the dataset fails to load from Kaggle
-            ValueError: If there are not enough samples to create the requested partitions
+            ValueError: If the configured partition label column is not found.
 
         Note:
             If you need to authenticate with Kaggle, ensure that your Kaggle API credentials
@@ -63,15 +62,15 @@ class KaggleDatasetHandler(DatasetHandler):
                 "kagglehub and pandas are required to use KaggleDataset. "
                 "Install them with: pip install kagglehub pandas"
             )
+
         self.kaggle_handle = kaggle_handle
         self.path = path
         self.feature_columns = feature_columns
         self.target_columns = target_columns
-        self._n_partitions = n_partitions
+        self.partition_label_column = partition_label_column
         self.framework = framework
         self.device = device
         self.dtype = dtype
-        self._partitions: Sequence[Dataset] | None = None
 
         self._df: pd.DataFrame = kagglehub.dataset_load(  # pyright: ignore[reportPossiblyUnboundVariable]
             kagglehub.KaggleDatasetAdapter.PANDAS,  # pyright: ignore[reportPossiblyUnboundVariable]
@@ -81,23 +80,12 @@ class KaggleDatasetHandler(DatasetHandler):
         if self._df is None:
             raise RuntimeError(f"Failed to load dataset from Kaggle handle: {self.kaggle_handle}, path: {self.path}")
 
-        self.samples_per_partition = (
-            len(self._df) // self.n_partitions if samples_per_partition is None else samples_per_partition
-        )
-        if self.samples_per_partition * self.n_partitions > len(self._df):
-            raise ValueError(
-                f"Not enough samples in dataset ({len(self._df)}) to create "
-                f"{self.n_partitions} partitions with {self.samples_per_partition} "
-                f"samples each ({self.samples_per_partition * self.n_partitions} total)."
-            )
+        if self.partition_label_column is not None and self.partition_label_column not in self._df.columns:
+            raise ValueError(f"partition_label_column ({self.partition_label_column}) is not in the dataframe")
 
     @property
     def n_samples(self) -> int:
         return len(self._df)
-
-    @property
-    def n_partitions(self) -> int:
-        return self._n_partitions
 
     @property
     def n_features(self) -> int:
@@ -110,37 +98,22 @@ class KaggleDatasetHandler(DatasetHandler):
     def get_datapoints(self) -> Dataset:
         return self._create_partition(self._df)
 
-    def get_partitions(self) -> Sequence[Dataset]:
-        """
-        Return the dataset divided into partitions for distribution among agents.
+    def get_labels(self) -> list[object]:
+        """Return labels from the configured partition label column."""
+        label_column = self.partition_label_column
+        if label_column is None:
+            if len(self.target_columns) != 1:
+                raise ValueError("partition_label_column is required when using multiple target columns")
+            label_column = self.target_columns[0]
+        return list(self._df[label_column])
 
-        This method provides the core partitioning functionality for decentralized
-        optimization. Each partition represents the local dataset of an agent in
-        the network.
-
-        Each partition is sampled uniformly at random from the dataset without replacement.
-
-        Returns:
-            Sequence[Dataset]: Sequence of Dataset objects, where each partition is a list of
-            (features, targets) tuples.
-
-        """
-        if self._partitions is None:
-            self._partitions = self._random_split(self._df)
-        return self._partitions
-
-    def _random_split(self, df: pd.DataFrame) -> Sequence[Dataset]:
-        # Shuffle the dataframe
-        df = df.sample(frac=1, random_state=iop.rng_numpy(), replace=False).reset_index(drop=True)
-
-        partitions: list[Dataset] = []
-        for i in range(self.n_partitions):
-            start_idx = i * self.samples_per_partition
-            end_idx = start_idx + self.samples_per_partition
-            partition_df = df.iloc[start_idx:end_idx]
-            partitions.append(self._create_partition(partition_df))
-
-        return partitions
+    def split(
+        self,
+        partitions: Sequence[Sequence[int]],
+    ) -> Sequence[Dataset]:
+        """Materialize dataframe rows from index partitions."""
+        idx_partitions = self._resolve_partitions(partitions)
+        return [self._create_partition(self._df.iloc[indices]) for indices in idx_partitions]
 
     def _create_partition(self, df_partition: pd.DataFrame) -> Dataset:
         partition: Dataset = []

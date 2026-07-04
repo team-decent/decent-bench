@@ -353,14 +353,8 @@ def test_fednova_uploads_normalizer_then_cumulative_gradient() -> None:
 
     np.testing.assert_allclose(network.server().message(clients[0], _NORMALIZER_CHANNEL), np.array([2.0]))
     np.testing.assert_allclose(network.server().message(clients[1], _NORMALIZER_CHANNEL), np.array([1.0]))
-
-    algorithm._collect_received_normalizers(network, participating_clients)
-    algorithm._communicate_cumulative_gradients(network, participating_clients)
-
     np.testing.assert_allclose(network.server().message(clients[0], _CUMULATIVE_GRADIENT_CHANNEL), np.array([4.0]))
     np.testing.assert_allclose(network.server().message(clients[1], _CUMULATIVE_GRADIENT_CHANNEL), np.array([4.0]))
-
-    assert network.server().aux_vars["received_a_i"] == {clients[0]: 2.0, clients[1]: 1.0}
 
 
 def test_fednova_stores_client_sample_counts_on_server_initialize() -> None:
@@ -384,8 +378,6 @@ def test_fednova_renormalizes_client_weights_over_received_subset() -> None:
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
     algorithm._run_local_updates(network, participating_clients)
-    algorithm._collect_received_normalizers(network, participating_clients)
-    algorithm._communicate_cumulative_gradients(network, participating_clients)
     network.server()._received_messages.clear(  # noqa: SLF001
         sender=clients[1],
         channel=_CUMULATIVE_GRADIENT_CHANNEL,
@@ -407,34 +399,15 @@ def test_fednova_aggregate_rejects_non_positive_normalizer() -> None:
     algorithm.server_broadcast(network, selected_clients)
     participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
     algorithm._run_local_updates(network, participating_clients)
-    algorithm._collect_received_normalizers(network, participating_clients)
-    algorithm._communicate_cumulative_gradients(network, participating_clients)
-    network.server().aux_vars["received_a_i"][clients[0]] = 0.0
+    network.send(
+        sender=clients[0],
+        receiver=network.server(),
+        msg=np.array([0.0]),
+        channel=_NORMALIZER_CHANNEL,
+    )
 
     with pytest.raises(ValueError, match="FedNova coefficients `a_i` must be positive"):
         algorithm.aggregate(network, participating_clients)
-
-
-def test_fednova_collect_received_normalizers_stores_empty_dict_when_all_are_dropped() -> None:
-    clients = [Agent(TrackingCost(1.0, n_samples=1)), Agent(TrackingCost(10.0, n_samples=3))]
-    server = Agent(TrackingCost(0.0))
-    network = FedNetwork(
-        clients=clients,
-        server=server,
-        message_drop={server: NoDrops(), clients[0]: DropOnCalls({1}), clients[1]: DropOnCalls({1})},
-    )
-    algorithm = FedNova(iterations=1, step_size=1.0, num_local_steps=1)
-
-    algorithm.initialize(network)
-    network._step(0)  # noqa: SLF001
-    selected_clients = network.clients()
-    algorithm.server_broadcast(network, selected_clients)
-    participating_clients = algorithm._clients_with_server_broadcast(network, selected_clients)
-    algorithm._run_local_updates(network, participating_clients)
-
-    algorithm._collect_received_normalizers(network, participating_clients)
-
-    assert network.server().aux_vars["received_a_i"] == {}
 
 
 def test_fednova_skips_round_when_all_normalizer_uploads_are_dropped() -> None:
@@ -452,9 +425,8 @@ def test_fednova_skips_round_when_all_normalizer_uploads_are_dropped() -> None:
     algorithm.step(network, 0)
 
     np.testing.assert_allclose(network.server().x, np.array([0.0]))
-    assert network.server().aux_vars["received_a_i"] == {}
-    assert "_fednova_cumulative_gradient" not in clients[0].aux_vars
-    assert "_fednova_cumulative_gradient" not in clients[1].aux_vars
+    assert network.server().messages(_NORMALIZER_CHANNEL) == {}
+    assert set(network.server().messages(_CUMULATIVE_GRADIENT_CHANNEL)) == set(clients)
 
 
 @pytest.mark.parametrize("dropped_calls", [{1}, {2}])

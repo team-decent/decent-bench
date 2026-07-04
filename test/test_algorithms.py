@@ -39,52 +39,54 @@ from decent_bench.algorithms.p2p import (
     SimpleGT,
     WangElia,
 )
-from decent_bench.benchmark import create_classification_problem
-from decent_bench.costs import LogisticRegressionCost, PyTorchCost
+from decent_bench.benchmark import create_regression_problem
+from decent_bench.costs import LinearRegressionCost, PyTorchCost
 from decent_bench.networks import FedNetwork, P2PNetwork
 from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
+
+num_iterations = 25
 
 all_p2p_algs = pytest.mark.parametrize(
     ("algorithm_cls", "kwargs"),
     [
-        (DGD, {"iterations": 10, "step_size": 0.1}),
-        (ATC, {"iterations": 10, "step_size": 0.1}),
-        (SimpleGT, {"iterations": 10, "step_size": 0.1}),
-        (ED, {"iterations": 10, "step_size": 0.1}),
-        (AugDGM, {"iterations": 10, "step_size": 0.1}),
-        (WangElia, {"iterations": 10, "step_size": 0.1}),
-        (EXTRA, {"iterations": 10, "step_size": 0.1}),
-        (ATC_Tracking, {"iterations": 10, "step_size": 0.1}),
-        (NIDS, {"iterations": 10, "step_size": 0.1}),
-        (ADMM, {"iterations": 10, "penalty": 1.0, "relaxation": 0.5}),
-        (ATG, {"iterations": 10, "penalty": 1.0, "relaxation": 0.5}),
-        (DLM, {"iterations": 10, "step_size": 0.1, "penalty": 1.0}),
-        (DiNNO, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5}),
-        (GT_VR, {"iterations": 10, "step_size": 0.1, "snapshot_prob": 0.5}),
-        (GT_SAGA, {"iterations": 10, "step_size": 0.1}),
-        (GT_SARAH, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5}),
-        (KGT, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5}),
-        (LED, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5}),
-        (LT_ADMM, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5}),
-        (LT_ADMM_VR, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5, "v2": False}),
-        (LT_ADMM_VR, {"iterations": 10, "step_size": 0.1, "num_local_steps": 5, "v2": True}),
-        (ProxSkip, {"iterations": 10, "step_size": 0.1, "comm_probability": 0.5}),
+        (DGD, {"iterations": num_iterations, "step_size": 0.1}),
+        (ATC, {"iterations": num_iterations, "step_size": 0.1}),
+        (SimpleGT, {"iterations": num_iterations, "step_size": 0.1}),
+        (ED, {"iterations": num_iterations, "step_size": 0.1}),
+        (AugDGM, {"iterations": num_iterations, "step_size": 0.1}),
+        (WangElia, {"iterations": num_iterations, "step_size": 0.1}),
+        (EXTRA, {"iterations": num_iterations, "step_size": 0.1}),
+        (ATC_Tracking, {"iterations": num_iterations, "step_size": 0.1}),
+        (NIDS, {"iterations": num_iterations, "step_size": 0.1}),
+        (ADMM, {"iterations": num_iterations, "penalty": 1.0, "relaxation": 0.5}),
+        (ATG, {"iterations": num_iterations, "penalty": 1.0, "relaxation": 0.5}),
+        (DLM, {"iterations": num_iterations, "step_size": 0.1, "penalty": 1.0}),
+        (DiNNO, {"iterations": num_iterations, "step_size": 0.1, "num_local_steps": 5}),
+        (GT_VR, {"iterations": num_iterations, "step_size": 0.1, "snapshot_prob": 0.5}),
+        (GT_SAGA, {"iterations": num_iterations, "step_size": 0.1}),
+        (GT_SARAH, {"iterations": num_iterations, "step_size": 0.1, "num_local_steps": 5}),
+        (KGT, {"iterations": num_iterations, "step_size": 0.1, "num_local_steps": 5}),
+        (LED, {"iterations": num_iterations, "step_size": 0.1, "num_local_steps": 5}),
+        (LT_ADMM, {"iterations": num_iterations, "step_size": 0.1, "num_local_steps": 5}),
+        (LT_ADMM_VR, {"iterations": num_iterations, "step_size": 0.1, "num_local_steps": 5, "v2": False}),
+        (LT_ADMM_VR, {"iterations": num_iterations, "step_size": 0.1, "num_local_steps": 5, "v2": True}),
+        (ProxSkip, {"iterations": num_iterations, "step_size": 0.1, "comm_probability": 0.5}),
     ],
 )
 
 all_fed_algs = pytest.mark.parametrize(
     ("algorithm_cls", "kwargs"),
     [
-        (FedAvg, {"iterations": 10, "step_size": 0.1}),
-        (FedDyn, {"iterations": 10, "step_size": 0.1}),
-        (FedLT, {"iterations": 10, "step_size": 0.1}),
-        (FedProx, {"iterations": 10, "step_size": 0.1}),
-        (FedAdagrad, {"iterations": 10, "step_size": 0.1}),
-        (FedNova, {"iterations": 10, "step_size": 0.1}),
-        (FedPD, {"iterations": 10, "step_size": 0.1}),
-        (FedYogi, {"iterations": 10, "step_size": 0.1}),
-        (FedAdam, {"iterations": 10, "step_size": 0.1}),
-        (Scaffold, {"iterations": 10, "step_size": 0.1}),
+        (FedAvg, {"iterations": num_iterations, "step_size": 0.1}),
+        (FedDyn, {"iterations": num_iterations, "step_size": 0.1}),
+        (FedLT, {"iterations": num_iterations, "step_size": 0.1}),
+        (FedProx, {"iterations": num_iterations, "step_size": 0.1}),
+        (FedAdagrad, {"iterations": num_iterations, "step_size": 0.1}),
+        (FedNova, {"iterations": num_iterations, "step_size": 0.1}),
+        (FedPD, {"iterations": num_iterations, "step_size": 0.1}),
+        (FedYogi, {"iterations": num_iterations, "step_size": 0.1}),
+        (FedAdam, {"iterations": num_iterations, "step_size": 0.1}),
+        (Scaffold, {"iterations": num_iterations, "step_size": 0.1}),
     ],
 )
 
@@ -94,24 +96,21 @@ def _create_p2p_network(impairments: bool, cost_cls: type) -> P2PNetwork:
         torch = pytest.importorskip("torch")
 
     try:
-        costs, _, _ = create_classification_problem(
+        costs, _, _ = create_regression_problem(
             cost_cls=cost_cls,
             n_agents=4,
-            show_progress=False,
         )
     except Exception:
-        # Bad solver might fail, will be updated soon...
-        costs, _, _ = create_classification_problem(
+        costs, _, _ = create_regression_problem(
             cost_cls=cost_cls,
             n_agents=4,
-            show_progress=False,
         )
     agents = [
         Agent(
             cost,
             activation=UniformActivationRate(0.8) if impairments else None,
         )
-        for i, cost in enumerate(costs)
+        for cost in costs
     ]
     return P2PNetwork(
         graph=nx.complete_graph(len(agents)),
@@ -127,24 +126,21 @@ def _create_fed_network(impairments: bool, cost_cls: type) -> FedNetwork:
         torch = pytest.importorskip("torch")
 
     try:
-        costs, _, _ = create_classification_problem(
+        costs, _, _ = create_regression_problem(
             cost_cls=cost_cls,
             n_agents=4,
-            show_progress=False,
         )
     except Exception:
-        # Bad solver might fail, will be updated soon...
-        costs, _, _ = create_classification_problem(
+        costs, _, _ = create_regression_problem(
             cost_cls=cost_cls,
             n_agents=4,
-            show_progress=False,
         )
     agents = [
         Agent(
             cost,
             activation=UniformActivationRate(0.8) if impairments else None,
         )
-        for i, cost in enumerate(costs)
+        for cost in costs
     ]
     return FedNetwork(
         clients=agents,
@@ -157,14 +153,14 @@ def _create_fed_network(impairments: bool, cost_cls: type) -> FedNetwork:
 @all_p2p_algs
 def test_p2p_algorithm_instantiation(algorithm_cls: type, kwargs: dict[str, float | int]) -> None:
     algorithm = algorithm_cls(**kwargs)
-    assert algorithm.iterations == 10
+    assert algorithm.iterations == num_iterations
     assert isinstance(algorithm.name, str)
 
 
 @all_fed_algs
 def test_fed_algorithm_instantiation(algorithm_cls: type, kwargs: dict[str, float | int]) -> None:
     algorithm = algorithm_cls(**kwargs)
-    assert algorithm.iterations == 10
+    assert algorithm.iterations == num_iterations
     assert isinstance(algorithm.name, str)
 
 
@@ -174,7 +170,7 @@ def test_fed_algorithm_instantiation(algorithm_cls: type, kwargs: dict[str, floa
 )
 @pytest.mark.parametrize(
     "cost_cls",
-    [LogisticRegressionCost, PyTorchCost],
+    [LinearRegressionCost, PyTorchCost],
 )
 @all_p2p_algs
 def test_p2p_algorithm_execution(
@@ -201,7 +197,7 @@ def test_p2p_algorithm_execution(
 )
 @pytest.mark.parametrize(
     "cost_cls",
-    [LogisticRegressionCost, PyTorchCost],
+    [LinearRegressionCost, PyTorchCost],
 )
 @all_fed_algs
 def test_fed_algorithm_execution(

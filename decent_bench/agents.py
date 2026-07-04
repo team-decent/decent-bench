@@ -3,6 +3,7 @@ from __future__ import annotations
 import bisect
 import contextlib
 from collections.abc import Iterator, Mapping, Sequence
+from copy import deepcopy
 from types import MappingProxyType
 from typing import Any, Self, cast
 from uuid import UUID, uuid4
@@ -54,7 +55,7 @@ class Agent:
 
         self._index = -1
         self._cost = cost
-        self._activation = AlwaysActive() if activation is None else activation
+        self._activation = AlwaysActive() if activation is None else deepcopy(activation)
         self._state_snapshot_period = state_snapshot_period
         self.data = {} if data is None else data
         self._current_x: Array | None = None

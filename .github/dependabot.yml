@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # version update of dependencies (as specified in pyproject.toml)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # version update of github action tools (as specified in workflows/ci.yaml)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

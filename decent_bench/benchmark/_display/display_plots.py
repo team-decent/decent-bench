@@ -105,7 +105,7 @@ def _preprocess(
         has_inf = frame[["mean", "min", "max"]].isin([np.inf, -np.inf]).any(axis=1)
         if has_inf.any():
             rows_with_inf = frame[has_inf]
-            cutoff = rows_with_inf.groupby("algorithm")["iteration"].min().rename("cutoff")
+            cutoff = rows_with_inf.groupby("algorithm", observed=False)["iteration"].min().rename("cutoff")
             # map cutoff iteration to the corresponding algorithm
             frame["cutoff"] = frame.set_index("algorithm").index.map(cutoff.to_dict())
 

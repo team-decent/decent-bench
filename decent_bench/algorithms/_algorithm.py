@@ -1,11 +1,8 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING, Any, final
+from collections.abc import Callable
+from typing import Any, final
 
 from decent_bench.networks import Network
-
-if TYPE_CHECKING:
-    from decent_bench.agents import Agent
 
 
 class Algorithm[NetworkT: Network](ABC):
@@ -62,32 +59,18 @@ class Algorithm[NetworkT: Network](ABC):
 
         """
 
-    @abstractmethod
-    def cleanup_agents(self, network: NetworkT) -> Iterable["Agent"]:
-        """
-        Return the agents whose auxiliary variables should be cleared.
-
-        Args:
-            network: provides the agents and topology for this algorithm.
-
-        """
-
-    def cleanup(self, network: NetworkT) -> None:
+    def _cleanup(self, network: NetworkT) -> None:
         """
         Clean up the algorithm state by clearing auxiliary variables from agents.
 
         This method is used to free up memory used by auxiliary variables that are not needed after training.
         Can be overridden to control what gets cleaned up.
 
-        Note:
-            Override :meth:`~decent_bench.algorithms.Algorithm.cleanup_agents` to control which
-            agents are cleaned up.
-
         Args:
             network: provides the agents and topology for this algorithm.
 
         """
-        for agent in self.cleanup_agents(network):
+        for agent in network.graph.nodes():
             if agent.aux_vars is not None:
                 agent.aux_vars.clear()
 
@@ -108,8 +91,6 @@ class Algorithm[NetworkT: Network](ABC):
         Run the algorithm.
 
         This method first calls :meth:`initialize`, then :meth:`step` for the specified number of iterations.
-        Optionally call :meth:`cleanup` after :meth:`run` to clear auxiliary variables
-        and free up memory.
 
         Args:
             network: provides the agents and topology for this algorithm.
