@@ -69,12 +69,13 @@ build-backend = "hatchling.build"
 
 [tool.tox]
 envlist = ["dev", "mypy", "pytest", "ruff", "sphinx"]
+package = "editable"
 
 [tool.tox.env.dev]
 description = "Generate dev venv with all dependencies, active with `source .tox/dev/bin/activate`"
 deps = ["-rdocs/requirements.txt"]
 commands_pre = [
-  ["python", "-m", "pip", "install", ".", "--group", "dev", "--group", "dev-cpu"],
+  ["python", "-m", "pip", "install", "--group", "dev", "--group", "dev-cpu"],
 ]
 
 [tool.tox.env.dev-gpu]
@@ -82,11 +83,12 @@ description = "Generate dev venv with all dependencies including GPU support, ac
 set_env = { PIP_EXTRA_INDEX_URL = "https://download.pytorch.org/whl/cu128" } # torch 2.11 uses CUDA 13.0 which seems to have broken linalg.norm, use cuda 12.8 for now
 deps = ["-rdocs/requirements.txt"]
 commands_pre = [
-  ["python", "-m", "pip", "install", ".", "--group", "dev", "--group", "dev-gpu"],
+  ["python", "-m", "pip", "install", "--group", "dev", "--group", "dev-gpu"],
 ]
 
 [tool.tox.env.sphinx]
 description = "Generate rst and html files using sphinx"
+skip_install = true
 deps = ["-rdocs/requirements.txt"]
 commands = [
   ["sphinx-apidoc", "-o", "docs/source/api", "decent_bench", "--separate", "--no-toc", "--templatedir=docs/source/_templates"],
@@ -97,7 +99,7 @@ commands = [
 description = "Run mypy (static type checker)"
 deps = []
 commands_pre = [
-  ["python", "-m", "pip", "install", ".", "--group", "typecheck", "--group", "dev-cpu"],
+  ["python", "-m", "pip", "install", "--group", "typecheck", "--group", "dev-cpu"],
   ["python", "-m", "pip", "install", ".[torch,kaggle]"],
 ]
 commands = [["mypy", "decent_bench"]]
@@ -106,15 +108,17 @@ commands = [["mypy", "decent_bench"]]
 description = "Run pytest (test executor)"
 deps = []
 commands_pre = [
-  ["python", "-m", "pip", "install", ".", "--group", "test"],
+  ["python", "-m", "pip", "install", "--group", "test"],
+  ["python", "-m", "pip", "install", ".[torch]"],
 ]
 commands = [["pytest"]]
 
 [tool.tox.env.ruff]
 description = "Run ruff (format and style checker)"
+skip_install = true
 deps = []
 commands_pre = [
-  ["python", "-m", "pip", "install", ".", "--group", "lint"],
+  ["python", "-m", "pip", "install", "--group", "lint"],
 ]
 commands = [
   ["ruff", "check", "decent_bench"],
