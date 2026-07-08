@@ -30,7 +30,7 @@ Issues = "https://github.com/team-decent/decent-bench/issues"
 [project.optional-dependencies]
 dev = [
   "hatch>=1.14,<2",
-  "mypy==2.1.0",
+  "mypy==2.2.0",
   "pytest>=9,<10",
   "ruff==0.15.20",
   "scipy-stubs>=1.18,<2",
