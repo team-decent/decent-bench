@@ -4,7 +4,7 @@ Introduction
 ============
 
 The success of modern artificial intelligence (AI) is fueled by access to massive datasets and efficient training
-methods. However, in many use cases it is not possible to apply centralized training, for example because of
+methods. However, in many use cases it is not possible to apply centralized training, for example due to
 privacy (*e.g.* diagnostic models for healthcare) or practical constraints (*e.g.* search and rescue with a
 multi-robot system).
 Therefore a suitable alternative is *decentralized learning*, in which agents connected in a network cooperatively train
@@ -87,7 +87,7 @@ of challenging scenarios. In particular, decent-bench offers the following funct
 * **Simulating deployment scenarios**: decent-bench allows to define realistic scenarios in which to test decentralized algorithms (both federated and peer-to-peer); this includes simulating unreliable communications and limited/heterogeneous computational power.
 * **Benchmarking**: decent-bench defines a simple benchmarking pipeline to test and compare different decentralized algorithms in the same scenario. Additionally, it provides a library of state-of-the-art algorithms ready to use.
 * **Reproducibility**: as part of the benchmarking pipeline, decent-bench allows setting random seeds to ensure that results are easily reproducible.
-* **Paper-ready results**: decent-bench provides the results of a benchmark run in a format that can be directly pasted into papers (with several customization options). The raw results are also available as ``pandas.DataFrame`` for easy inspection.
+* **Paper-ready results**: decent-bench provides the results of a benchmark run in a format that can be directly included in papers (with several customization options). The raw results are also available as ``pandas.DataFrame`` for easy inspection.
 
 
 References

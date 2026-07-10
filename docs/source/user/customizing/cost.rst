@@ -73,7 +73,7 @@ The following shows the implementation of :class:`~decent_bench.costs.QuadraticC
 .. _interop_cost:
 
 .. note:: What is :func:`~decent_bench.utils.interoperability.autodecorate_cost_method`? As briefly discussed
-    :ref:`here <interop_seed>` (and explored in more detail in :doc:`this page </user/customizing/algorithm>`),
+    :ref:`here <interop_seed>` (and explored in more detail in the page :doc:`on customizing algorithms </user/customizing/algorithm>`),
     decent-bench uses an interoperability layer that allows to define algorithms only once, but implementing
     cost functions in different backends (supported are NumPy, PyTorch, TensorFlow, JAX). This allows to use efficient,
     framework-native operations to implement costs. The decorator then is needed to correctly interface costs with the

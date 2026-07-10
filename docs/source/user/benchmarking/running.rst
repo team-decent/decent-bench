@@ -78,7 +78,8 @@ In both examples, we generate a linear regression problem
 characterized by the local costs
 :math:`f_i(x_i) = \frac{1}{m_i} \sum_{h = 1}^{m_i} \frac{1}{2} (a_i^h x_i - b_i^h)^2` with feature vectors
 :math:`a_i^h \in \mathbb{R}^{1 \times n}` and targets :math:`b_i^h \in \mathbb{R}`. Since the costs are quadratic, the
-``create_regression_problem`` utility also computes the optimal solution ``x_optimal``.
+``create_regression_problem`` utility also computes the optimal solution ``x_optimal``. Notice that the third output of
+``costs, x_optimal, _ = create_regression_problem(n_agents=n_agents)`` is ``test_data``.
 
 We then create the federated or peer-to-peer network of agents to solve the problem, respectively:
 

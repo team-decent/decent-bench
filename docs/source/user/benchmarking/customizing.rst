@@ -4,7 +4,7 @@ Customizing benchmark settings
 Storing results
 ^^^^^^^^^^^^^^^
 A first important tool for benchmarking is the :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager`, which
-is instantiated in a folder location (folder ``results`` in the example below).
+defines the results destination (folder ``results`` in the example below).
 
 .. literalinclude:: ../../../examples/checkpointing_fed_example.py
     :language: python
@@ -29,7 +29,7 @@ arguments are:
 * ``benchmark_problem``: instance of :class:`~decent_bench.benchmark.BenchmarkProblem` which defines the problem.
 * ``n_trials``: if the benchmark setup (network and/or algorithms) have stochastic features, running several trials is necessary. This is possible by setting the ``n_trials`` argument. See more in :ref:`this section <reproducibility>`.
 * ``max_processes``: allows to set the number of threads that should be used to run the simulations.
-* ``runtime_metrics``: if the benchmark run is very long, it can be useful to monitor its progress (beyond the progress bar that is displayed by default). This can be done by plotting :class:`~decent_bench.metrics.RuntimeMetric`, which they are simple and computationally cheap performance metric displayed in a plot that evolves as the simulations run. The available runtime metrics are: :tagged:`runtime metric`.
+* ``runtime_metrics``: if the benchmark run is very long, it can be useful to monitor its progress (beyond the progress bar that is displayed by default). This can be done by plotting :class:`~decent_bench.metrics.RuntimeMetric`, which are simple and computationally cheap performance metrics displayed in a plot that evolves as the simulations run. The available runtime metrics are: :tagged:`runtime metric`.
 
 
 Metrics computation and display

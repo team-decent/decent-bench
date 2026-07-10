@@ -8,7 +8,7 @@ https://pypi.org/project/decent-bench/)
 <!-- include in index.rst below this point -->
 
 decent-bench allows you to benchmark decentralized algorithms (both peer-to-peer and federated) under realistic
-constraints (including limited communications and computational power). The code base provides a 
+constraints, including limited communications and computational power. The code base provides a 
 highly configurable benchmarking pipeline and a library of state-of-the-art algorithms already implemented.
 
 
@@ -25,5 +25,4 @@ decent-bench is developed by [Elias Ram](https://github.com/elramen/), [Simon Gr
 
 
 ## Contact
-Contact [Dr. Nicola Bastianello](https://bastianello.me/) if you have any questions or would like to contribute
-to the project.
+Contact [Dr. Nicola Bastianello](https://bastianello.me/) if you have any questions.

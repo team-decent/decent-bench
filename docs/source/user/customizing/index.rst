@@ -1,7 +1,7 @@
 Customizing
 ===========
 
-Recalling the simple example below, which was discussed on :doc:`this page </user/benchmarking/running>`, we can highlight several
+Recalling the simple example below, which was discussed in :doc:`Running a benchmark </user/benchmarking/running>`, we can highlight several
 components of a benchmark workflow:
 
 * **Network**, either federated or peer-to-peer.

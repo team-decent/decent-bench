@@ -8,7 +8,7 @@ stochastic gradients computed on a subset :math:`\mathcal{B} \subset \{ 1, \ldot
 .. math::
     \nabla f_i(x) \approx \frac{1}{|\mathcal{B}|} \sum_{h \in \mathcal{B}} \ell(x, d_i^h).
 
-See instead :doc:`this page </user/customizing/network>` for how to create networks with stochastic features.
+See instead the section :doc:`on customizing networks </user/customizing/network>` for how to create networks with stochastic features.
 
 The following example creates the same linear regression problem as before, but setting ``batch_size=2``, which means
 that agents compute stochastic gradients with two datapoints.
@@ -57,4 +57,5 @@ solid line, and the minimum and maximum as the envelope around it. This is done 
     benchmarking pipeline using the functions in the interoperability API allows to implement each item once, while
     allowing to select different framework for the backend. ``set_seed`` is part of this interoperability API, and it
     takes care of setting the seed for whichever framework is selected. More details on interoperability in
-    :doc:`this page </user/customizing/algorithm>`. The seed is set for the built-in python ``random`` module as well.
+    the page :doc:`on customizing algorithms </user/customizing/algorithm>`.
+    The seed is set for the built-in python ``random`` module as well.
