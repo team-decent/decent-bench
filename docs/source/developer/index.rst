@@ -9,4 +9,3 @@ suggestions.
 
    developer
    advanced
-   advanced_algorithms

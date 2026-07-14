@@ -116,3 +116,89 @@ back to :class:`~decent_bench.utils.array.Array`.
 Costs are the only place where framework-native operations should be employed, making sure to use
 :func:`~decent_bench.utils.interoperability.autodecorate_cost_method` to correctly interface with the
 interoperability layer (see discussion :ref:`here <interop_cost>`).
+
+
+Advanced algorithm implementation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+The following is a short example showing how to implement more efficient custom algorithms. The example shows a version
+of :class:`~decent_bench.algorithms.p2p.LT_ADMM` customized for :class:`decent_bench.costs.PyTorchCost` by using
+a PyTorch optimizer during local training. Notice that the initialize method sets up the PyTorch optimizer for each
+agent, and the ``_local_training`` method performs local training using the optimizer.
+
+.. code-block:: python
+
+    from dataclasses import dataclass
+    from typing import TYPE_CHECKING, Any
+
+    import decent_bench.utils.interoperability as iop
+    from decent_bench.agents import Agent
+    from decent_bench.algorithms.p2p import LT_ADMM
+    from decent_bench.costs import PyTorchCost
+    from decent_bench.networks import P2PNetwork
+
+    if TYPE_CHECKING:
+        import torch
+
+    try:
+        import torch
+    except ImportError as e:
+        raise ImportError(
+            "PyTorch is required for LT-ADMM algorithm, but it is not installed. "
+            "Please install PyTorch to use this algorithm."
+        ) from e
+
+
+    @dataclass(eq=False)
+    class LT_ADMM_TORCH(LT_ADMM):
+        opt_cls: type[torch.optim.Optimizer] | None = None  # PyTorch optimizer class to use for local training, e.g. torch.optim.Adam
+        opt_kwargs: dict[str, Any] | None = None  # Keyword arguments for PyTorch optimizer
+        sched_cls: type[torch.optim.lr_scheduler.LRScheduler] | None = None  # PyTorch scheduler class for local training
+        sched_kwargs: dict[str, Any] | None = None  # Keyword arguments for PyTorch scheduler
+        name: str = "LT-ADMM-TORCH"
+
+        def initialize(self, network: P2PNetwork) -> None:
+            super().initialize(network)
+            for i in network.agents():
+                if not isinstance(i.cost, PyTorchCost):
+                    raise TypeError(f"LT-ADMM-TORCH requires PyTorchCost, but agent {i} has cost of type {type(i.cost)}")
+
+                # Initialize PyTorch optimizer for local training if use_torch_optim is True
+                if self.opt_cls is not None:
+                    if self.opt_kwargs is None:
+                        self.opt_kwargs = {}
+                    self.opt_kwargs.setdefault("lr", self.step_size)
+                    i.cost.init_local_training(
+                        opt_cls=self.opt_cls,
+                        opt_kwargs=self.opt_kwargs,
+                        sched_cls=self.sched_cls,
+                        sched_kwargs=self.sched_kwargs,
+                    )
+
+        def _local_training(self, agent: Agent, network: P2PNetwork) -> None:
+            if TYPE_CHECKING:
+                if not isinstance(agent.cost, PyTorchCost):
+                    raise TypeError(
+                        f"LT-ADMM-TORCH requires PyTorchCost, but agent {agent} has cost of type {type(agent.cost)}"
+                    )
+
+            agent.aux_vars["phi"] = iop.copy(agent.x)
+            z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
+            multiplier = self.penalty * len(network.neighbors(agent))
+            correction = self.aux_step_size * (multiplier * agent.x - z_sum)
+
+            if self.opt_cls is not None:  # Use PyTorch optimizer
+                agent.aux_vars["phi"] = agent.cost.local_training(
+                    x=agent.aux_vars["phi"],
+                    iterations=self.num_local_steps,
+                    regularization=correction,
+                    agent=agent,
+                )
+            else:  # Default to gradient descent
+                for _ in range(self.num_local_steps):
+                    current_gradient = agent.cost.gradient(agent.aux_vars["phi"])
+                    step = self.step_size * current_gradient + correction
+                    # Update phi_i,k according to gradient step
+                    agent.aux_vars["phi"] -= step
+
+            # Update agent's main parameter
+            agent.x = agent.aux_vars["phi"]
