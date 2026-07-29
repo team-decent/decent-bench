@@ -15,8 +15,8 @@ dependencies = [
   "matplotlib>=3.9,<4",
   "networkx>=3.4,<4",
   "numpy>=2.0,<3",
-  "pandas>=2.3.3,<3",
-  "rich>=13,<14",
+  "pandas>=2.3.3,<4",
+  "rich>=13,<16",
   "scipy>=1.14,<2",
   "scikit-learn>=1.5,<2",
   "zstandard>=0.23,<1",
@@ -32,16 +32,16 @@ torch = [
   "torch>=2.5,<3",
   "torchvision>=0.20,<1",
 ]
-kaggle = ["kagglehub>=0.3,<1"]
+kaggle = ["kagglehub>=0.3,<2"]
 
 [dependency-groups]
 lint = ["ruff==0.15.20"]
 typecheck = [
-  "mypy==2.1.0",
+  "mypy==2.2.0",
   "scipy-stubs>=1.18,<2",
   "types-networkx>=3.4,<4",
   "types-tensorflow>=2.18,<3",
-  "pandas-stubs>=2.3.3,<3",
+  "pandas-stubs>=2.3.3,<4",
   "microsoft-python-type-stubs @ git+https://github.com/microsoft/python-type-stubs.git@main",
 ]
 test = [
