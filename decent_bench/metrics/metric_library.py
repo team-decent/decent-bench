@@ -10,11 +10,13 @@ from decent_bench.metrics import utils
 from decent_bench.metrics._metric import Metric
 from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import FedNetwork
+from decent_bench.utils._tags import Tag, tags
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
 
 
+@tags(Tag.METRIC)
 class Regret(Metric):
     r"""
     Global regret.
@@ -53,6 +55,7 @@ class Regret(Metric):
         return [utils._regret(network.agents(), problem, iteration)]  # noqa: SLF001
 
 
+@tags(Tag.METRIC)
 class GradientNorm(Metric):
     r"""
     Global gradient norm.
@@ -80,6 +83,7 @@ class GradientNorm(Metric):
         return [utils._gradient_norm(network.agents(), iteration)]  # noqa: SLF001
 
 
+@tags(Tag.METRIC)
 class XError(Metric):
     r"""
     Distance to optimal solution.
@@ -123,6 +127,7 @@ class XError(Metric):
         return [utils._x_error(network.agents(), problem, iteration)]  # noqa: SLF001
 
 
+@tags(Tag.METRIC)
 class ConsensusError(Metric):
     r"""
     Distance to consensus.
@@ -159,6 +164,7 @@ class ConsensusError(Metric):
         return [float(iop.norm(x_mean - a.x_history[iteration])) for a in agent_views]
 
 
+@tags(Tag.METRIC)
 class XUpdates(Metric):
     r"""
     Number of x iterations/updates.
@@ -184,6 +190,7 @@ class XUpdates(Metric):
         return [a.n_x_updates for a in network.agents()]
 
 
+@tags(Tag.METRIC)
 class FunctionCalls(Metric):
     r"""
     Number of function calls.
@@ -213,6 +220,7 @@ class FunctionCalls(Metric):
         return [a.n_function_calls for a in network.agents()]
 
 
+@tags(Tag.METRIC)
 class GradientCalls(Metric):
     r"""
     Number of gradient calls.
@@ -242,6 +250,7 @@ class GradientCalls(Metric):
         return [a.n_gradient_calls for a in network.agents()]
 
 
+@tags(Tag.METRIC)
 class HessianCalls(Metric):
     r"""
     Number of Hessian calls.
@@ -271,6 +280,7 @@ class HessianCalls(Metric):
         return [a.n_hessian_calls for a in network.agents()]
 
 
+@tags(Tag.METRIC)
 class ProximalCalls(Metric):
     r"""
     Number of proximal calls.
@@ -296,6 +306,7 @@ class ProximalCalls(Metric):
         return [a.n_proximal_calls for a in network.agents()]
 
 
+@tags(Tag.METRIC)
 class SentMessages(Metric):
     r"""
     Number of sent messages.
@@ -321,6 +332,7 @@ class SentMessages(Metric):
         return [a.n_sent_messages for a in network.graph.nodes]
 
 
+@tags(Tag.METRIC)
 class ReceivedMessages(Metric):
     r"""
     Number of received messages.
@@ -346,6 +358,7 @@ class ReceivedMessages(Metric):
         return [a.n_received_messages for a in network.graph.nodes]
 
 
+@tags(Tag.METRIC)
 class SentMessagesDropped(Metric):
     r"""
     Number of sent messages dropped.
@@ -371,6 +384,7 @@ class SentMessagesDropped(Metric):
         return [a.n_sent_messages_dropped for a in network.graph.nodes]
 
 
+@tags(Tag.METRIC)
 class Accuracy(Metric):
     r"""
     Accuracy of the agents'/clients' predictions.
@@ -427,6 +441,7 @@ class Accuracy(Metric):
         return utils._accuracy(network.agents(), problem, iteration)  # noqa: SLF001
 
 
+@tags(Tag.METRIC)
 class MSE(Metric):
     r"""
     Mean squared error of the agents'/clients' predictions.
@@ -478,6 +493,7 @@ class MSE(Metric):
         return utils._mse(network.agents(), problem, iteration)  # noqa: SLF001
 
 
+@tags(Tag.METRIC)
 class Precision(Metric):
     r"""
     Precision of the agents'/clients' predictions.
@@ -534,6 +550,7 @@ class Precision(Metric):
         return utils._precision(network.agents(), problem, iteration)  # noqa: SLF001
 
 
+@tags(Tag.METRIC)
 class Recall(Metric):
     r"""
     Recall of the agents'/clients' predictions.
@@ -590,6 +607,7 @@ class Recall(Metric):
         return utils._recall(network.agents(), problem, iteration)  # noqa: SLF001
 
 
+@tags(Tag.METRIC)
 class Loss(Metric):
     r"""
     Loss of the agents'/clients' predictions.
@@ -629,6 +647,7 @@ def _server_metric_cost(network: NetworkMetricsView, metric_name: str) -> Cost:
     return agent_views[0].cost
 
 
+@tags(Tag.METRIC)
 class ClientDriftFromServer(Metric):
     r"""
     Distance between client local models and the server model.
@@ -668,6 +687,7 @@ class ClientDriftFromServer(Metric):
         return utils._drifts(network.clients(), network.server(), iteration)  # noqa: SLF001
 
 
+@tags(Tag.METRIC)
 class FractionSelectedClients(Metric):
     r"""
     Fraction of clients selected by the federated algorithm to perform local training.
@@ -701,6 +721,7 @@ class FractionSelectedClients(Metric):
         return [sum(agent.n_times_selected for agent in agent_views) / (n_rounds * len(agent_views))]
 
 
+@tags(Tag.METRIC)
 class ServerMSE(Metric):
     r"""
     Mean squared error of the server model's predictions.
@@ -742,6 +763,7 @@ class ServerMSE(Metric):
         return [utils._mse_at_x(cost, network.server().x_history[iteration], problem)]  # noqa: SLF001
 
 
+@tags(Tag.METRIC)
 class ServerAccuracy(Metric):
     r"""
     Accuracy of the server model's predictions.

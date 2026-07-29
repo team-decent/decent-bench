@@ -2,17 +2,19 @@ from dataclasses import dataclass
 
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import P2PNetwork
-from decent_bench.utils._tags import tags
+from decent_bench.utils._tags import Tag, tags
 from decent_bench.utils.types import InitialStates
 
 from ._p2p_algorithm import P2PAlgorithm
 
 
-@tags("peer-to-peer", "gradient-based")
+@tags(Tag.ALGORITHM, Tag.PEER_TO_PEER, Tag.GRADIENT_BASED)
 @dataclass(eq=False)
 class DGD(P2PAlgorithm):
     r"""
-    Distributed gradient descent characterized by the update step below.
+    Distributed gradient descent :footcite:p:`Alg_DGD`.
+
+    The algorithm is characterized by the update:
 
     .. math::
         \mathbf{x}_{i, k+1} = \sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k}) - \rho \nabla f_i(\mathbf{x}_{i,k})
@@ -23,6 +25,8 @@ class DGD(P2PAlgorithm):
     :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j,
     :math:`\rho` is the step size (the corresponding argument is ``step_size``),
     and :math:`f_i` is agent i's local cost function.
+
+    .. footbibliography::
 
     """
 

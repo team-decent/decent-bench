@@ -10,7 +10,7 @@ from scipy import special
 
 import decent_bench.centralized_algorithms as ca
 import decent_bench.utils.interoperability as iop
-from decent_bench.utils._tags import tags
+from decent_bench.utils._tags import Tag, tags
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import (
     Dataset,
@@ -24,7 +24,7 @@ from decent_bench.utils.types import (
 from ._empirical_risk_cost import EmpiricalRiskCost
 
 
-@tags("classification", "empirical-risk")
+@tags(Tag.COST, Tag.CLASSIFICATION, Tag.EMPIRICAL_RISK)
 class LogisticRegressionCost(EmpiricalRiskCost):
     r"""
     Logistic regression cost function.

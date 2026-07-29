@@ -6,7 +6,7 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformSelection
-from decent_bench.utils._tags import tags
+from decent_bench.utils._tags import Tag, tags
 from decent_bench.utils.types import InitialStates
 
 from ._fed_algorithm import FedAlgorithm
@@ -20,7 +20,7 @@ _MODEL_DELTA_CHANNEL = "model_delta"
 _CONTROL_VARIATE_DELTA_CHANNEL = "control_variate_delta"
 
 
-@tags("federated")
+@tags(Tag.ALGORITHM, Tag.FEDERATED)
 @dataclass(eq=False)
 class Scaffold(FedAlgorithm):
     r"""

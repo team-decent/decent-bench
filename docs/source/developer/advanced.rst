@@ -1,5 +1,5 @@
-Advanced Developer Guide
-========================
+Advanced
+========
 
 This guide covers the more advanced and unique architectural approaches taken in :doc:`Decent Bench <index>`, 
 particularly focusing on the interoperability system that enables seamless framework-agnostic operations.
@@ -915,6 +915,6 @@ Common Pitfalls
 Further Reading
 ---------------
 
-- :doc:`API Reference <api/decent_bench.utils.interoperability>`
-- :doc:`User Guide <user>` for basic usage
+- :doc:`API Reference <../api/decent_bench.utils.interoperability>`
+- :doc:`User Guide <../user/index>` for basic usage
 - `Type Checking Documentation <https://docs.python.org/3/library/typing.html#typing.TYPE_CHECKING>`_

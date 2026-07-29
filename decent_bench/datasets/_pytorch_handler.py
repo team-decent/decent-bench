@@ -42,7 +42,7 @@ class PyTorchDatasetHandler(DatasetHandler):
 
         """
         if not TORCH_AVAILABLE:
-            raise ImportError("PyTorch is required to use PyTorchWrapper. Install it with: pip install torch")
+            raise ImportError("PyTorch is required to use PyTorchDatasetHandler. Install it with: pip install torch")
 
         self.torch_dataset = torch_dataset
         self._n_targets = n_targets

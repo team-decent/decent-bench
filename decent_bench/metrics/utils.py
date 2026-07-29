@@ -355,11 +355,10 @@ def linear_convergence_rate(y: Sequence[float]) -> float:
         the convergence rate (multiplicative factor per iteration)
 
     Example:
-        >>> print("Convergence rate of:")
-        >>> for alg, results in metric_results.plot_results.items():
-        >>>     for metric, stat_results in results.items():
-        >>>         if type(metric) == metric_library.GradientNorm:
-        >>>             print(f"\t- {alg.name}: {utils.linear_convergence_rate(stat_results[1])}")
+        >>> xerror = metrics_results.plot_results[metrics_results.plot_results["metric"] == "x error"]
+        >>> for alg in metrics_results.algorithms:
+                xerror_over_time = xerror[xerror["algorithm"] == alg]["mean"]
+        >>>     print(f"Rate for {alg} = {linear_convergence_rate(xerror[xerror["algorithm"] == alg]["mean"])}")
 
     """
     y_array: NDArray[float64] = np.asarray(y, dtype=float64)

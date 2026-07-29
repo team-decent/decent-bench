@@ -5,12 +5,14 @@ from typing import TYPE_CHECKING
 
 import decent_bench.utils.interoperability as iop
 from decent_bench.metrics._runtime_metric import RuntimeMetric
+from decent_bench.utils._tags import Tag, tags
 
 if TYPE_CHECKING:
     from decent_bench.agents import Agent
     from decent_bench.benchmark import BenchmarkProblem
 
 
+@tags(Tag.RUNTIME_METRIC)
 class RuntimeLoss(RuntimeMetric):
     r"""
     Runtime loss metric.
@@ -37,6 +39,7 @@ class RuntimeLoss(RuntimeMetric):
         return total_loss / len(agents)
 
 
+@tags(Tag.RUNTIME_METRIC)
 class RuntimeRegret(RuntimeMetric):
     r"""
     Runtime regret metric.
@@ -71,6 +74,7 @@ class RuntimeRegret(RuntimeMetric):
         return agent_cost - self._cached_optimal_cost
 
 
+@tags(Tag.RUNTIME_METRIC)
 class RuntimeGradientNorm(RuntimeMetric):
     r"""
     Runtime gradient norm metric.
@@ -98,6 +102,7 @@ class RuntimeGradientNorm(RuntimeMetric):
         return grad_norms / len(agents)
 
 
+@tags(Tag.RUNTIME_METRIC)
 class RuntimeConsensusError(RuntimeMetric):
     r"""
     Monitors how well agents agree on their decision variables.
