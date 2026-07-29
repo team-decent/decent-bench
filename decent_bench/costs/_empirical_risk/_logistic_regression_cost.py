@@ -8,8 +8,8 @@ from numpy import float64
 from numpy.typing import NDArray
 from scipy import special
 
-import decent_bench.centralized_algorithms as ca
 import decent_bench.utils.interoperability as iop
+import decent_bench.utils.solvers as ca
 from decent_bench.utils._tags import Tag, tags
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import (

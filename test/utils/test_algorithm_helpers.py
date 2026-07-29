@@ -14,9 +14,9 @@ from decent_bench.algorithms.utils import (
 )
 from decent_bench.costs import L2RegularizerCost, LinearRegressionCost, PyTorchCost, QuadraticCost
 from decent_bench.networks import FedNetwork, P2PNetwork
-from decent_bench.utils.agent_utils import infer_client_data_size
+from decent_bench.agents._utils import infer_client_data_size
 from decent_bench.utils.array import Array
-from decent_bench.utils.pytorch_utils import SimpleLinearModel
+from decent_bench.costs.utils.pytorch_utils import SimpleLinearModel
 
 
 def _make_p2p_network(n_agents: int = 3, shape: tuple[int, ...] = (2,)) -> P2PNetwork:

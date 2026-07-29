@@ -13,7 +13,7 @@ from matplotlib.figure import Figure
 from decent_bench.metrics._computational_cost import ComputationalCost
 from decent_bench.metrics._metric import Metric
 from decent_bench.metrics._metrics_view import NetworkMetricsView
-from decent_bench.utils.logger import LOGGER
+from decent_bench.utils._logger import LOGGER
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import MetricResult

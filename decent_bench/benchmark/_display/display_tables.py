@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from decent_bench.metrics.metric_library import FunctionCalls, GradientCalls, HessianCalls, ProximalCalls
-from decent_bench.utils.logger import LOGGER
+from decent_bench.utils._logger import LOGGER
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import MetricResult

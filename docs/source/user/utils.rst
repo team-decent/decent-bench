@@ -6,7 +6,7 @@ Drawing networks
 ----------------
 Networks, both :class:`~decent_bench.networks.FedNetwork` and :class:`~decent_bench.networks.P2PNetwork`, can be drawn
 using `NetworkX <https://networkx.org/en/>`_ drawing tools. To do so, decent-bench exposes
-:func:`~decent_bench.utils.network_utils.plot_network`, as shown in the following example.
+:func:`~decent_bench.networks.plot_network`, as shown in the following example.
 
 
 .. literalinclude:: ../../../docs/examples/network_drawing.py

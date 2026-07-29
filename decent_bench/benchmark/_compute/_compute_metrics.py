@@ -15,9 +15,9 @@ from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.metrics import Metric, utils
 from decent_bench.metrics import metric_library as ml
 from decent_bench.metrics._metrics_view import NetworkMetricsView
+from decent_bench.metrics.utils import _find_duplicates
 from decent_bench.networks import Network
-from decent_bench.utils._metric_helpers import _find_duplicates
-from decent_bench.utils.logger import LOGGER, start_logger
+from decent_bench.utils._logger import LOGGER, start_logger
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem

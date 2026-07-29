@@ -17,12 +17,12 @@ import decent_bench.utils.interoperability as iop
 from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark._benchmark_problem import BenchmarkProblem
 from decent_bench.benchmark._benchmark_result import BenchmarkResult
-from decent_bench.metrics import RuntimeMetricPlotter
+from decent_bench.benchmark._progress_bar import ProgressBarController
+from decent_bench.metrics._runtime_metric_plotter import RuntimeMetricPlotter
 from decent_bench.networks import Network
-from decent_bench.utils import logger
+from decent_bench.utils import _logger
+from decent_bench.utils._logger import LOGGER
 from decent_bench.utils.interoperability._rng import _set_seed
-from decent_bench.utils.logger import LOGGER
-from decent_bench.utils.progress_bar import ProgressBarController
 from decent_bench.utils.types import SupportedFrameworks
 
 if TYPE_CHECKING:
@@ -30,9 +30,9 @@ if TYPE_CHECKING:
     from multiprocessing.context import SpawnContext
     from multiprocessing.managers import SyncManager
 
+    from decent_bench.benchmark._progress_bar import ProgressBarHandle
     from decent_bench.metrics import RuntimeMetric
     from decent_bench.utils.checkpoint_manager import CheckpointManager
-    from decent_bench.utils.progress_bar import ProgressBarHandle
 
 
 def _validate_unique_algorithm_names(algorithms: list[Algorithm[Network]]) -> None:
@@ -396,7 +396,7 @@ def _init_logging_and_multiprocessing(
 ) -> tuple[QueueListener | None, "SyncManager | None", "SpawnContext | None"]:
     # Detect if PyTorch costs are being used to determine multiprocessing context
     if max_processes == 1:
-        logger.start_logger(log_level)
+        _logger.start_logger(log_level)
         return None, None, None
 
     use_spawn = _should_use_spawn_context(benchmark_problem)
@@ -413,7 +413,7 @@ def _init_logging_and_multiprocessing(
                 "This prevents child processes from re-running top-level script code during import."
             ) from e
         raise
-    log_listener = logger.start_log_listener(manager, log_level)
+    log_listener = _logger.start_log_listener(manager, log_level)
 
     if use_spawn:
         LOGGER.debug("Using spawn multiprocessing context for PyTorch/JAX compatibility")
@@ -509,7 +509,7 @@ def _run_trials(
             )
 
         with ProcessPoolExecutor(
-            initializer=logger.start_queue_logger,
+            initializer=_logger.start_queue_logger,
             initargs=(log_listener.queue,),
             max_workers=max_processes,
             mp_context=mp_context,

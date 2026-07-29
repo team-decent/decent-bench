@@ -2,22 +2,22 @@ from decent_bench import (
     agents,
     algorithms,
     benchmark,
-    centralized_algorithms,
     costs,
     datasets,
     metrics,
     networks,
     schemes,
 )
+from decent_bench.utils import solvers
 
 __all__ = [
     "agents",
     "algorithms",
     "benchmark",
-    "centralized_algorithms",
     "costs",
     "datasets",
     "metrics",
     "networks",
     "schemes",
+    "solvers",
 ]

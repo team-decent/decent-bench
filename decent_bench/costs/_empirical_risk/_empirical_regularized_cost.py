@@ -121,7 +121,7 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
 
         This wrapper preserves evaluation, gradient, and Hessian structure, but does not imply a closed-form proximal.
         Use a specialized composite cost if one exists, or use
-        :func:`decent_bench.centralized_algorithms.proximal_solver` when its assumptions are satisfied.
+        :func:`decent_bench.utils.solvers.proximal_solver` when its assumptions are satisfied.
 
         Raises:
             NotImplementedError: Always, because no generic closed-form proximal is provided.

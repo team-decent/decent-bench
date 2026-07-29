@@ -3,11 +3,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import decent_bench.utils.interoperability as iop
+from decent_bench.agents._utils import infer_client_data_size
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformSelection
 from decent_bench.utils._tags import Tag, tags
-from decent_bench.utils.agent_utils import infer_client_data_size
 from decent_bench.utils.types import InitialStates, LocalSteps
 
 from ._fed_algorithm import FedAlgorithm
@@ -106,7 +106,7 @@ class FedNova(FedAlgorithm):
     coefficient (the corresponding argument is ``server_momentum``).
 
     In this implementation, :math:`n_i` is inferred once during ``initialize`` from each client's local cost via
-    :func:`~decent_bench.utils.agent_utils.infer_client_data_size`, then stored on the server for later rounds.
+    :func:`~decent_bench.agents.infer_client_data_size`, then stored on the server for later rounds.
     If no client has both uploads received in a round under network impairments, the server skips that round without
     error.
 

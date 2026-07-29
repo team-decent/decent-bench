@@ -5,7 +5,7 @@ import numpy as np
 from decent_bench.agents import Agent
 from decent_bench.benchmark import create_regression_problem
 from decent_bench.networks import P2PNetwork
-from decent_bench.utils.network_utils import plot_network
+from decent_bench.networks import plot_network
 
 if __name__ == "__main__":
 

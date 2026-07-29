@@ -4,8 +4,8 @@ from collections.abc import Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
+from decent_bench.utils._logger import LOGGER
 from decent_bench.utils.array import Array
-from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 from ._functions import to_array_like, to_jax, to_numpy, to_tensorflow, to_torch
