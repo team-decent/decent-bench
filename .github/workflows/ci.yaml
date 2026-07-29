@@ -37,6 +37,18 @@ jobs:
 
       - name: Install tox
         run: pip install tox
+      
+      - name: Show torch / platform info
+        run: |
+          python - << 'EOF'
+          import torch, platform, sys
+          print("platform:", platform.platform())
+          print("python:", sys.version)
+          print("torch:", torch.__version__)
+          print("mps built:", torch.backends.mps.is_built())
+          print("mps avail:", torch.backends.mps.is_available())
+          print(torch.__config__.show())
+          EOF
 
       - name: Run pytest
         run: tox -e pytest
