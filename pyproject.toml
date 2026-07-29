@@ -29,7 +29,7 @@ Issues = "https://github.com/team-decent/decent-bench/issues"
 
 [project.optional-dependencies]
 torch = [
-  "torch==2.13.0",
+  "torch>=2.5,<3",
   "torchvision>=0.20,<1",
 ]
 kaggle = ["kagglehub>=0.3,<2"]
