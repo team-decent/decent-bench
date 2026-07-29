@@ -110,6 +110,7 @@ deps = []
 commands_pre = [
   ["python", "-m", "pip", "install", "--group", "test"],
   ["python", "-m", "pip", "install", ".[torch]"],
+  ["python", "-c", "import torch, platform, sys; print('platform:', platform.platform()); print('python:', sys.version); print('torch:', torch.__version__); print('mps built:', torch.backends.mps.is_built()); print('mps avail:', torch.backends.mps.is_available()); print(torch.__config__.show())"],
 ]
 commands = [["pytest"]]
 
