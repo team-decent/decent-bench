@@ -9,8 +9,8 @@ from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCos
 from decent_bench.datasets import (
     SyntheticClassificationDatasetHandler,
     SyntheticRegressionDatasetHandler,
-    split_iid,
 )
+from decent_bench.datasets.utils import split_iid
 from decent_bench.utils import _logger
 from decent_bench.utils import solvers as ca
 from decent_bench.utils._logger import LOGGER

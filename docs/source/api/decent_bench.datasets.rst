@@ -9,4 +9,4 @@ decent\_bench.datasets
 .. toctree::
    :maxdepth: 2
 
-   decent_bench.datasets.partitioners
+   decent_bench.datasets.utils
