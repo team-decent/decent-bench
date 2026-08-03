@@ -5,16 +5,16 @@ from operator import add
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
-from decent_bench import centralized_algorithms as ca
 from decent_bench.costs import Cost, LinearRegressionCost, LogisticRegressionCost, PyTorchCost, QuadraticCost
 from decent_bench.datasets import (
     SyntheticClassificationDatasetHandler,
     SyntheticRegressionDatasetHandler,
-    split_iid,
 )
-from decent_bench.utils import logger
+from decent_bench.datasets.utils import split_iid
+from decent_bench.utils import _logger
+from decent_bench.utils import solvers as ca
+from decent_bench.utils._logger import LOGGER
 from decent_bench.utils.array import Array
-from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import Dataset, EmpiricalRiskBatchSize, SupportedDevices, SupportedFrameworks
 
 SOLVE_MAX_ITER = 10000
@@ -40,7 +40,7 @@ def create_classification_problem(
         n_agents: number of agents
         batch_size: size of mini-batches for stochastic methods, or "all" for full-batch
         compute_x_optimal: if the optimal solution should be computed
-            (using :func:`~decent_bench.centralized_algorithms.solve`). It is ignored when PyTorchCost is selected.
+            (using :func:`~decent_bench.utils.solvers.solve`). It is ignored when PyTorchCost is selected.
         show_progress: whether to display a progress bar while computing ``x_optimal``. Defaults to ``True``.
 
     Note:
@@ -54,7 +54,7 @@ def create_classification_problem(
 
     """
     if not LOGGER.handlers:
-        logger.start_logger()
+        _logger.start_logger()
     LOGGER.info("Creating cost functions ...")
     dataset = SyntheticClassificationDatasetHandler(
         n_targets=2,
@@ -83,7 +83,7 @@ def create_classification_problem(
         except ImportError as e:
             raise ImportError("PyTorch must be installed to use PyTorchCost") from e
 
-        from decent_bench.utils.pytorch_utils import ArgmaxActivation, SimpleLinearModel  # noqa: PLC0415
+        from decent_bench.costs.utils.pytorch_utils import ArgmaxActivation, SimpleLinearModel  # noqa: PLC0415
 
         def model_gen() -> torch.nn.Module:
             return SimpleLinearModel(
@@ -159,7 +159,7 @@ def create_regression_problem(
 
     """
     if not LOGGER.handlers:
-        logger.start_logger()
+        _logger.start_logger()
     LOGGER.info("Creating cost functions ...")
     dataset = SyntheticRegressionDatasetHandler(
         n_targets=1,
@@ -188,7 +188,7 @@ def create_regression_problem(
         except ImportError as e:
             raise ImportError("PyTorch must be installed to use PyTorchCost") from e
 
-        from decent_bench.utils.pytorch_utils import SimpleLinearModel  # noqa: PLC0415
+        from decent_bench.costs.utils.pytorch_utils import SimpleLinearModel  # noqa: PLC0415
 
         def model_gen() -> torch.nn.Module:
             return SimpleLinearModel(
@@ -238,7 +238,7 @@ def create_quadratic_problem(
 
     """
     if not LOGGER.handlers:
-        logger.start_logger()
+        _logger.start_logger()
     LOGGER.info("Creating cost functions ...")
     A, b = [], []  # noqa: N806
     for _ in range(n_agents):

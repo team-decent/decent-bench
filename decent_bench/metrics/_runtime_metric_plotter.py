@@ -10,7 +10,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 
 from decent_bench.benchmark._display.display_plots import _get_marker_style_color
-from decent_bench.utils.logger import LOGGER
+from decent_bench.utils._logger import LOGGER
 
 if TYPE_CHECKING:
     from multiprocessing.context import DefaultContext, Process, SpawnContext, SpawnProcess

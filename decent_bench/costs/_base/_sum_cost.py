@@ -6,8 +6,8 @@ from typing import Any
 import numpy as np
 
 import decent_bench.utils.interoperability as iop
-from decent_bench import centralized_algorithms as ca
 from decent_bench.costs._base._cost import Cost
+from decent_bench.utils import solvers as ca
 from decent_bench.utils.array import Array
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
@@ -102,7 +102,7 @@ class SumCost(Cost):
         Approximate the proximal of the full summed objective.
 
         ``SumCost`` computes its proximal through
-        :func:`decent_bench.centralized_algorithms.proximal_solver`, which solves the proximal subproblem for the full
+        :func:`decent_bench.utils.solvers.proximal_solver`, which solves the proximal subproblem for the full
         summed objective using accelerated gradient descent. Extra ``args`` and ``kwargs`` are ignored.
 
         Raises:

@@ -9,7 +9,7 @@ from decent_bench.benchmark._compute.compute_metrics_at_iter import compute_metr
 from decent_bench.metrics import Metric, utils
 from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network
-from decent_bench.utils.logger import LOGGER
+from decent_bench.utils._logger import LOGGER
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem

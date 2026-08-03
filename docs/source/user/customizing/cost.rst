@@ -60,7 +60,7 @@ In particular, the following abstract methods need to be concretely implemented:
 
 Not all costs have a well-defined hessian or proximal; in that case, raise a ``NotImplementedError``. In some cases, it
 is possible to approximate the proximal of a cost that does not admit a closed-form proximal. To this end,
-decent-bench exposes the util :func:`~decent_bench.centralized_algorithms.proximal_solver`.
+decent-bench exposes the util :func:`~decent_bench.utils.solvers.proximal_solver`.
 
 
 The following shows the implementation of :class:`~decent_bench.costs.QuadraticCost` as an example:

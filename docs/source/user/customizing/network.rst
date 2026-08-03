@@ -76,9 +76,9 @@ One can also create custom schemes: this is done by creating an implementation o
 :mod:`~decent_bench.schemes` for the full library.
 
 
-.. literalinclude:: ../../../../decent_bench/schemes.py
+.. literalinclude:: ../../../../decent_bench/schemes/_drops.py
     :language: python
-    :lines: 688-708
+    :lines: 26-46
 
 
 Asynchronous agent activation
@@ -93,9 +93,9 @@ At each iteration, the network polls all agents to check if they are active (*i.
 implementation of :class:`decent_bench.schemes.AgentActivationScheme`.
 
 
-.. literalinclude:: ../../../../decent_bench/schemes.py
+.. literalinclude:: ../../../../decent_bench/schemes/_activation.py
     :language: python
-    :lines: 45-65
+    :lines: 36-56
 
 
 Instances of :class:`decent_bench.schemes.AgentActivationScheme` are passed directly to the init of

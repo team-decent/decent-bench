@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any, cast, override
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._empirical_risk._empirical_risk_cost import EmpiricalRiskCost
+from decent_bench.utils._logger import LOGGER
 from decent_bench.utils._tags import Tag, tags
-from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import (
     Dataset,
     EmpiricalRiskBatchSize,

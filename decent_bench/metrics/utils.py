@@ -14,8 +14,8 @@ from sklearn import metrics as sk_metrics
 import decent_bench.utils.interoperability as iop
 from decent_bench.costs import Cost, EmpiricalRiskCost
 from decent_bench.metrics._metrics_view import AgentMetricsView
+from decent_bench.utils._logger import LOGGER
 from decent_bench.utils.array import Array
-from decent_bench.utils.logger import LOGGER
 from decent_bench.utils.types import Dataset
 
 if TYPE_CHECKING:
@@ -23,6 +23,18 @@ if TYPE_CHECKING:
 
 
 CACHE_MAX_SIZE = 50_000
+
+
+def _find_duplicates(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for item in items:
+        if item in seen:
+            duplicates.add(item)
+        else:
+            seen.add(item)
+
+    return sorted(duplicates)
 
 
 class MetricProgressBar(Progress):

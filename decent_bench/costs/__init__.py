@@ -23,10 +23,10 @@ Developer note:
     concrete costs may implement specialized proximals, positive scalar scaling preserves proximal support, and a
     single positively scaled regularizer term preserves regularizer proximal support. ``SumCost`` computes the
     proximal of the full summed objective through
-    :func:`decent_bench.centralized_algorithms.proximal_solver` when that accelerated-gradient backend is applicable.
+    :func:`decent_bench.utils.solvers.proximal_solver` when that accelerated-gradient backend is applicable.
     Multi-term regularizer composites and :class:`EmpiricalRegularizedCost` do not provide a generic proximal. Use a
     specialized proximal if one exists, or use
-    :func:`decent_bench.centralized_algorithms.proximal_solver` when applicable.
+    :func:`decent_bench.utils.solvers.proximal_solver` when applicable.
 """
 
 from . import _base as base

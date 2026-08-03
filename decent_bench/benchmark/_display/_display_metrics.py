@@ -9,8 +9,8 @@ from decent_bench.benchmark._display.display_plots import display_plots
 from decent_bench.benchmark._display.display_tables import display_tables
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.metrics import ComputationalCost, Metric
-from decent_bench.utils import logger
-from decent_bench.utils.logger import LOGGER
+from decent_bench.utils import _logger
+from decent_bench.utils._logger import LOGGER
 
 if TYPE_CHECKING:
     from decent_bench.algorithms import Algorithm
@@ -95,7 +95,7 @@ def display_metrics(
         Computational cost plots will be shown on the left and iteration plots on the right.
 
     """
-    logger.start_logger(log_level=log_level)
+    _logger.start_logger(log_level=log_level)
     LOGGER.info("Displaying metrics")
 
     if metrics_result is None:

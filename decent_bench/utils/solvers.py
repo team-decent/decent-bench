@@ -6,9 +6,9 @@ import numpy as np
 from rich.progress import track
 
 import decent_bench.utils.interoperability as iop
-from decent_bench.utils import logger
+from decent_bench.utils import _logger
+from decent_bench.utils._logger import LOGGER
 from decent_bench.utils.array import Array
-from decent_bench.utils.logger import LOGGER
 
 if TYPE_CHECKING:
     from decent_bench.costs import Cost
@@ -43,7 +43,7 @@ def solve(
 
     """
     if not LOGGER.handlers:
-        logger.start_logger()
+        _logger.start_logger()
     LOGGER.info("Finding the optimal solution to the problem ...")
 
     stop_criteria = f"Stopping after {max_iter} iterations"

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-import decent_bench.centralized_algorithms as ca
+import decent_bench.utils.solvers as ca
 from decent_bench.costs import Cost, QuadraticCost
 from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
@@ -215,7 +215,7 @@ def test_solve_logger_initialization_is_lazy(monkeypatch: pytest.MonkeyPatch) ->
         stub_no_handlers.handlers.append(object())
 
     monkeypatch.setattr(ca, "LOGGER", stub_no_handlers)
-    monkeypatch.setattr(ca.logger, "start_logger", fake_start_logger_no_handlers)
+    monkeypatch.setattr(ca._logger, "start_logger", fake_start_logger_no_handlers)
 
     ca.solve(cost)
 
@@ -228,7 +228,7 @@ def test_solve_logger_initialization_is_lazy(monkeypatch: pytest.MonkeyPatch) ->
         started_with_handlers["count"] += 1
 
     monkeypatch.setattr(ca, "LOGGER", stub_with_handlers)
-    monkeypatch.setattr(ca.logger, "start_logger", fake_start_logger_with_handlers)
+    monkeypatch.setattr(ca._logger, "start_logger", fake_start_logger_with_handlers)
 
     ca.solve(cost)
 

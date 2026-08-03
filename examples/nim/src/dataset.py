@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 from PIL import Image
 
 from decent_bench.datasets import DatasetHandler
-from decent_bench.utils.logger import LOGGER, start_logger
+from decent_bench.utils._logger import LOGGER, start_logger
 from decent_bench.utils.types import Dataset
 
 

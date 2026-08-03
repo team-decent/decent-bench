@@ -3,7 +3,6 @@ from ._computational_cost import ComputationalCost
 from ._metric import Metric
 from ._metrics_view import AgentMetricsView, NetworkMetricsView, NetworkType
 from ._runtime_metric import RuntimeMetric
-from ._runtime_metric_plotter import RuntimeMetricPlotter
 
 __all__ = [
     "AgentMetricsView",
@@ -12,7 +11,6 @@ __all__ = [
     "NetworkMetricsView",
     "NetworkType",
     "RuntimeMetric",
-    "RuntimeMetricPlotter",
     "metric_library",
     "runtime_library",
     "utils",

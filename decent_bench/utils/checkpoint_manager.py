@@ -17,7 +17,7 @@ from decent_bench.algorithms import Algorithm
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, MetricResult
 from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network
-from decent_bench.utils.logger import LOGGER
+from decent_bench.utils._logger import LOGGER
 
 # NOTE: On some platforms (notably Windows), the Python binding can expose the 32-bit
 # Zstandard magic number as a signed int, which makes it negative.

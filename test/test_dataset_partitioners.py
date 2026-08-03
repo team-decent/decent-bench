@@ -9,6 +9,8 @@ from decent_bench.datasets import (
     DatasetHandler,
     PyTorchDatasetHandler,
     SyntheticClassificationDatasetHandler,
+)
+from decent_bench.datasets.utils import (
     split_dirichlet_label,
     split_iid,
     split_label_quantity,

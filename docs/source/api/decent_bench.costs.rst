@@ -11,3 +11,8 @@ decent\_bench.costs
    :special-members:
       __init__,
       __add__,
+
+.. toctree::
+   :maxdepth: 1
+
+   decent_bench.costs.utils

@@ -43,7 +43,7 @@ class TrialColumn(ProgressColumn):
         self.style = style
         self.finished_style = finished_style
 
-    def render(self, task: "Task") -> Text:  # noqa: D102
+    def render(self, task: "Task") -> Text:
         trial = self.n_trials if task.finished else task.fields.get("fields", task.fields).get("trial", "?")
         return Text(f"{trial}/{self.n_trials}", style=self.finished_style if task.finished else self.style)
 
@@ -55,7 +55,7 @@ class SpeedColumn(ProgressColumn):
         super().__init__()
         self.progress_step = progress_step
 
-    def render(self, task: "Task") -> Text:  # noqa: D102
+    def render(self, task: "Task") -> Text:
         if task.speed is None and task.finished_speed is None:
             return Text("--.-- it/s", style="progress.percentage", justify="right")
 
