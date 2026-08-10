@@ -37,7 +37,7 @@ kaggle = ["kagglehub>=0.3,<2"]
 [dependency-groups]
 lint = ["ruff==0.15.20"]
 typecheck = [
-  "mypy==2.2.0",
+  "mypy==2.3.0",
   "scipy-stubs>=1.18,<2",
   "types-networkx>=3.4,<4",
   "types-tensorflow>=2.18,<3",
