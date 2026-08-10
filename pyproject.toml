@@ -35,7 +35,7 @@ torch = [
 kaggle = ["kagglehub>=0.3,<2"]
 
 [dependency-groups]
-lint = ["ruff==0.15.20"]
+lint = ["ruff==0.16.2"]
 typecheck = [
   "mypy==2.3.0",
   "scipy-stubs>=1.18,<2",
