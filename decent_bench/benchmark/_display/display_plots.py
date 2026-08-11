@@ -430,7 +430,7 @@ def _get_separate_legend_path(plot_path: Path) -> Path:
     return plot_path.with_name(f"{plot_path.stem}_legend{plot_path.suffix}")
 
 
-def _plot_subplot(
+def _plot_subplot(  # noqa: PLR0917
     subplot: SubPlot,
     x: Sequence[float],
     y_mean: Sequence[float],
