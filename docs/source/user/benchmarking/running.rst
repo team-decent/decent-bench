@@ -1,6 +1,8 @@
 Running a benchmark
 -------------------
-A typical benchmark run is characterized by four steps:
+A typical benchmark process starts by configuring decent-bench, then follows four workflow steps:
+
+0. **Configure**: call :func:`~decent_bench.benchmark.configure` once per process, before creating costs or other backend-dependent objects. Choose a framework and device for a new experiment; optionally set a seed, log level, and storage directory.
 
 1. **Benchmark problem definition**: where the local costs :math:`f_i` (see :eq:`decentralized-problem`) and the network architecture are defined. This includes defining practical constraints such as limited communications/computational power. The benchmark problem is defined as a :class:`~decent_bench.benchmark.BenchmarkProblem` object.
 2. **Benchmark**: where a set of algorithms is tested on the benchmark problem; see :func:`~decent_bench.benchmark.benchmark`. The results are contained in a :class:`~decent_bench.benchmark.BenchmarkResult` object.
@@ -12,15 +14,31 @@ The worflow is depicted in the diagram below:
 .. mermaid::
 
    flowchart TB
-       START(( )):::empty -->|BenchmarkProblem| A[benchmark]
+       START(( )):::empty --> C[configure]
+       C --> P[define problem]
+       P -->|BenchmarkProblem| A[benchmark]
        A -->|BenchmarkResult| B[compute_metrics]
-       B -->|MetricResult| C[display_metrics]
+       B -->|MetricResult| D[display_metrics]
 
        classDef empty width:0px,height:0px,fill:transparent,stroke:transparent,color:transparent;
 
 
 The following code examples show how to execute this workflow in practice. The first example is for a federated
 setting, the second for a peer-to-peer setting, and after each example we show the corresponding output.
+
+For a new run, select the backend before constructing the problem. Set ``storage_dir`` to save checkpoints and results;
+omit it to run without checkpointing. Once configuration is set, benchmark, metrics, and display functions use it
+automatically.
+
+.. code-block:: python
+
+    from decent_array.types import Devices, Frameworks
+    from decent_bench.benchmark import configure
+
+    configure(Frameworks.NUMPY, Devices.CPU, seed=42, storage_dir="results")
+
+To reopen this experiment in a later process, call ``configure(storage_dir="results")``. The backend, seed, and
+checkpoint settings are read from the experiment metadata, so do not pass ``framework`` or ``device`` when reopening it.
 
 
 Federated example
@@ -73,7 +91,7 @@ In both examples, we generate a linear regression problem
 
 .. literalinclude:: ../../../examples/basic_p2p_example.py
     :language: python
-    :lines: 15
+    :lines: 17
 
 characterized by the local costs
 :math:`f_i(x_i) = \frac{1}{m_i} \sum_{h = 1}^{m_i} \frac{1}{2} (a_i^h x_i - b_i^h)^2` with feature vectors
@@ -85,11 +103,11 @@ We then create the federated or peer-to-peer network of agents to solve the prob
 
 .. literalinclude:: ../../../examples/basic_fed_example.py
     :language: python
-    :lines: 14
+    :lines: 17
 
 .. literalinclude:: ../../../examples/basic_p2p_example.py
     :language: python
-    :lines: 17-18
+    :lines: 19-20
 
 where each agent is assigned one of the cost functions :math:`f_i` contained in ``costs``.
 
@@ -97,7 +115,7 @@ These steps set up the benchmark problem, which is represented by the data struc
 
 .. literalinclude:: ../../../examples/basic_fed_example.py
     :language: python
-    :lines: 15
+    :lines: 18
 
 The next steps are the execution of the benchmark using the :func:`~decent_bench.benchmark.benchmark` function, passing
 a list of the algorithms to be tested as ``algorithms``, each with its hyperparameters. The results are contained in the
@@ -108,7 +126,7 @@ In the examples, two performance metrics are selected (which are instances of :c
 
 .. literalinclude:: ../../../examples/basic_fed_example.py
     :language: python
-    :lines: 32
+    :lines: 36
 
 with :class:`~decent_bench.metrics.metric_library.XError` being the distance from the optimal solution, and
 :class:`~decent_bench.metrics.metric_library.GradientNorm` the norm of the gradient of :math:`\sum_{i = 1}^N f_i`. If

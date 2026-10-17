@@ -1,6 +1,6 @@
 [project]
 name = "decent-bench"
-version = "0.2.3"
+version = "0.3.0"
 authors = [{name = "Elias Ram"}, {name = "Simon Granström"}, {name = "Adriana Rodriguez"}, {name = "Nicola Bastianello"}]
 maintainers = [{name = "Team Decent"}]
 description = "A benchmarking framework for decentralized optimization"
@@ -12,6 +12,7 @@ classifiers = [
 ]
 license = "AGPL-3.0-only"
 dependencies = [
+  "decent-array>=0.2.7",
   "matplotlib>=3.9,<4",
   "networkx>=3.4,<4",
   "numpy>=2.0,<3",
@@ -128,6 +129,10 @@ commands = [
 [tool.pytest.ini_options]
 addopts = "-q -W error"
 testpaths = ["test"]
+markers = [
+  "backend_framework(framework): configure the named backend for a test",
+  "no_auto_configure: test manages configure() state directly",
+]
 
 [tool.mypy]
 strict = true

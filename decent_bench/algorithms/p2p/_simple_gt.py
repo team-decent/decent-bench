@@ -32,7 +32,6 @@ class SimpleGT(P2PAlgorithm):
 
     """
 
-    iterations: int = 100
     step_size: float = 0.001
     x0: InitialStates = None
     name: str = "SimpleGT"

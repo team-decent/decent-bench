@@ -51,7 +51,7 @@ class Metric(ABC):
     def is_available(
         self,
         problem: "BenchmarkProblem",  # noqa: ARG002
-    ) -> tuple[bool, str | None]:
+    ) -> str | None:
         """
         Check whether this metric can be computed for the given problem.
 
@@ -63,12 +63,10 @@ class Metric(ABC):
             problem: the benchmark problem being evaluated
 
         Returns:
-            A tuple ``(available, reason)``. When *available* is ``True``, *reason* is
-            ``None``. When *available* is ``False``, *reason* contains a human-readable
-            explanation.
+            ``None`` when *available*, and a string with the reason for *unavailability* otherwise.
 
         """
-        return True, None
+        return None
 
     @abstractmethod
     def compute(

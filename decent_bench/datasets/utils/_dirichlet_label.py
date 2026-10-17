@@ -1,8 +1,8 @@
 from collections.abc import Hashable, Sequence
 
 import numpy as np
+from decent_array import interoperability as iop
 
-import decent_bench.utils.interoperability as iop
 from decent_bench.datasets._dataset_handler import DatasetHandler
 
 from ._utils import (
@@ -73,7 +73,7 @@ def _split_once(
     label_assignments = _shuffled_sequence(list(zip(label_items, label_counts, strict=True)))
     for (_, label_indices), label_count in label_assignments:
         selected_indices = _shuffled_sequence(label_indices)[:label_count]
-        proportions = iop.rng_numpy().dirichlet(np.full(n_partitions, alpha))
+        proportions = iop.get_numpy_rng().dirichlet(np.full(n_partitions, alpha))
         _extend_weighted_by_capacity(selected_indices, partitions, remaining_counts, proportions)
 
     if any(remaining_counts):

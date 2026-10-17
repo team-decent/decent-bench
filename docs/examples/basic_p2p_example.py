@@ -1,13 +1,15 @@
 import networkx as nx
+from decent_array.types import Devices, Frameworks
 
 from decent_bench import benchmark
 from decent_bench.agents import Agent
 from decent_bench.algorithms.p2p import ADMM, DGD, ED
-from decent_bench.benchmark import create_regression_problem
+from decent_bench.benchmark import configure, create_regression_problem
 from decent_bench.metrics import metric_library
 from decent_bench.networks import P2PNetwork
 
 if __name__ == "__main__":
+    configure(Frameworks.NUMPY, Devices.CPU)
 
     ## Problem definition ------------------------------------------------
     n_agents = 10
@@ -24,11 +26,12 @@ if __name__ == "__main__":
 
     results = benchmark.benchmark(
         algorithms=[
-            DGD(iterations=num_iter, step_size=0.1),
-            ED(iterations=num_iter, step_size=0.1),
-            ADMM(iterations=num_iter, penalty=1, relaxation=0.8),
+            DGD(step_size=0.1),
+            ED(step_size=0.1),
+            ADMM(penalty=1, relaxation=0.8),
         ],
         benchmark_problem=problem,
+        iterations=num_iter,
         n_trials=1,
         )
 

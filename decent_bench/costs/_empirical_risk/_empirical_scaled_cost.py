@@ -3,15 +3,12 @@ from __future__ import annotations
 from functools import cached_property
 from typing import Any
 
-import numpy as np
+from decent_array import Array, nan
 
-from decent_bench.utils.array import Array
 from decent_bench.utils.types import (
     Dataset,
     EmpiricalRiskIndices,
     EmpiricalRiskReduction,
-    SupportedDevices,
-    SupportedFrameworks,
 )
 
 from ._empirical_risk_cost import EmpiricalRiskCost
@@ -44,14 +41,6 @@ class _EmpiricalScaledCost(EmpiricalRiskCost):
         return self.cost.shape
 
     @property
-    def framework(self) -> SupportedFrameworks:
-        return self.cost.framework
-
-    @property
-    def device(self) -> SupportedDevices:
-        return self.cost.device
-
-    @property
     def n_samples(self) -> int:
         return self.cost.n_samples
 
@@ -79,7 +68,7 @@ class _EmpiricalScaledCost(EmpiricalRiskCost):
             return float(self.scalar * self.cost.m_cvx)
         if self.scalar == 0:
             return 0.0
-        return np.nan
+        return nan
 
     def predict(self, x: Array, data: list[Array]) -> Array:
         """Predictions are unchanged by scalar scaling of the objective."""

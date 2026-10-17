@@ -3,22 +3,15 @@ Customizing benchmark settings
 
 Storing results
 ^^^^^^^^^^^^^^^
-A first important tool for benchmarking is the :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager`, which
-defines the results destination (folder ``results`` in the example below).
+A first step is to configure an optional storage directory (folder ``results`` in the example below).
 
 .. literalinclude:: ../../../examples/checkpointing_fed_example.py
     :language: python
     :linenos:
 
-The role of the :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager` is to store the results at every step
-of the benchmarking workflow. This is done by passing the  :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager`
-instance as the ``checkpoint_manager`` argument of :func:`~decent_bench.benchmark.benchmark`, :func:`~decent_bench.benchmark.compute_metrics`, :func:`~decent_bench.benchmark.display_metrics`.
-Additionally, the :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager` stores snapshots of the simulation
-results ("checkpoints") as the benchmark runs. This allows resuming simulations later (*e.g.* adding more iterations)
-or recovering interrupted simulations.
-
-See more in :ref:`this section <checkpointing>`.
-
+When ``storage_dir`` is set, decent-bench stores checkpoints, computed metrics, tables, and plots there automatically.
+It also stores snapshots of the simulation as it runs, allowing interrupted simulations to resume or to add more
+iterations later. See :ref:`this section <checkpointing>` for details.
 
 Benchmark settings
 ^^^^^^^^^^^^^^^^^^
@@ -39,7 +32,7 @@ displyed with :func:`~decent_bench.benchmark.display_metrics`.
 
 .. literalinclude:: ../../../examples/basic_p2p_example.py
     :language: python
-    :lines: 36-44
+    :lines: 39-47
 
 These steps can be customized in several ways. For :func:`~decent_bench.benchmark.compute_metrics`:
 
@@ -50,7 +43,7 @@ These steps can be customized in several ways. For :func:`~decent_bench.benchmar
 For :func:`~decent_bench.benchmark.display_metrics`:
 
 * ``table_metrics``, ``plot_metrics``, ``algorithms``: these can be used to select only a subset of the metrics/algorithms computed by :func:`~decent_bench.benchmark.compute_metrics` and stored in the :class:`~decent_bench.benchmark.MetricResult` object.
-* Table formatting: ``table_fmt`` to choose either plain text or LaTeX tables (if a :class:`~decent_bench.utils.checkpoint_manager.CheckpointManager` is defined, both are stored in the results dir); ``scale_compute`` to scale metrics related to the computational cost like :class:`~decent_bench.metrics.metric_library.GradientCalls`, which might be significantly large.
+* Table formatting: ``table_fmt`` to choose either plain text or LaTeX tables (if ``storage_dir`` is configured, both are stored in the results directory); ``scale_compute`` to scale metrics related to the computational cost like :class:`~decent_bench.metrics.metric_library.GradientCalls`, which might be significantly large.
 * Plot customization 1: ``plot_grid``; ``individual_plots`` to plot each metric in a separate figure; ``plot_format``.
 * Plot customization 2: by default, metrics are plotted against iteration numbers; however, this might give a biased perspective since different algorithms will have different computational costs. The plots therefore can be customized to account for this by passing a :class:`~decent_bench.metrics.ComputationalCost` object into ``computational_cost``, which defines the cost of each operation (function, gradient, hessian, proximal evaluation, and communication). The computational cost will then replace the iteration numbers on the x-axis, or both can be plotted side-by-side using ``compare_iterations_and_computational_cost``. Finally, using computational cost for the x-axis might result in large values, and ``scale_x_axis`` can be used to make them more manageable.
 
@@ -171,13 +164,13 @@ Table:
 
 Interpreting logger messages
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Throughout the benchmark workflow, logger messages are displayed in the terminal. The amount of information can be
-tuned by setting the ``log_level`` argument of :func:`~decent_bench.benchmark.benchmark`, :func:`~decent_bench.benchmark.compute_metrics`, :func:`~decent_bench.benchmark.display_metrics`.
+Throughout the benchmark workflow, logger messages are displayed in the terminal. Set ``log_level`` in
+:func:`~decent_bench.benchmark.configure` to control how much information is shown.
 Examples are (printing progressively less information): ``logging.DEBUG``, ``logging.INFO`` (the default), ``logging.WARNING``, ``logging.ERROR``, ``logging.CRITICAL``.
 See `here <https://docs.python.org/3/library/logging.html#logging-levels>`_ for more details.
 
 The following are examples of the logger messages printed when running the code shown in the previous section with
-the default ``log_level = logging.INFO``.
+the default ``log_level=logging.INFO``.
 
 During benchmark problem creation:
 
@@ -187,7 +180,7 @@ During benchmark problem creation:
     INFO     ... done!
     INFO     Finding the optimal solution to the problem ...
     INFO     ... done!                                              # with a progress bar if x_optimal is computed iteratively rather than in closed form
-    INFO     Initialized checkpoint directory at 'results'          # if checkpoint_manager is defined
+    INFO     Initialized checkpoint directory at 'results'          # if storage_dir is configured
 
 During benchmark run:
 
@@ -208,7 +201,7 @@ During metrics computation:
     ...                                                                                             # plus warnings for all other unavailable metrics
     Computing plot metrics   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00 Plot computation complete
     Computing table metrics  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00 Table computation complete
-    INFO     Saved computed metrics result to results/metric_computation.pkl.zst                    # if checkpoint_manager is defined
+    INFO     Saved computed metrics result to results/metric_computation.pkl.zst                    # if storage_dir is configured
 
 During metrics display:
 

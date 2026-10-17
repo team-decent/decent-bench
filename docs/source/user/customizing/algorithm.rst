@@ -1,8 +1,7 @@
 Algorithms
 ----------
 
-This section discusses available algorithms and how to implement algorithms from scratch, in particular how to ensure
-that they satisfy interoperability requirements.
+This section discusses available algorithms and how to implement algorithms from scratch.
 
 
 Algorithm structure
@@ -13,7 +12,7 @@ benchmark problem. In turn these are subclasses of :class:`~decent_bench.algorit
 
 .. literalinclude:: ../../../../decent_bench/algorithms/_algorithm.py
     :language: python
-    :lines: 8-13, 33-60, 83-125
+    :lines: 8-13, 30-60, 62-107
 
 Algorithms are thus characterized by the following:
 
@@ -91,31 +90,11 @@ It is worth pointing out some important implementation choices:
 
 
 
-.. _interoperability:
-
-Interoperability
-^^^^^^^^^^^^^^^^
-The goal of decent-bench is to provide a benchmarking pipeline (from networks to algorithms) that is not
-tied to any single computational framework. This is accomplished via the interoperability layer
-:mod:`~decent_bench.utils.interoperability`, exposing a standard API which then interfaces with the supported
-frameworks (currently, NumPy, PyTorch, TensorFlow, JAX).
-
-The idea then is to use the interoperability layer while defining network and algorithms, ensuring that they can be
-reused across frameworks, instead of defining framework-specific versions of each algorithm.
-
-The components of the interoperability layer include, first the :class:`~decent_bench.utils.array.Array` object, which wraps
-a framework-native array/tensor. The benchmarking pipeline assumes that only :class:`~decent_bench.utils.array.Array`
-objects are passed around. The second component is the interoperability API, which defines functions like
-:func:`decent_bench.utils.interoperability.zeros` and :func:`decent_bench.utils.interoperability.eye_like` (used in
-the ED algorithm shown above).
-
-Algorithms, networks, and schemes should therefore always use interoperability functions. When they are not available, 
-a workaround is to convert to NumPy (:class:`decent_bench.utils.interoperability.to_numpy`) and then converting
-back to :class:`~decent_bench.utils.array.Array`.
-
-Costs are the only place where framework-native operations should be employed, making sure to use
-:func:`~decent_bench.utils.interoperability.autodecorate_cost_method` to correctly interface with the
-interoperability layer (see discussion :ref:`here <interop_cost>`).
+decent-bench algorithms should work with the selected computational framework. Call
+:func:`~decent_bench.benchmark.configure` to choose the framework and device, then use the array operations provided by
+`decent-array <https://decent-array.readthedocs.io/>`_ when defining algorithms, networks, and schemes. These operations
+keep the implementation independent of NumPy, PyTorch, and other framework-specific APIs. Use native framework
+operations in a cost implementation when needed; the next section shows an example.
 
 
 Advanced algorithm implementation
@@ -130,7 +109,7 @@ agent, and the ``_local_training`` method performs local training using the opti
     from dataclasses import dataclass
     from typing import TYPE_CHECKING, Any
 
-    import decent_bench.utils.interoperability as iop
+    from decent_array import interoperability as iop
     from decent_bench.agents import Agent
     from decent_bench.algorithms.p2p import LT_ADMM
     from decent_bench.costs import PyTorchCost

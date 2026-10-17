@@ -1,4 +1,3 @@
-import logging
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Literal
 
@@ -9,18 +8,15 @@ from decent_bench.benchmark._display.display_plots import display_plots
 from decent_bench.benchmark._display.display_tables import display_tables
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.metrics import ComputationalCost, Metric
-from decent_bench.utils import _logger
 from decent_bench.utils._logger import LOGGER
 
 if TYPE_CHECKING:
     from decent_bench.algorithms import Algorithm
     from decent_bench.networks import Network
-    from decent_bench.utils.checkpoint_manager import CheckpointManager
 
 
 def display_metrics(
     metrics_result: MetricResult | None = None,
-    checkpoint_manager: "CheckpointManager | None" = None,
     *,
     table_metrics: list[Metric | str] | None = None,
     plot_metrics: list[Metric | str] | None = None,
@@ -34,7 +30,6 @@ def display_metrics(
     compare_iterations_and_computational_cost: bool = False,
     plot_format: Literal["png", "pdf", "svg"] = "png",
     show_plots: bool = True,
-    log_level: int = logging.INFO,
 ) -> None:
     """
     Display the results of metrics computation.
@@ -73,7 +68,6 @@ def display_metrics(
         plot_format: format to save plots in, defaults to ``png``. Can be ``png``, ``pdf``, or ``svg``.
         show_plots: whether to show the plots after creating them, defaults to ``True``. Can be useful to set to
             ``False`` when running in a non-interactive environment or when only saving the plots without displaying.
-        log_level: minimum level to log, e.g. :data:`logging.INFO`
 
     Raises:
         ValueError: If neither ``metrics_result`` nor ``checkpoint_manager`` is provided, or
@@ -95,7 +89,10 @@ def display_metrics(
         Computational cost plots will be shown on the left and iteration plots on the right.
 
     """
-    _logger.start_logger(log_level=log_level)
+    from decent_bench.benchmark._configure import get_checkpoint_manager, get_config  # noqa: PLC0415
+
+    get_config()
+    checkpoint_manager = get_checkpoint_manager()
     LOGGER.info("Displaying metrics")
 
     if metrics_result is None:

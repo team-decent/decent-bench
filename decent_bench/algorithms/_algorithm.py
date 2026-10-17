@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import Any, final
+from typing import final
 
 from decent_bench.networks import Network
 
@@ -11,27 +11,6 @@ class Algorithm[NetworkT: Network](ABC):
     def __post_init__(self) -> None:
         """Optional hook to be called by dataclasses after __init__."""  # noqa: D401
         return
-
-    def __init_subclass__(cls, **kwargs: dict[str, Any]) -> None:
-        """Validate `iterations` for all subclasses."""
-        super().__init_subclass__(**kwargs)
-
-        # override __post_init__ to inject `iterations` validation
-        original_post_init: Callable[[Algorithm[NetworkT]], None] | None = getattr(cls, "__post_init__", None)
-
-        def __post_init__(self: "Algorithm[NetworkT]") -> None:  # noqa: N807
-            # inject `iterations` validation
-            if self.iterations <= 0:
-                raise ValueError("`iterations` must be positive")
-
-            # add subclass's __post_init__ if any
-            if original_post_init:
-                original_post_init(self)
-
-        setattr(cls, "__post_init__", __post_init__)  # noqa: B010
-
-    iterations: int
-    """Number of iterations to run the algorithm for."""
 
     @property
     @abstractmethod
@@ -75,15 +54,16 @@ class Algorithm[NetworkT: Network](ABC):
                 agent.aux_vars.clear()
 
     @final
-    def _snapshot_agents(self, network: NetworkT, iteration: int) -> None:
+    def _snapshot_agents(self, network: NetworkT, iteration: int, iterations: int) -> None:
         for i in network.snapshot_agents():
             # Forcefully save a snapshot on the final iteration
-            i._snapshot(iteration=iteration, force=iteration == self.iterations)  # noqa: SLF001
+            i._snapshot(iteration=iteration, force=iteration == iterations)  # noqa: SLF001
 
     @final
     def run(
         self,
         network: NetworkT,
+        iterations: int,
         start_iteration: int = 0,
         progress_callback: Callable[[int], None] | None = None,
     ) -> None:
@@ -94,32 +74,34 @@ class Algorithm[NetworkT: Network](ABC):
 
         Args:
             network: provides the agents and topology for this algorithm.
+            iterations: total number of iterations to run.
             start_iteration: iteration number to start from, used when resuming from a checkpoint. If greater than 0,
                 :meth:`initialize` will be skipped.
             progress_callback: optional callback to report progress after each iteration.
 
         Raises:
-            ValueError: if start_iteration is not in [0, iterations]
+            ValueError: if iterations is not positive or start_iteration is not in [0, iterations]
 
         Warning:
             Do not override this method. Instead, override :meth:`initialize` and :meth:`step` as needed.
 
         Note:
             The algorithm saves the agents' states every :attr:`~decent_bench.agents.Agent.state_snapshot_period`.
+            The final state is always snapshotted even when it falls outside the configured snapshot period.
 
         """
-        if start_iteration < 0 or start_iteration > self.iterations:
-            raise ValueError(
-                f"Invalid start_iteration {start_iteration} for algorithm with {self.iterations} iterations"
-            )
+        if iterations <= 0:
+            raise ValueError("`iterations` must be positive")
+        if start_iteration < 0 or start_iteration > iterations:
+            raise ValueError(f"Invalid start_iteration {start_iteration} for algorithm with {iterations} iterations")
 
         if start_iteration == 0:
             self.initialize(network)
 
-        for k in range(start_iteration, self.iterations):
+        for k in range(start_iteration, iterations):
             network._step(k)  # noqa: SLF001
             self.step(network, k)
             # Already completed the iteration, so snapshot with k+1 to indicate the state after iteration k
-            self._snapshot_agents(network, k + 1)
+            self._snapshot_agents(network, k + 1, iterations)
             if progress_callback is not None:
                 progress_callback(k)

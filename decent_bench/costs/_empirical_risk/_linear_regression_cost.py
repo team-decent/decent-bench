@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from functools import cached_property
+from typing import Any
 
-import numpy as np
-from numpy import float64
-from numpy.typing import NDArray
+from decent_array import Array, nan
+from decent_array import interoperability as iop
 
-import decent_bench.utils.interoperability as iop
 from decent_bench.costs._empirical_risk._empirical_risk_cost import EmpiricalRiskCost
 from decent_bench.utils._tags import Tag, tags
 from decent_bench.utils.types import (
@@ -14,8 +13,6 @@ from decent_bench.utils.types import (
     EmpiricalRiskBatchSize,
     EmpiricalRiskIndices,
     EmpiricalRiskReduction,
-    SupportedDevices,
-    SupportedFrameworks,
 )
 
 
@@ -62,13 +59,10 @@ class LinearRegressionCost(EmpiricalRiskCost):
             TypeError: If dataset targets are not single dimensional values.
 
         """
-        if len(iop.shape(dataset[0][0])) != 1:
-            raise ValueError(f"Dataset features must be vectors, got: {dataset[0][0]}")
-        if iop.to_numpy(dataset[0][1]).shape != (1,):
-            raise TypeError(
-                f"Dataset targets must be single dimensional values, got: {dataset[0][1]} "
-                f"with shape {iop.to_numpy(dataset[0][1]).shape}, expected shape is (1,)."
-            )
+        if dataset[0][0].ndim != 1:
+            raise ValueError(f"Dataset features must be vectors, got: {dataset[0][0].shape}")
+        if dataset[0][1].shape != (1,):
+            raise TypeError(f"Dataset targets must be single dimensional values, got: {dataset[0][1].shape}")
         if isinstance(batch_size, int) and (batch_size <= 0 or batch_size > len(dataset)):
             raise ValueError(
                 f"Batch size must be positive and at most the number of samples, "
@@ -80,21 +74,13 @@ class LinearRegressionCost(EmpiricalRiskCost):
         self._dataset = dataset
         self._batch_size = self.n_samples if batch_size == "all" else batch_size
         # Cache data matrices for efficiency when using full dataset
-        self.A: NDArray[float64] | None = None
-        self.b: NDArray[float64] | None = None
-        self.ATA: NDArray[float64] | None = None
+        self.A: Array | None = None
+        self.b: Array | None = None
+        self.ATA: Array | None = None
 
     @property
     def shape(self) -> tuple[int, ...]:
         return iop.shape(self._dataset[0][0])
-
-    @property
-    def framework(self) -> SupportedFrameworks:
-        return SupportedFrameworks.NUMPY
-
-    @property
-    def device(self) -> SupportedDevices:
-        return SupportedDevices.CPU
 
     @property
     def n_samples(self) -> int:
@@ -122,8 +108,8 @@ class LinearRegressionCost(EmpiricalRiskCost):
         :attr:`Cost.m_smooth <decent_bench.costs.Cost.m_smooth>`.
         """
         _, ATA, _ = self._get_batch_data(indices="all")  # noqa: N806
-        eigs = np.linalg.eigvalsh(ATA)
-        return float(np.max(np.abs(eigs))) / self.n_samples
+        eigs = iop.eigvalsh(ATA)
+        return float(iop.max(iop.absolute(eigs))) / self.n_samples
 
     @cached_property
     def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -143,16 +129,15 @@ class LinearRegressionCost(EmpiricalRiskCost):
         :attr:`Cost.m_cvx <decent_bench.costs.Cost.m_cvx>`.
         """
         _, ATA, _ = self._get_batch_data(indices="all")  # noqa: N806
-        l_min = float(np.min(np.linalg.eigvalsh(ATA))) / self.n_samples
+        l_min = float(iop.min(iop.eigvalsh(ATA))) / self.n_samples
         tol = 1e-12
         if l_min > tol:
             return l_min
         if abs(l_min) <= tol:
             return 0
-        return np.nan
+        return nan
 
-    @iop.autodecorate_cost_method(EmpiricalRiskCost.predict)
-    def predict(self, x: NDArray[float64], data: list[NDArray[float64]]) -> NDArray[float64]:
+    def predict(self, x: Array, data: list[Array]) -> Array:
         r"""
         Make predictions at x on the given data.
 
@@ -166,12 +151,10 @@ class LinearRegressionCost(EmpiricalRiskCost):
             Predicted targets as an array.
 
         """
-        pred_data = np.stack(data) if isinstance(data, list) else data
-        pred: NDArray[float64] = pred_data.dot(x)
-        return pred
+        pred_data = iop.stack(data)
+        return pred_data @ x
 
-    @iop.autodecorate_cost_method(EmpiricalRiskCost.function)
-    def function(self, x: NDArray[float64], indices: EmpiricalRiskIndices = "batch") -> float:
+    def function(self, x: Array, indices: EmpiricalRiskIndices = "batch", **kwargs: Any) -> float:  # noqa: ARG002, ANN401
         r"""
         Evaluate function at x using datapoints at the given indices.
 
@@ -194,16 +177,16 @@ class LinearRegressionCost(EmpiricalRiskCost):
         where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
         """
         A, _, b = self._get_batch_data(indices)  # noqa: N806
-        residual = A.dot(x) - b
-        return float(0.5 * residual.dot(residual) / len(self.batch_used))
+        residual = A @ x - b
+        return float(0.5 * iop.sum(residual * residual)) / len(self.batch_used)
 
-    @iop.autodecorate_cost_method(EmpiricalRiskCost.gradient)
     def gradient(
         self,
-        x: NDArray[float64],
+        x: Array,
         indices: EmpiricalRiskIndices = "batch",
         reduction: EmpiricalRiskReduction = "mean",
-    ) -> NDArray[float64]:
+        **kwargs: Any,  # noqa: ARG002, ANN401
+    ) -> Array:
         r"""
         Gradient at x using datapoints at the given indices.
 
@@ -240,21 +223,18 @@ class LinearRegressionCost(EmpiricalRiskCost):
             return self._per_sample_gradients(x, indices)
 
         A, ATA, b = self._get_batch_data(indices)  # noqa: N806
-        res: NDArray[float64] = (ATA.dot(x) - A.T.dot(b)) / len(self.batch_used)
-        return res
+        return (iop.matmul(ATA, x) - iop.matmul(A.T, b)) / len(self.batch_used)
 
     def _per_sample_gradients(
         self,
-        x: NDArray[float64],
+        x: Array,
         indices: EmpiricalRiskIndices = "batch",
-    ) -> NDArray[float64]:
+    ) -> Array:
         A, _, b = self._get_batch_data(indices)  # noqa: N806
-        residuals = A.dot(x) - b  # shape: (n_samples,)
-        res: NDArray[float64] = residuals[:, np.newaxis] * A
-        return res
+        residuals = iop.matmul(A, x) - b  # shape: (n_samples,)
+        return iop.expand_dims(residuals, axis=1) * A
 
-    @iop.autodecorate_cost_method(EmpiricalRiskCost.hessian)
-    def hessian(self, x: NDArray[float64], indices: EmpiricalRiskIndices = "batch") -> NDArray[float64]:  # noqa: ARG002
+    def hessian(self, x: Array, indices: EmpiricalRiskIndices = "batch", **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         r"""
         Hessian at x using datapoints at the given indices.
 
@@ -277,11 +257,9 @@ class LinearRegressionCost(EmpiricalRiskCost):
         where :math:`\mathbf{A}_B` and :math:`\mathbf{b}_B` are the rows corresponding to the batch :math:`\mathcal{B}`.
         """
         _, ATA, _ = self._get_batch_data(indices)  # noqa: N806
-        res: NDArray[float64] = ATA / len(self.batch_used)
-        return res
+        return ATA / len(self.batch_used)
 
-    @iop.autodecorate_cost_method(EmpiricalRiskCost.proximal)
-    def proximal(self, x: NDArray[float64], penalty: float) -> NDArray[float64]:
+    def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         r"""
         Proximal at x using the full dataset.
 
@@ -295,27 +273,24 @@ class LinearRegressionCost(EmpiricalRiskCost):
         """
         A, ATA, b = self._get_batch_data("all")  # noqa: N806
         scale = 1 / self.n_samples
-        lhs = penalty * scale * ATA + np.eye(A.shape[1])
-        rhs = x + penalty * scale * A.T @ b
-        return np.asarray(np.linalg.solve(lhs, rhs), dtype=float64)
+        lhs = penalty * scale * ATA + iop.eye(A.shape[1])
+        rhs = x + penalty * scale * (A.T @ b)
+        return iop.solve(lhs, rhs)
 
     def _get_batch_data(
         self,
         indices: EmpiricalRiskIndices = "batch",
-    ) -> tuple[NDArray[float64], NDArray[float64], NDArray[float64]]:
+    ) -> tuple[Array, Array, Array]:
         """Get data for a batch. Returns A, A.T@A and b for the batch."""
         indices = self._sample_batch_indices(indices)
 
         if len(indices) == self.n_samples:
             if self.A is None or self.b is None or self.ATA is None:
-                self.A = np.stack([iop.to_numpy(x) for x, _ in self._dataset])
-                self.b = np.stack([iop.to_numpy(y) for _, y in self._dataset]).squeeze()
+                self.A = iop.stack([x for x, _ in self._dataset])
+                self.b = iop.squeeze(iop.stack([y for _, y in self._dataset]))
                 self.ATA = self.A.T @ self.A
             return self.A, self.ATA, self.b
 
-        A, b = np.empty((len(indices), *self.shape)), np.empty(len(indices))  # noqa: N806
-        for i, idx in enumerate(indices):
-            x_i, y_i = self._dataset[idx]
-            A[i, :] = iop.to_numpy(x_i)
-            b[i] = iop.to_numpy(y_i).item()
+        A = iop.stack([self._dataset[idx][0] for idx in indices])  # noqa: N806
+        b = iop.squeeze(iop.stack([self._dataset[idx][1] for idx in indices]))
         return A, A.T @ A, b

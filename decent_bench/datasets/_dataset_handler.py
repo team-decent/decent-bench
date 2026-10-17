@@ -30,7 +30,7 @@ class DatasetHandler(ABC):
 
     Data Structure:
         The dataset consists of datapoints, where each datapoint is a tuple of
-        (features, targets). Features and targets are represented as :class:`~decent_bench.utils.array.Array`
+        (features, targets). Features and targets are represented as :class:`decent_array.Array`
         objects or framework-specific tensor objects in special cases. For unsupervised learning,
         targets are usually None. Partitions are sequences of such datapoints,
         allowing users to easily distribute local datasets among agents.

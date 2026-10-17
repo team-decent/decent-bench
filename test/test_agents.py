@@ -3,10 +3,10 @@ import copy
 import numpy as np
 import pytest
 
-import decent_bench.utils.interoperability as iop
+from decent_array import Array, interoperability as iop
 from decent_bench.agents import Agent, AgentHistory
 from decent_bench.costs import L2RegularizerCost, LinearRegressionCost, QuadraticCost
-from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
+from decent_array.types import Devices, Frameworks
 
 try:
     import torch
@@ -43,50 +43,50 @@ except RuntimeError:
     "framework,device",
     [
         pytest.param(
-            SupportedFrameworks.NUMPY,
-            SupportedDevices.CPU,
+            Frameworks.NUMPY,
+            Devices.CPU,
         ),
         pytest.param(
-            SupportedFrameworks.PYTORCH,
-            SupportedDevices.CPU,
+            Frameworks.PYTORCH,
+            Devices.CPU,
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            SupportedFrameworks.PYTORCH,
-            SupportedDevices.GPU,
+            Frameworks.PYTORCH,
+            Devices.GPU,
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
         pytest.param(
-            SupportedFrameworks.TENSORFLOW,
-            SupportedDevices.CPU,
+            Frameworks.TENSORFLOW,
+            Devices.CPU,
             marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
         ),
         pytest.param(
-            SupportedFrameworks.TENSORFLOW,
-            SupportedDevices.GPU,
+            Frameworks.TENSORFLOW,
+            Devices.GPU,
             marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
         ),
         pytest.param(
-            SupportedFrameworks.JAX,
-            SupportedDevices.CPU,
+            Frameworks.JAX,
+            Devices.CPU,
             marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
         ),
         pytest.param(
-            SupportedFrameworks.JAX,
-            SupportedDevices.GPU,
+            Frameworks.JAX,
+            Devices.GPU,
             marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
         ),
     ],
 )
-def test_in_place_operations_history(framework: SupportedFrameworks, device: SupportedDevices):
+def test_in_place_operations_history(framework: Frameworks, device: Devices):
     """Test that in-place operations on agent.x properly update the history."""
     agent = Agent(
-        LinearRegressionCost([(np.array([1.0, 1.0, 1.0]), np.array([1.0]))]),
+        LinearRegressionCost([(Array(np.array([1.0, 1.0, 1.0])), Array(np.array([1.0])))]),
         activation=None,
         state_snapshot_period=1,
     )
 
-    initial = iop.zeros(framework=framework, device=device, shape=(3,))
+    initial = iop.zeros(shape=(3,))
     agent.initialize(x=initial)
 
     def assert_state(expected_x, expected_history):
@@ -186,53 +186,53 @@ def test_in_place_operations_history(framework: SupportedFrameworks, device: Sup
     "framework,device",
     [
         pytest.param(
-            SupportedFrameworks.NUMPY,
-            SupportedDevices.CPU,
+            Frameworks.NUMPY,
+            Devices.CPU,
         ),
         pytest.param(
-            SupportedFrameworks.PYTORCH,
-            SupportedDevices.CPU,
+            Frameworks.PYTORCH,
+            Devices.CPU,
             marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
         ),
         pytest.param(
-            SupportedFrameworks.PYTORCH,
-            SupportedDevices.GPU,
+            Frameworks.PYTORCH,
+            Devices.GPU,
             marks=pytest.mark.skipif(not TORCH_CUDA_AVAILABLE, reason="PyTorch CUDA not available"),
         ),
         pytest.param(
-            SupportedFrameworks.TENSORFLOW,
-            SupportedDevices.CPU,
+            Frameworks.TENSORFLOW,
+            Devices.CPU,
             marks=pytest.mark.skipif(not TF_AVAILABLE, reason="TensorFlow not available"),
         ),
         pytest.param(
-            SupportedFrameworks.TENSORFLOW,
-            SupportedDevices.GPU,
+            Frameworks.TENSORFLOW,
+            Devices.GPU,
             marks=pytest.mark.skipif(not TF_GPU_AVAILABLE, reason="TensorFlow GPU not available"),
         ),
         pytest.param(
-            SupportedFrameworks.JAX,
-            SupportedDevices.CPU,
+            Frameworks.JAX,
+            Devices.CPU,
             marks=pytest.mark.skipif(not JAX_AVAILABLE, reason="JAX not available"),
         ),
         pytest.param(
-            SupportedFrameworks.JAX,
-            SupportedDevices.GPU,
+            Frameworks.JAX,
+            Devices.GPU,
             marks=pytest.mark.skipif(not JAX_GPU_AVAILABLE, reason="JAX GPU not available"),
         ),
     ],
 )
 @pytest.mark.parametrize("state_snapshot_period", [1, 5, 10])
 def test_agent_state_snapshot_period(
-    framework: SupportedFrameworks, device: SupportedDevices, state_snapshot_period: int
+    framework: Frameworks, device: Devices, state_snapshot_period: int
 ):
     """Test that agent history is recorded according to the specified history period."""
     agent = Agent(
-        LinearRegressionCost([(np.array([1.0, 1.0, 1.0]), np.array([1.0]))]),
+        LinearRegressionCost([(Array(np.array([1.0, 1.0, 1.0])), Array(np.array([1.0])))]),
         activation=None,
         state_snapshot_period=state_snapshot_period,
     )
 
-    initial = iop.zeros(shape=(3,), framework=framework, device=device)
+    initial = iop.zeros(shape=(3,))
     agent.initialize(x=initial)
 
     def assert_state(expected_x, expected_history):
@@ -286,19 +286,19 @@ def _make_quadratic_agent() -> Agent:
     """Return an agent with a simple 2-D quadratic cost f(x) = x^T x."""
     A = np.eye(2) * 2.0
     b = np.zeros(2)
-    return Agent(QuadraticCost(A, b, 0.0), activation=None, state_snapshot_period=1)
+    return Agent(QuadraticCost(Array(A), Array(b), 0.0), activation=None, state_snapshot_period=1)
 
 
 def _make_empirical_agent(batch_size="all") -> Agent:
     """Return an agent backed by a 4-sample LinearRegressionCost."""
-    dataset = [(np.array([float(i)]), np.array([float(i)])) for i in range(1, 5)]
+    dataset = [(Array(np.array([float(i)])), Array(np.array([float(i)]))) for i in range(1, 5)]
     return Agent(LinearRegressionCost(dataset, batch_size=batch_size), activation=None, state_snapshot_period=1)
 
 
 def _initialized_quadratic_agent() -> Agent:
     """Return a quadratic agent initialized at zeros."""
     agent = _make_quadratic_agent()
-    agent.initialize(x=np.zeros(2))
+    agent.initialize(x=iop.zeros(2))
     return agent
 
 
@@ -357,10 +357,10 @@ class TestCallCounting:
 
         Calling the wrapper therefore increments the same agent counter as calling the original cost directly.
         """
-        base_cost = QuadraticCost(np.eye(2) * 2.0, np.zeros(2), 0.0)
+        base_cost = QuadraticCost(Array(np.eye(2) * 2.0), Array(np.zeros(2)))
         wrapper = make_wrapper(base_cost)
         agent = Agent(base_cost, activation=None, state_snapshot_period=1)
-        agent.initialize(x=np.zeros(2))
+        agent.initialize(x=iop.zeros(2))
 
         agent.cost.function(agent.x)
         wrapper.function(agent.x)
@@ -376,10 +376,10 @@ class TestCallCounting:
     )
     def test_deepcopied_wrapper_avoids_shared_counter_effects(self, make_wrapper):
         """Deep-copying a wrapper breaks the shared reference to the patched base cost."""
-        base_cost = QuadraticCost(np.eye(2) * 2.0, np.zeros(2), 0.0)
+        base_cost = QuadraticCost(Array(np.eye(2) * 2.0), Array(np.zeros(2)))
         wrapper = copy.deepcopy(make_wrapper(base_cost))
         agent = Agent(base_cost, activation=None, state_snapshot_period=1)
-        agent.initialize(x=np.zeros(2))
+        agent.initialize(x=iop.zeros(2))
 
         wrapper.function(agent.x)
 
@@ -399,12 +399,12 @@ class TestCallCounting:
         This is current shared-reference behavior: calling the wrapped agent also increments the counter on the agent
         that owns the reused base cost object.
         """
-        base_cost = QuadraticCost(np.eye(2) * 2.0, np.zeros(2), 0.0)
+        base_cost = QuadraticCost(Array(np.eye(2) * 2.0), Array(np.zeros(2)))
         wrapped_cost = make_wrapper(base_cost)
         base_agent = Agent(base_cost, activation=None, state_snapshot_period=1)
         wrapped_agent = Agent(wrapped_cost, activation=None, state_snapshot_period=1)
-        base_agent.initialize(x=np.zeros(2))
-        wrapped_agent.initialize(x=np.zeros(2))
+        base_agent.initialize(x=iop.zeros(2))
+        wrapped_agent.initialize(x=iop.zeros(2))
 
         wrapped_agent.cost.function(wrapped_agent.x)
 
@@ -496,20 +496,20 @@ class TestEmpiricalRiskCallCounting:
     def test_full_batch_counts_as_one(self):
         """With batch_size='all' (4 samples), each call should add 4/4 = 1.0."""
         agent = _make_empirical_agent(batch_size="all")
-        agent.initialize(x=np.zeros(1))
+        agent.initialize(x=iop.zeros(1))
         agent.cost.function(agent.x)
         assert agent._n_function_calls == pytest.approx(agent.cost.n_samples)
 
     def test_mini_batch_counts_as_fraction(self):
         """With batch_size=2 out of 4 samples, each call should add 2/4 = 0.5."""
         agent = _make_empirical_agent(batch_size=2)
-        agent.initialize(x=np.zeros(1))
+        agent.initialize(x=iop.zeros(1))
         agent.cost.function(agent.x)
         assert agent._n_function_calls == pytest.approx(0.5 * agent.cost.n_samples)
 
     def test_no_count_suppresses_empirical_risk_counting(self):
         agent = _make_empirical_agent(batch_size="all")
-        agent.initialize(x=np.zeros(1))
+        agent.initialize(x=iop.zeros(1))
         with Agent.no_count([agent]):
             agent.cost.function(agent.x)
             agent.cost.gradient(agent.x)

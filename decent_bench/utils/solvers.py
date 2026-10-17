@@ -1,14 +1,15 @@
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from math import isfinite
 from typing import TYPE_CHECKING, final
 
 import numpy as np
+from decent_array import Array
+from decent_array import interoperability as iop
 from rich.progress import track
 
-import decent_bench.utils.interoperability as iop
 from decent_bench.utils import _logger
 from decent_bench.utils._logger import LOGGER
-from decent_bench.utils.array import Array
 
 if TYPE_CHECKING:
     from decent_bench.costs import Cost
@@ -57,22 +58,21 @@ def solve(
     from decent_bench.costs import LinearRegressionCost, QuadraticCost, SumCost  # noqa: PLC0415
 
     if isinstance(cost, QuadraticCost):
-        x_optimal = Array(np.linalg.solve(cost.A, -cost.b))
+        x_optimal = iop.solve(cost.A, -cost.b)
     # linear regression
     elif isinstance(cost, SumCost) and all(isinstance(c, LinearRegressionCost) for c in cost.costs):
-        z = iop.zeros(framework=cost.costs[0].framework, device=cost.costs[0].device, shape=cost.costs[0].shape)
-        Q = np.asarray(sum(c.hessian(z, indices="all") for c in cost.costs))  # noqa: N806
-        r = np.asarray(sum(c.gradient(z, indices="all") for c in cost.costs))
+        z = iop.zeros(shape=cost.costs[0].shape)
+        Q = sum(c.hessian(z, indices="all") for c in cost.costs)  # noqa: N806
+        r = sum(c.gradient(z, indices="all") for c in cost.costs)
         try:
-            x_optimal_np = np.linalg.solve(Q, -r)
+            x_optimal = iop.solve(Q, -r)  # type: ignore[arg-type]
         except np.linalg.LinAlgError:
-            x_optimal_np = np.linalg.lstsq(Q, -r, rcond=None)[0]
-        x_optimal = Array(x_optimal_np)
+            x_optimal = Array(np.linalg.lstsq(iop.to_numpy(Q), iop.to_numpy(-r), rcond=None)[0])
     # exclude costs with m_smooth = 0
-    elif np.isfinite(cost.m_smooth) and np.isfinite(cost.m_cvx) and cost.m_smooth == 0:
+    elif isfinite(cost.m_smooth) and isfinite(cost.m_cvx) and cost.m_smooth == 0:
         raise ValueError("Costs with m_smooth = 0 are not supported.")
     # smooth and convex/strongly convex
-    elif np.isfinite(cost.m_smooth) and np.isfinite(cost.m_cvx) and cost.m_smooth > 0:
+    elif isfinite(cost.m_smooth) and isfinite(cost.m_cvx) and cost.m_smooth > 0:
         LOGGER.info(f"{stop_criteria}")
         x_optimal = AcceleratedGradientDescent(cost).run(
             max_iter=max_iter,
@@ -106,7 +106,7 @@ class Solver(ABC):
 
     def __init__(self, cost: "Cost", x0: Array | None = None):
         if x0 is None:
-            x0 = iop.zeros(shape=cost.shape, framework=cost.framework, device=cost.device)
+            x0 = iop.zeros(shape=cost.shape)
         if iop.shape(x0) != cost.shape:
             raise ValueError("x0 and cost function domain must have same shape")
         self.x = x0
@@ -303,7 +303,7 @@ def proximal_solver(cost: "Cost", y: Array, penalty: float, max_iter: int = 100)
 
     from decent_bench.costs import QuadraticCost  # noqa: PLC0415
 
-    proximal_cost = QuadraticCost(A=iop.eye_like(y) / penalty, b=-y / penalty) + cost
+    proximal_cost = QuadraticCost(A=iop.eye(iop.shape(y)[0]) / penalty, b=-y / penalty) + cost
     if proximal_cost.m_smooth == np.inf or np.isnan(proximal_cost.m_smooth) or np.isnan(proximal_cost.m_cvx):
         raise NotImplementedError("Proximal solver requires the cost to be differentiable, L-smooth, and convex.")
     return AcceleratedGradientDescent(proximal_cost, x0=y).run(

@@ -1,4 +1,3 @@
-import logging
 from json import JSONDecodeError
 from typing import TYPE_CHECKING, Literal
 
@@ -15,26 +14,22 @@ from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.metrics import Metric, utils
 from decent_bench.metrics import metric_library as ml
 from decent_bench.metrics._metrics_view import NetworkMetricsView
-from decent_bench.metrics.utils import _find_duplicates
 from decent_bench.networks import Network
-from decent_bench.utils._logger import LOGGER, start_logger
+from decent_bench.utils._logger import LOGGER
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
-    from decent_bench.utils.checkpoint_manager import CheckpointManager
 
 
 def compute_metrics(
     benchmark_result: BenchmarkResult | None = None,
-    checkpoint_manager: "CheckpointManager | None" = None,
     *,
     table_metrics: list[Metric] | None = None,
     plot_metrics: list[Metric] | None = None,
     statistics_across_agents: list[str] | None = None,
-    log_level: int = logging.INFO,
 ) -> MetricResult:
     """
     Compute metrics from a benchmark result.
@@ -74,14 +69,17 @@ def compute_metrics(
         All used table- and plot-metrics will be saved to the checkpoints' metadata if a checkpoint manager is provided,
         in order to know which metrics were computed and can be displayed later.
 
-        Metrics that return ``False`` from :meth:`~decent_bench.metrics.Metric.is_available` for the given problem are
+        Metrics marked unavailable by :meth:`~decent_bench.metrics.Metric.is_available` for the given problem are
         filtered out from the returned metric lists. Warnings are emitted with the omitted metric names.
 
         Plot metrics can still be available even when their final table value is ``inf/nan``: plot computation keeps the
         finite part of a trajectory, while table metrics are evaluated at the final iteration.
 
     """
-    start_logger(log_level=log_level)
+    from decent_bench.benchmark._configure import get_checkpoint_manager, get_config  # noqa: PLC0415
+
+    get_config()
+    checkpoint_manager = get_checkpoint_manager()
     LOGGER.info("Starting metrics computation")
 
     # 1) user input validation
@@ -170,13 +168,25 @@ def _validate_unique_descriptions(metrics: list[Metric], type_: Literal["table",
         raise ValueError(f"{type_.capitalize()} metric descriptions must be unique, duplicates found: {duplicates}")
 
 
+def _find_duplicates(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for item in items:
+        if item in seen:
+            duplicates.add(item)
+        else:
+            seen.add(item)
+
+    return sorted(duplicates)
+
+
 def _remove_unavailable(
     metrics: list[Metric], problem: "BenchmarkProblem", type_: Literal["table", "plot"]
 ) -> list[Metric]:
     available_metrics: list[Metric] = []
     for metric in metrics:
-        available, reason = metric.is_available(problem)
-        if not available:
+        reason = metric.is_available(problem)
+        if reason is not None:
             LOGGER.warning(f"Skipping {type_} metric '{metric.description}' because it is unavailable: {reason}")
             continue
 

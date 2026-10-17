@@ -3,8 +3,9 @@ from copy import deepcopy
 import networkx as nx
 import numpy as np
 import pytest
+from decent_array.types import Frameworks
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.algorithms.utils import (
     initial_states,
@@ -15,7 +16,7 @@ from decent_bench.algorithms.utils import (
 from decent_bench.costs import L2RegularizerCost, LinearRegressionCost, PyTorchCost, QuadraticCost
 from decent_bench.networks import FedNetwork, P2PNetwork
 from decent_bench.agents._utils import infer_client_data_size
-from decent_bench.utils.array import Array
+from decent_array import Array
 from decent_bench.costs.utils.pytorch_utils import SimpleLinearModel
 
 
@@ -46,11 +47,11 @@ def test_initial_states_array_broadcasts_to_all_agents() -> None:
 
 def test_initial_states_dict_matches_by_agent_id() -> None:
     net = _make_p2p_network(n_agents=3, shape=(2,))
-    x0_dict: dict[Agent, np.ndarray] = {}
+    x0_dict: dict[Agent, Array] = {}
 
     for idx, agent in enumerate(net.graph):
         same_id_other_instance = deepcopy(agent)
-        x0_dict[same_id_other_instance] = np.full(agent.cost.shape, fill_value=float(idx + 1))
+        x0_dict[same_id_other_instance] = Array(np.full(agent.cost.shape, fill_value=float(idx + 1)))
 
     x0s = initial_states(x0_dict, net)
 
@@ -61,7 +62,7 @@ def test_initial_states_dict_matches_by_agent_id() -> None:
 def test_initial_states_non_fed_missing_agent_raises() -> None:
     net = _make_p2p_network(n_agents=3, shape=(2,))
     x0_dict = {
-        agent: iop.zeros(shape=agent.cost.shape, framework=agent.cost.framework, device=agent.cost.device)
+        agent: iop.zeros(shape=agent.cost.shape)
         for agent in list(net.graph)[:2]
     }
 
@@ -89,8 +90,8 @@ def test_initial_states_fed_infers_server_as_client_mean() -> None:
     net = FedNetwork(clients=clients)
 
     x0_dict = {
-        clients[0]: np.array([1.0, 3.0]),
-        clients[1]: np.array([5.0, 7.0]),
+        clients[0]: Array(np.array([1.0, 3.0])),
+        clients[1]: Array(np.array([5.0, 7.0])),
     }
 
     x0s = initial_states(x0_dict, net)
@@ -106,7 +107,7 @@ def test_initial_states_fed_missing_client_raises() -> None:
     net = FedNetwork(clients=clients)
 
     with pytest.raises(ValueError, match="x0 not provided for agent"):
-        initial_states({clients[0]: np.array([1.0, 2.0])}, net)
+        initial_states({clients[0]: Array(np.array([1.0, 2.0]))}, net)
 
 
 def test_normal_initialization_returns_expected_shapes() -> None:
@@ -139,9 +140,9 @@ def test_uniform_initialization_samples_within_range() -> None:
 
 def test_infer_client_data_size_reads_empirical_risk_n_samples() -> None:
     dataset = [
-        (np.array([1.0, 0.0]), np.array([1.0])),
-        (np.array([0.0, 1.0]), np.array([1.0])),
-        (np.array([2.0, 0.0]), np.array([2.0])),
+        (Array(np.array([1.0, 0.0])), Array(np.array([1.0]))),
+        (Array(np.array([0.0, 1.0])), Array(np.array([1.0]))),
+        (Array(np.array([2.0, 0.0])), Array(np.array([2.0]))),
     ]
     client = Agent(LinearRegressionCost(dataset))
 
@@ -171,6 +172,7 @@ def test_pytorch_initialization_rejects_non_pytorch_cost() -> None:
         pytorch_initialization(net)
 
 
+@pytest.mark.backend_framework(Frameworks.PYTORCH)
 def test_pytorch_initialization_extracts_flattened_model_parameters() -> None:
     torch = pytest.importorskip("torch")
 

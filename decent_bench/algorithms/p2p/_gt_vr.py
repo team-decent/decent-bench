@@ -22,7 +22,6 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
     GT-VR: Gradient Tracking with Variance Reduction algorithm :footcite:p:`Alg_GT_VR`.
 
     Args:
-        iterations: Total number of iterations
         step_size: Step size for primal updates
         snapshot_prob: Probability of performing a snapshot update (P in the paper)
         x0: Initial parameters (optional)
@@ -35,7 +34,6 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
 
     """
 
-    iterations: int = 100
     step_size: float = 0.01
     snapshot_prob: float = 0.3  # P in the algorithm
     x0: InitialStates = None  # Initial parameters (optional)
@@ -46,7 +44,7 @@ class GT_VR(P2PAlgorithm):  # noqa: N801
         Validate parameters.
 
         Raises:
-            ValueError: If any of the parameters are invalid (e.g., non-positive iterations, local_steps,
+            ValueError: If any of the algorithm parameters are invalid (e.g., non-positive local_steps,
             step_size, penalty, or alpha).
 
         """

@@ -5,13 +5,14 @@ import contextlib
 from collections.abc import Iterator, Mapping, Sequence
 from copy import deepcopy
 from types import MappingProxyType
-from typing import Any, Self, cast
+from typing import Any, Self
 from uuid import UUID, uuid4
 
-import decent_bench.utils.interoperability as iop
+from decent_array import Array
+from decent_array import interoperability as iop
+
 from decent_bench.costs import Cost, EmpiricalRiskCost
 from decent_bench.schemes import AgentActivationScheme, AlwaysActive
-from decent_bench.utils.array import Array
 
 
 class Agent:
@@ -182,7 +183,10 @@ class Agent:
     def _copy_aux_var(self, value: object) -> object:
         if isinstance(value, Mapping):
             return {k: self._copy_aux_var(v) for k, v in value.items()}
-        return iop.copy(cast("Array", value))
+        if isinstance(value, Array):
+            return iop.copy(value)
+
+        return value
 
     def _snapshot(self, iteration: int, force: bool = False) -> None:
         """

@@ -4,8 +4,7 @@ import random
 from abc import ABC, abstractmethod
 
 import numpy as np
-
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
 
 
 class AgentActivationScheme(ABC):
@@ -84,10 +83,10 @@ class MarkovChainActivation(AgentActivationScheme):
                 [active_to_inactive, 1 - active_to_inactive],
             ]
         )  # transition matrix
-        self._current_state = iop.rng_numpy().choice(self._states, p=[0, 1])
+        self._current_state = iop.get_numpy_rng().choice(self._states, p=[0, 1])
 
     def is_active(self, iteration: int) -> bool:  # noqa: ARG002
-        self._current_state = iop.rng_numpy().choice(
+        self._current_state = iop.get_numpy_rng().choice(
             self._states,
             p=self._P[self._current_state],
         )  # evolve the Markov chain
@@ -113,11 +112,11 @@ class PoissonActivation(AgentActivationScheme):
         if mean_interval < 0:
             raise ValueError("`mean_interval` must be non-negative")
         self.mean_interval = mean_interval
-        self._countdown = int(iop.rng_numpy().poisson(self.mean_interval))
+        self._countdown = int(iop.get_numpy_rng().poisson(self.mean_interval))
 
     def is_active(self, iteration: int) -> bool:  # noqa: ARG002
         if self._countdown == 0:
-            self._countdown = int(iop.rng_numpy().poisson(self.mean_interval))
+            self._countdown = int(iop.get_numpy_rng().poisson(self.mean_interval))
             return True
         self._countdown -= 1
         return False

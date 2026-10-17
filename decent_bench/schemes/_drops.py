@@ -4,8 +4,7 @@ import random
 from abc import ABC, abstractmethod
 
 import numpy as np
-
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
 
 
 class DropScheme(ABC):
@@ -76,11 +75,11 @@ class GilbertElliott(DropScheme):
         self.good_to_bad = good_to_bad
         self._states = np.array([0, 1])  # good = 0, bad = 1
         self._P = np.array([[1 - good_to_bad, good_to_bad], [bad_to_good, 1 - bad_to_good]])  # transition matrix
-        self._current_state = iop.rng_numpy().choice(self._states)  # initialize uniformly at random
+        self._current_state = iop.get_numpy_rng().choice(self._states)  # initialize uniformly at random
 
     def should_drop(self) -> bool:
-        self._current_state = iop.rng_numpy().choice(
+        self._current_state = iop.get_numpy_rng().choice(
             self._states, p=self._P[self._current_state]
         )  # evolve the Markov chain
 
-        return iop.rng_numpy().random() < self.drop_rate if self._current_state else False
+        return iop.get_numpy_rng().random() < self.drop_rate if self._current_state else False

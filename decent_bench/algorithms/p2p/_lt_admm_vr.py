@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+
 from decent_bench.agents import Agent
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.costs import EmpiricalRiskCost
@@ -22,7 +23,6 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
     during the local training phase.
 
     Args:
-        iterations: Total number of communication rounds (K)
         num_local_steps: Number of local training steps (tau)
         step_size: Local step size (gamma)
         aux_step_size: Local step size (beta)
@@ -52,11 +52,7 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
                 raise TypeError("LT-ADMM-VR is only compatible with EmpiricalRiskCost.")
 
             neighbors = network.neighbors(i)
-            z_i = iop.zeros(
-                shape=(len(neighbors), *iop.shape(self.x0[i])),
-                framework=i.cost.framework,
-                device=i.cost.device,
-            )
+            z_i = iop.zeros(shape=(len(neighbors), *iop.shape(self.x0[i])))
             neighbor_to_idx: dict[Agent, int] = {}  # Mapping from neighbor to index in z_i array
 
             for idx, j in enumerate(neighbors):
@@ -87,7 +83,7 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
                 raise TypeError("LT-ADMM-VR is only compatible with EmpiricalRiskCost.")
 
         agent.aux_vars["phi"] = iop.copy(agent.x)
-        z_sum = iop.sum(agent.aux_vars["z_i"], dim=0)
+        z_sum = iop.sum(agent.aux_vars["z_i"], axis=0)
         # Always use the number of neighbors for the penalty term to ensure proper scaling
         multiplier = self.penalty * len(network.neighbors(agent))
         correction = self.aux_step_size * (multiplier * agent.x - z_sum)
@@ -99,8 +95,8 @@ class LT_ADMM_VR(LT_ADMM):  # noqa: N801
         for _ in range(self.num_local_steps):
             batch_grad = agent.cost.gradient(agent.aux_vars["phi"])
             batch_used = agent.cost.batch_used
-            r_grads = iop.mean(agent.aux_vars["r_grads"][batch_used], dim=0)
-            current_gradient = (batch_grad - r_grads) + iop.mean(agent.aux_vars["r_grads"], dim=0)
+            r_grads = iop.mean(agent.aux_vars["r_grads"][batch_used], axis=0)
+            current_gradient = (batch_grad - r_grads) + iop.mean(agent.aux_vars["r_grads"], axis=0)
 
             step = self.step_size * current_gradient + correction
             agent.aux_vars["phi"] -= step

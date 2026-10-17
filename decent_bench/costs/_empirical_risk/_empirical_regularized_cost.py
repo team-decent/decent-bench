@@ -1,20 +1,18 @@
 from __future__ import annotations
 
 from functools import cached_property
+from math import isnan
 from typing import Any
 
-import numpy as np
+from decent_array import Array
+from decent_array import interoperability as iop
 
-import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._regularizer_costs import BaseRegularizerCost
-from decent_bench.utils.array import Array
 from decent_bench.utils.types import (
     Dataset,
     EmpiricalRiskIndices,
     EmpiricalRiskReduction,
-    SupportedDevices,
-    SupportedFrameworks,
 )
 
 from ._empirical_risk_cost import EmpiricalRiskCost
@@ -35,7 +33,7 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
     """
 
     def __init__(self, empirical_cost: EmpiricalRiskCost, regularizer: BaseRegularizerCost):
-        empirical_cost._validate_cost_operation(regularizer, check_framework=True, check_device=True)  # noqa: SLF001
+        empirical_cost._validate_cost_operation(regularizer)  # noqa: SLF001
 
         self.empirical_cost = empirical_cost
         self.regularizer = regularizer
@@ -43,14 +41,6 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
     @property
     def shape(self) -> tuple[int, ...]:
         return self.empirical_cost.shape
-
-    @property
-    def framework(self) -> SupportedFrameworks:
-        return self.empirical_cost.framework
-
-    @property
-    def device(self) -> SupportedDevices:
-        return self.empirical_cost.device
 
     @property
     def n_samples(self) -> int:
@@ -71,12 +61,12 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
     @cached_property
     def m_smooth(self) -> float:
         m_smooth_vals = [self.empirical_cost.m_smooth, self.regularizer.m_smooth]
-        return np.nan if any(np.isnan(v) for v in m_smooth_vals) else float(sum(m_smooth_vals))
+        return float("nan") if any(isnan(v) for v in m_smooth_vals) else float(sum(m_smooth_vals))
 
     @cached_property
     def m_cvx(self) -> float:
         m_cvx_vals = [self.empirical_cost.m_cvx, self.regularizer.m_cvx]
-        return np.nan if any(np.isnan(v) for v in m_cvx_vals) else float(sum(m_cvx_vals))
+        return float("nan") if any(isnan(v) for v in m_cvx_vals) else float(sum(m_cvx_vals))
 
     def predict(self, x: Array, data: list[Array]) -> Array:
         """Predictions are determined by the empirical term."""

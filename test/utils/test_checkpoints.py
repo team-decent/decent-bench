@@ -15,7 +15,8 @@ import pandas as pd
 import pytest
 import zstandard as zstd
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+from decent_array.types import Devices, Frameworks
 from decent_bench.agents import Agent
 from decent_bench.algorithms import Algorithm
 from decent_bench.algorithms.p2p import ADMM, ATC, DGD
@@ -25,13 +26,34 @@ from decent_bench.benchmark import (
     MetricResult,
     benchmark,
     create_classification_problem,
+    configure,
     resume_benchmark,
 )
 from decent_bench.costs import LogisticRegressionCost, PyTorchCost
 from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network, P2PNetwork
 from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
-from decent_bench.utils.checkpoint_manager import _ZSTD_MAGIC, CheckpointManager  # noqa: PLC2701
+from decent_bench.utils._checkpoint_manager import _ZSTD_MAGIC, CheckpointManager  # noqa: PLC2701
+
+def _configure_for_checkpoint(
+    storage_dir: Path | None = None,
+    *,
+    n_checkpoints: int = 3,
+    open_existing: bool = False,
+) -> None:
+    """Set up a fresh global configuration for a checkpoint test."""
+    from decent_bench.benchmark import _configure
+
+    _configure._STATE = _configure._ConfigurationState()
+    if open_existing:
+        configure(storage_dir=storage_dir)
+    else:
+        configure(
+            Frameworks.NUMPY,
+            Devices.CPU,
+            storage_dir=storage_dir,
+            n_checkpoints=n_checkpoints,
+        )
 
 try:
     import torch
@@ -65,7 +87,6 @@ class DummyAlg(DGD):
 
 
 def _build_problem_and_algorithms(
-    iterations: int,
     cost_cls: type[LogisticRegressionCost | PyTorchCost],
 ) -> tuple[BenchmarkProblem, list[Algorithm[Any]]]:
     # Keep n_agents low to avoid expensive optimization in tests.
@@ -83,30 +104,29 @@ def _build_problem_and_algorithms(
     )
     problem = BenchmarkProblem(network=network, x_optimal=x_optimal, test_data=test_data)
     algorithms: list[Algorithm[Any]] = [
-        DGD(iterations=iterations),
-        ATC(iterations=iterations),
-        DummyAlg(iterations=iterations, name="DummyAlg"),
+        DGD(),
+        ATC(),
+        DummyAlg(name="DummyAlg"),
     ] + (
         # ADMM does not work with PyTorchCost due to no Proximal
-        [ADMM(iterations=iterations)] if cost_cls is LogisticRegressionCost else []
+        [ADMM()] if cost_cls is LogisticRegressionCost else []
     )
     return problem, algorithms
 
 
 def test_init_validates_arguments(tmp_path: Path) -> None:  # noqa: D103
-    with pytest.raises(ValueError, match="checkpoint_step must be a positive integer or None"):
-        CheckpointManager(tmp_path / "ckpt", checkpoint_step=0)
-
-    with pytest.raises(ValueError, match="keep_n_checkpoints must be a positive integer"):
-        CheckpointManager(tmp_path / "ckpt", keep_n_checkpoints=0)
+    with pytest.raises(ValueError, match="n_checkpoints must be a positive integer"):
+        CheckpointManager(tmp_path / "ckpt", n_checkpoints=-1)
 
 
+@pytest.mark.no_auto_configure
 def test_checkpoint_restores_top_level_agent_keyed_algorithm_dict(tmp_path: Path) -> None:  # noqa: D103
-    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
+    configure(Frameworks.NUMPY, Devices.CPU)
+    problem, algorithms = _build_problem_and_algorithms(cost_cls=LogisticRegressionCost)
     algorithm = algorithms[0]
     algorithm.custom_agent_map = {agent: float(idx) for idx, agent in enumerate(problem.network.agents())}  # type: ignore[attr-defined]
-    manager = CheckpointManager(tmp_path / "ckpt", keep_n_checkpoints=3)
-    manager.initialize(algorithms=[algorithm], problem=problem, n_trials=1)
+    manager = CheckpointManager(tmp_path / "ckpt", n_checkpoints=3)
+    manager.initialize(algorithms=[algorithm], problem=problem, n_trials=1, iterations=5)
 
     loaded_algs = manager.load_initial_algorithms(network=problem.network)
     loaded_alg = loaded_algs[0]
@@ -116,16 +136,18 @@ def test_checkpoint_restores_top_level_agent_keyed_algorithm_dict(tmp_path: Path
     assert set(loaded_map) == set(problem.network.agents())
 
 
+@pytest.mark.no_auto_configure
 def test_initialize_saves_structure_and_metadata(tmp_path: Path) -> None:  # noqa: D103
+    configure(Frameworks.NUMPY, Devices.CPU)
     checkpoint_dir = tmp_path / "ckpt"
-    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
+    problem, algorithms = _build_problem_and_algorithms(cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(
         checkpoint_dir,
-        checkpoint_step=2,
+        n_checkpoints=3,
         benchmark_metadata={"seed": 123},
     )
 
-    manager.initialize(algorithms=algorithms, problem=problem, n_trials=3)
+    manager.initialize(algorithms=algorithms, problem=problem, n_trials=3, iterations=5)
 
     assert (checkpoint_dir / "metadata.json").exists()
     assert (checkpoint_dir / "initial_algorithms.pkl.zst").exists()
@@ -136,6 +158,10 @@ def test_initialize_saves_structure_and_metadata(tmp_path: Path) -> None:  # noq
 
     metadata = manager.load_metadata()
     assert metadata["n_trials"] == 3
+    assert metadata["iterations"] == 5
+    assert metadata["backend"] == {"framework": Frameworks.NUMPY.value, "device": Devices.CPU.value}
+    assert metadata["checkpointing"] == {"n_checkpoints": 3, "compression_level": 1}
+    assert metadata["n_checkpoints"] == 3
     assert metadata["benchmark_metadata"] == {"seed": 123}
     assert [alg["name"] for alg in metadata["algorithms"]] == ["DGD", "ATC", "DummyAlg", "ADMM"]
 
@@ -146,10 +172,12 @@ def test_initialize_saves_structure_and_metadata(tmp_path: Path) -> None:  # noq
     assert len(loaded_problem.network.agents()) == 4
 
 
+@pytest.mark.no_auto_configure
 def test_append_metadata_merges_entries(tmp_path: Path) -> None:  # noqa: D103
-    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
+    configure(Frameworks.NUMPY, Devices.CPU)
+    problem, algorithms = _build_problem_and_algorithms(cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(tmp_path / "ckpt", benchmark_metadata={"seed": 7})
-    manager.initialize(algorithms=algorithms, problem=problem, n_trials=1)
+    manager.initialize(algorithms=algorithms, problem=problem, n_trials=1, iterations=5)
 
     updated = manager.append_metadata({"host": "runner-1", "seed": 99})
 
@@ -157,24 +185,32 @@ def test_append_metadata_merges_entries(tmp_path: Path) -> None:  # noqa: D103
 
 
 def test_should_checkpoint_logic(tmp_path: Path) -> None:  # noqa: D103
-    manager = CheckpointManager(tmp_path / "ckpt", checkpoint_step=3)
+    manager = CheckpointManager(tmp_path / "ckpt", n_checkpoints=3)
 
-    assert manager.should_checkpoint(0) is False
-    assert manager.should_checkpoint(1) is False
-    assert manager.should_checkpoint(2) is True
-    assert manager.should_checkpoint(5) is True
+    checkpoint_iterations = [i for i in range(10) if manager.should_checkpoint(i, 10)]
+    assert checkpoint_iterations == [3, 6, 9]
+
+    assert manager.should_checkpoint(0, 10) is False
+    assert manager.should_checkpoint(1, 10) is False
+    assert manager.should_checkpoint(3, 10) is True
+    assert manager.should_checkpoint(6, 10) is True
 
     with pytest.raises(ValueError, match="Iteration number must be non-negative"):
-        manager.should_checkpoint(-1)
+        manager.should_checkpoint(-1, 10)
 
-    manager_no_step = CheckpointManager(tmp_path / "ckpt_no_step", checkpoint_step=None)
-    assert manager_no_step.should_checkpoint(100) is False
+    manager_one_checkpoint = CheckpointManager(tmp_path / "ckpt_one", n_checkpoints=1)
+    assert manager_one_checkpoint.should_checkpoint(7, 9) is False
+    assert manager_one_checkpoint.should_checkpoint(8, 9) is True
+    assert CheckpointManager(tmp_path / "ckpt_many", n_checkpoints=5)._checkpoint_iterations(3) == {1, 2, 3}
+    assert manager._checkpoint_iterations(0) == set()
 
 
+@pytest.mark.no_auto_configure
 def test_save_and_load_checkpoint_roundtrip(tmp_path: Path) -> None:  # noqa: D103
-    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
-    manager = CheckpointManager(tmp_path / "ckpt", keep_n_checkpoints=5)
-    manager.initialize(algorithms=algorithms, problem=problem, n_trials=1)
+    configure(Frameworks.NUMPY, Devices.CPU)
+    problem, algorithms = _build_problem_and_algorithms(cost_cls=LogisticRegressionCost)
+    manager = CheckpointManager(tmp_path / "ckpt", n_checkpoints=5)
+    manager.initialize(algorithms=algorithms, problem=problem, n_trials=1, iterations=5)
 
     assert manager.load_checkpoint(alg_idx=0, trial=0) is None
 
@@ -207,10 +243,12 @@ def test_save_and_load_checkpoint_roundtrip(tmp_path: Path) -> None:  # noqa: D1
     assert rng_state == {"seed": 123, "python_random_state": random.getstate()}
 
 
+@pytest.mark.no_auto_configure
 def test_load_checkpoint_supports_legacy_uncompressed_pickle(tmp_path: Path) -> None:  # noqa: D103
-    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
+    configure(Frameworks.NUMPY, Devices.CPU)
+    problem, algorithms = _build_problem_and_algorithms(cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(tmp_path / "ckpt")
-    manager.initialize(algorithms=algorithms, problem=problem, n_trials=1)
+    manager.initialize(algorithms=algorithms, problem=problem, n_trials=1, iterations=5)
 
     trial_dir = tmp_path / "ckpt" / "algorithm_0" / "trial_0"
     trial_dir.mkdir(parents=True, exist_ok=True)
@@ -237,10 +275,12 @@ def test_load_checkpoint_supports_legacy_uncompressed_pickle(tmp_path: Path) -> 
     assert rng_state == {"seed": 123}
 
 
+@pytest.mark.no_auto_configure
 def test_mark_unmark_and_load_trial_result(tmp_path: Path) -> None:  # noqa: D103
-    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
+    configure(Frameworks.NUMPY, Devices.CPU)
+    problem, algorithms = _build_problem_and_algorithms(cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(tmp_path / "ckpt")
-    manager.initialize(algorithms=algorithms, problem=problem, n_trials=1)
+    manager.initialize(algorithms=algorithms, problem=problem, n_trials=1, iterations=5)
 
     final_checkpoint = manager.mark_trial_complete(
         alg_idx=0,
@@ -261,37 +301,14 @@ def test_mark_unmark_and_load_trial_result(tmp_path: Path) -> None:  # noqa: D10
     assert manager.is_trial_complete(alg_idx=0, trial=0) is False
 
 
-def test_cleanup_old_checkpoints_keeps_latest_n(tmp_path: Path) -> None:  # noqa: D103
-    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
-    manager = CheckpointManager(tmp_path / "ckpt", keep_n_checkpoints=2)
-    manager.initialize(algorithms=algorithms, problem=problem, n_trials=1)
-
-    for iteration in (1, 2, 3):
-        manager.save_checkpoint(
-            alg_idx=0,
-            trial=0,
-            iteration=iteration,
-            algorithm=algorithms[0],
-            network=problem.network,
-            rng_state={"seed": iteration},
-        )
-
-    trial_dir = tmp_path / "ckpt" / "algorithm_0" / "trial_0"
-    checkpoints = sorted(p.name for p in trial_dir.glob("checkpoint_*.pkl.zst"))
-    assert checkpoints == ["checkpoint_0000002.pkl.zst", "checkpoint_0000003.pkl.zst"]
-
-    loaded = manager.load_checkpoint(alg_idx=0, trial=0)
-    assert loaded is not None
-    _, _, iteration, _ = loaded
-    assert iteration == 3
-
-
+@pytest.mark.no_auto_configure
 def test_load_benchmark_result_skips_incomplete_algorithms(  # noqa: D103
     tmp_path: Path,
 ) -> None:
-    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
+    configure(Frameworks.NUMPY, Devices.CPU)
+    problem, algorithms = _build_problem_and_algorithms(cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(tmp_path / "ckpt")
-    manager.initialize(algorithms=algorithms, problem=problem, n_trials=2)
+    manager.initialize(algorithms=algorithms, problem=problem, n_trials=2, iterations=5)
 
     manager.mark_trial_complete(
         alg_idx=0,
@@ -356,7 +373,7 @@ def test_save_metrics_result_does_not_mutate_network_views(
     ckpt_path.mkdir(parents=True, exist_ok=True)
     manager = CheckpointManager(ckpt_path)
 
-    problem, algorithms = _build_problem_and_algorithms(iterations=3, cost_cls=LogisticRegressionCost)
+    problem, algorithms = _build_problem_and_algorithms(cost_cls=LogisticRegressionCost)
     network_views = {algorithms[0]: [NetworkMetricsView.from_network(problem.network)]}
     metrics_result = MetricResult(
         network_views=network_views,
@@ -382,7 +399,7 @@ def test_load_metrics_result_reconstructs_only_selected_algorithms(
     ckpt_path.mkdir(parents=True, exist_ok=True)
     manager = CheckpointManager(ckpt_path)
 
-    problem, algorithms = _build_problem_and_algorithms(iterations=3, cost_cls=LogisticRegressionCost)
+    problem, algorithms = _build_problem_and_algorithms(cost_cls=LogisticRegressionCost)
     selected_algorithm = algorithms[0]
     other_algorithm = algorithms[1]
     raw_table_results = {
@@ -420,10 +437,12 @@ def test_load_metrics_result_reconstructs_only_selected_algorithms(
     assert {algorithm.name for algorithm in loaded.network_views} == {selected_algorithm.name}
 
 
+@pytest.mark.no_auto_configure
 def test_create_backup_and_clear(tmp_path: Path) -> None:  # noqa: D103
-    problem, algorithms = _build_problem_and_algorithms(iterations=5, cost_cls=LogisticRegressionCost)
+    configure(Frameworks.NUMPY, Devices.CPU)
+    problem, algorithms = _build_problem_and_algorithms(cost_cls=LogisticRegressionCost)
     manager = CheckpointManager(tmp_path / "ckpt")
-    manager.initialize(algorithms=algorithms, problem=problem, n_trials=1)
+    manager.initialize(algorithms=algorithms, problem=problem, n_trials=1, iterations=5)
 
     backup_path = manager.create_backup()
     assert backup_path.exists()
@@ -439,16 +458,12 @@ def test_create_backup_and_clear(tmp_path: Path) -> None:  # noqa: D103
     [
         (LogisticRegressionCost, 1),
         pytest.param(LogisticRegressionCost, 2, marks=LINUX_ONLY_MP_GT1),
-        pytest.param(
-            PyTorchCost,
-            1,
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
-        ),
     ],
 )
 @pytest.mark.filterwarnings(
     "ignore:os.fork\\(\\) was called.*:RuntimeWarning"
 )  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
+@pytest.mark.no_auto_configure
 def test_resume_from_checkpoint_with_additional_trials(
     tmp_path: Path,
     cost_cls: type[LogisticRegressionCost | PyTorchCost],
@@ -460,37 +475,40 @@ def test_resume_from_checkpoint_with_additional_trials(
     if seed is not None:
         iop.set_seed(seed)
 
-    problem_1, algorithms_1 = _build_problem_and_algorithms(10, cost_cls=cost_cls)
+    problem_1, algorithms_1 = _build_problem_and_algorithms(cost_cls=cost_cls)
     problem_2, algorithms_2 = deepcopy(problem_1), deepcopy(algorithms_1)
 
-    manager = CheckpointManager(tmp_path / "ckpt", checkpoint_step=2)
+    _configure_for_checkpoint(tmp_path / "ckpt", n_checkpoints=3)
     bench_1 = benchmark(
         algorithms=algorithms_1,
         benchmark_problem=problem_1,
+        iterations=10,
         n_trials=1,
-        checkpoint_manager=manager,
         max_processes=max_processes,
     )
+    _configure_for_checkpoint(tmp_path / "expected", n_checkpoints=3)
+    if seed is not None:
+        iop.set_seed(seed)
     bench_2 = benchmark(
         algorithms=algorithms_2,
         benchmark_problem=problem_2,
+        iterations=10,
         n_trials=2,
         max_processes=max_processes,
     )
     assert bench_1 is not None
     assert bench_2 is not None
 
+    _configure_for_checkpoint(tmp_path / "ckpt", open_existing=True)
     resumed_bench = resume_benchmark(
-        checkpoint_manager=manager,
         increase_trials=1,
         max_processes=max_processes,
     )
     assert resumed_bench is not None
 
     # Check that the resumed benchmark has the expected number of iterations and trials.
-    for alg in resumed_bench.states:
-        assert alg.iterations == 10
-        assert len(resumed_bench.states[alg]) == 2
+    assert resumed_bench.iterations == 10
+    assert all(len(trials) == 2 for trials in resumed_bench.states.values())
 
     # Check that the resumed benchmark's problem matches the original.
     assert len(resumed_bench.problem.network.agents()) == 4
@@ -545,16 +563,12 @@ def test_resume_from_checkpoint_with_additional_trials(
     [
         (LogisticRegressionCost, 1),
         pytest.param(LogisticRegressionCost, 2, marks=LINUX_ONLY_MP_GT1),
-        pytest.param(
-            PyTorchCost,
-            1,
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
-        ),
     ],
 )
 @pytest.mark.filterwarnings(
     "ignore:os.fork\\(\\) was called.*:RuntimeWarning"
 )  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
+@pytest.mark.no_auto_configure
 def test_resume_from_checkpoint_with_additional_iterations(
     tmp_path: Path,
     cost_cls: type[LogisticRegressionCost | PyTorchCost],
@@ -566,39 +580,53 @@ def test_resume_from_checkpoint_with_additional_iterations(
     if seed is not None:
         iop.set_seed(seed)
 
-    problem_5, algorithms_5 = _build_problem_and_algorithms(5, cost_cls=cost_cls)
+    problem_5, algorithms_5 = _build_problem_and_algorithms(cost_cls=cost_cls)
     problem_10, algorithms_10 = deepcopy(problem_5), deepcopy(algorithms_5)
-    for alg in algorithms_10:
-        alg.iterations = 10
 
-    manager = CheckpointManager(tmp_path / "ckpt", checkpoint_step=2)
+    _configure_for_checkpoint(tmp_path / "ckpt", n_checkpoints=3)
     bench_5 = benchmark(
         algorithms=algorithms_5,
         benchmark_problem=problem_5,
+        iterations=5,
         n_trials=2,
-        checkpoint_manager=manager,
         max_processes=max_processes,
     )
+    _configure_for_checkpoint(tmp_path / "expected", n_checkpoints=3)
+    if seed is not None:
+        iop.set_seed(seed)
     bench_10 = benchmark(
         algorithms=algorithms_10,
         benchmark_problem=problem_10,
+        iterations=10,
         n_trials=2,
         max_processes=max_processes,
     )
     assert bench_5 is not None
     assert bench_10 is not None
 
+    _configure_for_checkpoint(tmp_path / "ckpt", open_existing=True)
     resumed_bench = resume_benchmark(
-        checkpoint_manager=manager,
         increase_iterations=5,
         max_processes=max_processes,
     )
     assert resumed_bench is not None
 
     # Check that the resumed benchmark has the expected number of iterations and trials.
-    for alg in resumed_bench.states:
-        assert alg.iterations == 10
-        assert len(resumed_bench.states[alg]) == 2
+    assert resumed_bench.iterations == 10
+    assert all(len(trials) == 2 for trials in resumed_bench.states.values())
+
+    expected_checkpoint_names = [
+        "checkpoint_0000001.pkl.zst",
+        "checkpoint_0000003.pkl.zst",
+        "checkpoint_0000004.pkl.zst",
+        "checkpoint_0000006.pkl.zst",
+        "checkpoint_0000009.pkl.zst",
+    ]
+    for alg_idx in range(len(algorithms_5)):
+        for trial in range(2):
+            trial_dir = tmp_path / "ckpt" / f"algorithm_{alg_idx}" / f"trial_{trial}"
+            actual_checkpoint_names = sorted(path.name for path in trial_dir.glob("checkpoint_*.pkl.zst"))
+            assert actual_checkpoint_names == expected_checkpoint_names
 
     # Check that the resumed benchmark's problem matches the original.
     assert len(resumed_bench.problem.network.agents()) == 4
@@ -653,16 +681,12 @@ def test_resume_from_checkpoint_with_additional_iterations(
     [
         (LogisticRegressionCost, 1),
         pytest.param(LogisticRegressionCost, 2, marks=LINUX_ONLY_MP_GT1),
-        pytest.param(
-            PyTorchCost,
-            1,
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
-        ),
     ],
 )
 @pytest.mark.filterwarnings(
     "ignore:os.fork\\(\\) was called.*:RuntimeWarning"
 )  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
+@pytest.mark.no_auto_configure
 def test_resume_from_checkpoint_with_additional_iterations_and_trials(
     tmp_path: Path,
     cost_cls: type[LogisticRegressionCost | PyTorchCost],
@@ -674,30 +698,32 @@ def test_resume_from_checkpoint_with_additional_iterations_and_trials(
     if seed is not None:
         iop.set_seed(seed)
 
-    problem_5, algorithms_5 = _build_problem_and_algorithms(5, cost_cls=cost_cls)
+    problem_5, algorithms_5 = _build_problem_and_algorithms(cost_cls=cost_cls)
     problem_10, algorithms_10 = deepcopy(problem_5), deepcopy(algorithms_5)
-    for alg in algorithms_10:
-        alg.iterations = 10
 
-    manager = CheckpointManager(tmp_path / "ckpt", checkpoint_step=2)
+    _configure_for_checkpoint(tmp_path / "ckpt", n_checkpoints=3)
     bench_5 = benchmark(
         algorithms=algorithms_5,
         benchmark_problem=problem_5,
+        iterations=5,
         n_trials=1,
-        checkpoint_manager=manager,
         max_processes=max_processes,
     )
+    _configure_for_checkpoint(tmp_path / "expected", n_checkpoints=3)
+    if seed is not None:
+            iop.set_seed(seed)
     bench_10 = benchmark(
         algorithms=algorithms_10,
         benchmark_problem=problem_10,
+        iterations=10,
         n_trials=2,
         max_processes=max_processes,
     )
     assert bench_5 is not None
     assert bench_10 is not None
 
+    _configure_for_checkpoint(tmp_path / "ckpt", open_existing=True)
     resumed_bench = resume_benchmark(
-        checkpoint_manager=manager,
         increase_iterations=5,
         increase_trials=1,
         max_processes=max_processes,
@@ -705,9 +731,8 @@ def test_resume_from_checkpoint_with_additional_iterations_and_trials(
     assert resumed_bench is not None
 
     # Check that the resumed benchmark has the expected number of iterations and trials.
-    for alg in resumed_bench.states:
-        assert alg.iterations == 10
-        assert len(resumed_bench.states[alg]) == 2
+    assert resumed_bench.iterations == 10
+    assert all(len(trials) == 2 for trials in resumed_bench.states.values())
 
     # Check that the resumed benchmark's problem matches the original.
     assert len(resumed_bench.problem.network.agents()) == 4
@@ -762,16 +787,12 @@ def test_resume_from_checkpoint_with_additional_iterations_and_trials(
     [
         (LogisticRegressionCost, 1),
         pytest.param(LogisticRegressionCost, 2, marks=LINUX_ONLY_MP_GT1),
-        pytest.param(
-            PyTorchCost,
-            1,
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
-        ),
     ],
 )
 @pytest.mark.filterwarnings(
     "ignore:os.fork\\(\\) was called.*:RuntimeWarning"
 )  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
+@pytest.mark.no_auto_configure
 def test_resume_from_non_completed_checkpoint(
     tmp_path: Path,
     cost_cls: type[LogisticRegressionCost | PyTorchCost],
@@ -783,23 +804,24 @@ def test_resume_from_non_completed_checkpoint(
     if seed is not None:
         iop.set_seed(seed)
 
-    problem_5, algorithms_5 = _build_problem_and_algorithms(5, cost_cls=cost_cls)
+    problem_5, algorithms_5 = _build_problem_and_algorithms(cost_cls=cost_cls)
     problem_10, algorithms_10 = deepcopy(problem_5), deepcopy(algorithms_5)
-    for alg in algorithms_10:
-        alg.iterations = 10
 
-    manager = CheckpointManager(tmp_path / "ckpt", checkpoint_step=2)
+    _configure_for_checkpoint(tmp_path / "ckpt", n_checkpoints=5)
     bench_5 = benchmark(
         algorithms=algorithms_5,
         benchmark_problem=problem_5,
+        iterations=5,
         n_trials=2,
-        checkpoint_manager=manager,
         max_processes=max_processes,
     )
-
+    _configure_for_checkpoint(tmp_path / "expected", n_checkpoints=5)
+    if seed is not None:
+        iop.set_seed(seed)
     bench_10 = benchmark(
         algorithms=algorithms_10,
         benchmark_problem=problem_10,
+        iterations=10,
         n_trials=2,
         max_processes=max_processes,
     )
@@ -849,17 +871,16 @@ def test_resume_from_non_completed_checkpoint(
                 progress = json.load(f)
             print(f"Progress for {path.parent.name}: {progress}")
 
+    _configure_for_checkpoint(tmp_path / "ckpt", open_existing=True)
     resumed_bench = resume_benchmark(
-        checkpoint_manager=manager,
         increase_iterations=5,
         max_processes=max_processes,
     )
     assert resumed_bench is not None
 
     # Check that the resumed benchmark has the expected number of iterations and trials.
-    for alg in resumed_bench.states:
-        assert alg.iterations == 10
-        assert len(resumed_bench.states[alg]) == 2
+    assert resumed_bench.iterations == 10
+    assert all(len(trials) == 2 for trials in resumed_bench.states.values())
 
     # Check that the resumed benchmark's problem matches the original.
     assert len(resumed_bench.problem.network.agents()) == 4
@@ -913,37 +934,36 @@ def test_resume_from_non_completed_checkpoint(
     [
         (LogisticRegressionCost, 1),
         pytest.param(LogisticRegressionCost, 2, marks=LINUX_ONLY_MP_GT1),
-        pytest.param(
-            PyTorchCost,
-            1,
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
-        ),
     ],
 )
 @pytest.mark.filterwarnings(
     "ignore:os.fork\\(\\) was called.*:RuntimeWarning"
 )  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
+@pytest.mark.no_auto_configure
 def test_back_to_back_benchmarks(
     cost_cls: type[LogisticRegressionCost | PyTorchCost],
     max_processes: int,
 ) -> None:
     _skip_if_max_processes_exceeds_cpu_count(max_processes)
+    configure(Frameworks.NUMPY, Devices.CPU)
 
     iop.set_seed(123)
-    problem_5, algorithms_5 = _build_problem_and_algorithms(5, cost_cls=cost_cls)
+    problem_5, algorithms_5 = _build_problem_and_algorithms(cost_cls=cost_cls)
 
     bench_1 = benchmark(
         algorithms=algorithms_5,
         benchmark_problem=problem_5,
+        iterations=5,
         n_trials=2,
         max_processes=max_processes,
     )
 
     iop.set_seed(123)
-    problem_5, algorithms_5 = _build_problem_and_algorithms(5, cost_cls=cost_cls)
+    problem_5, algorithms_5 = _build_problem_and_algorithms(cost_cls=cost_cls)
     bench_2 = benchmark(
         algorithms=algorithms_5,
         benchmark_problem=problem_5,
+        iterations=5,
         n_trials=2,
         max_processes=max_processes,
     )

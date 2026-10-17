@@ -3,9 +3,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-import decent_bench.utils.interoperability as iop
+from decent_array import Array
+from decent_array import interoperability as iop
+
 from decent_bench.costs._base._cost import Cost
-from decent_bench.utils.array import Array
 from decent_bench.utils.types import Dataset, EmpiricalRiskIndices, EmpiricalRiskReduction
 
 
@@ -259,7 +260,7 @@ class EmpiricalRiskCost(Cost, ABC):
             if self.batch_size < self.n_samples:
                 remaining: list[int] = getattr(self, "_remaining_batch_indices", [])
                 if len(remaining) == 0:
-                    remaining = iop.rng_numpy().permutation(self.n_samples).tolist()
+                    remaining = iop.get_numpy_rng().permutation(self.n_samples).tolist()
 
                 if len(remaining) >= self.batch_size:
                     sample = remaining[: self.batch_size]
@@ -270,9 +271,11 @@ class EmpiricalRiskCost(Cost, ABC):
 
                     if len(sample) > 0:
                         used_now = set(sample)
-                        next_epoch = iop.rng_numpy().permutation(list(set(range(self.n_samples)) - used_now)).tolist()
+                        next_epoch = (
+                            iop.get_numpy_rng().permutation(list(set(range(self.n_samples)) - used_now)).tolist()
+                        )
                     else:
-                        next_epoch = iop.rng_numpy().permutation(self.n_samples).tolist()
+                        next_epoch = iop.get_numpy_rng().permutation(self.n_samples).tolist()
 
                     sample.extend(next_epoch[:needed])
                     self._remaining_batch_indices = next_epoch[needed:]

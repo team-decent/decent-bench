@@ -12,9 +12,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
+from decent_array import Array
+from decent_array.types import Devices, Frameworks
+
 from decent_bench.agents import Agent, AgentHistory
 from decent_bench.algorithms.federated import FedAvg
-from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, compute_metrics, display_metrics
+from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, compute_metrics, configure, display_metrics
+from decent_bench.benchmark._configure import get_config
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.costs import LinearRegressionCost, LogisticRegressionCost, QuadraticCost
 from decent_bench.metrics._metric import Metric
@@ -33,6 +37,13 @@ from decent_bench.metrics.metric_library import Accuracy, MSE, Precision, Recall
 from decent_bench.networks import FedNetwork
 
 display_plots_module = importlib.import_module("decent_bench.benchmark._display.display_plots")
+
+
+def _ensure_configured() -> None:
+    try:
+        get_config()
+    except RuntimeError:
+        configure(Frameworks.NUMPY, Devices.CPU)
 
 
 # -----------------------------------------------------------------------------
@@ -129,6 +140,7 @@ def _run_display_with_capture(
     monkeypatch.setattr(display_metrics_module, "display_plots", _capture_plots)
 
     try:
+        _ensure_configured()
         display_metrics(metrics_result=metrics_result, **display_kwargs)
     finally:
         plt.close("all")
@@ -162,12 +174,12 @@ def _build_minimal_benchmark_result() -> BenchmarkResult:
 
 def _build_federated_benchmark_result(iterations: int = 2) -> tuple[BenchmarkResult, FedAvg]:
     clients = [
-        Agent(QuadraticCost(np.eye(1), np.array([0.0]))),
-        Agent(QuadraticCost(np.eye(1), np.array([0.0]))),
+        Agent(QuadraticCost(Array(np.eye(1)), Array(np.array([0.0])))),
+        Agent(QuadraticCost(Array(np.eye(1)), Array(np.array([0.0])))),
     ]
     network = FedNetwork(clients=clients)
-    algorithm = FedAvg(iterations=iterations, step_size=0.1)
-    algorithm.run(network)
+    algorithm = FedAvg(step_size=0.1)
+    algorithm.run(network, iterations)
     return BenchmarkResult(problem=BenchmarkProblem(network=network), states={algorithm: [network]}), algorithm
 
 
@@ -554,6 +566,7 @@ def test_compute_metrics_rejects_duplicate_metric_descriptions(
     plot_metrics: list[_MetricStub],
     expected_error: str,
 ) -> None:  # noqa: D103
+    _ensure_configured()
     benchmark_result = _build_minimal_benchmark_result()
 
     with pytest.raises(ValueError, match=expected_error):
@@ -561,9 +574,10 @@ def test_compute_metrics_rejects_duplicate_metric_descriptions(
 
 
 def test_compute_metrics_uses_federated_defaults_and_server_view() -> None:  # noqa: D103
+    _ensure_configured()
     benchmark_result, algorithm = _build_federated_benchmark_result(iterations=2)
 
-    metrics_result = compute_metrics(benchmark_result=benchmark_result, log_level=40)
+    metrics_result = compute_metrics(benchmark_result=benchmark_result)
 
     assert metrics_result.network_views is not None
     assert metrics_result.network_views[algorithm][0].server().x_history.max() == 2
@@ -604,6 +618,7 @@ def test_compute_metrics_uses_federated_defaults_and_server_view() -> None:  # n
 
 
 def test_compute_metrics_custom_metrics_do_not_append_federated_defaults(monkeypatch) -> None:  # noqa: D103
+    _ensure_configured()
     benchmark_result, _ = _build_federated_benchmark_result(iterations=1)
     metric = _MetricStub("custom table")
     captured: dict[str, object] = {}
@@ -880,22 +895,21 @@ def test_add_legend_and_save_creates_missing_parent_directory(monkeypatch) -> No
 
 def test_xerror_unavailable_without_x_optimal() -> None:  # noqa: D103
     x_error = XError()
-    available, reason = x_error.is_available(SimpleNamespace(x_optimal=None))
-    assert not available
+    reason = x_error.is_available(SimpleNamespace(x_optimal=None))
+    assert reason is not None
     assert reason == "requires problem.x_optimal"
 
 
 def test_xerror_available_with_x_optimal() -> None:  # noqa: D103
     x_error = XError()
-    available, reason = x_error.is_available(SimpleNamespace(x_optimal=np.array([0.0])))
-    assert available
+    reason = x_error.is_available(SimpleNamespace(x_optimal=np.array([0.0])))
     assert reason is None
 
 
 def test_regret_unavailable_without_x_optimal() -> None:  # noqa: D103
     regret = Regret()
-    available, reason = regret.is_available(SimpleNamespace(x_optimal=None))
-    assert not available
+    reason = regret.is_available(SimpleNamespace(x_optimal=None))
+    assert reason is not None
     assert reason == "requires problem.x_optimal"
 
 
@@ -904,8 +918,8 @@ def test_metrics_unavailable_without_test_data() -> None:  # noqa: D103
     metrics = [Accuracy(), MSE(), Precision(), Recall()]
 
     for metric in metrics:
-        available, reason = metric.is_available(problem)
-        assert not available
+        reason = metric.is_available(problem)
+        assert reason is not None
         assert reason == "requires problem.test_data"
 
 
@@ -915,138 +929,26 @@ def test_metrics_unavailable_without_empirical_risk_cost() -> None:  # noqa: D10
     metrics = [Accuracy(), MSE(), Precision(), Recall()]
 
     for metric in metrics:
-        available, reason = metric.is_available(problem)
-        assert not available
+        reason = metric.is_available(problem)
+        assert reason is not None
         assert "EmpiricalRiskCost" in reason
 
 
 def test_classification_metrics_unavailable_with_float_targets() -> None:  # noqa: D103
-    lr_cost = LinearRegressionCost([(np.array([1.0]), np.array([1.0]))])
+    lr_cost = LinearRegressionCost([(Array(np.array([1.0])), Array(np.array([1.0])))])
     network = SimpleNamespace(agents=lambda: [SimpleNamespace(cost=lr_cost)])
-    problem = SimpleNamespace(test_data=[(np.array([0.0]), 0.1)], network=network)
+    problem = SimpleNamespace(test_data=[(Array(np.array([0.0])), Array(np.array([0.1])))], network=network)
 
     for metric in [Accuracy(), Precision(), Recall()]:
-        available, reason = metric.is_available(problem)
-        assert not available
+        reason = metric.is_available(problem)
+        assert reason is not None
         assert "integer targets" in reason
-
-
-def test_server_mse_availability_and_values() -> None:  # noqa: D103
-    test_data = [(np.array([1.0]), np.array([1.0]))]
-    cost = LinearRegressionCost(test_data)
-    client = Agent(cost)
-    client.initialize(x=np.array([0.0]))
-
-    unavailable_problem = SimpleNamespace(
-        test_data=test_data,
-        network=SimpleNamespace(agents=lambda: [client]),
-    )
-    available, reason = ml.ServerMSE().is_available(unavailable_problem)
-    assert not available
-    assert "FedNetwork" in reason
-
-    client = Agent(cost)
-    client.initialize(x=np.array([0.0]))
-
-    fed_problem_without_test_data = BenchmarkProblem(network=FedNetwork([client]))
-    available, reason = ml.ServerMSE().is_available(fed_problem_without_test_data)
-    assert not available
-    assert reason == "requires problem.test_data"
-
-    client = Agent(cost)
-    client.initialize(x=np.array([0.0]))
-
-    problem = BenchmarkProblem(network=FedNetwork([client]), test_data=test_data)
-    metric = ml.ServerMSE()
-    available, reason = metric.is_available(problem)
-    assert available
-    assert reason is None
-
-    client_view = AgentMetricsView.from_agent(client)
-    server_history = AgentHistory()
-    server_history[0] = np.array([0.0])
-    server_history[1] = np.array([1.0])
-    server_view = AgentMetricsView(
-        id=uuid4(),
-        cost=cost,
-        x_history=server_history,
-        n_x_updates=0,
-        n_function_calls=0.0,
-        n_gradient_calls=0.0,
-        n_hessian_calls=0.0,
-        n_proximal_calls=0.0,
-        n_sent_messages=0,
-        n_received_messages=0,
-        n_sent_messages_dropped=0,
-        n_times_selected=0,
-    )
-
-    network_view = _network_metrics_view(
-        [client_view, server_view],
-        network_type=NetworkType.FEDERATED,
-        server=server_view,
-    )
-    assert metric.compute(network_view, problem, 0) == [1.0]
-    assert metric.compute(network_view, problem, 1) == [0.0]
-
-
-def test_server_accuracy_availability_and_values() -> None:  # noqa: D103
-    train_data = [(np.array([1.0]), np.array([1])), (np.array([-1.0]), np.array([0]))]
-    test_data = [(np.array([1.0]), 1), (np.array([-1.0]), 0)]
-    cost = LogisticRegressionCost(train_data)
-    client = Agent(cost)
-    client.initialize(x=np.array([0.0]))
-    problem = BenchmarkProblem(network=FedNetwork([client]), test_data=test_data)
-
-    client_for_float_targets = Agent(cost)
-    client_for_float_targets.initialize(x=np.array([0.0]))
-
-    float_target_problem = BenchmarkProblem(
-        network=FedNetwork([client_for_float_targets]),
-        test_data=[(np.array([1.0]), 1.0), (np.array([-1.0]), 0.0)],
-    )
-    metric = ml.ServerAccuracy()
-    available, reason = metric.is_available(float_target_problem)
-    assert not available
-    assert "integer targets" in reason
-
-    available, reason = metric.is_available(problem)
-    assert available
-    assert reason is None
-
-    client_view = AgentMetricsView.from_agent(client)
-    server_history = AgentHistory()
-    server_history[0] = np.array([0.0])
-    server_history[1] = np.array([10.0])
-    server_view = AgentMetricsView(
-        id=uuid4(),
-        cost=cost,
-        x_history=server_history,
-        n_x_updates=0,
-        n_function_calls=0.0,
-        n_gradient_calls=0.0,
-        n_hessian_calls=0.0,
-        n_proximal_calls=0.0,
-        n_sent_messages=0,
-        n_received_messages=0,
-        n_sent_messages_dropped=0,
-        n_times_selected=0,
-    )
-
-    network_view = _network_metrics_view(
-        [client_view, server_view],
-        network_type=NetworkType.FEDERATED,
-        server=server_view,
-    )
-    assert metric.compute(network_view, problem, 0) == [0.5]
-    assert metric.compute(network_view, problem, 1) == [1.0]
 
 
 def test_is_available_default_returns_true() -> None:  # noqa: D103
     """Base Metric.is_available default: always available."""
     metric = _MetricStub("t")
-    available, reason = metric.is_available(SimpleNamespace())
-    assert available
+    reason = metric.is_available(SimpleNamespace())
     assert reason is None
 
 

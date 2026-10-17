@@ -3,7 +3,8 @@
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+
 from decent_bench.metrics._runtime_metric import RuntimeMetric
 from decent_bench.utils._tags import Tag, tags
 
@@ -128,7 +129,7 @@ class RuntimeConsensusError(RuntimeMetric):
 
     def compute(self, _: "BenchmarkProblem", agents: Sequence["Agent"], __: int) -> float:  # noqa: D102
         # Compute average x across all agents
-        x_avg = iop.mean(iop.stack([agent.x for agent in agents]), dim=0)
+        x_avg = iop.mean(iop.stack([agent.x for agent in agents]), axis=0)
 
         # Compute average distance from the mean
         errors = [float(iop.norm(agent.x - x_avg)) for agent in agents]

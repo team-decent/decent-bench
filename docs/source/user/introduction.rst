@@ -29,7 +29,7 @@ as depicted below.
 In particular:
 
 * A **federated architecture** is characterized by a central agent, called *coordinator* or *server*, connected to a set of *clients* or *agents*. The clients store data and process it to train local models, send them to the coordinator, which aggregates all models into a global one and broadcasts back to the clients.
-* A **peer-to-peer architecture** instead is characterized by agents sharing locally trained models directly with neighboring agents, and aggregate the received models.
+* A **peer-to-peer architecture** instead is characterized by agents sharing locally trained models directly with neighboring agents, and aggregating the received models.
 
 
 Problem formulation
@@ -51,7 +51,7 @@ and empirical risk minimization structure:
    f_i(x_i) = \sum_{h = 1}^{m_i} \ell(x_i, d_i^h)
 
 where :math:`d_i^h` are the :math:`m_i` datapoints of agent :math:`i` (*e.g.* pairs of feature vector and label)
-and `ell` is a loss function (*e.g.* squared error, 0-1 loss).
+and :math:`ell` is a loss function (*e.g.* squared error, 0-1 loss).
 
 Beyond learning, a wide range of decentralized tasks can be formulated as :eq:`decentralized-problem` with suitable
 cost functions and, potentially, the addition of other constraints. The following section briefly discusses some
@@ -65,8 +65,8 @@ Use cases
 * **Resource allocation**: consider a set of power generators linked to the power grid, each with different output (*e.g.* different types of renewable/fossil energy). These generators need to coordinate in order to fully satisfy the power demand in the grid.
 
 
-Practical challenges
---------------------
+Practical constraints
+---------------------
 Achieving decentralized tasks thus boils down to designing tailored optimization algorithms to solve :eq:`decentralized-problem`.
 However, this is far from a simple objective. Indeed, in most use cases algorithms need to operate under a set of
 practical constraints, which include:
@@ -81,14 +81,13 @@ It is therefore necessary to account for these challenges at the design stage.
 
 Why decent-bench
 ------------------
-The objective of decent-bench (for *decentralized-benchmarking*) is to support the design of decentralized algorithms that can be deployed in a wide range
+The objective of *decent-bench* (for *decentralized-benchmarking*) is to support the design of decentralized algorithms that can be deployed in a wide range
 of challenging scenarios. In particular, decent-bench offers the following functionalities:
 
 * **Simulating deployment scenarios**: decent-bench allows to define realistic scenarios in which to test decentralized algorithms (both federated and peer-to-peer); this includes simulating unreliable communications and limited/heterogeneous computational power.
 * **Benchmarking**: decent-bench defines a simple benchmarking pipeline to test and compare different decentralized algorithms in the same scenario. Additionally, it provides a library of state-of-the-art algorithms ready to use.
 * **Reproducibility**: as part of the benchmarking pipeline, decent-bench allows setting random seeds to ensure that results are easily reproducible.
 * **Paper-ready results**: decent-bench provides the results of a benchmark run in a format that can be directly included in papers (with several customization options). The raw results are also available as ``pandas.DataFrame`` for easy inspection.
-
 
 References
 ----------

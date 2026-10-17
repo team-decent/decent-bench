@@ -26,3 +26,4 @@ class BenchmarkResult:
 
     problem: BenchmarkProblem
     states: Mapping[Algorithm[Network], Sequence[Network]]
+    iterations: int = 0

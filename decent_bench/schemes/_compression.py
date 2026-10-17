@@ -3,9 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 import numpy as np
-
-import decent_bench.utils.interoperability as iop
-from decent_bench.utils.array import Array
+from decent_array import Array
+from decent_array import interoperability as iop
 
 
 class CompressionScheme(ABC):
@@ -48,8 +47,9 @@ class Quantization(CompressionScheme):
         self.quantization_step = quantization_step
 
     def compress(self, msg: Array) -> Array:
-        msg_np = iop.to_numpy(msg, dtype=np.float64)
-        return iop.to_array_like(self.quantization_step * np.rint(msg_np / self.quantization_step), msg)
+        msg_np = np.asarray(iop.to_numpy(msg), dtype=np.float64)
+        compressed_msg = self.quantization_step * np.rint(msg_np / self.quantization_step)
+        return iop.from_numpy_like(compressed_msg, msg)
 
 
 class StochasticQuantization(CompressionScheme):
@@ -107,15 +107,15 @@ class StochasticQuantization(CompressionScheme):
         if msg_norm == 0:
             return iop.zeros_like(msg)
 
-        msg_np = iop.to_numpy(msg, dtype=np.float64)
+        msg_np = np.asarray(iop.to_numpy(msg), dtype=np.float64)
         magnitudes = np.abs(msg_np)
         signs = np.sign(msg_np)
         scaled_magnitudes = self.n_levels * magnitudes / msg_norm
         lower_levels = np.floor(scaled_magnitudes)
         probabilities = scaled_magnitudes - lower_levels
-        quantized_levels = lower_levels + (iop.rng_numpy().random(size=magnitudes.shape) < probabilities)
+        quantized_levels = lower_levels + (iop.get_numpy_rng().random(size=magnitudes.shape) < probabilities)
         compressed_msg = msg_norm * signs * quantized_levels / self.n_levels
-        return iop.to_array_like(compressed_msg, msg)
+        return iop.from_numpy_like(compressed_msg, msg)
 
 
 class TopK(CompressionScheme):
@@ -157,7 +157,7 @@ class TopK(CompressionScheme):
         compressed_flat = np.zeros_like(flat_msg)
         compressed_flat[idx] = flat_msg[idx]
 
-        return iop.to_array_like(compressed_flat.reshape(msg_np.shape), msg)
+        return iop.from_numpy_like(compressed_flat.reshape(msg_np.shape), msg)
 
     def compressed_msg_size(self, msg: Array) -> int:
         """Compute the size of the compressed version of *msg*."""
@@ -199,11 +199,11 @@ class RandK(CompressionScheme):
         k_count = min(int(self.k), n_elements) if self.is_integer_k else max(1, int(np.ceil(self.k * n_elements)))
 
         flat_msg = msg_np.reshape(-1)
-        idx = iop.rng_numpy().choice(n_elements, size=k_count, replace=False)
+        idx = iop.get_numpy_rng().choice(n_elements, size=k_count, replace=False)
         compressed_flat = np.zeros_like(flat_msg)
         compressed_flat[idx] = flat_msg[idx]
 
-        return iop.to_array_like(compressed_flat.reshape(msg_np.shape), msg)
+        return iop.from_numpy_like(compressed_flat.reshape(msg_np.shape), msg)
 
     def compressed_msg_size(self, msg: Array) -> int:
         """Compute the size of the compressed version of *msg*."""

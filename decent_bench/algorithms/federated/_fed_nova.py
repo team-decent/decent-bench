@@ -2,7 +2,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-import decent_bench.utils.interoperability as iop
+from decent_array import Array
+from decent_array import interoperability as iop
+
 from decent_bench.agents._utils import infer_client_data_size
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
@@ -13,8 +15,9 @@ from decent_bench.utils.types import InitialStates, LocalSteps
 from ._fed_algorithm import FedAlgorithm
 
 if TYPE_CHECKING:
+    from decent_array import Array
+
     from decent_bench.agents import Agent
-    from decent_bench.utils.array import Array
 
 
 _NORMALIZER_CHANNEL = "normalizer"
@@ -113,7 +116,6 @@ class FedNova(FedAlgorithm):
     .. footbibliography::
     """
 
-    iterations: int = 100
     step_size: float = 0.001
     num_local_steps: LocalSteps = 1
     use_momentum: bool = False
@@ -183,7 +185,7 @@ class FedNova(FedAlgorithm):
         for client in participating_clients:
             local_x, cumulative_gradient, a_i = self._compute_local_update(client, server)
             client.x = local_x
-            normalizer_upload = iop.reshape(iop.to_array_like(a_i, cumulative_gradient), (1,))
+            normalizer_upload = iop.asarray(a_i)
             network.send(sender=client, receiver=server, msg=normalizer_upload, channel=_NORMALIZER_CHANNEL)
             network.send(
                 sender=client,
@@ -263,7 +265,9 @@ class FedNova(FedAlgorithm):
         server_sample_counts = server.aux_vars["client_sample_counts"]
         server_x = iop.copy(server.x)
         cumulative_gradients = [server.message(client, _CUMULATIVE_GRADIENT_CHANNEL) for client in received_clients]
-        a_values = [iop.astype(server.message(client, _NORMALIZER_CHANNEL), float) for client in received_clients]
+        a_values = [
+            float(iop.squeeze(server.message(client, _NORMALIZER_CHANNEL)).item()) for client in received_clients
+        ]
         if any(a_i <= 0 for a_i in a_values):
             raise ValueError("FedNova coefficients `a_i` must be positive")
 

@@ -2,7 +2,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme, UniformSelection
@@ -12,8 +13,9 @@ from decent_bench.utils.types import InitialStates
 from ._fed_algorithm import FedAlgorithm
 
 if TYPE_CHECKING:
+    from decent_array import Array
+
     from decent_bench.agents import Agent
-    from decent_bench.utils.array import Array
 
 
 _MODEL_DELTA_CHANNEL = "model_delta"
@@ -74,7 +76,6 @@ class Scaffold(FedAlgorithm):
 
     """
 
-    iterations: int = 100
     step_size: float = 0.001
     num_local_steps: int = 1
     server_step_size: float = 1.0
@@ -135,7 +136,7 @@ class Scaffold(FedAlgorithm):
         channel: str = "default",
     ) -> None:
         """Send the current server model and control variate under ``channel``."""
-        payload = iop.stack([network.server().x, network.server().aux_vars["c"]], dim=0)
+        payload = iop.stack([network.server().x, network.server().aux_vars["c"]], axis=0)
         network.send(sender=network.server(), receiver=selected_clients, msg=payload, channel=channel)
 
     def _run_local_updates(self, network: FedNetwork, participating_clients: Sequence["Agent"]) -> None:

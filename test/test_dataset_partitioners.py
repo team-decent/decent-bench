@@ -4,7 +4,7 @@ from collections.abc import Sequence
 import numpy as np
 import pytest
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
 from decent_bench.datasets import (
     DatasetHandler,
     PyTorchDatasetHandler,

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import P2PNetwork
 from decent_bench.utils._tags import Tag, tags
@@ -50,7 +51,6 @@ class ADMM(P2PAlgorithm):
 
     """
 
-    iterations: int = 100
     penalty: float = 1
     relaxation: float = 0.5
     x0: InitialStates = None
@@ -84,7 +84,7 @@ class ADMM(P2PAlgorithm):
 
     def step(self, network: P2PNetwork, _: int) -> None:
         for i in network.active_agents():
-            i.x = i.cost.proximal(iop.sum(i.aux_vars["z"], dim=0) * self.rho_i[i], penalty=self.rho_i[i])
+            i.x = i.cost.proximal(iop.sum(i.aux_vars["z"], axis=0) * self.rho_i[i], penalty=self.rho_i[i])
 
         for i in network.active_agents():
             for j in network.active_neighbors(i):

@@ -1,9 +1,10 @@
 from dataclasses import dataclass
-from decent_bench.networks import P2PNetwork
-from decent_bench.algorithms.p2p import P2PAlgorithm
-import decent_bench.utils.interoperability as iop
-from decent_bench.algorithms.utils import initial_states
 
+from decent_array import interoperability as iop
+
+from decent_bench.algorithms.p2p import P2PAlgorithm
+from decent_bench.algorithms.utils import initial_states
+from decent_bench.networks import P2PNetwork
 
 Y_UPDATE = "y"
 Z_UPDATE = "z"
@@ -24,7 +25,6 @@ class AvgConsensus(P2PAlgorithm):
 
     """
 
-    iterations: int = 100
     name: str = "Average Consensus"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -61,7 +61,6 @@ class RatioConsensus(P2PAlgorithm):
 
     """
 
-    iterations: int = 100
     name: str = "Ratio Consensus"
 
     def initialize(self, network: P2PNetwork) -> None:  # noqa: D102
@@ -87,4 +86,4 @@ class RatioConsensus(P2PAlgorithm):
                 for j, z_j in i.messages(channel=Z_UPDATE).items():
                     z_avg += self.W[i, j] * z_j
 
-            i.x = iop.div(y_avg, z_avg)
+            i.x = y_avg / z_avg

@@ -3,11 +3,12 @@ from functools import cached_property
 from typing import Any
 
 import numpy as np
+from decent_array import interoperability as iop
+from decent_array.types import Devices, Frameworks
 from numpy.typing import DTypeLike, NDArray
 from sklearn import datasets as sk_datasets
 
-import decent_bench.utils.interoperability as iop
-from decent_bench.utils.types import Dataset, SupportedDevices, SupportedFrameworks
+from decent_bench.utils.types import Dataset
 
 from ._dataset_handler import DatasetHandler
 
@@ -19,8 +20,8 @@ class SyntheticRegressionDatasetHandler(DatasetHandler):
         n_features: int,
         n_samples: int,
         *,
-        framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
-        device: SupportedDevices = SupportedDevices.CPU,
+        framework: Frameworks = Frameworks.NUMPY,
+        device: Devices = Devices.CPU,
         feature_dtype: DTypeLike = np.float64,
         target_dtype: DTypeLike = np.float64,
         squeeze_targets: bool = False,
@@ -94,11 +95,11 @@ class SyntheticRegressionDatasetHandler(DatasetHandler):
     def _create_partition(self, features: NDArray[Any], targets: NDArray[Any], indices: list[int]) -> Dataset:
         return [
             (
-                iop.to_array(features[j], self.framework, self.device),
+                iop.from_numpy(features[j]),
                 (
-                    iop.squeeze(iop.to_array(targets[j : j + 1], self.framework, self.device))
+                    iop.squeeze(iop.from_numpy(targets[j : j + 1]))
                     if self.squeeze_targets
-                    else iop.to_array(targets[j : j + 1], self.framework, self.device)
+                    else iop.from_numpy(targets[j : j + 1])
                 ),
             )
             for j in indices

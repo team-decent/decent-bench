@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 
+from decent_array import Array
+
 from decent_bench.networks import Network
-from decent_bench.utils.array import Array
 from decent_bench.utils.types import Dataset
 
 

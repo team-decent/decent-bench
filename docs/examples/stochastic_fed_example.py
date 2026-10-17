@@ -1,15 +1,16 @@
+from decent_array.types import Devices, Frameworks
+
 from decent_bench import benchmark
 from decent_bench.agents import Agent
 from decent_bench.algorithms.federated import FedAvg, Scaffold
-from decent_bench.benchmark import create_regression_problem
+from decent_bench.benchmark import configure, create_regression_problem
 from decent_bench.metrics import metric_library
 from decent_bench.networks import FedNetwork
-from decent_bench.utils.interoperability import set_seed
 
 if __name__ == "__main__":
 
-    ## Set random seed ---------------------------------------------------
-    set_seed(42)
+    ## Configure framework and random seed ------------------------------
+    configure(Frameworks.NUMPY, Devices.CPU, seed=42)
 
     ## Problem definition ------------------------------------------------
     n_agents = 10
@@ -25,10 +26,11 @@ if __name__ == "__main__":
 
     results = benchmark.benchmark(
         algorithms=[
-            FedAvg(iterations=num_iter, step_size=step, num_local_steps=num_local_steps),
-            Scaffold(iterations=num_iter, step_size=step, num_local_steps=num_local_steps),
+            FedAvg(step_size=step, num_local_steps=num_local_steps),
+            Scaffold(step_size=step, num_local_steps=num_local_steps),
         ],
         benchmark_problem=problem,
+        iterations=num_iter,
         n_trials=10,
         )
 

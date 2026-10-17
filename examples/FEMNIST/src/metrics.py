@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from sklearn import metrics as sk_metrics
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
 from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.metrics import Metric, NetworkMetricsView
 from decent_bench.networks import FedNetwork

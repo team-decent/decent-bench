@@ -8,8 +8,9 @@ from typing import Any, cast
 
 import networkx as nx
 import numpy as np
+from decent_array import Array
+from decent_array import interoperability as iop
 
-import decent_bench.utils.interoperability as iop
 from decent_bench.agents import Agent
 from decent_bench.costs import ZeroCost
 from decent_bench.schemes import (
@@ -21,7 +22,6 @@ from decent_bench.schemes import (
     NoiseScheme,
     NoNoise,
 )
-from decent_bench.utils.array import Array
 
 
 class Network(ABC):  # noqa: B024
@@ -83,32 +83,25 @@ class Network(ABC):  # noqa: B024
     @staticmethod
     def _validate_agent_cost_compatibility(graph: nx.Graph[Agent]) -> None:
         """
-        Validate that all agents' costs share the same shape, framework, and device.
+        Validate that all agents' costs share the same shape.
 
         Raises:
-            ValueError: If agents in the graph have mismatching cost shape, framework, or device.
+            ValueError: If agents in the graph have mismatching cost shapes.
 
         """
         agents = list(graph.nodes())
         if len(agents) <= 1:
             return
 
-        first_cost = agents[0].cost
-        first_signature = (first_cost.shape, first_cost.framework, first_cost.device)
-        mismatches: list[str] = []
-        for agent in agents[1:]:
-            signature = (agent.cost.shape, agent.cost.framework, agent.cost.device)
-            if signature != first_signature:
-                mismatches.append(
-                    f"agent {agent.id}: shape={agent.cost.shape}, framework={agent.cost.framework}, "
-                    f"device={agent.cost.device}"
-                )
+        first_shape = agents[0].cost.shape
+        mismatches = [
+            f"agent {agent.id}: shape={agent.cost.shape}" for agent in agents[1:] if agent.cost.shape != first_shape
+        ]
 
         if mismatches:
             raise ValueError(
-                "All agents in a network must have costs with the same shape, framework, and device. "
-                f"Expected shape={first_cost.shape}, framework={first_cost.framework}, "
-                f"device={first_cost.device}; mismatches: {'; '.join(mismatches)}"
+                "All agents in a network must have costs with the same shape. "
+                f"Expected shape={first_shape}; mismatches: {'; '.join(mismatches)}"
             )
 
     @staticmethod
@@ -313,7 +306,6 @@ class Network(ABC):  # noqa: B024
 
         counter_increment = self._message_compression[sender].compressed_msg_size(msg) / sender.cost.size
         sender._n_sent_messages += counter_increment * len(receiver)  # noqa: SLF001
-        framework, device = iop.framework_device_of_array(msg)  # remove after iop refactor
 
         # select confirmed receivers (message is not dropped)
         confirmed_receivers = [r for r in receiver if not self._message_drop[sender].should_drop()]
@@ -321,7 +313,7 @@ class Network(ABC):  # noqa: B024
         # compress the message
         msg = cast("Array", self._message_compression[sender].compress(iop.copy(msg)))
         # generate noise
-        noise = self._message_noise[sender].make_noise((len(confirmed_receivers), *iop.shape(msg)), framework, device)
+        noise = self._message_noise[sender].make_noise((len(confirmed_receivers), *iop.shape(msg)))
         # transmit messages
         for i, r in enumerate(confirmed_receivers):
             transmitted_msg = msg if noise is None else msg + noise[i]
@@ -424,7 +416,7 @@ class P2PNetwork(Network):
         for i in agents:
             W[i, i] = 1 - sum(W[i])
 
-        self.W = iop.to_array(W, agents[0].cost.framework, agents[0].cost.device)
+        self.W = iop.from_numpy(W)
         return self.W
 
     @weights.setter
@@ -432,30 +424,15 @@ class P2PNetwork(Network):
         """
         Set custom consensus weights matrix.
 
-        A simple way to create custom weights is to start using numpy and then
-        use :func:`~decent_bench.utils.interoperability.to_array` to convert to an
-        :class:`~decent_bench.utils.array.Array` object with the desired framework and device.
-        For an example see :func:`~decent_bench.utils.interoperability.zeros`.
-
         Raises:
-            ValueError: if the shape, framework, and device are incompatible with the agents' cost functions
+            ValueError: if the shape is incompatible with the number of agents
 
         Note:
             If not set, the weights matrix is initialized using the Metropolis-Hastings method.
-            Weights will be overwritten if framework or device differ from
-            ``Agent.cost.framework`` or ``Agent.cost.device``.
 
         """
         if iop.shape(value) != (len(self.agents()), len(self.agents())):
             raise ValueError(f"Weights matrix must be of shape ({len(self.agents())}, {len(self.agents())})")
-
-        framework, device = iop.framework_device_of_array(value)
-
-        if framework != self.agents()[0].cost.framework or device != self.agents()[0].cost.device:
-            raise ValueError(
-                f"Weights matrix must be on the same framework and device as the agents' "
-                f"cost functions ({self.agents()[0].cost.framework}, {self.agents()[0].cost.device})"
-            )
 
         self.W = value
 
@@ -472,11 +449,7 @@ class P2PNetwork(Network):
             nodelist=agents,
             dtype=np.dtype(float),
         )
-        return iop.to_array(
-            adjacency_matrix,
-            agents[0].cost.framework,
-            agents[0].cost.device,
-        )
+        return iop.from_numpy(adjacency_matrix)
 
     def neighbors(self, agent: Agent) -> list[Agent]:
         """Alias for :meth:`~decent_bench.networks.Network.connected_agents`."""
@@ -531,9 +504,8 @@ class FedNetwork(Network):
             raise ValueError("`clients` list must be non-empty")
         if server is None:
             # get cost info from one of the clients
-            shape, framework, device = clients[0].cost.shape, clients[0].cost.framework, clients[0].cost.device
             server = Agent(
-                ZeroCost(shape, framework, device),
+                ZeroCost(clients[0].cost.shape),
                 AlwaysActive(),
                 min(c.state_snapshot_period for c in clients),
             )

@@ -6,7 +6,7 @@ from decent_bench.utils._tags import Tag, tags
 from ._fed_opt import FedOpt
 
 if TYPE_CHECKING:
-    from decent_bench.utils.array import Array
+    from decent_array import Array
 
 
 @tags(Tag.ALGORITHM, Tag.FEDERATED)

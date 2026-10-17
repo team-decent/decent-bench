@@ -2,30 +2,13 @@
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import TYPE_CHECKING, Literal, SupportsIndex, TypeAlias, TypeVar, Union
 
 if TYPE_CHECKING:
-    import jax
-    import numpy
-    import tensorflow as tf
-    import torch
+    from decent_array import Array
 
     from decent_bench.agents import Agent
     from decent_bench.networks import Network
-    from decent_bench.utils.array import Array
-
-ArrayLike: TypeAlias = Union["numpy.ndarray", "torch.Tensor", "tf.Tensor", "jax.Array"]  # noqa: UP040
-"""
-Type alias for array-like types supported in decent-bench, including NumPy arrays,
-PyTorch tensors, TensorFlow tensors, and JAX arrays.
-"""
-
-SupportedArrayTypes: TypeAlias = ArrayLike | float | int  # noqa: UP040
-"""
-Type alias for supported types for optimization variables in decent-bench,
-including array-like types and scalars.
-"""
 
 if TYPE_CHECKING:
     NetworkT = TypeVar("NetworkT", bound=Network)
@@ -88,7 +71,7 @@ global dataset or the entire dataset itself. These subsets can be obtained
 by using the :class:`~decent_bench.datasets.DatasetHandler` class, specifically the
 :meth:`~decent_bench.datasets.DatasetHandler.split` method.
 
-Features and targets are represented as :class:`~decent_bench.utils.array.Array`
+Features and targets are represented as :class:`decent_array.Array`
 objects or framework-specific tensor objects in special cases. For unsupervised learning,
 targets are usually None.
 
@@ -98,20 +81,3 @@ but typically it is:
 - Features: 1-dimensional vector (n_features,)
 - Targets: 1-dimensional vector (n_targets,), or None for unsupervised learning.
 """
-
-
-class SupportedFrameworks(Enum):
-    """Enum for supported frameworks in decent-bench."""
-
-    NUMPY = "numpy"
-    PYTORCH = "pytorch"
-    TENSORFLOW = "tensorflow"
-    JAX = "jax"
-
-
-class SupportedDevices(Enum):
-    """Enum for supported devices in decent-bench."""
-
-    CPU = "cpu"
-    GPU = "gpu"
-    MPS = "mps"

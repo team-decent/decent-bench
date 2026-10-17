@@ -1,13 +1,14 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+
 from decent_bench.utils._tags import Tag, tags
 
 from ._fed_opt import FedOpt
 
 if TYPE_CHECKING:
-    from decent_bench.utils.array import Array
+    from decent_array import Array
 
 
 @tags(Tag.ALGORITHM, Tag.FEDERATED)

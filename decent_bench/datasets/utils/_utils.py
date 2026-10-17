@@ -5,9 +5,9 @@ from collections.abc import Hashable, Sequence
 from typing import Any
 
 import numpy as np
+from decent_array import interoperability as iop
 from numpy.typing import NDArray
 
-import decent_bench.utils.interoperability as iop
 from decent_bench.datasets._dataset_handler import DatasetHandler
 
 
@@ -105,7 +105,7 @@ def _extend_weighted_by_capacity(
     remaining_counts: list[int],
     weights: NDArray[Any],
 ) -> None:
-    rng = iop.rng_numpy()
+    rng = iop.get_numpy_rng()
     for index in indices:
         available_partitions = [partition_index for partition_index, count in enumerate(remaining_counts) if count > 0]
         if len(available_partitions) == 0:
@@ -153,9 +153,9 @@ def _indices_by_label(labels: Sequence[Hashable]) -> dict[Hashable, list[int]]:
 
 
 def _shuffled_range(stop: int) -> list[int]:
-    return [int(index) for index in iop.rng_numpy().permutation(stop)]
+    return [int(index) for index in iop.get_numpy_rng().permutation(stop)]
 
 
 def _shuffled_sequence[T](values: Sequence[T]) -> list[T]:
-    indices = iop.rng_numpy().permutation(len(values))
+    indices = iop.get_numpy_rng().permutation(len(values))
     return [values[int(index)] for index in indices]

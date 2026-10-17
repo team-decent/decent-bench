@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from functools import cached_property
+from math import isnan, prod
 from typing import Any, overload
 
-import numpy as np
+from decent_array import Array
+from decent_array import interoperability as iop
 
-import decent_bench.utils.interoperability as iop
 from decent_bench.costs._base._cost import Cost
 from decent_bench.utils._tags import Tag, tags
-from decent_bench.utils.array import Array
-from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 __all__ = [
     "BaseRegularizerCost",
@@ -29,34 +28,18 @@ class BaseRegularizerCost(Cost):
     performance. Mixing a regularizer with an arbitrary non-regularizer still falls back to generic cost composition.
     """
 
-    def __init__(
-        self,
-        shape: tuple[int, ...],
-        *,
-        framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
-        device: SupportedDevices = SupportedDevices.CPU,
-    ):
+    def __init__(self, shape: tuple[int, ...]):
         if len(shape) == 0:
             raise ValueError("Regularizer shape must be non-empty.")
         if any(dim <= 0 for dim in shape):
             raise ValueError(f"Regularizer shape must be positive, got {shape}.")
         self._shape = shape
-        self._dim = int(np.prod(shape))
-        self._framework = framework
-        self._device = device
+        self._dim = int(prod(shape))
         self._hessian_cache: Array | None = None
 
     @property
     def shape(self) -> tuple[int, ...]:
         return self._shape
-
-    @property
-    def framework(self) -> SupportedFrameworks:
-        return self._framework
-
-    @property
-    def device(self) -> SupportedDevices:
-        return self._device
 
     @overload
     def __add__(self, other: BaseRegularizerCost) -> BaseRegularizerCost: ...
@@ -126,7 +109,7 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
         if len(regularizers) == 0:
             raise ValueError("Composite regularizer must contain at least one regularizer.")
         first = regularizers[0]
-        super().__init__(first.shape, framework=first.framework, device=first.device)
+        super().__init__(first.shape)
 
         if weights is None:
             weights = [1.0] * len(regularizers)
@@ -137,7 +120,7 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
         for regularizer, weight in zip(regularizers, weights, strict=True):
             if not isinstance(regularizer, BaseRegularizerCost):
                 raise TypeError(f"Composite regularizer can only contain regularizers, got {type(regularizer)}.")
-            self._validate_cost_operation(regularizer, check_framework=True, check_device=True)
+            self._validate_cost_operation(regularizer)
             if isinstance(regularizer, _CompositeRegularizerCost):
                 for inner_regularizer, inner_weight in regularizer._terms:  # noqa: SLF001
                     self._terms.append((inner_regularizer, float(weight) * inner_weight))
@@ -147,14 +130,14 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
     @cached_property
     def m_smooth(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         m_smooth_vals = [abs(weight) * regularizer.m_smooth for regularizer, weight in self._terms]
-        return np.nan if any(np.isnan(v) for v in m_smooth_vals) else float(sum(m_smooth_vals))
+        return float("nan") if any(isnan(v) for v in m_smooth_vals) else float(sum(m_smooth_vals))
 
     @cached_property
     def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         if any(weight < 0 for _, weight in self._terms):
-            return np.nan
+            return float("nan")
         m_cvx_vals = [weight * regularizer.m_cvx for regularizer, weight in self._terms]
-        return np.nan if any(np.isnan(v) for v in m_cvx_vals) else float(sum(m_cvx_vals))
+        return float("nan") if any(isnan(v) for v in m_cvx_vals) else float(sum(m_cvx_vals))
 
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ANN401
         return float(sum(weight * regularizer.function(x, **kwargs) for regularizer, weight in self._terms))
@@ -162,13 +145,13 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
     def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ANN401
         return iop.sum(
             iop.stack([regularizer.gradient(x, **kwargs) * weight for regularizer, weight in self._terms]),
-            dim=0,
+            axis=0,
         )
 
     def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ANN401
         return iop.sum(
             iop.stack([regularizer.hessian(x, **kwargs) * weight for regularizer, weight in self._terms]),
-            dim=0,
+            axis=0,
         )
 
     def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ANN401
@@ -206,21 +189,21 @@ class L1RegularizerCost(BaseRegularizerCost):
 
     @cached_property
     def m_smooth(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
-        return np.nan
+        return float("nan")
 
     @cached_property
     def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
         return 0.0
 
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ARG002, ANN401
-        return float(iop.astype(iop.sum(iop.absolute(x)), float))
+        return float(iop.sum(iop.absolute(x)).item())
 
     def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         return iop.sign(x)
 
     def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if self._hessian_cache is None:
-            self._hessian_cache = iop.zeros(shape=(self._dim, self._dim), framework=self.framework, device=self.device)
+            self._hessian_cache = iop.zeros(shape=(self._dim, self._dim))
         return self._hessian_cache
 
     def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
@@ -247,14 +230,14 @@ class L2RegularizerCost(BaseRegularizerCost):
         return 1.0
 
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ARG002, ANN401
-        return float(iop.astype(0.5 * iop.sum(iop.mul(x, x)), float))
+        return float(0.5 * iop.sum(iop.multiply(x, x)).item())
 
     def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         return x
 
     def hessian(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         if self._hessian_cache is None:
-            self._hessian_cache = iop.eye(n=self._dim, framework=self.framework, device=self.device)
+            self._hessian_cache = iop.eye(self._dim)
         return self._hessian_cache
 
     def proximal(self, x: Array, penalty: float, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
@@ -275,12 +258,10 @@ class FractionalQuadraticRegularizerCost(BaseRegularizerCost):
         self,
         shape: tuple[int, ...],
         *,
-        framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
-        device: SupportedDevices = SupportedDevices.CPU,
         prox_max_iter: int = 100,
         prox_tol: float | None = 1e-10,
     ):
-        super().__init__(shape, framework=framework, device=device)
+        super().__init__(shape)
         if prox_max_iter <= 0:
             raise ValueError("prox_max_iter must be positive.")
         self._prox_max_iter = prox_max_iter
@@ -292,11 +273,11 @@ class FractionalQuadraticRegularizerCost(BaseRegularizerCost):
 
     @cached_property
     def m_cvx(self) -> float:  # pyright: ignore[reportIncompatibleMethodOverride]
-        return np.nan
+        return float("nan")
 
     def function(self, x: Array, **kwargs: Any) -> float:  # noqa: ARG002, ANN401
         x2 = x * x
-        return float(iop.astype(iop.sum(x2 / (1.0 + x2)), float))
+        return float(iop.sum(x2 / (1.0 + x2)).item())
 
     def gradient(self, x: Array, **kwargs: Any) -> Array:  # noqa: ARG002, ANN401
         x2 = x * x
@@ -319,7 +300,7 @@ class FractionalQuadraticRegularizerCost(BaseRegularizerCost):
             denom = (1.0 + x2) ** 2
             grad = 2.0 * current / denom + (current - x) / penalty
             next_x = current - step_size * grad
-            if self._prox_tol is not None and iop.astype(iop.norm(next_x - current), float) <= self._prox_tol:
+            if self._prox_tol is not None and float(iop.norm(next_x - current).item()) <= self._prox_tol:
                 return next_x
             current = next_x
         return current

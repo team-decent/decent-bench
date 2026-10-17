@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+
 from decent_bench.agents import Agent
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import P2PNetwork
@@ -17,7 +18,6 @@ class LED(P2PAlgorithm):
     Local Exact-Diffusion (LED) algorithm :footcite:p:`Alg_LED`.
 
     Args:
-        iterations: Total number of communication rounds (r)
         num_local_steps: Number of local updates (tau)
         step_size: Step size alpha for gradient steps
         aux_step_size: Step size beta for dual variable
@@ -28,7 +28,6 @@ class LED(P2PAlgorithm):
 
     """
 
-    iterations: int = 100  # Total number of communication rounds (r)
     num_local_steps: int = 5  # Number of local updates (tau)
     step_size: float = 0.01  # Step size alpha for gradient steps
     aux_step_size: float = 0.01  # Step size beta for dual variable
@@ -40,7 +39,7 @@ class LED(P2PAlgorithm):
         Validate parameters.
 
         Raises:
-            ValueError: If any of the parameters are invalid (e.g., non-positive iterations, local_steps,
+            ValueError: If any of the algorithm parameters are invalid (e.g., non-positive local_steps,
             step_size, penalty, or alpha).
 
         """

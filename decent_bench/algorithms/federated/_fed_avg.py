@@ -11,8 +11,9 @@ from decent_bench.utils.types import InitialStates
 from ._fed_algorithm import FedAlgorithm
 
 if TYPE_CHECKING:
+    from decent_array import Array
+
     from decent_bench.agents import Agent
-    from decent_bench.utils.array import Array
 
 
 @tags(Tag.ALGORITHM, Tag.FEDERATED)
@@ -43,7 +44,6 @@ class FedAvg(FedAlgorithm):
 
     # C=0.1; batch size= inf/10/50 (dataset sizes are bigger; normally 1/10 of the total dataset).
     # E= 5/20 (num local epochs).
-    iterations: int = 100
     step_size: float = 0.001
     num_local_steps: int = 1
     selection_scheme: ClientSelectionScheme | None = field(

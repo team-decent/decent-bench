@@ -1,9 +1,12 @@
 import operator
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import lru_cache, reduce
 from typing import TYPE_CHECKING
 
 import numpy as np
+from decent_array import Array
+from decent_array import interoperability as iop
+from decent_array.types import dtypes
 from numpy import float64
 from numpy import linalg as la
 from numpy.typing import NDArray
@@ -11,30 +14,16 @@ from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, T
 from rich.table import Column
 from sklearn import metrics as sk_metrics
 
-import decent_bench.utils.interoperability as iop
-from decent_bench.costs import Cost, EmpiricalRiskCost
+from decent_bench.costs import EmpiricalRiskCost
 from decent_bench.metrics._metrics_view import AgentMetricsView
+from decent_bench.networks import FedNetwork
 from decent_bench.utils._logger import LOGGER
-from decent_bench.utils.array import Array
-from decent_bench.utils.types import Dataset
 
 if TYPE_CHECKING:
     from decent_bench.benchmark import BenchmarkProblem
 
 
 CACHE_MAX_SIZE = 50_000
-
-
-def _find_duplicates(items: list[str]) -> list[str]:
-    seen: set[str] = set()
-    duplicates: set[str] = set()
-    for item in items:
-        if item in seen:
-            duplicates.add(item)
-        else:
-            seen.add(item)
-
-    return sorted(duplicates)
 
 
 class MetricProgressBar(Progress):
@@ -61,13 +50,7 @@ class MetricProgressBar(Progress):
 def _clear_caches() -> None:
     """Clear module-level functools caches used by metric utilities."""
     x_mean.cache_clear()
-    _predict_agent.cache_clear()
-
-
-def _drifts(agents: Sequence[AgentMetricsView], server: AgentMetricsView, iteration: int) -> list[float]:
-    """Calculate each agent's distance from the server state at *iteration*."""
-    server_x = server.x_history[iteration]
-    return [float(iop.norm(agent.x_history[iteration] - server_x)) for agent in agents]
+    _predict.cache_clear()
 
 
 @lru_cache(maxsize=CACHE_MAX_SIZE)
@@ -89,111 +72,22 @@ def x_mean(agents: tuple[AgentMetricsView, ...], iteration: int = -1) -> Array:
     return reduce(operator.add, all_x_at_iter) / len(all_x_at_iter)
 
 
-def _regret(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
-    r"""
-    Calculate the global regret at *iteration* (or using the agents' final x if *iteration* is -1).
-
-    Global regret is defined as:
-
-    .. include:: snippets/global_cost_error.rst
-
-    """
-    x_opt = problem.x_optimal
-    mean_x = x_mean(tuple(agents), iteration)
-    optimal_cost, actual_cost = 0.0, 0.0
-    for a in agents:
-        kwargs = {"indices": "all"} if isinstance(a.cost, EmpiricalRiskCost) else {}
-        optimal_cost += a.cost.function(x_opt, **kwargs)  # type: ignore[arg-type]
-        actual_cost += a.cost.function(mean_x, **kwargs)
-    return (actual_cost - optimal_cost) / len(agents)
+@lru_cache(maxsize=CACHE_MAX_SIZE)
+def _predict(agent: AgentMetricsView, iteration: int, problem: "BenchmarkProblem") -> Array:
+    """Get the predictions of *agent* at *iteration*. Cached since predictions may be expensive."""
+    test_x = [x for x, _ in problem.test_data]  # type: ignore[union-attr]
+    return agent.cost.predict(agent.x_history[iteration], test_x)  # type: ignore[no-any-return,attr-defined]
 
 
-def _gradient_norm(agents: Sequence[AgentMetricsView], iteration: int = -1) -> float:
-    r"""
-    Calculate the global gradient norm at *iteration* (or using the agents' final x if *iteration* is -1).
-
-    Global gradient norm is defined as:
-
-    .. include:: snippets/global_gradient_optimality.rst
-    """
-    mean_x = x_mean(tuple(agents), iteration)
-    gradients = []
-    for a in agents:
-        kwargs = {"indices": "all"} if isinstance(a.cost, EmpiricalRiskCost) else {}
-        gradients.append(a.cost.gradient(mean_x, **kwargs))
-    grad_avg = reduce(operator.add, gradients) / len(gradients)
-    return float(iop.norm(grad_avg))
-
-
-def _x_error(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int = -1) -> float:
-    r"""
-    Calculate x error at *iteration* (or at the final x if *iteration* is -1).
-
-    .. math::
-        \|\mathbf{\bar{x}}_k - \mathbf{x}^\star\|
-
-    where :math:`\mathbf{\bar{x}}_k` is the mean of the agents' local x at iteration k,
-    and :math:`\mathbf{x}^\star` is the optimal x defined in the *problem*.
-
-    """
-    mean_x = x_mean(tuple(agents), iteration)
-    return float(iop.norm(mean_x - problem.x_optimal))  # type: ignore[operator]
-
-
-def _observed_rounds(agents: Sequence[AgentMetricsView]) -> int:
-    """
-    Get the number of completed rounds observed in the agents' histories.
-
-    The initial snapshot is stored at iteration 0, so the maximum recorded iteration corresponds to the number of
-    completed algorithm rounds when the final snapshot is present.
-    """
-    if not agents:
-        return 0
-    return max(agent.x_history.max() for agent in agents)
-
-
-def _losses(agents: Sequence[AgentMetricsView], iteration: int) -> list[float]:
-    """Calculate each agent's loss at *iteration*."""
-    return [
-        agent.cost.function(agent.x_history[iteration], indices="all")
-        if isinstance(agent.cost, EmpiricalRiskCost)
-        else agent.cost.function(agent.x_history[iteration])
-        for agent in agents
-    ]
-
-
-def _accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
-    """
-    Calculate the accuracy per agent.
-
-    Accuracy is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
-
-    Args:
-        agents: sequence of agents to calculate accuracy for
-        problem: benchmark problem containing test data
-        iteration: iteration to calculate accuracy at, or -1 to use the agents' final x
-
-    Returns:
-        list of accuracies per agent at *iteration*
-
-    """
-    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
-    ret: list[float] = []
-    for agent in agents:
-        preds = _predict_agent(agent, iteration, problem)
-        if np.any(~np.isfinite(preds)):
-            LOGGER.warning(
-                "Predictions contain NaN or Inf values, which are not valid for Accuracy calculation, "
-                "returning NaN for Accuracy"
-            )
-            return [np.nan for _ in agents]
-        ret.append(float(sk_metrics.accuracy_score(test_y, preds)))
-    return ret
+###### regression and classification metrics
+def _test_targets(problem: "BenchmarkProblem") -> Array:
+    """Get stacked test targets."""
+    return iop.stack([y for _, y in problem.test_data])  # type: ignore[union-attr]
 
 
 def _mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
-    Calculate the mean squared error (MSE) per agent.
+    Compute the mean squared error (MSE) per agent.
 
     MSE is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
 
@@ -207,52 +101,58 @@ def _mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iterat
 
     """
     ret: list[float] = []
-    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
+    test_y = _test_targets(problem)
+
     for agent in agents:
-        preds = _predict_agent(agent, iteration, problem)
-        if np.any(~np.isfinite(preds)):
+        preds = _predict(agent, iteration, problem)
+
+        if not iop.all(iop.isfinite(preds)):
             LOGGER.warning(
-                "Predictions contain NaN or Inf values, which are not valid for MSE calculation, returning NaN for MSE"
+                "Predictions contain NaN or Inf values, which are not valid for MSE calculation, returning NaN"
             )
             return [np.nan for _ in agents]
-        ret.append(sk_metrics.mean_squared_error(test_y, preds))
+
+        error = preds - test_y
+        ret.append(float(iop.mean(error * error)))
+
     return ret
 
 
-def _predict_cost_at_x(cost: Cost, x: Array, problem: "BenchmarkProblem") -> NDArray[float64]:
-    """Get predictions from *cost* at an arbitrary model state *x*."""
-    test_x, _ = _split_dataset(problem.test_data)  # type: ignore[arg-type]
-    return iop.to_numpy(cost.predict(x, list(test_x)))  # type: ignore[attr-defined]
+def _accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
+    """
+    Compute the accuracy per agent.
 
+    Accuracy is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
 
-def _accuracy_at_x(cost: Cost, x: Array, problem: "BenchmarkProblem") -> float:
-    """Calculate accuracy from *cost* predictions at an arbitrary model state *x*."""
-    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
-    preds = _predict_cost_at_x(cost, x, problem)
-    if np.any(~np.isfinite(preds)):
-        LOGGER.warning(
-            "Predictions contain NaN or Inf values, which are not valid for Accuracy calculation, "
-            "returning NaN for Accuracy"
-        )
-        return np.nan
-    return float(sk_metrics.accuracy_score(test_y, preds))
+    Args:
+        agents: sequence of agents to calculate accuracy for
+        problem: benchmark problem containing test data
+        iteration: iteration to calculate accuracy at, or -1 to use the agents' final x
 
+    Returns:
+        list of accuracies per agent at *iteration*
 
-def _mse_at_x(cost: Cost, x: Array, problem: "BenchmarkProblem") -> float:
-    """Calculate MSE from *cost* predictions at an arbitrary model state *x*."""
-    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
-    preds = _predict_cost_at_x(cost, x, problem)
-    if np.any(~np.isfinite(preds)):
-        LOGGER.warning(
-            "Predictions contain NaN or Inf values, which are not valid for MSE calculation, returning NaN for MSE"
-        )
-        return np.nan
-    return float(sk_metrics.mean_squared_error(test_y, preds))
+    """
+    test_y = _test_targets(problem)
+    ret: list[float] = []
+
+    for agent in agents:
+        preds = _predict(agent, iteration, problem)
+
+        if not iop.all(iop.isfinite(preds)):
+            LOGGER.warning(
+                "Predictions contain NaN or Inf values, which are not valid for accuracy calculation, returning NaN"
+            )
+            return [np.nan for _ in agents]
+
+        ret.append(float(iop.mean(preds == test_y)))
+
+    return ret
 
 
 def _precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
-    Calculate the precision per agent.
+    Compute the precision per agent.
 
     Precision is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
     Calculated using :func:`sklearn.metrics.precision_score` with micro averaging.
@@ -266,23 +166,26 @@ def _precision(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", 
         list of precision per agent at *iteration*
 
     """
-    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
+    test_y = iop.to_numpy(_test_targets(problem))
     ret: list[float] = []
+
     for agent in agents:
-        preds = _predict_agent(agent, iteration, problem)
-        if np.any(~np.isfinite(preds)):
+        preds = _predict(agent, iteration, problem)
+
+        if not iop.all(iop.isfinite(preds)):
             LOGGER.warning(
-                "Predictions contain NaN or Inf values, which are not valid for Precision calculation, "
-                "returning NaN for Precision"
+                "Predictions contain NaN or Inf values, which are not valid for precision calculation, returning NaN"
             )
             return [np.nan for _ in agents]
-        ret.append(float(sk_metrics.precision_score(test_y, preds, average="micro")))
+
+        ret.append(float(sk_metrics.precision_score(test_y, iop.to_numpy(preds), average="micro")))
+
     return ret
 
 
 def _recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
     """
-    Calculate the recall per agent.
+    Compute the recall per agent.
 
     Recall is only applicable for problems using :class:`~decent_bench.costs.EmpiricalRiskCost`.
     Calculated using :func:`sklearn.metrics.recall_score` with micro averaging.
@@ -296,44 +199,71 @@ def _recall(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", ite
         list of recall per agent at *iteration*
 
     """
-    _, test_y = _split_dataset(problem.test_data)  # type: ignore[arg-type]
+    test_y = iop.to_numpy(_test_targets(problem))
     ret: list[float] = []
+
     for agent in agents:
-        preds = _predict_agent(agent, iteration, problem)
-        if np.any(~np.isfinite(preds)):
+        preds = _predict(agent, iteration, problem)
+
+        if not iop.all(iop.isfinite(preds)):
             LOGGER.warning(
-                "Predictions contain NaN or Inf values, which are not valid for Recall calculation,"
-                " returning NaN for Recall"
+                "Predictions contain NaN or Inf values, which are not valid for recall calculation, returning NaN"
             )
             return [np.nan for _ in agents]
-        ret.append(float(sk_metrics.recall_score(test_y, preds, average="micro")))
+
+        ret.append(float(sk_metrics.recall_score(test_y, iop.to_numpy(preds), average="micro")))
+
     return ret
 
 
-def _split_dataset(data: Dataset) -> tuple[tuple[Array, ...], NDArray[float64]]:
-    """
-    Split dataset into features and labels.
-
-    Args:
-        data: dataset to split, as a tuple of (features, labels)
-
-    Returns:
-        tuple of (features, labels)
-
-    """
-    x, y = zip(*data, strict=True)
-    test_x = tuple(x)
-    test_y = np.array(y)
-    return test_x, test_y
+###### availability tests for metrics
+def _requires_x_optimal(problem: "BenchmarkProblem") -> str | None:
+    if getattr(problem, "x_optimal", None) is None:
+        return "requires problem.x_optimal"
+    return None
 
 
-@lru_cache(maxsize=CACHE_MAX_SIZE)
-def _predict_agent(agent: AgentMetricsView, iteration: int, problem: "BenchmarkProblem") -> NDArray[float64]:
-    """Get the predictions of *agent* at *iteration*. Cached since predictions may be expensive."""
-    test_x, _ = _split_dataset(problem.test_data)  # type: ignore[arg-type]
-    return iop.to_numpy(agent.cost.predict(agent.x_history[iteration], list(test_x)))  # type: ignore[attr-defined]
+def _requires_test_data(problem: "BenchmarkProblem") -> str | None:
+    if getattr(problem, "test_data", None) is None:
+        return "requires problem.test_data"
+    return None
 
 
+def _requires_empirical_cost(problem: "BenchmarkProblem") -> str | None:
+    if not all(isinstance(a.cost, EmpiricalRiskCost) for a in problem.network.agents()):
+        return "requires all agents with EmpiricalRiskCost"
+    return None
+
+
+def _requires_integer_targets(problem: "BenchmarkProblem") -> str | None:
+    reason = _requires_test_data(problem)
+    if reason is not None:
+        return reason
+
+    int_dtypes = dtypes(kind=("signed integer", "unsigned integer"))
+    for d in problem.test_data:  # type: ignore[union-attr]
+        if d[1].dtype not in int_dtypes:
+            return f"requires integer targets, dtype {d[1].dtype} found"
+    return None
+
+
+def _requires_fednetwork(problem: "BenchmarkProblem") -> str | None:
+    if not isinstance(problem.network, FedNetwork):
+        return "requires FedNetwork"
+    return None
+
+
+def _check_availability(
+    conditions: tuple[Callable[["BenchmarkProblem"], str | None], ...], problem: "BenchmarkProblem"
+) -> str | None:
+    for c in conditions:
+        reason = c(problem)
+        if reason is not None:
+            return reason
+    return None
+
+
+###### iterations utils
 def all_sorted_iterations(agents: Sequence[AgentMetricsView]) -> list[int]:
     """
     Get a sorted list of all iterations reached by any agent in *agents*.
@@ -349,6 +279,19 @@ def all_sorted_iterations(agents: Sequence[AgentMetricsView]) -> list[int]:
     return sorted(all_iters)
 
 
+def _observed_rounds(agents: Sequence[AgentMetricsView]) -> int:
+    """
+    Get the number of completed rounds observed in the agents' histories.
+
+    The initial snapshot is stored at iteration 0, so the maximum recorded iteration corresponds to the number of
+    completed algorithm rounds when the final snapshot is present.
+    """
+    if not agents:
+        return 0
+    return max(agent.x_history.max() for agent in agents)
+
+
+###### convergence rate
 def linear_convergence_rate(y: Sequence[float]) -> float:
     r"""
     Compute the linear (a.k.a. exponential or geometric) convergence rate from a given trajectory.

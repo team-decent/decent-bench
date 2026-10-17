@@ -3,7 +3,9 @@ import pytest
 
 import decent_bench.utils.solvers as ca
 from decent_bench.costs import Cost, QuadraticCost
-from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
+from decent_bench.costs._decorators import autodecorate_cost_method
+from decent_array.types import Devices, Frameworks
+from decent_array import Array
 
 
 class DummyCost(Cost):
@@ -16,12 +18,12 @@ class DummyCost(Cost):
         return (1,)
 
     @property
-    def framework(self) -> SupportedFrameworks:
-        return SupportedFrameworks.NUMPY
+    def framework(self) -> Frameworks:
+        return Frameworks.NUMPY
 
     @property
-    def device(self) -> SupportedDevices:
-        return SupportedDevices.CPU
+    def device(self) -> Devices:
+        return Devices.CPU
 
     @property
     def m_smooth(self) -> float:
@@ -31,15 +33,19 @@ class DummyCost(Cost):
     def m_cvx(self) -> float:
         return self._m_cvx
 
+    @autodecorate_cost_method(Cost.function)
     def function(self, x: np.ndarray) -> float:
-        return float(0.5 * x[0] * x[0])
+        return float((0.5 * x[0]**2).item())
 
+    @autodecorate_cost_method(Cost.gradient)
     def gradient(self, x: np.ndarray) -> np.ndarray:
         return np.asarray([x[0]], dtype=float)
 
+    @autodecorate_cost_method(Cost.hessian)
     def hessian(self, x: np.ndarray) -> np.ndarray:  # noqa: ARG002
         return np.asarray([[1.0]], dtype=float)
 
+    @autodecorate_cost_method(Cost.proximal)
     def proximal(self, x: np.ndarray, rho: float) -> np.ndarray:
         return x / (1.0 + rho)
 
@@ -80,10 +86,10 @@ def test_solve_quadratic_uses_closed_form(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(ca.GradientDescent, "run", fail_run)
     monkeypatch.setattr(ca.AcceleratedGradientDescent, "run", fail_run)
 
-    cost = QuadraticCost(A=np.asarray([[2.0]], dtype=float), b=np.asarray([-4.0], dtype=float))
+    cost = QuadraticCost(A=Array(np.asarray([[2.0]], dtype=float)), b=Array(np.asarray([-4.0], dtype=float)))
     x = ca.solve(cost)
 
-    np.testing.assert_allclose(np.asarray(x), np.asarray([2.0], dtype=float))
+    np.testing.assert_allclose(x.value, np.asarray([2.0], dtype=float))
 
 
 def test_solve_rejects_affine_costs() -> None:
@@ -152,33 +158,33 @@ def test_solve_routes_nonsmooth_or_nonconvex_to_gradient(
 
 
 def test_solver_run_uses_snapshot_for_inplace_updates() -> None:
-    solver = InPlaceStepSolver(cost=DummyCost(m_smooth=1.0, m_cvx=0.0), x0=np.asarray([0.0], dtype=float))
+    solver = InPlaceStepSolver(cost=DummyCost(m_smooth=1.0, m_cvx=0.0), x0=Array(np.asarray([0.0], dtype=float)))
 
     out = solver.run(max_iter=5, stop_tol=1e-12, show_progress=False)
 
-    np.testing.assert_allclose(np.asarray(out), np.asarray([5.0], dtype=float))
+    np.testing.assert_allclose(out.value, np.asarray([5.0], dtype=float))
 
 
 def test_solver_run_supports_progress_display() -> None:
-    solver = InPlaceStepSolver(cost=DummyCost(m_smooth=1.0, m_cvx=0.0), x0=np.asarray([0.0], dtype=float))
+    solver = InPlaceStepSolver(cost=DummyCost(m_smooth=1.0, m_cvx=0.0), x0=Array(np.asarray([0.0], dtype=float)))
 
     out = solver.run(max_iter=1, show_progress=True)
 
-    np.testing.assert_allclose(np.asarray(out), np.asarray([1.0], dtype=float))
+    np.testing.assert_allclose(out.value, np.asarray([1.0], dtype=float))
 
 
 def test_solver_run_honors_stop_tol() -> None:
-    solver = DecayStepSolver(cost=DummyCost(m_smooth=1.0, m_cvx=0.0), x0=np.asarray([0.0], dtype=float))
+    solver = DecayStepSolver(cost=DummyCost(m_smooth=1.0, m_cvx=0.0), x0=Array(np.asarray([0.0], dtype=float)))
 
     out = solver.run(max_iter=50, stop_tol=0.2, show_progress=False)
 
     expected = 1.0 + 0.25
-    np.testing.assert_allclose(np.asarray(out), np.asarray([expected], dtype=float))
+    np.testing.assert_allclose(out.value, np.asarray([expected], dtype=float))
     assert solver.steps == 2
 
 
 def test_solver_run_raises_when_max_tol_not_met() -> None:
-    solver = ConstantStepSolver(cost=DummyCost(m_smooth=1.0, m_cvx=0.0), x0=np.asarray([0.0], dtype=float))
+    solver = ConstantStepSolver(cost=DummyCost(m_smooth=1.0, m_cvx=0.0), x0=Array(np.asarray([0.0], dtype=float)))
 
     with pytest.raises(RuntimeError, match="failed to converge"):
         solver.run(max_iter=3, max_tol=0.5, show_progress=False)
@@ -198,14 +204,14 @@ def test_solver_run_validates_inputs(
     max_tol: float | None,
     msg: str,
 ) -> None:
-    solver = ConstantStepSolver(cost=DummyCost(m_smooth=1.0, m_cvx=0.0), x0=np.asarray([0.0], dtype=float))
+    solver = ConstantStepSolver(cost=DummyCost(m_smooth=1.0, m_cvx=0.0), x0=Array(np.asarray([0.0], dtype=float)))
 
     with pytest.raises(ValueError, match=msg):
         solver.run(max_iter=max_iter, stop_tol=stop_tol, max_tol=max_tol, show_progress=False)
 
 
 def test_solve_logger_initialization_is_lazy(monkeypatch: pytest.MonkeyPatch) -> None:
-    cost = QuadraticCost(A=np.asarray([[1.0]], dtype=float), b=np.asarray([-1.0], dtype=float))
+    cost = QuadraticCost(A=Array(np.asarray([[1.0]], dtype=float)), b=Array(np.asarray([-1.0], dtype=float)))
 
     started_no_handlers = {"count": 0}
     stub_no_handlers = StubLogger(handlers=[])

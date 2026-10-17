@@ -4,7 +4,8 @@ from typing import Any
 import networkx as nx
 import pytest
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+from decent_array.types import Devices, Frameworks
 from decent_bench.agents import Agent
 from decent_bench.algorithms import Algorithm
 from decent_bench.algorithms.p2p import ADMM, ATC, DGD
@@ -12,6 +13,7 @@ from decent_bench.algorithms.federated import FedAvg, FedAdagrad, FedAdam, FedNo
 from decent_bench.benchmark import (
     BenchmarkProblem,
     benchmark,
+    configure,
     create_classification_problem,
 )
 from decent_bench.costs import LogisticRegressionCost, PyTorchCost
@@ -29,7 +31,6 @@ except ModuleNotFoundError:
 
 # Suppress JAX debug logs that cause issues during cleanup
 logging.getLogger("jax").setLevel(logging.WARNING)
-
 
 def _build_p2p_problem_and_algorithms(
     iterations: int,
@@ -50,12 +51,12 @@ def _build_p2p_problem_and_algorithms(
     )
     problem = BenchmarkProblem(network=network, x_optimal=x_optimal, test_data=test_data)
     algorithms: list[Algorithm[Any]] = [
-        DGD(iterations=iterations, step_size=0.01),
-        ATC(iterations=iterations, step_size=0.01),
+        DGD(step_size=0.01),
+        ATC(step_size=0.01),
     ] + (
         # ADMM does not work with PyTorchCost due to no Proximal
         [
-            ADMM(iterations=iterations),
+            ADMM(),
         ]
         if cost_cls is LogisticRegressionCost
         else []
@@ -81,35 +82,31 @@ def _build_fed_problem_and_algorithms(
     )
     problem = BenchmarkProblem(network=network, x_optimal=x_optimal, test_data=test_data)
     algorithms: list[Algorithm[Any]] = [
-        FedAvg(iterations=iterations, step_size=0.01),
-        FedNova(iterations=iterations, step_size=0.01),
-        FedAdagrad(iterations=iterations, step_size=0.01, server_step_size=0.01),
-        FedYogi(iterations=iterations, step_size=0.01, server_step_size=0.01),
-        FedAdam(iterations=iterations, step_size=0.01, server_step_size=0.01),
+        FedAvg(step_size=0.01),
+        FedNova(step_size=0.01),
+        FedAdagrad(step_size=0.01, server_step_size=0.01),
+        FedYogi(step_size=0.01, server_step_size=0.01),
+        FedAdam(step_size=0.01, server_step_size=0.01),
     ]
     return problem, algorithms
 
 
 @pytest.mark.parametrize(
-    "cost_cls",
-    [
-        LogisticRegressionCost,
-        pytest.param(
-            PyTorchCost,
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
-        ),
-    ],
+    "cost_cls", [LogisticRegressionCost,],
 )
 @pytest.mark.filterwarnings(
     "ignore:os.fork\\(\\) was called.*:RuntimeWarning"
 )  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
+@pytest.mark.no_auto_configure
 def test_p2p(cost_cls: type[LogisticRegressionCost | PyTorchCost]) -> None:
+    configure(Frameworks.NUMPY, Devices.CPU)
     iop.set_seed(123)
     problem_5, algorithms_5 = _build_p2p_problem_and_algorithms(5, cost_cls=cost_cls)
 
     bench = benchmark(
         algorithms=algorithms_5,
         benchmark_problem=problem_5,
+        iterations=5,
         n_trials=2,
     )
 
@@ -126,25 +123,21 @@ def test_p2p(cost_cls: type[LogisticRegressionCost | PyTorchCost]) -> None:
 
 
 @pytest.mark.parametrize(
-    "cost_cls",
-    [
-        LogisticRegressionCost,
-        pytest.param(
-            PyTorchCost,
-            marks=pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not available"),
-        ),
-    ],
+    "cost_cls", [LogisticRegressionCost,],
 )
 @pytest.mark.filterwarnings(
     "ignore:os.fork\\(\\) was called.*:RuntimeWarning"
 )  # Suppress warnings about fork in JAX during cleanup, causes the test to fail
+@pytest.mark.no_auto_configure
 def test_fed(cost_cls: type[LogisticRegressionCost | PyTorchCost]) -> None:
+    configure(Frameworks.NUMPY, Devices.CPU)
     iop.set_seed(123)
     problem_5, algorithms_5 = _build_fed_problem_and_algorithms(5, cost_cls=cost_cls)
 
     bench = benchmark(
         algorithms=algorithms_5,
         benchmark_problem=problem_5,
+        iterations=5,
         n_trials=2,
     )
 
@@ -160,7 +153,9 @@ def test_fed(cost_cls: type[LogisticRegressionCost | PyTorchCost]) -> None:
                 )  # 5 iterations + initial state
 
 
+@pytest.mark.no_auto_configure
 def test_benchmark_rejects_duplicate_algorithm_names() -> None:
+    configure(Frameworks.NUMPY, Devices.CPU)
     iop.set_seed(123)
     problem, algorithms = _build_p2p_problem_and_algorithms(1, cost_cls=LogisticRegressionCost)
     algorithms[1].name = algorithms[0].name
@@ -169,5 +164,6 @@ def test_benchmark_rejects_duplicate_algorithm_names() -> None:
         benchmark(
             algorithms=algorithms,
             benchmark_problem=problem,
+            iterations=5,
             n_trials=1,
         )

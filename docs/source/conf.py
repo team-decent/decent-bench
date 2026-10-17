@@ -63,6 +63,7 @@ nitpick_ignore = [
 suppress_warnings = ["toc.duplicate", "myst.header"]
 
 intersphinx_mapping = {
+    "decent_array": ("https://decent-array.readthedocs.io/en/latest/", None),
     "networkx": ("https://networkx.org/documentation/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "python": ("https://docs.python.org/3", None),
@@ -86,6 +87,18 @@ intersphinx_mapping = {
 def _fix_missing_ref(app, env, node, contnode):
     if node.get("refdomain") == "py" and node.get("reftype") in {"class", "data"}:
         target = node.get("reftarget")
+        decent_array_aliases = {
+            "Array": "decent_array.Array",
+            "Devices": "decent_array.types.Devices",
+            "Frameworks": "decent_array.types.Frameworks",
+        }
+        if target in decent_array_aliases:
+            inventory = env.intersphinx_named_inventory.get("decent_array", {})
+            item = inventory.get("py:class", {}).get(decent_array_aliases[target])
+            if item is not None:
+                reference = nodes.reference("", "", internal=False, refuri=item.uri)
+                reference.append(contnode)
+                return reference
         if target in {"ArrayLike", "numpy.typing.ArrayLike"}:
             return nodes.reference(
                 "", "ArrayLike", refuri="https://numpy.org/doc/stable/reference/typing.html#numpy.typing.ArrayLike"

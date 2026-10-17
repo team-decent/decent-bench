@@ -29,8 +29,7 @@ from decent_bench.schemes import (
     UniformDropRate,
     UniformSelection,
 )
-from decent_bench.utils import interoperability as iop
-from decent_bench.utils.array import Array
+from decent_array import Array, interoperability as iop
 
 ## AgentActivationScheme
 
@@ -140,7 +139,7 @@ def make_clients(n_clients: int) -> list[Agent]:
 
 
 def _make_linear_regression_client(n_samples: int, scale: float = 1.0) -> Agent:
-    dataset = [(np.array([1.0, 1.0]), np.array([0.0])) for _ in range(n_samples)]
+    dataset = [(Array(np.array([1.0, 1.0])), Array(np.array([0.0]))) for _ in range(n_samples)]
     return Agent(scale * LinearRegressionCost(dataset))
 
 
@@ -238,10 +237,10 @@ def test_high_loss_client_selection_selects_fraction() -> None:
 
 def test_high_loss_client_selection_does_not_consume_empirical_risk_batch() -> None:
     dataset = [
-        (np.array([1.0, 0.0]), np.array([1.0])),
-        (np.array([0.0, 1.0]), np.array([1.0])),
-        (np.array([2.0, 0.0]), np.array([2.0])),
-        (np.array([0.0, 2.0]), np.array([2.0])),
+        (Array(np.array([1.0, 0.0])), Array(np.array([1.0]))),
+        (Array(np.array([0.0, 1.0])), Array(np.array([1.0]))),
+        (Array(np.array([2.0, 0.0])), Array(np.array([2.0]))),
+        (Array(np.array([0.0, 2.0])), Array(np.array([2.0]))),
     ]
     x = Array(np.zeros(2))
 
@@ -272,17 +271,18 @@ def test_high_loss_client_selection_does_not_consume_empirical_risk_batch() -> N
 @pytest.mark.parametrize(
     ("scheme", "message"),
     [
-        (NoCompression(), Array(np.array([3.0, -4.0, 1.0]))),
-        (Quantization(quantization_step=1e-6), Array(np.array([1.2345, -2.3456]))),
-        (StochasticQuantization(n_levels=4), Array(np.array([0.0, 0.0, 0.0]))),
-        (TopK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
-        (RandK(k=1.0), Array(np.array([3.0, -4.0, 1.0]))),
-        (TopK(k=3), Array(np.array([3.0, -4.0, 1.0]))),
-        (RandK(k=3), Array(np.array([3.0, -4.0, 1.0]))),
+        (NoCompression(), np.array([3.0, -4.0, 1.0])),
+        (Quantization(quantization_step=1e-6), np.array([1.2345, -2.3456])),
+        (StochasticQuantization(n_levels=4), np.array([0.0, 0.0, 0.0])),
+        (TopK(k=1.0), np.array([3.0, -4.0, 1.0])),
+        (RandK(k=1.0), np.array([3.0, -4.0, 1.0])),
+        (TopK(k=3), np.array([3.0, -4.0, 1.0])),
+        (RandK(k=3), np.array([3.0, -4.0, 1.0])),
     ],
 )
-def test_no_compression(scheme: CompressionScheme, message: Array) -> None:
-    original_message = Array(np.copy(iop.to_numpy(message)))
+def test_no_compression(scheme: CompressionScheme, message: np.ndarray) -> None:
+    message = Array(message)
+    original_message = iop.copy(message)
     compression_error = float(iop.norm(original_message - scheme.compress(message)))
 
     assert compression_error == pytest.approx(0)
@@ -294,19 +294,20 @@ def test_no_compression(scheme: CompressionScheme, message: Array) -> None:
     [
         (
             Quantization(quantization_step=1e-2),
-            Array(np.array([1.2345, -2.3456])),
+            np.array([1.2345, -2.3456]),
             float(np.linalg.norm(np.array([0.0045, 0.0044]))),
         ),
-        (TopK(k=2 / 3), Array(np.array([3.0, -4.0, 1.0])), 1.0),
-        (TopK(k=2), Array(np.array([3.0, -4.0, 1.0])), 1.0),
+        (TopK(k=2 / 3), np.array([3.0, -4.0, 1.0]), 1.0),
+        (TopK(k=2), np.array([3.0, -4.0, 1.0]), 1.0),
     ],
 )
 def test_compression(
     scheme: CompressionScheme,
-    message: Array,
+    message: np.ndarray,
     expected_norm: float,
 ) -> None:
-    original_message = Array(np.copy(iop.to_numpy(message)))
+    message = Array(message)
+    original_message = iop.copy(message)
     compression_error = float(iop.norm(original_message - scheme.compress(message)))
 
     assert compression_error == pytest.approx(expected_norm)
@@ -339,12 +340,15 @@ def test_randk_compression(k) -> None:
     assert observed_norms == {1.0, 3.0, 4.0}
 
 
-def test_stochastic_quantization_preserves_shape_and_signs() -> None:
+def test_stochastic_quantization_preserves_shape_and_does_not_flip_signs() -> None:
     message = Array(np.array([[3.0, -4.0], [0.0, 1.0]]))
     compressed_message = StochasticQuantization(n_levels=4).compress(message)
 
-    assert iop.to_numpy(compressed_message).shape == iop.to_numpy(message).shape
-    assert np.all(np.sign(iop.to_numpy(compressed_message)) == np.sign(iop.to_numpy(message)))
+    compressed_np = iop.to_numpy(compressed_message)
+    message_np = iop.to_numpy(message)
+
+    assert compressed_np.shape == message_np.shape
+    assert np.all(compressed_np * message_np >= 0)
 
 
 def test_stochastic_quantization_uses_norm_scaled_levels() -> None:
@@ -381,10 +385,10 @@ def test_k_compression(scheme: CompressionScheme) -> None:
     for n_kept in range(1, 15 + 1):
         s = scheme(k=n_kept / (n_kept + 5))
         compressed_msg = s.compress(Array(np.ones(n_kept + 5)))
-        assert np.count_nonzero(compressed_msg) == n_kept
+        assert np.count_nonzero(iop.to_numpy(compressed_msg)) == n_kept
         s = scheme(k=n_kept)
         compressed_msg = s.compress(Array(np.ones(n_kept + 5)))
-        assert np.count_nonzero(compressed_msg) == n_kept
+        assert np.count_nonzero(iop.to_numpy(compressed_msg)) == n_kept
 
 
 # test RandK and TopK with mismatched k and message size
@@ -399,7 +403,7 @@ def test_k_compression_mismatched(scheme: CompressionScheme) -> None:
     for k in range(5, 15 + 1):
         s = scheme(k=k)
         compressed_msg = s.compress(Array(np.ones(k - 2)))
-        assert np.count_nonzero(compressed_msg) == k - 2
+        assert np.count_nonzero(iop.to_numpy(compressed_msg)) == k - 2
 
 
 # test RandK and TopK with mismatched k and message size
@@ -413,13 +417,13 @@ def test_k_compression_mismatched(scheme: CompressionScheme) -> None:
 def test_k_compression_mismatched_k_msg_size(scheme: CompressionScheme) -> None:
     s = scheme(k=1.0)
     compressed_msg = s.compress(Array(np.ones(8)))
-    assert np.count_nonzero(compressed_msg) == 8
+    assert np.count_nonzero(iop.to_numpy(compressed_msg)) == 8
 
     for k in range(5, 15 + 1):
         s = scheme(k=k)
         compressed_msg = s.compress(Array(np.ones(k - 2)))
 
-        assert np.count_nonzero(compressed_msg) == k - 2
+        assert np.count_nonzero(iop.to_numpy(compressed_msg)) == k - 2
 
 
 # test RandK and TopK to check message shape is preserved
@@ -495,8 +499,7 @@ def test_no_noise(
     scheme: NoiseScheme,
 ) -> None:
     message = Array(np.ones(5))
-    framework, device = iop.framework_device_of_array(message)
-    noise = scheme.make_noise(iop.shape(message), framework, device)
+    noise = scheme.make_noise(iop.shape(message))
     noise_error = 0 if noise is None else float(iop.norm(noise))
 
     assert noise_error == pytest.approx(0)
@@ -513,8 +516,7 @@ def test_noise(
     scheme: NoiseScheme,
 ) -> None:
     message = Array(np.ones(5))
-    framework, device = iop.framework_device_of_array(message)
-    noise = scheme.make_noise(iop.shape(message), framework, device)
+    noise = scheme.make_noise(iop.shape(message))
     noise_error = 0 if noise is None else float(iop.norm(noise))
 
     assert noise_error > 0
@@ -525,4 +527,7 @@ def test_topk_compression_on_multi_dimensional_message() -> None:
     scheme = TopK(k=0.5)
     compressed_message = scheme.compress(message)
 
-    np.testing.assert_array_equal(compressed_message, Array(np.array([[1.0, 0.5], [0.0, 0.0]])))
+    np.testing.assert_array_equal(
+        iop.to_numpy(compressed_message),
+        iop.to_numpy(Array(np.array([[1.0, 0.5], [0.0, 0.0]]))),
+    )

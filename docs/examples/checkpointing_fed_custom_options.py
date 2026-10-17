@@ -1,25 +1,20 @@
-import platform
+from decent_array.types import Devices, Frameworks
 
 from decent_bench import benchmark
 from decent_bench.agents import Agent
 from decent_bench.algorithms.federated import FedAvg, Scaffold
-from decent_bench.benchmark import create_regression_problem
+from decent_bench.benchmark import configure, create_regression_problem
 from decent_bench.networks import FedNetwork
-from decent_bench.utils.checkpoint_manager import CheckpointManager
 
 if __name__ == "__main__":
 
-    cm = CheckpointManager(
-        checkpoint_dir="benchmark_results/long_run",
-        checkpoint_step=50,      # checkpoint every 50 iterations
-        keep_n_checkpoints=5,    # keep 5 most recent checkpoints
-        benchmark_metadata={
-            "description": "FedAvg v. Scaffold",
-            "system": platform.system(),
-            "python_version": platform.python_version(),
-            "notes": "step = 0.1, num_local_steps = 10",
-        },
-        )
+    configure(
+        Frameworks.NUMPY,
+        Devices.CPU,
+        storage_dir="benchmark_results/long_run",
+        n_checkpoints=5,  # save 5 evenly spaced checkpoints, including the final iteration
+        compression_level=2,
+    )
 
     ## Problem definition ------------------------------------------------
     n_agents = 10
@@ -35,10 +30,10 @@ if __name__ == "__main__":
 
     results = benchmark.benchmark(
         algorithms=[
-            FedAvg(iterations=num_iter, step_size=step, num_local_steps=num_local_steps),
-            Scaffold(iterations=num_iter, step_size=step, num_local_steps=num_local_steps),
+            FedAvg(step_size=step, num_local_steps=num_local_steps),
+            Scaffold(step_size=step, num_local_steps=num_local_steps),
         ],
         benchmark_problem=problem,
+        iterations=num_iter,
         n_trials=10,
-        checkpoint_manager=cm,
         )

@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+
 from decent_bench.agents import Agent
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import P2PNetwork
@@ -11,7 +12,7 @@ from decent_bench.utils.types import InitialStates
 from ._p2p_algorithm import P2PAlgorithm
 
 if TYPE_CHECKING:
-    from decent_bench.utils.array import Array
+    from decent_array import Array
 
 
 @tags(Tag.ALGORITHM, Tag.PEER_TO_PEER, Tag.DUAL_METHOD)
@@ -25,7 +26,6 @@ class DiNNO(P2PAlgorithm):
     then repeated for a number of iterations.
 
     Args:
-        iterations: Total number of outer iterations (K)
         step_size: Step size for primal updates
         num_local_steps: Number of inner iterations (B) for approximate primal update
         penalty: Penalty parameter (rho) for augmented Lagrangian
@@ -36,7 +36,6 @@ class DiNNO(P2PAlgorithm):
 
     """
 
-    iterations: int = 100  # Total number of outer iterations (K)
     step_size: float = 0.01
     num_local_steps: int = 5  # Number of inner iterations (B) for approximate primal update
     penalty: float = 0.5  # Penalty parameter (rho) for augmented Lagrangian
@@ -48,7 +47,7 @@ class DiNNO(P2PAlgorithm):
         Validate parameters.
 
         Raises:
-            ValueError: If any of the parameters are invalid (e.g., non-positive iterations, local_steps,
+            ValueError: If any of the algorithm parameters are invalid (e.g., non-positive local_steps,
             step_size, penalty, or alpha).
 
         """

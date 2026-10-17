@@ -148,12 +148,12 @@ class ProgressBarHandle:
             )
         )
 
-    def advance_progress_bar(self, algorithm: Algorithm[Any], iteration: int) -> None:
+    def advance_progress_bar(self, algorithm: Algorithm[Any], iteration: int, iterations: int) -> None:
         """Advance *algorithm*'s progress bar by an amount (units)."""
         if self._progress_step is None:
-            if (iteration + 1) < algorithm.iterations:
+            if (iteration + 1) < iterations:
                 return
-        elif (iteration + 1) % self._progress_step != 0 and (iteration + 1) < algorithm.iterations:
+        elif (iteration + 1) % self._progress_step != 0 and (iteration + 1) < iterations:
             return
 
         progress_bar_id = self._progress_bar_ids[algorithm]
@@ -171,7 +171,7 @@ class ProgressBarController:
         algorithms: algorithms that will be run, each gets its own bar
         n_trials: number of trials the algorithms will run
         progress_step: if provided, the progress bar will step every `progress_step`.
-            When provided, each algorithm's task total becomes `n_trials * ceil(algorithm.iterations / progress_step)`.
+        When provided, each algorithm's task total becomes `n_trials * ceil(iterations / progress_step)`.
             If `None`, the progress bar uses 1 unit per trial.
 
     Note:
@@ -184,6 +184,7 @@ class ProgressBarController:
         self,
         manager: SyncManager | None,
         algorithms: Sequence[Algorithm[Any]],
+        iterations: int,
         n_trials: int,
         progress_step: int | None,
         show_speed: bool = False,
@@ -220,7 +221,7 @@ class ProgressBarController:
         if progress_step is None:
             self._progress_bar_ids = {alg: orchestrator.add_task(alg.name, total=n_trials) for alg in algorithms}
         else:
-            self.steps_per_trial = {alg: max(1, ceil(alg.iterations / progress_step)) for alg in algorithms}
+            self.steps_per_trial = {alg: max(1, ceil(iterations / progress_step)) for alg in algorithms}
             self._progress_bar_ids = {
                 alg: orchestrator.add_task(alg.name, total=n_trials * self.steps_per_trial[alg]) for alg in algorithms
             }

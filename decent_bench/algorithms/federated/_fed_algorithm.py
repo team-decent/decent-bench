@@ -1,15 +1,17 @@
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+
 from decent_bench.algorithms._algorithm import Algorithm
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes import ClientSelectionScheme
 from decent_bench.utils.types import LocalSteps
 
 if TYPE_CHECKING:
+    from decent_array import Array
+
     from decent_bench.agents import Agent
-    from decent_bench.utils.array import Array
 
 
 class FedAlgorithm(Algorithm[FedNetwork]):

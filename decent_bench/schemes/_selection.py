@@ -6,8 +6,8 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import numpy as np
+from decent_array import interoperability as iop
 
-import decent_bench.utils.interoperability as iop
 from decent_bench.agents._utils import infer_client_data_size
 from decent_bench.costs import EmpiricalRiskCost
 
@@ -181,7 +181,7 @@ class DataSizeSelection(ClientSelectionScheme):
             dtype=np.float64,
         )
         probabilities = data_sizes / data_sizes.sum()
-        selected_indices = iop.rng_numpy().choice(len(clients_list), size=k, replace=False, p=probabilities)
+        selected_indices = iop.get_numpy_rng().choice(len(clients_list), size=k, replace=False, p=probabilities)
         return [clients_list[int(index)] for index in selected_indices]
 
 
@@ -304,7 +304,7 @@ class HighLossSelection(ClientSelectionScheme):
 
         clients_list = list(clients)
         losses = [self._client_loss(client) for client in clients_list]
-        tie_breakers = iop.rng_numpy().permutation(len(clients_list))
+        tie_breakers = iop.get_numpy_rng().permutation(len(clients_list))
         ranked_indices = sorted(
             range(len(clients_list)),
             key=lambda index: (-losses[index], int(tie_breakers[index])),

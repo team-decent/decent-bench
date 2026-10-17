@@ -13,8 +13,10 @@ try:
 except ImportError:
     KAGGLE_AVAILABLE = False
 
-import decent_bench.utils.interoperability as iop
-from decent_bench.utils.types import Dataset, SupportedDevices, SupportedFrameworks
+from decent_array import interoperability as iop
+from decent_array.types import Devices, Frameworks
+
+from decent_bench.utils.types import Dataset
 
 from ._dataset_handler import DatasetHandler
 
@@ -27,8 +29,8 @@ class KaggleDatasetHandler(DatasetHandler):
         feature_columns: list[str],
         target_columns: list[str],
         *,
-        framework: SupportedFrameworks = SupportedFrameworks.NUMPY,
-        device: SupportedDevices = SupportedDevices.CPU,
+        framework: Frameworks = Frameworks.NUMPY,
+        device: Devices = Devices.CPU,
         dtype: DTypeLike = np.float64,
         partition_label_column: str | None = None,
     ) -> None:
@@ -118,15 +120,7 @@ class KaggleDatasetHandler(DatasetHandler):
     def _create_partition(self, df_partition: pd.DataFrame) -> Dataset:
         partition: Dataset = []
         for _, row in df_partition.iterrows():
-            x = iop.to_array(
-                row[self.feature_columns].to_numpy().astype(self.dtype),
-                framework=self.framework,
-                device=self.device,
-            )
-            y = iop.to_array(
-                row[self.target_columns].to_numpy().astype(self.dtype),
-                framework=self.framework,
-                device=self.device,
-            )
+            x = iop.from_numpy(row[self.feature_columns].to_numpy().astype(self.dtype))
+            y = iop.from_numpy(row[self.target_columns].to_numpy().astype(self.dtype))
             partition.append((x, y))
         return partition

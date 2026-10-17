@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+
 from decent_bench.agents import Agent
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import P2PNetwork
@@ -20,7 +21,6 @@ class KGT(P2PAlgorithm):
     K-GT: Gradient Sum Tracking algorithm :footcite:p:`Alg_K_GT`.
 
     Args:
-        iterations: Total number of communication rounds (T)
         num_local_steps: Number of local gradient steps (K)
         step_size: Local step size (eta_c)
         aux_step_size: Communication step size (eta_s)
@@ -31,7 +31,6 @@ class KGT(P2PAlgorithm):
 
     """
 
-    iterations: int = 100  # Total number of communication rounds (T)
     num_local_steps: int = 5  # Number of local gradient steps (K)
     step_size: float = 0.01  # Local step size (eta_c)
     aux_step_size: float = 0.01  # Communication step size (eta_s)
@@ -43,7 +42,7 @@ class KGT(P2PAlgorithm):
         Validate parameters.
 
         Raises:
-            ValueError: If any of the parameters are invalid (e.g., non-positive iterations, local_steps,
+            ValueError: If any of the algorithm parameters are invalid (e.g., non-positive local_steps,
             step_size, penalty, or alpha).
 
         """

@@ -6,36 +6,25 @@ from math import prod
 from numbers import Real
 from typing import Any
 
-from decent_bench.utils.array import Array
-from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
+from decent_array import Array
 
 
 class Cost(ABC):
     """Used by agents to evaluate the cost and its derivatives at a certain x."""
 
-    def _validate_cost_operation(
-        self,
-        other: object,
-        *,
-        check_framework: bool = True,
-        check_device: bool = True,
-    ) -> None:
+    def _validate_cost_operation(self, other: object) -> None:
         """
         Validate that another object can participate in a binary cost operation.
 
         Raises:
             TypeError: If other is not a Cost.
-            ValueError: If shapes, frameworks, or devices are mismatched.
+            ValueError: If shapes are mismatched.
 
         """
         if not isinstance(other, Cost):
             raise TypeError(f"Cost can only be combined with another Cost, got {type(other)}.")
         if self.shape != other.shape:
             raise ValueError(f"Mismatched domain shapes: {self.shape} vs {other.shape}")
-        if check_framework and self.framework != other.framework:
-            raise ValueError(f"Mismatching frameworks: {self.framework} vs {other.framework}")
-        if check_device and self.device != other.device:
-            raise ValueError(f"Mismatching devices: {self.device} vs {other.device}")
 
     @property
     @abstractmethod
@@ -51,28 +40,6 @@ class Cost(ABC):
     def size(self) -> int:
         """Number of elements in x."""
         return prod(self.shape)
-
-    @property
-    @abstractmethod
-    def framework(self) -> SupportedFrameworks:
-        """
-        The framework used by this cost function.
-
-        Make sure that all :class:`decent_bench.utils.array.Array` objects returned by this cost function's methods
-        use this framework.
-
-        """
-
-    @property
-    @abstractmethod
-    def device(self) -> SupportedDevices:
-        """
-        The device used by this cost function.
-
-        Make sure that all :class:`decent_bench.utils.array.Array` objects returned by this cost function's methods
-        use this device.
-
-        """
 
     @property
     @abstractmethod

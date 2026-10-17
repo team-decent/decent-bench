@@ -3,12 +3,10 @@ from __future__ import annotations
 from functools import cached_property
 from typing import Any
 
-import numpy as np
+from decent_array import Array, nan
 
 from decent_bench.costs._base._cost import Cost
 from decent_bench.costs._base._sum_cost import SumCost
-from decent_bench.utils.array import Array
-from decent_bench.utils.types import SupportedDevices, SupportedFrameworks
 
 
 class ScaledCost(Cost):
@@ -37,14 +35,6 @@ class ScaledCost(Cost):
     def shape(self) -> tuple[int, ...]:
         return self.cost.shape
 
-    @property
-    def framework(self) -> SupportedFrameworks:
-        return self.cost.framework
-
-    @property
-    def device(self) -> SupportedDevices:
-        return self.cost.device
-
     @cached_property
     def m_smooth(self) -> float:
         if self.scalar == 0:
@@ -57,7 +47,7 @@ class ScaledCost(Cost):
             return float(self.scalar * self.cost.m_cvx)
         if self.scalar == 0:
             return 0.0
-        return np.nan
+        return nan
 
     def function(self, x: Array, *args: Any, **kwargs: Any) -> float:  # noqa: ANN401
         return float(self.scalar * self.cost.function(x, *args, **kwargs))

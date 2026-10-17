@@ -19,9 +19,10 @@ that agents compute stochastic gradients with two datapoints.
     :linenos:
 
 
-Since the datapoints to use during computation are chosen at random, the algorithms are now stochastic. In order to run
-reproducible simulations, one can use :func:`~decent_bench.utils.interoperability.set_seed` to set a seed before the
-benchmark is run.
+Since the datapoints to use during computation are chosen at random, the algorithms are now stochastic. To run
+reproducible simulations, set ``seed`` when calling :func:`~decent_bench.benchmark.configure` before creating the
+problem or running the benchmark. The configured seed is saved with a stored experiment and is restored when that
+experiment is reopened.
 
 Additionally, the benchmark runs several trials (``n_trials=10`` in :func:`~decent_bench.benchmark.benchmark`) and
 averages across them, to provide more informative results. Importantly, a different seed
@@ -48,14 +49,6 @@ This means that when aggregating over trials, there is some variation. This is h
 solid line, and the minimum and maximum as the envelope around it. This is done by default by decent-bench.
 
 
-.. _interop_seed:
-
 .. note::
-    How is it possible to set a seed? The functionality to set a seed is provided by the interoperability package
-    :mod:`decent_bench.utils.interoperability`. This package provides a wrapper around a number of widely used
-    frameworks (NumPy, PyTorch, TensorFlow, JAX), exposing a common API for all of them. Implementing all parts of the
-    benchmarking pipeline using the functions in the interoperability API allows to implement each item once, while
-    allowing to select different framework for the backend. ``set_seed`` is part of this interoperability API, and it
-    takes care of setting the seed for whichever framework is selected. More details on interoperability in
-    the page :doc:`on customizing algorithms </user/customizing/algorithm>`.
-    The seed is set for the built-in python ``random`` module as well.
+    ``configure(seed=...)`` sets the seed for the selected framework and Python's built-in ``random`` module. The
+    framework's array operations use the backend configured through ``decent-array``.

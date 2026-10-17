@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import P2PNetwork
 from decent_bench.utils._tags import Tag, tags
@@ -34,7 +35,6 @@ class ED(P2PAlgorithm):
 
     """
 
-    iterations: int = 100
     step_size: float = 0.001
     x0: InitialStates = None
     name: str = "ED"
@@ -58,7 +58,7 @@ class ED(P2PAlgorithm):
             i.initialize(x=self.x0[i], aux_vars={"y": y0, "y_new": y1})
 
         self.W = network.weights
-        self.W = 0.5 * (iop.eye_like(self.W) + self.W)
+        self.W = 0.5 * (iop.eye(iop.shape(self.W)[0]) + self.W)
 
     def step(self, network: P2PNetwork, _: int) -> None:
         for i in network.active_agents():

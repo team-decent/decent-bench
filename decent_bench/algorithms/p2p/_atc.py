@@ -17,14 +17,15 @@ class ATC(P2PAlgorithm):
     The algorithm is characterized by the update:
 
     .. math::
-        \mathbf{x}_{i, k+1} = (\sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k} - \rho \nabla f_j(\mathbf{x}_{j,k}))
+        \mathbf{x}_{i, k+1} = \sum_{j} \mathbf{W}_{ij}
+        (\mathbf{x}_{j,k} - \rho \nabla f_j(\mathbf{x}_{j,k}))
 
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
     j is a neighbor of i or i itself,
     :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j,
     :math:`\rho` is the step size (the corresponding argument is ``step_size``),
-    and :math:`f_i` is agent i's local cost function.
+    and :math:`f_j` is agent j's local cost function.
 
     Alias: :class:`AdaptThenCombine`
 
@@ -32,7 +33,6 @@ class ATC(P2PAlgorithm):
 
     """
 
-    iterations: int = 100
     step_size: float = 0.001
     x0: InitialStates = None
     name: str = "ATC"
@@ -66,7 +66,7 @@ class ATC(P2PAlgorithm):
 
         # consensus (a.k.a. combine step)
         for i in network.active_agents():
-            neighborhood_avg = self.W[i, i] * i.x
+            neighborhood_avg = self.W[i, i] * i.aux_vars["y"]
             for j, x_j in i.messages().items():
                 neighborhood_avg += self.W[i, j] * x_j
             i.x = neighborhood_avg

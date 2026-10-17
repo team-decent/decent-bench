@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
-import decent_bench.utils.interoperability as iop
+from decent_array import interoperability as iop
+
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import P2PNetwork
 from decent_bench.utils._tags import Tag, tags
@@ -54,7 +55,6 @@ class ATG(P2PAlgorithm):
 
     """
 
-    iterations: int = 100
     penalty: float = 1
     relaxation: float = 0.5
     gamma: float = 0.1
@@ -98,8 +98,8 @@ class ATG(P2PAlgorithm):
         # step 1: update consensus-ADMM variables
         for i in network.active_agents():
             # update auxiliary variables
-            i.aux_vars["y"] = (i.x + iop.sum(i.aux_vars["z_y"], dim=0)) / (1 + self.pN[i])
-            i.aux_vars["s"] = (i.cost.gradient(i.x) + iop.sum(i.aux_vars["z_s"], dim=0)) / (1 + self.pN[i])
+            i.aux_vars["y"] = (i.x + iop.sum(i.aux_vars["z_y"], axis=0)) / (1 + self.pN[i])
+            i.aux_vars["s"] = (i.cost.gradient(i.x) + iop.sum(i.aux_vars["z_s"], axis=0)) / (1 + self.pN[i])
             # update local state
             i.x = (1 - self.gamma) * i.x + self.gamma * (i.aux_vars["y"] - self.delta * i.aux_vars["s"])
 
