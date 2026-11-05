@@ -51,6 +51,7 @@ def _clear_caches() -> None:
     """Clear module-level functools caches used by metric utilities."""
     x_mean.cache_clear()
     _predict.cache_clear()
+    _test_targets.cache_clear()
 
 
 @lru_cache(maxsize=CACHE_MAX_SIZE)
@@ -80,9 +81,11 @@ def _predict(agent: AgentMetricsView, iteration: int, problem: "BenchmarkProblem
 
 
 ###### regression and classification metrics
+@lru_cache(maxsize=CACHE_MAX_SIZE)
 def _test_targets(problem: "BenchmarkProblem") -> Array:
-    """Get stacked test targets."""
-    return iop.stack([y for _, y in problem.test_data])  # type: ignore[union-attr]
+    """Stack wrapped or backend-native test targets."""
+    targets = [y if isinstance(y, Array) else Array(y) for _, y in problem.test_data]  # type: ignore[union-attr]
+    return iop.stack(targets)
 
 
 def _mse(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", iteration: int) -> list[float]:
@@ -145,7 +148,7 @@ def _accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", i
             )
             return [np.nan for _ in agents]
 
-        ret.append(float(iop.mean(preds == test_y)))
+        ret.append(float(iop.sum(preds == test_y)) / iop.size(test_y))
 
     return ret
 
@@ -240,10 +243,11 @@ def _requires_integer_targets(problem: "BenchmarkProblem") -> str | None:
     if reason is not None:
         return reason
 
-    int_dtypes = dtypes(kind=("signed integer", "unsigned integer"))
+    int_dtypes = dtypes(kind=("signed integer", "unsigned integer")).values()
     for d in problem.test_data:  # type: ignore[union-attr]
-        if d[1].dtype not in int_dtypes:
-            return f"requires integer targets, dtype {d[1].dtype} found"
+        target = d[1] if isinstance(d[1], Array) else Array(d[1])
+        if target.dtype not in int_dtypes:
+            return f"requires integer targets, dtype {target.dtype} found"
     return None
 
 

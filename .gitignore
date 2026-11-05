@@ -4,6 +4,7 @@
 .DS_Store
 .mypy_cache
 .tox
+.venv
 .vscode
 dist
 kladd.py
