@@ -40,9 +40,8 @@ class AvgConsensus(P2PAlgorithm):
 
         for i in network.active_agents():
             neighborhood_avg = self.W[i, i] * i.x
-            if len(i.messages()) > 0:
-                for j, x_j in i.messages().items():
-                    neighborhood_avg += self.W[i, j] * x_j
+            for j, x_j in i.messages().items():
+                neighborhood_avg += self.W[i, j] * x_j
             i.x = neighborhood_avg
 
 
@@ -52,10 +51,13 @@ class RatioConsensus(P2PAlgorithm):
     Ratio consensus characterized by the update step below.
 
     .. math::
-        \mathbf{x}_{i, k+1} = \sum_{j} \mathbf{W}_{ij} \mathbf{x}_{j,k}, \qquad \mathbf{x}_{i, 0} = \mathbf{u}_i
+        \mathbf{y}_{i, k+1} = \sum_{j} \mathbf{W}_{ij} \mathbf{y}_{j,k}, \qquad
+        \mathbf{z}_{i, k+1} = \sum_{j} \mathbf{W}_{ij} \mathbf{z}_{j,k}, \qquad
+        \mathbf{x}_{i, k+1} = \frac{\mathbf{y}_{i, k+1}}{\mathbf{z}_{i, k+1}}
 
     where
     :math:`\mathbf{x}_{i, k}` is agent i's local optimization variable at iteration k,
+    :math:`\mathbf{y}_{i, 0} = \mathbf{u}_i` and :math:`\mathbf{z}_{i, 0} = \mathbf{1}`,
     j is a neighbor of i or i itself,
     :math:`\mathbf{W}_{ij}` is the metropolis weight between agent i and j.
 
@@ -77,13 +79,13 @@ class RatioConsensus(P2PAlgorithm):
 
         for i in network.active_agents():
             y_avg = self.W[i, i] * i.aux_vars["y"]
-            if len(i.messages(channel=Y_UPDATE)) > 0:
-                for j, y_j in i.messages(channel=Y_UPDATE).items():
-                    y_avg += self.W[i, j] * y_j
+            for j, y_j in i.messages(channel=Y_UPDATE).items():
+                y_avg += self.W[i, j] * y_j
 
             z_avg = self.W[i, i] * i.aux_vars["z"]
-            if len(i.messages(channel=Z_UPDATE)) > 0:
-                for j, z_j in i.messages(channel=Z_UPDATE).items():
-                    z_avg += self.W[i, j] * z_j
+            for j, z_j in i.messages(channel=Z_UPDATE).items():
+                z_avg += self.W[i, j] * z_j
 
+            i.aux_vars["y"] = y_avg
+            i.aux_vars["z"] = z_avg
             i.x = y_avg / z_avg

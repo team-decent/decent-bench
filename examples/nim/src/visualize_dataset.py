@@ -2,6 +2,7 @@ import random
 
 import matplotlib.pyplot as plt
 import numpy as np
+from decent_array import interoperability as iop
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from numpy.typing import NDArray
@@ -22,7 +23,7 @@ def _make_red_occupancy_overlay(
     return overlay
 
 
-def visualize_nim_dataset(  # noqa: PLR0914
+def visualize_nim_dataset(
     nim_data: NIMDatasetHandler,
     num_samples_per_partition: int = 100,
     figsize: tuple[int, int] = (12, 10),
@@ -42,11 +43,11 @@ def visualize_nim_dataset(  # noqa: PLR0914
 
     """
     # Load and display the original image
-    image = Image.open(nim_data.image_file).convert("L")
+    with Image.open(nim_data.image_file) as image:
+        img_array = np.array(image.convert("L"))
 
     # Create figure and display image
     fig, ax = plt.subplots(figsize=figsize)
-    img_array = np.array(image)
     ax.imshow(img_array, cmap="gray", origin="upper")
     ax.axis("off")
 
@@ -95,11 +96,12 @@ def visualize_nim_dataset(  # noqa: PLR0914
             ax.axvline(x=x_pos + leakage, color="red", linestyle=":", alpha=0.3)
 
     # Generate distinct colors for each partition
-    colors = plt.cm.get_cmap("tab20")(np.linspace(0, 1, nim_data.n_partitions))
+    colors = plt.get_cmap("tab20")(np.linspace(0, 1, nim_data.n_partitions))
 
     # Plot sampled points from each partition
+    rng = random.Random(iop.get_seed())
     for i, partition_data in enumerate(nim_data.get_partitions()):
-        p_data = random.sample(partition_data, min(num_samples_per_partition, len(partition_data)))
+        p_data = rng.sample(partition_data, min(num_samples_per_partition, len(partition_data)))
         features = np.array([item[0] for item in p_data]) * nim_data._feature_norm  # noqa: SLF001
         labels = np.array([item[1] for item in p_data])
 
