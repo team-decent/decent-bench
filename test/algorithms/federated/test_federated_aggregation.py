@@ -7,7 +7,7 @@ from decent_bench.agents import Agent
 from decent_bench.algorithms.federated import FedAdagrad, FedAdam, FedAvg, FedProx, FedYogi
 from decent_bench.costs import Cost
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import DropScheme, NoDrops
+from decent_bench.schemes.drop import DropScheme, NoDrops
 from decent_bench.costs._decorators import autodecorate_cost_method
 from decent_array.types import Devices, Frameworks
 from decent_array import Array, interoperability as iop

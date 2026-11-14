@@ -10,7 +10,7 @@ from decent_bench.agents import Agent
 from decent_bench.algorithms.federated import FedAvg, FedNova
 from decent_bench.costs import Cost, EmpiricalRiskCost
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import DropScheme, NoDrops
+from decent_bench.schemes.drop import DropScheme, NoDrops
 from decent_bench.costs._decorators import autodecorate_cost_method
 
 

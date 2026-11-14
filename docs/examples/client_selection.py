@@ -7,7 +7,7 @@ from decent_bench.benchmark import configure
 from decent_bench.utils.problem_generation import create_regression_problem
 from decent_bench.metrics import metric_library
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import FairSelection
+from decent_bench.schemes.client_selection import FairSelection
 
 if __name__ == "__main__":
     configure(Frameworks.NUMPY, Devices.CPU)

@@ -12,7 +12,7 @@ from decent_array import Array
 from decent_array import interoperability as iop
 
 from decent_bench.costs import Cost, EmpiricalRiskCost
-from decent_bench.schemes import AgentActivationScheme, AlwaysActive
+from decent_bench.schemes.activation import AgentActivationScheme, AlwaysActive
 
 
 class Agent:

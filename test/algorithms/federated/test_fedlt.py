@@ -12,7 +12,10 @@ from decent_bench.agents import Agent
 from decent_bench.algorithms.federated import FedLT
 from decent_bench.costs import Cost, EmpiricalRiskCost, L1RegularizerCost, QuadraticCost, ZeroCost
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import ClientSelectionScheme, DropScheme, GaussianNoise, NoDrops, Quantization
+from decent_bench.schemes.compression import Quantization
+from decent_bench.schemes.drop import DropScheme, NoDrops
+from decent_bench.schemes.noise import GaussianNoise
+from decent_bench.schemes.client_selection import ClientSelectionScheme
 from decent_bench.utils.types import (
     Dataset,
     EmpiricalRiskIndices,

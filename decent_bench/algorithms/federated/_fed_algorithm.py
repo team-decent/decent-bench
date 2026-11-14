@@ -5,7 +5,7 @@ from decent_array import interoperability as iop
 
 from decent_bench.algorithms._algorithm import Algorithm
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import ClientSelectionScheme
+from decent_bench.schemes.client_selection import ClientSelectionScheme
 from decent_bench.utils.types import LocalSteps
 
 if TYPE_CHECKING:

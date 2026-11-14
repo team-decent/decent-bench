@@ -41,13 +41,13 @@ Details on federated algorithms
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Federated algorithms follow the same general pattern discussed above, but in addition expose the
 :func:`~decent_bench.algorithms.federated.FedAlgorithm.aggregate` method and require passing a
-:class:`~decent_bench.schemes.ClientSelectionScheme` as the argument ``selection_scheme``.
+:class:`~decent_bench.schemes.client_selection.ClientSelectionScheme` as the argument ``selection_scheme``.
 Indeed, federated algorithms usually apply *client selection* (a.k.a. *partial participation*), by which the server
 selects only a subsection of the currently active clients for a round of communication (clients send the local models
 to the server, which averages them).
 
-Different :class:`~decent_bench.schemes.ClientSelectionScheme` implementations are available to model different
-strategies, see :mod:`~decent_bench.schemes`.
+Different :class:`~decent_bench.schemes.client_selection.ClientSelectionScheme` implementations are available to model different
+strategies, see the :doc:`API documentation </../api/decent_bench.schemes>`.
 
 .. note:: Aggregation is another place where algorithms might differ from the original papers, or rather, the
     original implementations. Indeed, most papers present federated algorithms as using averaging during the aggregation

@@ -54,12 +54,12 @@ with several practical challenges. These include:
 * **Compressed communications**: if the bandwith is limited, compressing communications is necessary; this, however, results in some loss of information.
 * **Communications drops**: due to network issues, communications might fail to reach the recipient.
 
-These communications constraints are defined as "Scheme" objects in decent-bench, collected in 
-:mod:`~decent_bench.schemes`. Instances of schemes are passed into the network constructors as the arguments:
+These communications constraints are defined as "Scheme" objects in decent-bench, collected in the :doc:`schemes API </../api/decent_bench.schemes>`.
+Instances of schemes are passed into the network constructors as the arguments:
 
-* ``message_noise``: defined as instances of :class:`~decent_bench.schemes.NoiseScheme`.
-* ``message_compression``: defined as instances of :class:`~decent_bench.schemes.CompressionScheme`.
-* ``message_drop``: defined as instances of :class:`~decent_bench.schemes.DropScheme`.
+* ``message_noise``: defined as instances of :class:`~decent_bench.schemes.noise.NoiseScheme`.
+* ``message_compression``: defined as instances of :class:`~decent_bench.schemes.compression.CompressionScheme`.
+* ``message_drop``: defined as instances of :class:`~decent_bench.schemes.drop.DropScheme`.
 
 These arguments allow passing either one instance only, which applies the same scheme to all agents, or a dictionary
 keyed by agent to specify per-agent schemes. This allows simulating realistic scenarios where the agents have
@@ -71,12 +71,12 @@ only if it is not dropped.
 
 decent-bench takes care of simulating the communication constraints, so defining the schemes is the only thing needed.
 One can also create custom schemes: this is done by creating an implementation of the abstract schemes
-:class:`~decent_bench.schemes.NoiseScheme`, :class:`~decent_bench.schemes.CompressionScheme`,
-:class:`~decent_bench.schemes.DropScheme`. Below is an example of ``DropScheme`` implementation, and see
-:mod:`~decent_bench.schemes` for the full library.
+:class:`~decent_bench.schemes.noise.NoiseScheme`, :class:`~decent_bench.schemes.compression.CompressionScheme`,
+:class:`~decent_bench.schemes.drop.DropScheme`. Below is an example of ``DropScheme`` implementation, and see the
+:doc:`API documentation </../api/decent_bench.schemes.drop>` for the drop schemes library.
 
 
-.. literalinclude:: ../../../../decent_bench/schemes/_drops.py
+.. literalinclude:: ../../../../decent_bench/schemes/drop/_drops.py
     :language: python
     :lines: 26-46
 
@@ -87,18 +87,18 @@ In practical scenarios, agents might be equipped with heterogeneous computationa
 complete local data processing at different frequencies. When an agent complese local processing it activates, by sending
 the newly trained local model to the server (in federated architectures) or to neighbors (in peer-to-peer).
 
-To simulate *asynchronous activation* of agents, decent-bench provides :class:`decent_bench.schemes.AgentActivationScheme`.
+To simulate *asynchronous activation* of agents, decent-bench provides :class:`decent_bench.schemes.activation.AgentActivationScheme`.
 At each iteration, the network polls all agents to check if they are active (*i.e.* ready to communicate) or inactive
 (*i.e.* still processing). Then, only active agents will participate in communications. The following shows a concrete
-implementation of :class:`decent_bench.schemes.AgentActivationScheme`.
+implementation of :class:`decent_bench.schemes.activation.AgentActivationScheme`.
 
 
-.. literalinclude:: ../../../../decent_bench/schemes/_activation.py
+.. literalinclude:: ../../../../decent_bench/schemes/activation/_activation.py
     :language: python
     :lines: 36-56
 
 
-Instances of :class:`decent_bench.schemes.AgentActivationScheme` are passed directly to the init of
+Instances of :class:`decent_bench.schemes.activation.AgentActivationScheme` are passed directly to the init of
 :class:`~decent_bench.agents.Agent` via the ``activation`` argument. Then, networks expose the method
 :func:`~decent_bench.networks.Network.active_agents` which returns a list of active agents
 for the current iteration, as determined by their activation schemes. This method is then used in algorithms to
@@ -106,7 +106,7 @@ select agents for the next round of training, see :doc:`/user/customizing/algori
 
 
 .. note:: The server in :class:`~decent_bench.networks.FedNetwork` is always active
-    (with scheme :class:`decent_bench.schemes.AlwaysActive`).
+    (with scheme :class:`decent_bench.schemes.activation.AlwaysActive`).
 
 
 .. note:: Another source of partial agent participation in federated settings is *client selection*,
