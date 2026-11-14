@@ -133,9 +133,9 @@ class EmpiricalRiskCost(Cost, ABC):
     def __add__(self, other: Cost) -> Cost:
         """Add another cost, preserving the empirical-risk abstraction for regularization."""
         self._validate_cost_operation(other)
-        from decent_bench.costs._base._regularizer_costs import BaseRegularizerCost  # noqa: PLC0415
+        from decent_bench.costs._base._regularizer_costs import RegularizerCost  # noqa: PLC0415
 
-        if isinstance(other, BaseRegularizerCost):
+        if isinstance(other, RegularizerCost):
             from decent_bench.costs._empirical_risk._empirical_regularized_cost import (  # noqa: PLC0415
                 EmpiricalRegularizedCost,
             )

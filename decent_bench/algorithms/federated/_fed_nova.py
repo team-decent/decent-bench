@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 from decent_array import Array
 from decent_array import interoperability as iop
 
-from decent_bench.agents._utils import infer_client_data_size
+from decent_bench.agents._utils import _infer_client_data_size
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
 from decent_bench.schemes.client_selection import ClientSelectionScheme, UniformSelection
@@ -109,7 +109,7 @@ class FedNova(FedAlgorithm):
     coefficient (the corresponding argument is ``server_momentum``).
 
     In this implementation, :math:`n_i` is inferred once during ``initialize`` from each client's local cost via
-    :func:`~decent_bench.agents.infer_client_data_size`, then stored on the server for later rounds.
+    the internal utility function, then stored on the server for later rounds.
     If no client has both uploads received in a round under network impairments, the server skips that round without
     error.
 
@@ -152,7 +152,7 @@ class FedNova(FedAlgorithm):
     def _resolve_client_sample_counts(self, network: FedNetwork) -> dict["Agent", float]:
         client_sample_counts: dict[Agent, float] = {}
         for client in network.clients():
-            client_sample_counts[client] = infer_client_data_size(client)
+            client_sample_counts[client] = _infer_client_data_size(client)
         return client_sample_counts
 
     def initialize(self, network: FedNetwork) -> None:

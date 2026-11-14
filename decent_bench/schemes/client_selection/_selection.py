@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from decent_array import interoperability as iop
 
-from decent_bench.agents._utils import infer_client_data_size
+from decent_bench.agents._utils import _infer_client_data_size
 from decent_bench.costs import EmpiricalRiskCost
 
 if TYPE_CHECKING:
@@ -177,7 +177,7 @@ class DataSizeSelection(ClientSelectionScheme):
 
         clients_list = list(clients)
         data_sizes = np.array(
-            [infer_client_data_size(client) for client in clients_list],
+            [_infer_client_data_size(client) for client in clients_list],
             dtype=np.float64,
         )
         probabilities = data_sizes / data_sizes.sum()

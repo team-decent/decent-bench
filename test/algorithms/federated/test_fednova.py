@@ -234,7 +234,7 @@ def test_fednova_resolves_client_sample_counts_once_on_initialize(monkeypatch: p
         return float(client.cost.n_samples)  # type: ignore[attr-defined]
 
     monkeypatch.setattr(
-        "decent_bench.algorithms.federated._fed_nova.infer_client_data_size",
+        "decent_bench.algorithms.federated._fed_nova._infer_client_data_size",
         _tracking_infer_client_data_size,
     )
 
