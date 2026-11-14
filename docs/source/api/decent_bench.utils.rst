@@ -7,6 +7,7 @@ decent\_bench.utils
 
    decent_bench.utils.solvers
    decent_bench.utils.types
+   decent_bench.utils.tuning
 
 .. automodule:: decent_bench.utils
    :members:
