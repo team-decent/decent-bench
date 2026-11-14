@@ -2,7 +2,8 @@ from decent_array.types import Devices, Frameworks
 
 from decent_bench.agents import Agent
 from decent_bench.algorithms.federated import FedAvg
-from decent_bench.benchmark import BenchmarkProblem, configure, create_regression_problem
+from decent_bench.benchmark import BenchmarkProblem, configure
+from decent_bench.utils.problem_generation import create_regression_problem
 from decent_bench.metrics import metric_library
 from decent_bench.networks import FedNetwork
 from decent_bench.utils.tuning import grid_search

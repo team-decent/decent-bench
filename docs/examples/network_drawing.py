@@ -3,7 +3,8 @@ import networkx as nx
 from decent_array.types import Devices, Frameworks
 
 from decent_bench.agents import Agent
-from decent_bench.benchmark import configure, create_regression_problem
+from decent_bench.benchmark import configure
+from decent_bench.utils.problem_generation import create_regression_problem
 from decent_bench.networks import P2PNetwork
 from decent_bench.networks import plot_network
 

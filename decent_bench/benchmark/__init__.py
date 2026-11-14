@@ -5,7 +5,6 @@ from ._compute._compute_metrics import compute_metrics
 from ._configure import configure
 from ._display._display_metrics import display_metrics
 from ._metric_result import MetricResult
-from ._utils import create_classification_problem, create_quadratic_problem, create_regression_problem
 
 __all__ = [  # noqa: RUF022
     "benchmark",
@@ -16,7 +15,4 @@ __all__ = [  # noqa: RUF022
     "BenchmarkProblem",
     "BenchmarkResult",
     "MetricResult",
-    "create_classification_problem",
-    "create_regression_problem",
-    "create_quadratic_problem",
 ]

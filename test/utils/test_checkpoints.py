@@ -25,10 +25,10 @@ from decent_bench.benchmark import (
     BenchmarkProblem,
     MetricResult,
     benchmark,
-    create_classification_problem,
     configure,
     resume_benchmark,
 )
+from decent_bench.utils.problem_generation import create_classification_problem
 from decent_bench.costs import LogisticRegressionCost, PyTorchCost
 from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network, P2PNetwork

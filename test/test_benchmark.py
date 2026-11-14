@@ -14,8 +14,8 @@ from decent_bench.benchmark import (
     BenchmarkProblem,
     benchmark,
     configure,
-    create_classification_problem,
 )
+from decent_bench.utils.problem_generation import create_classification_problem
 from decent_bench.costs import LogisticRegressionCost, PyTorchCost
 from decent_bench.networks import FedNetwork, P2PNetwork
 from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
