@@ -1,7 +1,6 @@
 """
 Cost composition rules.
 
-Developer note:
     Generic cost arithmetic falls back to :class:`SumCost` and :class:`ScaledCost`.
 
     Regularizers preserve their abstraction under ``+``, ``-``, unary ``-``, ``*``, and ``/`` by returning
