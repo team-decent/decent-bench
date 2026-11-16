@@ -442,7 +442,7 @@ class AgentHistory:
 
         """
         if iteration < -1:
-            raise ValueError(f"Iteration must be positive or -1 for the latest snapshot, got {iteration}")
+            raise ValueError(f"Iteration must be non-negative or -1 for the latest snapshot, got {iteration}")
 
         if iteration == -1:
             return self._x_history[self.max()]

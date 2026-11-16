@@ -6,7 +6,7 @@ import pytest
 from decent_array import Array, interoperability as iop
 from decent_array.types import Devices, Frameworks
 
-from decent_bench.benchmark import configure
+from decent_bench.benchmark import compute_metrics, configure, resume_benchmark
 from decent_bench.benchmark._configure import get_checkpoint_manager, get_config
 
 pytestmark = pytest.mark.no_auto_configure
@@ -45,10 +45,36 @@ def test_configure_requires_backend_for_new_experiment() -> None:  # noqa: D103
         configure()
 
 
-@pytest.mark.parametrize("n_checkpoints", [0, -1])
-def test_configure_rejects_non_positive_checkpoint_count(n_checkpoints: int) -> None:  # noqa: D103
+@pytest.mark.parametrize("n_checkpoints", [0, -1, 1.5, True])
+def test_configure_rejects_invalid_checkpoint_count(n_checkpoints: int) -> None:  # noqa: D103
     with pytest.raises(ValueError, match="n_checkpoints must be a positive integer"):
         configure(Frameworks.NUMPY, Devices.CPU, n_checkpoints=n_checkpoints)
+
+
+def test_configure_rejects_non_integer_checkpoint_count_in_metadata(tmp_path: Path) -> None:  # noqa: D103
+    (tmp_path / "metadata.json").write_text(
+        json.dumps(
+            {
+                "backend": {"framework": Frameworks.NUMPY.value, "device": Devices.CPU.value},
+                "checkpointing": {"n_checkpoints": 1.5},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="n_checkpoints must be a positive integer"):
+        configure(storage_dir=tmp_path)
+
+
+@pytest.mark.parametrize("operation", [compute_metrics, resume_benchmark])
+def test_missing_checkpoint_data_error_identifies_data_and_preserves_cause(tmp_path: Path, operation) -> None:  # noqa: D103
+    configure(Frameworks.NUMPY, Devices.CPU, storage_dir=tmp_path)
+    (tmp_path / "metadata.json").write_text(json.dumps({"n_trials": 1, "iterations": 2}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="missing or invalid checkpoint data or metadata") as exc_info:
+        operation()
+
+    assert isinstance(exc_info.value.__cause__, FileNotFoundError)
+    assert "benchmark_problem.pkl.zst" in str(exc_info.value)
 
 
 def test_configure_without_storage_disables_checkpointing() -> None:  # noqa: D103

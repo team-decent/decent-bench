@@ -48,7 +48,6 @@ def compute_metrics(
             (like ``ConsensusError`` or ``Accuracy``). Available statistics are "mean" (aliases "average", "avg"),
             "std", "max" (alias "maximum"), "min" (alias "minimum"), and "median" (alias "mdn"). If ``None``, "mean"
             and "std" are used.
-        log_level: minimum level to log, e.g. :data:`logging.INFO`
 
     Returns:
         MetricsResult containing the computed metrics.
@@ -87,7 +86,9 @@ def compute_metrics(
         try:
             benchmark_result = checkpoint_manager.load_benchmark_result()
         except (FileNotFoundError, KeyError) as e:
-            raise ValueError(f"Invalid checkpoint directory: missing or corrupted metadata - {e}") from e
+            raise ValueError(
+                f"Invalid checkpoint directory: missing or invalid checkpoint data or metadata - {e}"
+            ) from e
         except JSONDecodeError as e:
             raise ValueError(f"Invalid checkpoint directory: metadata is not valid JSON - {e}") from e
 

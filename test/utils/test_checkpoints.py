@@ -117,9 +117,10 @@ def _build_problem_and_algorithms(
     return problem, algorithms
 
 
-def test_init_validates_arguments(tmp_path: Path) -> None:  # noqa: D103
+@pytest.mark.parametrize("n_checkpoints", [-1, 1.5, True])
+def test_init_validates_arguments(tmp_path: Path, n_checkpoints: int) -> None:  # noqa: D103
     with pytest.raises(ValueError, match="n_checkpoints must be a positive integer"):
-        CheckpointManager(tmp_path / "ckpt", n_checkpoints=-1)
+        CheckpointManager(tmp_path / "ckpt", n_checkpoints=n_checkpoints)
 
 
 @pytest.mark.no_auto_configure

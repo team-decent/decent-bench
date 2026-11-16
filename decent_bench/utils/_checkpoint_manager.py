@@ -67,10 +67,7 @@ class CheckpointManager:
                 └── table.txt                   # Final text file with table results
 
     File Descriptions:
-        - **metadata.json**: Benchmark configuration and any user-provided metadata
-            (e.g., hyperparameters, system info). User-provided metadata can be added through the
-            :func:`~decent_bench.benchmark.benchmark` function or appended later using
-            :meth:`~decent_bench.utils._checkpoint_manager.CheckpointManager.append_metadata`.
+        - **metadata.json**: Benchmark configuration and metadata, including the descriptions of computed metrics.
         - **benchmark_problem.pkl.zst**: Initial benchmark problem state before any trials run,
             stored as a zstd-compressed pickle payload.
         - **initial_algorithms.pkl.zst**: Initial algorithm states before any trials run,
@@ -150,7 +147,7 @@ class CheckpointManager:
             ValueError: If ``n_checkpoints`` is not a positive integer.
 
         """
-        if n_checkpoints <= 0:
+        if isinstance(n_checkpoints, bool) or not isinstance(n_checkpoints, int) or n_checkpoints <= 0:
             raise ValueError(f"n_checkpoints must be a positive integer, got {n_checkpoints}")
 
         self.checkpoint_dir = Path(checkpoint_dir)

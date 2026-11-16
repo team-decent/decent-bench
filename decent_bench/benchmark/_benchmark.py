@@ -87,7 +87,6 @@ def resume_benchmark(  # noqa: PLR0912, PLR0915
             algorithm execution. Each metric will open a plot window for each trial showing live updates. Useful for
             early stopping if convergence is not happening. Disabled by default. When using multiprocessing
             (``max_processes > 1``), each trial will open its own plot windows in separate processes.
-        log_level: minimum level to log, e.g. :data:`logging.INFO`
 
     Returns:
         BenchmarkResult containing the results of the benchmark.
@@ -147,7 +146,9 @@ def resume_benchmark(  # noqa: PLR0912, PLR0915
 
             LOGGER.debug(f"Loaded checkpoint: algorithms={algorithms}")
         except (FileNotFoundError, KeyError) as e:
-            raise ValueError(f"Invalid checkpoint directory: missing or corrupted metadata - {e}") from e
+            raise ValueError(
+                f"Invalid checkpoint directory: missing or invalid checkpoint data or metadata - {e}"
+            ) from e
         except JSONDecodeError as e:
             raise ValueError(f"Invalid checkpoint directory: metadata is not valid JSON - {e}") from e
 
@@ -253,7 +254,6 @@ def benchmark(
             algorithm execution. Each metric will open a plot window for each trial showing live updates. Useful for
             early stopping if convergence is not happening. Disabled by default. When using multiprocessing
             (``max_processes > 1``), each trial will open its own plot windows in separate processes.
-        log_level: minimum level to log, e.g. :data:`logging.INFO`.
 
     Returns:
         BenchmarkResult containing the results of the benchmark.

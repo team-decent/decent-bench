@@ -32,9 +32,11 @@ The folder structure looks like this:
     │       └── complete.json              # present when the trial completes
     ├── metric_computation.pkl.zst
     └── results/
-        ├── plots_fig1.png
+        ├── plot_fig1.png
         ├── table.tex
         └── table.txt
+
+For a single figure, the plot is named ``plot.png`` instead (or uses the selected plot format).
 
 
 Checkpointing options
