@@ -1,6 +1,7 @@
 import json
 import pickle
 import shutil
+import tempfile
 from dataclasses import replace
 from datetime import datetime
 from math import ceil
@@ -96,7 +97,7 @@ class CheckpointManager:
     Thread Safety:
         - Each trial writes to its own directory, avoiding write conflicts.
         - Completed trial results are loaded read-only.
-        - Metadata is written once at initialization.
+        - Metadata is updated by the main process.
 
     Args:
         checkpoint_dir: Path to save checkpoints during execution. If provided, progress will be saved
@@ -256,6 +257,19 @@ class CheckpointManager:
         metadata["benchmark_metadata"].update(additional_metadata)
         self._save_metadata(metadata)
         return metadata
+
+    def update_run_targets(self, iterations: int, n_trials: int) -> None:
+        """Persist the current run targets and invalidate metrics if more work remains."""
+        metadata = self.load_metadata()
+        if (
+            metadata["iterations"] != iterations
+            or metadata["n_trials"] != n_trials
+            or not self.is_benchmark_completed()
+        ):
+            metadata["metrics_stale"] = True
+        metadata["iterations"] = iterations
+        metadata["n_trials"] = n_trials
+        self._save_metadata(metadata)
 
     def load_initial_algorithms(self, network: Network | None = None) -> list[Algorithm[Network]]:
         """
@@ -483,20 +497,31 @@ class CheckpointManager:
             complete_path.unlink()
             LOGGER.debug(f"Unmarked trial complete: alg={alg_idx}, trial={trial}")
 
-    def is_trial_complete(self, alg_idx: int, trial: int) -> bool:
+    def is_trial_complete(self, alg_idx: int, trial: int, iterations: int | None = None) -> bool:
         """
         Check if a trial has been completed.
 
         Args:
             alg_idx: Algorithm index (0-based).
             trial: Trial number (0-based).
+            iterations: Required total iteration count, if checking against a run target.
 
         Returns:
             True if the trial has completed, False otherwise.
 
         """
-        trial_dir = self._get_trial_dir(alg_idx, trial)
-        return (trial_dir / "complete.json").exists()
+        complete_path = self._get_trial_dir(alg_idx, trial) / "complete.json"
+        if not complete_path.exists():
+            return False
+        if iterations is None:
+            return True
+        with complete_path.open(encoding="utf-8") as file:
+            completed_iteration: int = json.load(file)["iteration"]
+        if completed_iteration >= iterations:
+            raise ValueError(
+                f"Trial {trial} for algorithm index {alg_idx} exceeds the stored iteration target {iterations}"
+            )
+        return completed_iteration == iterations - 1
 
     def is_benchmark_started(self) -> bool:
         """
@@ -538,7 +563,7 @@ class CheckpointManager:
         for alg in algorithms:
             alg_idx = alg["index"]
             for trial in range(n_trials):
-                if not self.is_trial_complete(alg_idx, trial):
+                if not self.is_trial_complete(alg_idx, trial, metadata["iterations"]):
                     return False
         return True
 
@@ -547,11 +572,11 @@ class CheckpointManager:
         Check if the metrics have been computed and saved in the checkpoint.
 
         Returns:
-            True if the metrics result file exists, False otherwise.
+            True if current metrics have been saved, False otherwise.
 
         """
         metric_path = self.checkpoint_dir / "metric_computation_complete.json"
-        return metric_path.exists()
+        return metric_path.exists() and not self.load_metadata().get("metrics_stale")
 
     def load_trial_result(self, alg_idx: int, trial: int) -> tuple[Algorithm[Network], Network]:
         """
@@ -585,19 +610,20 @@ class CheckpointManager:
         network: Network = checkpoint_data["network"]
         return alg, network
 
-    def get_completed_trials(self, alg_idx: int, n_trials: int) -> list[int]:
+    def get_completed_trials(self, alg_idx: int, n_trials: int, iterations: int | None = None) -> list[int]:
         """
         Get list of completed trial numbers for an algorithm.
 
         Args:
             alg_idx: Algorithm index (0-based).
             n_trials: Total number of trials in the benchmark.
+            iterations: Required total iteration count, if checking against a run target.
 
         Returns:
             List of completed trial numbers (0-based).
 
         """
-        return [trial for trial in range(n_trials) if self.is_trial_complete(alg_idx, trial)]
+        return [trial for trial in range(n_trials) if self.is_trial_complete(alg_idx, trial, iterations)]
 
     def load_metadata(self) -> dict[str, Any]:
         """
@@ -644,7 +670,7 @@ class CheckpointManager:
             transient=True,
             disable=not progress_bar,
         ):
-            completed_trials = self.get_completed_trials(idx, n_trials)
+            completed_trials = self.get_completed_trials(idx, n_trials, metadata["iterations"])
             if len(completed_trials) != n_trials:
                 LOGGER.warning(
                     f"Algorithm '{alg.name}' has {len(completed_trials)}/{n_trials} completed trials. "
@@ -667,7 +693,7 @@ class CheckpointManager:
         return BenchmarkResult(
             problem=problem,
             states=states,
-            iterations=self.load_metadata()["iterations"],
+            iterations=metadata["iterations"],
         )
 
     def save_metrics_result(self, metrics_result: MetricResult) -> None:
@@ -695,6 +721,11 @@ class CheckpointManager:
         with metric_marker_path.open("w") as f:
             json.dump({"metric_computation_complete": True}, f)
 
+        metadata = self.load_metadata()
+        if metadata.get("metrics_stale"):
+            metadata["metrics_stale"] = False
+            self._save_metadata(metadata)
+
         LOGGER.info(f"Saved computed metrics result to {metric_path}")
 
     def load_metrics_result(self, skip_network_views: bool = False) -> MetricResult:
@@ -713,6 +744,8 @@ class CheckpointManager:
 
         """
         metric_path = self._resolve_data_file("metric_computation.pkl.zst", "metric_computation.pkl")
+        if metric_path.exists() and self.load_metadata().get("metrics_stale"):
+            raise ValueError("Stored metrics are out of date after extending the benchmark; recompute metrics first")
         metrics_result = cast("MetricResult", self._load_pickle(metric_path))
 
         if metrics_result.network_views is None and not skip_network_views:  # populate network views
@@ -788,8 +821,15 @@ class CheckpointManager:
     def _save_metadata(self, metadata: dict[str, Any]) -> None:
         """Save metadata to checkpoint directory."""
         metadata_path = self.checkpoint_dir / "metadata.json"
-        with metadata_path.open("w", encoding="utf-8") as f:
-            json.dump(metadata, f)
+        temp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.checkpoint_dir, delete=False) as file:
+                temp_path = Path(file.name)
+                json.dump(metadata, file)
+            temp_path.replace(metadata_path)
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
         LOGGER.debug(f"Saved metadata to {metadata_path}")
 
     def _save_initial_algorithms(self, algorithms: list[Algorithm[Network]]) -> None:

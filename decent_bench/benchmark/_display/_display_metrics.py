@@ -70,6 +70,7 @@ def display_metrics(
     Raises:
         ValueError: If ``metrics_result`` is not provided and no storage directory is configured, or no metrics result
             is found in the configured storage directory.
+        ValueError: If saved metrics are out of date after resuming or extending a benchmark.
         FileNotFoundError: If ``metrics_result`` is not provided and a required result file is missing from the
             configured storage directory.
 

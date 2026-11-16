@@ -1,4 +1,3 @@
-import operator
 import random
 import warnings
 from collections import defaultdict
@@ -160,36 +159,15 @@ def resume_benchmark(  # noqa: PLR0912, PLR0915
         f"and algorithms: {[alg.name for alg in algorithms]}\n"
     )
 
-    total_increase_trials = increase_trials + metadata.get("benchmark_metadata", {}).get("increased_trials", 0)
-    n_trials = metadata["n_trials"] + total_increase_trials
-    if increase_trials != 0:
-        metadata = checkpoint_manager.append_metadata({"increased_trials": total_increase_trials})
-        LOGGER.info(
-            f"Increasing number of trials for each algorithm by {increase_trials}, "
-            f"total increase is {total_increase_trials}"
-        )
-
-    iterations = metadata["iterations"]
+    n_trials = metadata["n_trials"] + increase_trials
+    iterations = metadata["iterations"] + increase_iterations
     if iterations <= 0:
         raise ValueError("Stored `iterations` must be positive")
-    total_increase_iterations = increase_iterations + metadata.get("benchmark_metadata", {}).get(
-        "increased_iterations", 0
-    )
-    if increase_iterations != 0:
-        iterations += increase_iterations
-        for alg_idx, _alg in enumerate(algorithms):
-            # Unmark all trials as incomplete to resume them with increased iterations
-            for trial in range(n_trials):
-                checkpoint_manager.unmark_trial_complete(alg_idx, trial)
-        # If we resume again, we have to increase the iterations on top of the already increased iterations,
-        # so we need to keep track of the total increase in the metadata
-        metadata = checkpoint_manager.append_metadata(
-            {"iterations": iterations, "increased_iterations": total_increase_iterations}
-        )
-        LOGGER.info(
-            f"Increased iterations for all algorithms by {increase_iterations}, "
-            f"total increase is {total_increase_iterations}"
-        )
+    checkpoint_manager.update_run_targets(iterations, n_trials)
+    if increase_trials:
+        LOGGER.info(f"Increased the number of trials by {increase_trials} to {n_trials}")
+    if increase_iterations:
+        LOGGER.info(f"Increased the number of iterations by {increase_iterations} to {iterations}")
 
     if "rng_seed" in metadata:
         base_seed = metadata["rng_seed"]
@@ -454,7 +432,7 @@ def _run_trials(  # noqa: PLR0917
     checkpoint_manager: "CheckpointManager | None" = None,
     runtime_metrics: "list[RuntimeMetric] | None" = None,
 ) -> dict[Algorithm[Network], list[Network]]:
-    results: dict[Algorithm[Network], list[Network]] = defaultdict(list)
+    results: dict[Algorithm[Network], dict[int, Network]] = defaultdict(dict)
     progress_bar_handle = progress_bar_ctrl.get_handle()
 
     # Create centralized plotter process and queue for runtime metrics
@@ -474,7 +452,7 @@ def _run_trials(  # noqa: PLR0917
     to_run: dict[Algorithm[Network], list[int]] = defaultdict(list)
     if checkpoint_manager is not None:
         for alg_idx, alg in enumerate(algorithms):
-            completed_trials = checkpoint_manager.get_completed_trials(alg_idx, n_trials)
+            completed_trials = checkpoint_manager.get_completed_trials(alg_idx, n_trials, iterations)
             incompleted_trials = [t for t in range(n_trials) if t not in completed_trials]
             if len(incompleted_trials) > 0:
                 to_run[alg] = incompleted_trials
@@ -482,7 +460,7 @@ def _run_trials(  # noqa: PLR0917
             # load completed trials
             for trial in completed_trials:
                 _, net = checkpoint_manager.load_trial_result(alg_idx, trial)
-                results[alg].append(net)
+                results[alg][trial] = net
                 progress_bar_ctrl.mark_one_trial_as_complete(alg, trial)
                 LOGGER.debug(f"Loaded completed trial {trial} for algorithm {alg.name} from checkpoint")
     else:
@@ -496,7 +474,7 @@ def _run_trials(  # noqa: PLR0917
     if len(to_run) == 0:
         LOGGER.info("No trials are left to run!")
         progress_bar_ctrl.stop()
-        return results
+        return {alg: [trials[trial] for trial in sorted(trials)] for alg, trials in results.items()}
 
     trial_args = {
         alg: [
@@ -537,14 +515,13 @@ def _run_trials(  # noqa: PLR0917
 
     progress_bar_ctrl.stop()
     for alg in partial_result:
-        sorted_trials = sorted(partial_result[alg], key=operator.itemgetter(0))  # sort by trial number
-        results[alg].extend([trial_result[1] for trial_result in sorted_trials])
+        results[alg].update(partial_result[alg])
 
     # Clean up runtime plotter process
     if runtime_plotter is not None:
         runtime_plotter.shutdown()
 
-    return results
+    return {alg: [trials[trial] for trial in sorted(trials)] for alg, trials in results.items()}
 
 
 def _derive_trial_seed(base_seed: int | None, algorithm_index: int, trial: int) -> int:
