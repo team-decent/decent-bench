@@ -39,9 +39,8 @@ class CheckpointManager:
     """
     Manages checkpoint directory structure and file operations for benchmark execution.
 
-    The CheckpointManager creates and maintains a hierarchical directory structure for storing
-    checkpoint data during benchmark execution. This allows benchmarks to be resumed if interrupted,
-    and provides incremental saving of results as trials complete.
+    Maintains a hierarchical directory structure for checkpoint data during benchmark execution. This allows benchmarks
+    to be resumed if interrupted, and provides incremental saving of results as trials complete.
 
     Directory Structure:
         The checkpoint directory is organized as follows::
@@ -130,7 +129,7 @@ class CheckpointManager:
         compression_level: int = 1,
     ) -> None:
         """
-        Initialize CheckpointManager with a checkpoint directory path.
+        Initialize checkpoint storage with a directory path.
 
         Args:
             checkpoint_dir: Path to save checkpoints during execution. If provided, progress will be saved

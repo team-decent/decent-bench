@@ -63,9 +63,6 @@ def resume_benchmark(  # noqa: PLR0912, PLR0915
     Resume a benchmark from an existing checkpoint directory.
 
     Args:
-        checkpoint_manager: CheckpointManager instance to load checkpoints from. Must contain valid checkpoints and
-            metadata from a previous benchmark run. Progress will be loaded from the latest checkpoints and the
-            benchmark will resume from there.
         increase_iterations: number of iterations to add to each algorithm's existing iteration count. This allows
             you to extend the benchmark run and collect more data points for the metrics. The additional iterations will
             be added on top of the existing iterations defined in the checkpoint metadata for each algorithm. If set to
@@ -76,7 +73,7 @@ def resume_benchmark(  # noqa: PLR0912, PLR0915
         create_backup: whether to create a backup of the existing checkpoint directory before resuming. It is
             recommended to set this to True to avoid accidental data loss, as resuming will modify the checkpoint
             directory by adding new checkpoints and metadata. If True, a backup will be created with the name
-            ``{checkpoint_manager.checkpoint_dir}_backup_{timestamp}.zip`` before resuming.
+            ``{checkpoint_dir}_backup_{timestamp}.zip`` before resuming.
         max_processes: maximum number of processes to use when running trials, multiprocessing improves performance
             but can be inhibiting when debugging or using a profiler, set to 1 to disable multiprocessing or ``None`` to
             use :class:`~concurrent.futures.ProcessPoolExecutor`'s default. If your algorithm is very lightweight you
@@ -234,6 +231,8 @@ def benchmark(
     """
     Benchmark decentralized algorithms.
 
+    If ``storage_dir`` was set in :func:`~decent_bench.benchmark.configure`, checkpoints and results are saved there.
+
     Args:
         algorithms: algorithms to benchmark
         benchmark_problem: problem to benchmark on, defines the network topology, cost functions, and communication
@@ -250,7 +249,6 @@ def benchmark(
             If `None`, the progress bar uses 1 unit per trial.
         show_speed: whether to show speed (iterations/second) in the progress bar.
         show_trial: whether to show which trials are currently running in the progress bar.
-        checkpoint_manager: if provided, will be used to save checkpoints during execution.
         runtime_metrics: optional list of :class:`~decent_bench.metrics.RuntimeMetric` to compute and plot during
             algorithm execution. Each metric will open a plot window for each trial showing live updates. Useful for
             early stopping if convergence is not happening. Disabled by default. When using multiprocessing
@@ -275,7 +273,7 @@ def benchmark(
         overhead of updating the progress bar too often.
 
     Raises:
-        ValueError: If the checkpoint directory is not empty when initializing the CheckpointManager.
+        ValueError: If the configured storage directory is not empty.
         ValueError: If any two algorithms share the same name.
         ValueError: If ``iterations`` is not positive.
 
@@ -299,7 +297,7 @@ def benchmark(
         checkpoint_manager.initialize(algorithms, benchmark_problem, n_trials, iterations)
     else:
         LOGGER.info(
-            "No checkpoint manager provided, running benchmark without checkpointing. "
+            "No storage directory configured, running benchmark without checkpointing. "
             "Progress cannot be resumed if interrupted."
         )
 

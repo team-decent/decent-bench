@@ -35,10 +35,8 @@ def compute_metrics(
     Compute metrics from a benchmark result.
 
     Args:
-        benchmark_result: result of a benchmark execution. If not provided, the result will be loaded from the
-            checkpoint manager
-        checkpoint_manager: if provided, will be used to save results of metrics computation and/or load benchmark
-            result.
+        benchmark_result: result of a benchmark execution. If not provided, the result will be loaded from the storage
+            directory defined by ``configure``.
         table_metrics: metrics to be displayed in a table of results. Table metrics are computed only at the
             *recentmost* iteration reached during benchmarking. If ``None``, all table
             metrics available for the benchmark problem will be used. For example, federated-only metrics are removed
@@ -56,18 +54,15 @@ def compute_metrics(
         MetricsResult containing the computed metrics.
 
     Raises:
-        ValueError: If neither ``benchmark_result`` nor ``checkpoint_manager`` is provided, or
-            if the checkpoint manager does not contain a valid benchmark result to load.
+        ValueError: If ``benchmark_result`` is not provided and no storage directory is configured, or the configured
+            storage directory does not contain a valid benchmark result to load.
         ValueError: If duplicate metrics (i.e. with same ``description``) are provided
             in ``table_metrics`` or ``plot_metrics``.
 
     Note:
-        If ``benchmark_result`` is not provided, it will be loaded from the checkpoint manager. If both are provided,
-        then the results from the provided ``benchmark_result`` will be used and the checkpoint manager will only be
-        used to save the computed metrics result. If neither is provided, an error will be raised.
-
-        All used table- and plot-metrics will be saved to the checkpoints' metadata if a checkpoint manager is provided,
-        in order to know which metrics were computed and can be displayed later.
+        If ``benchmark_result`` is not provided, it is loaded from the storage directory set by
+        :func:`~decent_bench.benchmark.configure`. When a storage directory is configured, the computed metrics result
+        and the descriptions of the table and plot metrics are saved there, even if ``benchmark_result`` is provided.
 
         Metrics marked unavailable by :meth:`~decent_bench.metrics.Metric.is_available` for the given problem are
         filtered out from the returned metric lists. Warnings are emitted with the omitted metric names.
@@ -86,8 +81,7 @@ def compute_metrics(
     if benchmark_result is None:
         if checkpoint_manager is None:
             raise ValueError(
-                "If ``benchmark_result`` is not provided, ``checkpoint_manager`` must be provided "
-                "to load the benchmark result from."
+                "If benchmark_result is not provided, configure() must set storage_dir to load the benchmark result."
             )
 
         try:
@@ -98,7 +92,9 @@ def compute_metrics(
             raise ValueError(f"Invalid checkpoint directory: metadata is not valid JSON - {e}") from e
 
         if len(benchmark_result.states) == 0:
-            raise ValueError("No benchmark result found in checkpoint manager to compute metrics")
+            raise ValueError(
+                "No completed benchmark result found in the configured storage directory to compute metrics"
+            )
 
     table_metrics, plot_metrics = _resolve_default_metrics(table_metrics, plot_metrics)
 

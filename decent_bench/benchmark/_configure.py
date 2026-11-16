@@ -136,6 +136,6 @@ def get_config() -> Config:
 
 
 def get_checkpoint_manager() -> CheckpointManager | None:
-    """Return the configured checkpoint manager."""
+    """Return the internal storage handler for the current configuration."""
     get_config()
     return _STATE.checkpoint_manager

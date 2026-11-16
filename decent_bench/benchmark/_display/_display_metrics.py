@@ -36,9 +36,7 @@ def display_metrics(
 
     Args:
         metrics_result: result of metrics computation containing the metrics to display. If not provided,
-            the result will be loaded from the checkpoint manager
-        checkpoint_manager: if provided, will be used to load metrics result and store the displayed tables and plots.
-            Tables will be saved as ``table.txt`` and ``table.tex`` while plots will be saved as ``plot_{#}.{format}``.
+            the result will be loaded from the storage directory set by :func:`~decent_bench.benchmark.configure`.
         table_metrics: metrics to tabulate. Entries can be :class:`~decent_bench.metrics.Metric` objects or strings
             (matching :attr:`~decent_bench.metrics.Metric.description`).
             If ``None`` all table metrics in metrics_result are displayed.
@@ -70,13 +68,13 @@ def display_metrics(
             ``False`` when running in a non-interactive environment or when only saving the plots without displaying.
 
     Raises:
-        ValueError: If neither ``metrics_result`` nor ``checkpoint_manager`` is provided, or
-            if the checkpoint manager does not contain a valid metrics result to load.
-        FileNotFoundError: If ``metrics_result`` is not provided and the checkpoint manager does not contain a metrics
-            result file to load.
+        ValueError: If ``metrics_result`` is not provided and no storage directory is configured, or no metrics result
+            is found in the configured storage directory.
+        FileNotFoundError: If ``metrics_result`` is not provided and a required result file is missing from the
+            configured storage directory.
 
     Note:
-        Checkpoint_manager is ignored if ``metrics_result`` is provided.
+        When a storage directory is configured, generated tables and plots are saved in its ``results`` subdirectory.
 
         Computational cost can be interpreted as the cost of running the algorithm on a specific hardware setup.
         Therefore the computational cost could be seen as the number of operations performed (similar to FLOPS) but
@@ -98,17 +96,16 @@ def display_metrics(
     if metrics_result is None:
         if checkpoint_manager is None:
             raise ValueError(
-                "If ``metrics_result`` is not provided, ``checkpoint_manager`` must be provided "
-                "to load the metrics result from."
+                "If metrics_result is not provided, configure() must set storage_dir to load the metrics result."
             )
         try:
-            with Status("Loading metrics result from checkpoint manager..."):
+            with Status("Loading metrics result from configured storage directory..."):
                 metrics_result = checkpoint_manager.load_metrics_result()
         except FileNotFoundError as e:
-            raise FileNotFoundError(f"Metrics result file not found in checkpoint manager: {e}") from e
+            raise FileNotFoundError(f"Required result file not found in the configured storage directory: {e}") from e
 
         if metrics_result is None:
-            raise ValueError("No metrics result found in checkpoint manager to display")
+            raise ValueError("No metrics result found in the configured storage directory to display")
 
     # filter `metrics_result` based on `plot_metrics`, `table_metrics`, and `algorithms` (if provided)
     selected_algorithms = _filter_algorithms(metrics_result, algorithms)
