@@ -137,7 +137,7 @@ with :class:`~decent_bench.metrics.metric_library.XError` being the distance fro
 :class:`~decent_bench.metrics.metric_library.GradientNorm` the norm of the gradient of
 :math:`\frac{1}{N}\sum_{i = 1}^N f_i` at the mean agent state. If
 the ``table_metrics`` and ``plot_metrics`` arguments of :func:`~decent_bench.benchmark.compute_metrics` are not specified,
-all the available metrics are used instead. Not all metrics are always available: for example
+predefined lists of table and plot metrics are used instead, excluding metrics unavailable for the problem. For example,
 :class:`~decent_bench.metrics.metric_library.XError` is not available if ``x_optimal`` is not available.
 
 .. note::

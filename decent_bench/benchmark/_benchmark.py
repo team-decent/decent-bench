@@ -84,9 +84,8 @@ def resume_benchmark(  # noqa: PLR0912, PLR0915
         show_speed: whether to show speed (iterations/second) in the progress bar.
         show_trial: whether to show which trials are currently running in the progress bar.
         runtime_metrics: optional list of :class:`~decent_bench.metrics.RuntimeMetric` to compute and plot during
-            algorithm execution. Each metric will open a plot window for each trial showing live updates. Useful for
-            early stopping if convergence is not happening. Disabled by default. When using multiprocessing
-            (``max_processes > 1``), each trial will open its own plot windows in separate processes.
+            algorithm execution. Each type of metric has a live plot with separate lines for each algorithm and trial.
+            Useful for early stopping if convergence is not happening. Disabled by default.
 
     Returns:
         BenchmarkResult containing the results of the benchmark.
@@ -251,9 +250,8 @@ def benchmark(
         show_speed: whether to show speed (iterations/second) in the progress bar.
         show_trial: whether to show which trials are currently running in the progress bar.
         runtime_metrics: optional list of :class:`~decent_bench.metrics.RuntimeMetric` to compute and plot during
-            algorithm execution. Each metric will open a plot window for each trial showing live updates. Useful for
-            early stopping if convergence is not happening. Disabled by default. When using multiprocessing
-            (``max_processes > 1``), each trial will open its own plot windows in separate processes.
+            algorithm execution. Each type of metric has a live plot with separate lines for each algorithm and trial.
+            Useful for early stopping if convergence is not happening. Disabled by default.
 
     Returns:
         BenchmarkResult containing the results of the benchmark.
@@ -363,9 +361,8 @@ def _benchmark(
             If ``None``, no checkpoints will be saved and the benchmark will run from start to finish
             without resumption capability.
         runtime_metrics: optional list of :class:`~decent_bench.metrics.RuntimeMetric` to compute and plot during
-            algorithm execution. Each metric will open a plot window for each trial showing live updates. Useful for
-            early stopping if convergence is not happening. Disabled by default. When using multiprocessing
-            (``max_processes > 1``), each trial will open its own plot windows in separate processes.
+            algorithm execution. Each type of metric has a live plot with separate lines for each algorithm and trial.
+            Useful for early stopping if convergence is not happening. Disabled by default.
 
     Returns:
         BenchmarkResult containing the results of the benchmark.

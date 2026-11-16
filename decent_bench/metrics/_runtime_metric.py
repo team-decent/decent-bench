@@ -17,8 +17,8 @@ class RuntimeMetric(ABC):
     Abstract base class for runtime metrics.
 
     Runtime metrics are computed during algorithm execution to provide live feedback
-    for early stopping or monitoring. Unlike post-hoc metrics, they don't store historical
-    data and are designed to be lightweight.
+    for early stopping or monitoring. They are designed to be lightweight; their plotter only
+    retains the values needed to draw live curves.
 
     To create a new runtime metric, subclass this class and implement :meth:`description`,
     :meth:`x_log`, :meth:`y_log`, and :meth:`compute`.
@@ -26,7 +26,8 @@ class RuntimeMetric(ABC):
     Args:
         update_interval: Number of iterations between metric updates, do not update more frequently than necessary as
             this can slow down the algorithm.
-        save_path: Path to save the plot when the metric is updated, if None, the plot will not be saved
+        save_path: Directory for saving the plot as ``<metric class name>.png`` during normal plotter shutdown.
+            If ``None``, the plot is not saved.
 
     Note:
         The :meth:`compute` method should be efficient as it's called during algorithm execution.
@@ -42,7 +43,8 @@ class RuntimeMetric(ABC):
         Args:
             update_interval: Number of iterations between metric updates, do not update more frequently than necessary
                 as this can slow down the algorithm.
-            save_path: Path to save the plot when the metric is updated, if None, the plot will not be saved
+            save_path: Directory for saving the plot as ``<metric class name>.png`` during normal plotter shutdown.
+                If ``None``, the plot is not saved.
 
         """
         self._update_interval = update_interval

@@ -38,12 +38,11 @@ def compute_metrics(
         benchmark_result: result of a benchmark execution. If not provided, the result will be loaded from the storage
             directory defined by ``configure``.
         table_metrics: metrics to be displayed in a table of results. Table metrics are computed only at the
-            *recentmost* iteration reached during benchmarking. If ``None``, all table
-            metrics available for the benchmark problem will be used. For example, federated-only metrics are removed
-            when a non-federated network is passed.
+            *recentmost* iteration reached during benchmarking. If ``None``, a predefined list of table metrics is
+            used, excluding metrics unavailable for the benchmark problem.
         plot_metrics: metrics to be plotted over algorithm iterations. Plot metrics are computed at *all* the
-            iterations reached during benchmarking. If ``None``, all plot metrics available for the
-            benchmark problem will be used.
+            iterations reached during benchmarking. If ``None``, a predefined list of plot metrics is used, excluding
+            metrics unavailable for the benchmark problem.
         statistics_across_agents: statistics to compute across agents for metrics that return one value per agent
             (like ``ConsensusError`` or ``Accuracy``). Available statistics are "mean" (aliases "average", "avg"),
             "std", "max" (alias "maximum"), "min" (alias "minimum"), and "median" (alias "mdn"). If ``None``, "mean"

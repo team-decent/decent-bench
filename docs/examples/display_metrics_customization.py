@@ -36,8 +36,8 @@ if __name__ == "__main__":
     ## Computing results -------------------------------------------------
     metrics_results = benchmark.compute_metrics(
         benchmark_result=results,
-        table_metrics=None,  # use all available metrics
-        plot_metrics=None,  # use all available metrics
+        table_metrics=None,  # use available default table metrics
+        plot_metrics=None,  # use available default plot metrics
         statistics_across_agents=["mean", "std"],  # compute mean and std values of metrics across agents
         )
 
