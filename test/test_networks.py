@@ -10,16 +10,22 @@ from decent_bench.networks import P2PNetwork, FedNetwork
 from decent_bench.costs import L2RegularizerCost
 from decent_array import Array, interoperability as iop
 from decent_array.types import Devices, Frameworks
-from decent_bench.schemes import (
+from decent_bench.schemes.activation import (
     AgentActivationScheme,
     AlwaysActive,
-    CompressionScheme,
-    DropScheme,
-    NoiseScheme,
-    NoCompression,
-    NoDrops,
-    NoNoise,
     UniformActivationRate,
+)
+from decent_bench.schemes.compression import (
+    CompressionScheme,
+    NoCompression,
+)
+from decent_bench.schemes.drop import (
+    DropScheme,
+    NoDrops,
+)
+from decent_bench.schemes.noise import (
+    NoiseScheme,
+    NoNoise,
 )
 
 class NeverActive(AgentActivationScheme):

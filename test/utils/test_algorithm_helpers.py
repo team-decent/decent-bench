@@ -15,7 +15,7 @@ from decent_bench.algorithms.utils import (
 )
 from decent_bench.costs import L2RegularizerCost, LinearRegressionCost, PyTorchCost, QuadraticCost
 from decent_bench.networks import FedNetwork, P2PNetwork
-from decent_bench.agents._utils import infer_client_data_size
+from decent_bench.agents._utils import _infer_client_data_size
 from decent_array import Array
 from decent_bench.costs.utils.pytorch_utils import SimpleLinearModel
 
@@ -146,7 +146,7 @@ def test_infer_client_data_size_reads_empirical_risk_n_samples() -> None:
     ]
     client = Agent(LinearRegressionCost(dataset))
 
-    data_size = infer_client_data_size(client)
+    data_size = _infer_client_data_size(client)
 
     assert data_size == 3.0
 
@@ -155,14 +155,14 @@ def test_infer_client_data_size_does_not_infer_from_quadratic_dimension() -> Non
     client = Agent(QuadraticCost(A=np.eye(7), b=np.ones(7)))
 
     with pytest.raises(ValueError, match="Cannot infer client data size"):
-        infer_client_data_size(client)
+        _infer_client_data_size(client)
 
 
 def test_infer_client_data_size_raises_when_no_size_signal() -> None:
     client = Agent(L2RegularizerCost((2,)))
 
     with pytest.raises(ValueError, match="Cannot infer client data size"):
-        infer_client_data_size(client)
+        _infer_client_data_size(client)
 
 
 def test_pytorch_initialization_rejects_non_pytorch_cost() -> None:

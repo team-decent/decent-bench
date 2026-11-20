@@ -3,7 +3,8 @@ from decent_array.types import Devices, Frameworks
 from decent_bench import benchmark
 from decent_bench.agents import Agent
 from decent_bench.algorithms.federated import FedAvg, Scaffold
-from decent_bench.benchmark import configure, create_regression_problem
+from decent_bench.benchmark import configure
+from decent_bench.utils.problem_generation import create_regression_problem
 from decent_bench.metrics import ComputationalCost
 from decent_bench.networks import FedNetwork
 
@@ -35,8 +36,8 @@ if __name__ == "__main__":
     ## Computing results -------------------------------------------------
     metrics_results = benchmark.compute_metrics(
         benchmark_result=results,
-        table_metrics=None,  # use all available metrics
-        plot_metrics=None,  # use all available metrics
+        table_metrics=None,  # use available default table metrics
+        plot_metrics=None,  # use available default plot metrics
         statistics_across_agents=["mean", "std"],  # compute mean and std values of metrics across agents
         )
 

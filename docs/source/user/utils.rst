@@ -2,6 +2,18 @@ Utils
 =====
 
 
+Hyperparameter tuning
+---------------------
+The utility :func:`~decent_bench.utils.tuning.grid_search` can be used to tune the hyperparameters of an algorithm before
+benchmarking it against other algorithms.
+
+
+.. literalinclude:: ../../../docs/examples/grid_search_fed_example.py
+    :language: python
+    :linenos:
+
+
+
 Drawing networks
 ----------------
 Networks, both :class:`~decent_bench.networks.FedNetwork` and :class:`~decent_bench.networks.P2PNetwork`, can be drawn
@@ -14,8 +26,8 @@ using `NetworkX <https://networkx.org/en/>`_ drawing tools. To do so, decent-ben
     :linenos:
 
 
-Generating a network from its adjacency matrix
-----------------------------------------------
+Generating a P2P network from its adjacency matrix
+--------------------------------------------------
 `NetworkX <https://networkx.org/en/>`_ graphs, which define the topology of :class:`~decent_bench.networks.P2PNetwork`
 instances, can also be created by their adjacency matrices, as shown in the following example.
 

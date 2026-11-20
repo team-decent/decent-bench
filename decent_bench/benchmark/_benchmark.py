@@ -1,4 +1,3 @@
-import operator
 import random
 import warnings
 from collections import defaultdict
@@ -65,9 +64,6 @@ def resume_benchmark(  # noqa: PLR0912, PLR0915
     Resume a benchmark from an existing checkpoint directory.
 
     Args:
-        checkpoint_manager: CheckpointManager instance to load checkpoints from. Must contain valid checkpoints and
-            metadata from a previous benchmark run. Progress will be loaded from the latest checkpoints and the
-            benchmark will resume from there.
         increase_iterations: number of iterations to add to each algorithm's existing iteration count. This allows
             you to extend the benchmark run and collect more data points for the metrics. The additional iterations will
             be added on top of the existing iterations defined in the checkpoint metadata for each algorithm. If set to
@@ -78,7 +74,7 @@ def resume_benchmark(  # noqa: PLR0912, PLR0915
         create_backup: whether to create a backup of the existing checkpoint directory before resuming. It is
             recommended to set this to True to avoid accidental data loss, as resuming will modify the checkpoint
             directory by adding new checkpoints and metadata. If True, a backup will be created with the name
-            ``{checkpoint_manager.checkpoint_dir}_backup_{timestamp}.zip`` before resuming.
+            ``{checkpoint_dir}_backup_{timestamp}.zip`` before resuming.
         max_processes: maximum number of processes to use when running trials, multiprocessing improves performance
             but can be inhibiting when debugging or using a profiler, set to 1 to disable multiprocessing or ``None`` to
             use :class:`~concurrent.futures.ProcessPoolExecutor`'s default. If your algorithm is very lightweight you
@@ -89,10 +85,8 @@ def resume_benchmark(  # noqa: PLR0912, PLR0915
         show_speed: whether to show speed (iterations/second) in the progress bar.
         show_trial: whether to show which trials are currently running in the progress bar.
         runtime_metrics: optional list of :class:`~decent_bench.metrics.RuntimeMetric` to compute and plot during
-            algorithm execution. Each metric will open a plot window for each trial showing live updates. Useful for
-            early stopping if convergence is not happening. Disabled by default. When using multiprocessing
-            (``max_processes > 1``), each trial will open its own plot windows in separate processes.
-        log_level: minimum level to log, e.g. :data:`logging.INFO`
+            algorithm execution. Each type of metric has a live plot with separate lines for each algorithm and trial.
+            Useful for early stopping if convergence is not happening. Disabled by default.
 
     Returns:
         BenchmarkResult containing the results of the benchmark.
@@ -152,7 +146,9 @@ def resume_benchmark(  # noqa: PLR0912, PLR0915
 
             LOGGER.debug(f"Loaded checkpoint: algorithms={algorithms}")
         except (FileNotFoundError, KeyError) as e:
-            raise ValueError(f"Invalid checkpoint directory: missing or corrupted metadata - {e}") from e
+            raise ValueError(
+                f"Invalid checkpoint directory: missing or invalid checkpoint data or metadata - {e}"
+            ) from e
         except JSONDecodeError as e:
             raise ValueError(f"Invalid checkpoint directory: metadata is not valid JSON - {e}") from e
 
@@ -165,36 +161,15 @@ def resume_benchmark(  # noqa: PLR0912, PLR0915
         f"and algorithms: {[alg.name for alg in algorithms]}\n"
     )
 
-    total_increase_trials = increase_trials + metadata.get("benchmark_metadata", {}).get("increased_trials", 0)
-    n_trials = metadata["n_trials"] + total_increase_trials
-    if increase_trials != 0:
-        metadata = checkpoint_manager.append_metadata({"increased_trials": total_increase_trials})
-        LOGGER.info(
-            f"Increasing number of trials for each algorithm by {increase_trials}, "
-            f"total increase is {total_increase_trials}"
-        )
-
-    iterations = metadata["iterations"]
+    n_trials = metadata["n_trials"] + increase_trials
+    iterations = metadata["iterations"] + increase_iterations
     if iterations <= 0:
         raise ValueError("Stored `iterations` must be positive")
-    total_increase_iterations = increase_iterations + metadata.get("benchmark_metadata", {}).get(
-        "increased_iterations", 0
-    )
-    if increase_iterations != 0:
-        iterations += increase_iterations
-        for alg_idx, _alg in enumerate(algorithms):
-            # Unmark all trials as incomplete to resume them with increased iterations
-            for trial in range(n_trials):
-                checkpoint_manager.unmark_trial_complete(alg_idx, trial)
-        # If we resume again, we have to increase the iterations on top of the already increased iterations,
-        # so we need to keep track of the total increase in the metadata
-        metadata = checkpoint_manager.append_metadata(
-            {"iterations": iterations, "increased_iterations": total_increase_iterations}
-        )
-        LOGGER.info(
-            f"Increased iterations for all algorithms by {increase_iterations}, "
-            f"total increase is {total_increase_iterations}"
-        )
+    checkpoint_manager.update_run_targets(iterations, n_trials)
+    if increase_trials:
+        LOGGER.info(f"Increased the number of trials by {increase_trials} to {n_trials}")
+    if increase_iterations:
+        LOGGER.info(f"Increased the number of iterations by {increase_iterations} to {iterations}")
 
     if "rng_seed" in metadata:
         base_seed = metadata["rng_seed"]
@@ -236,6 +211,8 @@ def benchmark(
     """
     Benchmark decentralized algorithms.
 
+    If ``storage_dir`` was set in :func:`~decent_bench.benchmark.configure`, checkpoints and results are saved there.
+
     Args:
         algorithms: algorithms to benchmark
         benchmark_problem: problem to benchmark on, defines the network topology, cost functions, and communication
@@ -252,12 +229,9 @@ def benchmark(
             If `None`, the progress bar uses 1 unit per trial.
         show_speed: whether to show speed (iterations/second) in the progress bar.
         show_trial: whether to show which trials are currently running in the progress bar.
-        checkpoint_manager: if provided, will be used to save checkpoints during execution.
         runtime_metrics: optional list of :class:`~decent_bench.metrics.RuntimeMetric` to compute and plot during
-            algorithm execution. Each metric will open a plot window for each trial showing live updates. Useful for
-            early stopping if convergence is not happening. Disabled by default. When using multiprocessing
-            (``max_processes > 1``), each trial will open its own plot windows in separate processes.
-        log_level: minimum level to log, e.g. :data:`logging.INFO`.
+            algorithm execution. Each type of metric has a live plot with separate lines for each algorithm and trial.
+            Useful for early stopping if convergence is not happening. Disabled by default.
 
     Returns:
         BenchmarkResult containing the results of the benchmark.
@@ -277,7 +251,7 @@ def benchmark(
         overhead of updating the progress bar too often.
 
     Raises:
-        ValueError: If the checkpoint directory is not empty when initializing the CheckpointManager.
+        ValueError: If the configured storage directory is not empty.
         ValueError: If any two algorithms share the same name.
         ValueError: If ``iterations`` is not positive.
 
@@ -301,7 +275,7 @@ def benchmark(
         checkpoint_manager.initialize(algorithms, benchmark_problem, n_trials, iterations)
     else:
         LOGGER.info(
-            "No checkpoint manager provided, running benchmark without checkpointing. "
+            "No storage directory configured, running benchmark without checkpointing. "
             "Progress cannot be resumed if interrupted."
         )
 
@@ -367,9 +341,8 @@ def _benchmark(
             If ``None``, no checkpoints will be saved and the benchmark will run from start to finish
             without resumption capability.
         runtime_metrics: optional list of :class:`~decent_bench.metrics.RuntimeMetric` to compute and plot during
-            algorithm execution. Each metric will open a plot window for each trial showing live updates. Useful for
-            early stopping if convergence is not happening. Disabled by default. When using multiprocessing
-            (``max_processes > 1``), each trial will open its own plot windows in separate processes.
+            algorithm execution. Each type of metric has a live plot with separate lines for each algorithm and trial.
+            Useful for early stopping if convergence is not happening. Disabled by default.
 
     Returns:
         BenchmarkResult containing the results of the benchmark.
@@ -477,7 +450,7 @@ def _run_trials(  # noqa: PLR0917
     checkpoint_manager: "CheckpointManager | None" = None,
     runtime_metrics: "list[RuntimeMetric] | None" = None,
 ) -> dict[Algorithm[Network], list[Network]]:
-    results: dict[Algorithm[Network], list[Network]] = defaultdict(list)
+    results: dict[Algorithm[Network], dict[int, Network]] = defaultdict(dict)
     progress_bar_handle = progress_bar_ctrl.get_handle()
 
     # Create centralized plotter process and queue for runtime metrics
@@ -497,7 +470,7 @@ def _run_trials(  # noqa: PLR0917
     to_run: dict[Algorithm[Network], list[int]] = defaultdict(list)
     if checkpoint_manager is not None:
         for alg_idx, alg in enumerate(algorithms):
-            completed_trials = checkpoint_manager.get_completed_trials(alg_idx, n_trials)
+            completed_trials = checkpoint_manager.get_completed_trials(alg_idx, n_trials, iterations)
             incompleted_trials = [t for t in range(n_trials) if t not in completed_trials]
             if len(incompleted_trials) > 0:
                 to_run[alg] = incompleted_trials
@@ -505,7 +478,7 @@ def _run_trials(  # noqa: PLR0917
             # load completed trials
             for trial in completed_trials:
                 _, net = checkpoint_manager.load_trial_result(alg_idx, trial)
-                results[alg].append(net)
+                results[alg][trial] = net
                 progress_bar_ctrl.mark_one_trial_as_complete(alg, trial)
                 LOGGER.debug(f"Loaded completed trial {trial} for algorithm {alg.name} from checkpoint")
     else:
@@ -519,7 +492,7 @@ def _run_trials(  # noqa: PLR0917
     if len(to_run) == 0:
         LOGGER.info("No trials are left to run!")
         progress_bar_ctrl.stop()
-        return results
+        return {alg: [trials[trial] for trial in sorted(trials)] for alg, trials in results.items()}
 
     trial_args = {
         alg: [
@@ -562,14 +535,13 @@ def _run_trials(  # noqa: PLR0917
 
     progress_bar_ctrl.stop()
     for alg in partial_result:
-        sorted_trials = sorted(partial_result[alg], key=operator.itemgetter(0))  # sort by trial number
-        results[alg].extend([trial_result[1] for trial_result in sorted_trials])
+        results[alg].update(partial_result[alg])
 
     # Clean up runtime plotter process
     if runtime_plotter is not None:
         runtime_plotter.shutdown()
 
-    return results
+    return {alg: [trials[trial] for trial in sorted(trials)] for alg, trials in results.items()}
 
 
 def _derive_trial_seed(base_seed: int | None, algorithm_index: int, trial: int) -> int:

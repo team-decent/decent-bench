@@ -1,13 +1,19 @@
 version: 2
 updates:
   # version update of dependencies (as specified in pyproject.toml)
+  # divided between dependencies and development dependencies
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      dependencies:
+        dependency-type: "production"
+      dev-dependencies:
+        dependency-type: "development"
 
   # version update of github action tools (as specified in workflows/ci.yaml)
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"

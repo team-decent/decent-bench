@@ -11,14 +11,14 @@ from decent_bench.costs._base._cost import Cost
 from decent_bench.utils._tags import Tag, tags
 
 __all__ = [
-    "BaseRegularizerCost",
     "FractionalQuadraticRegularizerCost",
     "L1RegularizerCost",
     "L2RegularizerCost",
+    "RegularizerCost",
 ]
 
 
-class BaseRegularizerCost(Cost):
+class RegularizerCost(Cost):
     """
     Base class for regularizers with regularizer-preserving arithmetic.
 
@@ -42,7 +42,7 @@ class BaseRegularizerCost(Cost):
         return self._shape
 
     @overload
-    def __add__(self, other: BaseRegularizerCost) -> BaseRegularizerCost: ...
+    def __add__(self, other: RegularizerCost) -> RegularizerCost: ...
 
     @overload
     def __add__(self, other: Cost) -> Cost: ...
@@ -50,7 +50,7 @@ class BaseRegularizerCost(Cost):
     def __add__(self, other: Cost) -> Cost:
         """Add another cost, preserving the regularizer abstraction when possible."""
         self._validate_cost_operation(other)
-        if isinstance(other, BaseRegularizerCost):
+        if isinstance(other, RegularizerCost):
             return _CompositeRegularizerCost([self, other])
         return super().__add__(other)
 
@@ -88,24 +88,24 @@ class BaseRegularizerCost(Cost):
     def __sub__(self, other: Cost) -> Cost:
         """Subtract another cost, preserving the regularizer abstraction when possible."""
         self._validate_cost_operation(other)
-        if isinstance(other, BaseRegularizerCost):
+        if isinstance(other, RegularizerCost):
             return _CompositeRegularizerCost([self, other], weights=[1.0, -1.0])
         return super().__sub__(other)
 
 
-class _CompositeRegularizerCost(BaseRegularizerCost):
+class _CompositeRegularizerCost(RegularizerCost):
     """
     Weighted combination of regularizers that preserves the regularizer abstraction.
 
     This wrapper represents sums and scalar rescalings of regularizers while keeping the
-    :class:`BaseRegularizerCost` interface. It combines function, gradient, and Hessian termwise. A generic proximal
+    :class:`RegularizerCost` interface. It combines function, gradient, and Hessian termwise. A generic proximal
     is intentionally not implemented except for the single positively scaled regularizer case.
 
     Instances keep references to the wrapped cost objects. No implicit copying is performed; use
     :func:`copy.deepcopy` explicitly if independent objects are required.
     """
 
-    def __init__(self, regularizers: list[BaseRegularizerCost], weights: list[float] | None = None):
+    def __init__(self, regularizers: list[RegularizerCost], weights: list[float] | None = None):
         if len(regularizers) == 0:
             raise ValueError("Composite regularizer must contain at least one regularizer.")
         first = regularizers[0]
@@ -116,9 +116,9 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
         if len(regularizers) != len(weights):
             raise ValueError("Composite regularizer weights must match the number of regularizers.")
 
-        self._terms: list[tuple[BaseRegularizerCost, float]] = []
+        self._terms: list[tuple[RegularizerCost, float]] = []
         for regularizer, weight in zip(regularizers, weights, strict=True):
-            if not isinstance(regularizer, BaseRegularizerCost):
+            if not isinstance(regularizer, RegularizerCost):
                 raise TypeError(f"Composite regularizer can only contain regularizers, got {type(regularizer)}.")
             self._validate_cost_operation(regularizer)
             if isinstance(regularizer, _CompositeRegularizerCost):
@@ -180,7 +180,7 @@ class _CompositeRegularizerCost(BaseRegularizerCost):
 
 
 @tags(Tag.COST, Tag.REGULARIZER)
-class L1RegularizerCost(BaseRegularizerCost):
+class L1RegularizerCost(RegularizerCost):
     r"""
     L1 regularizer cost.
 
@@ -214,7 +214,7 @@ class L1RegularizerCost(BaseRegularizerCost):
 
 
 @tags(Tag.COST, Tag.REGULARIZER)
-class L2RegularizerCost(BaseRegularizerCost):
+class L2RegularizerCost(RegularizerCost):
     r"""
     L2 regularizer cost.
 
@@ -247,7 +247,7 @@ class L2RegularizerCost(BaseRegularizerCost):
 
 
 @tags(Tag.COST, Tag.REGULARIZER)
-class FractionalQuadraticRegularizerCost(BaseRegularizerCost):
+class FractionalQuadraticRegularizerCost(RegularizerCost):
     r"""
     Nonconvex fractional quadratic regularizer.
 

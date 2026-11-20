@@ -1,11 +1,10 @@
 """
 Cost composition rules.
 
-Developer note:
     Generic cost arithmetic falls back to :class:`SumCost` and :class:`ScaledCost`.
 
     Regularizers preserve their abstraction under ``+``, ``-``, unary ``-``, ``*``, and ``/`` by returning
-    :class:`BaseRegularizerCost`-aware composites. Empirical-risk costs preserve their abstraction under scalar
+    :class:`RegularizerCost`-aware composites. Empirical-risk costs preserve their abstraction under scalar
     scaling through a private empirical scaling wrapper, and under ``empirical + regularizer`` through
     :class:`EmpiricalRegularizedCost`. Unsupported mixed compositions still fall back to the generic wrappers.
 
@@ -32,12 +31,12 @@ Developer note:
 from . import _base as base
 from . import _empirical_risk as empirical_risk
 from ._base import (
-    BaseRegularizerCost,
     Cost,
     FractionalQuadraticRegularizerCost,
     L1RegularizerCost,
     L2RegularizerCost,
     QuadraticCost,
+    RegularizerCost,
     ScaledCost,
     SumCost,
     ZeroCost,
@@ -51,7 +50,6 @@ from ._empirical_risk import (
 )
 
 __all__ = [
-    "BaseRegularizerCost",
     "Cost",
     "EmpiricalRegularizedCost",
     "EmpiricalRiskCost",
@@ -62,6 +60,7 @@ __all__ = [
     "LogisticRegressionCost",
     "PyTorchCost",
     "QuadraticCost",
+    "RegularizerCost",
     "ScaledCost",
     "SumCost",
     "ZeroCost",

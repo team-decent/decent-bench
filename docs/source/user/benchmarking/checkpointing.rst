@@ -32,9 +32,11 @@ The folder structure looks like this:
     │       └── complete.json              # present when the trial completes
     ├── metric_computation.pkl.zst
     └── results/
-        ├── plots_fig1.png
+        ├── plot_fig1.png
         ├── table.tex
         └── table.txt
+
+For a single figure, the plot is named ``plot.png`` instead (or uses the selected plot format).
 
 
 Checkpointing options
@@ -85,6 +87,8 @@ To extend a completed run with additional iterations or trials, pass the increme
 ``increase_iterations`` adds that many iterations to each algorithm. ``increase_trials`` adds trials for each algorithm.
 The existing results are retained, and the new work is appended to the experiment. A backup is recommended before
 resuming a completed run.
+After extending a run, call ``compute_metrics`` again before applying ``display_metrics``.
+If an extension is interrupted, call ``resume_benchmark`` without increments to finish the already requested work.
 
 
 Computing and displaying metrics later

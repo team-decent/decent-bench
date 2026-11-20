@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from decent_bench.algorithms.utils import initial_states
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import ClientSelectionScheme, UniformSelection
+from decent_bench.schemes.client_selection import ClientSelectionScheme, UniformSelection
 from decent_bench.utils._tags import Tag, tags
 from decent_bench.utils.types import InitialStates
 

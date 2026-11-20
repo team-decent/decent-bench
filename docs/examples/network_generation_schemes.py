@@ -2,9 +2,13 @@ import networkx as nx
 from decent_array.types import Devices, Frameworks
 
 from decent_bench.agents import Agent
-from decent_bench.benchmark import configure, create_regression_problem
+from decent_bench.benchmark import configure
+from decent_bench.utils.problem_generation import create_regression_problem
 from decent_bench.networks import P2PNetwork
-from decent_bench.schemes import GaussianNoise, MarkovChainActivation, Quantization, UniformDropRate
+from decent_bench.schemes.activation import MarkovChainActivation
+from decent_bench.schemes.compression import Quantization
+from decent_bench.schemes.drop import UniformDropRate
+from decent_bench.schemes.noise import GaussianNoise
 
 if __name__ == "__main__":
     configure(Frameworks.NUMPY, Devices.CPU)

@@ -18,7 +18,7 @@ from decent_array.types import Devices, Frameworks
 from decent_bench.agents import Agent, AgentHistory
 from decent_bench.algorithms.federated import FedAvg
 from decent_bench.benchmark import BenchmarkProblem, BenchmarkResult, compute_metrics, configure, display_metrics
-from decent_bench.benchmark._configure import get_config
+from decent_bench.benchmark._configure import get_checkpoint_manager, get_config
 from decent_bench.benchmark._metric_result import MetricResult
 from decent_bench.costs import LinearRegressionCost, LogisticRegressionCost, QuadraticCost
 from decent_bench.metrics._metric import Metric
@@ -273,6 +273,47 @@ def _build_display_metric_result(
 # -----------------------------------------------------------------------------
 # display_metrics Filtering Tests
 # -----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("operation", "result_name"),
+    [(compute_metrics, "benchmark_result"), (display_metrics, "metrics_result")],
+)
+def test_missing_result_without_storage_explains_configuration(operation, result_name: str) -> None:  # noqa: D103
+    with pytest.raises(ValueError, match=rf"{result_name}.*configure\(\).*storage_dir"):
+        operation()
+
+
+@pytest.mark.no_auto_configure
+def test_missing_metrics_file_identifies_configured_storage(tmp_path: Path) -> None:  # noqa: D103
+    configure(Frameworks.NUMPY, Devices.CPU, storage_dir=tmp_path)
+
+    with pytest.raises(FileNotFoundError, match="Required result file not found in the configured storage directory"):
+        display_metrics()
+
+
+@pytest.mark.no_auto_configure
+def test_display_saves_provided_metrics_to_configured_storage(tmp_path: Path) -> None:  # noqa: D103
+    configure(Frameworks.NUMPY, Devices.CPU, storage_dir=tmp_path)
+    metrics_result = _build_display_metric_result([_AlgorithmStub("A")], [_MetricStub("metric")], [])
+
+    display_metrics(metrics_result)
+
+    assert (tmp_path / "results" / "table.txt").is_file()
+    assert (tmp_path / "results" / "table.tex").is_file()
+
+
+@pytest.mark.no_auto_configure
+def test_empty_loaded_benchmark_identifies_configured_storage(monkeypatch, tmp_path: Path) -> None:  # noqa: D103
+    configure(Frameworks.NUMPY, Devices.CPU, storage_dir=tmp_path)
+    manager = get_checkpoint_manager()
+    assert manager is not None
+    benchmark_result = _build_minimal_benchmark_result()
+    benchmark_result.states.clear()
+    monkeypatch.setattr(manager, "load_benchmark_result", lambda: benchmark_result)
+
+    with pytest.raises(ValueError, match="No completed benchmark result found in the configured storage directory"):
+        compute_metrics()
 
 
 @pytest.mark.parametrize(

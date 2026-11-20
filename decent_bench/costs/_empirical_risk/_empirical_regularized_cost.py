@@ -8,7 +8,7 @@ from decent_array import Array
 from decent_array import interoperability as iop
 
 from decent_bench.costs._base._cost import Cost
-from decent_bench.costs._base._regularizer_costs import BaseRegularizerCost
+from decent_bench.costs._base._regularizer_costs import RegularizerCost
 from decent_bench.utils.types import (
     Dataset,
     EmpiricalRiskIndices,
@@ -32,7 +32,7 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
     :func:`copy.deepcopy` explicitly if independent objects are required.
     """
 
-    def __init__(self, empirical_cost: EmpiricalRiskCost, regularizer: BaseRegularizerCost):
+    def __init__(self, empirical_cost: EmpiricalRiskCost, regularizer: RegularizerCost):
         empirical_cost._validate_cost_operation(regularizer)  # noqa: SLF001
 
         self.empirical_cost = empirical_cost
@@ -129,6 +129,6 @@ class EmpiricalRegularizedCost(EmpiricalRiskCost):
         return self.empirical_cost._get_batch_data(indices)  # noqa: SLF001
 
     def __add__(self, other: Cost) -> Cost:
-        if isinstance(other, BaseRegularizerCost):
+        if isinstance(other, RegularizerCost):
             return EmpiricalRegularizedCost(self.empirical_cost, self.regularizer + other)
         return super().__add__(other)

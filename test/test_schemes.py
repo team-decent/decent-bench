@@ -3,30 +3,38 @@ import pytest
 
 from decent_bench.agents import Agent
 from decent_bench.costs import L2RegularizerCost, LinearRegressionCost
-from decent_bench.schemes import (
+from decent_bench.schemes.activation import (
     AgentActivationScheme,
     AlwaysActive,
-    ClientSelectionScheme,
-    CompressionScheme,
     CyclicActivation,
-    DataSizeSelection,
-    DropScheme,
-    GaussianNoise,
-    GilbertElliott,
-    HighLossSelection,
     MarkovChainActivation,
-    NoCompression,
-    NoDrops,
-    NoiseScheme,
-    NoNoise,
-    FairSelection,
     PoissonActivation,
-    StochasticQuantization,
+    UniformActivationRate,
+)
+from decent_bench.schemes.compression import (
+    CompressionScheme,
+    NoCompression,
     Quantization,
     RandK,
+    StochasticQuantization,
     TopK,
-    UniformActivationRate,
+)
+from decent_bench.schemes.drop import (
+    DropScheme,
+    GilbertElliott,
+    NoDrops,
     UniformDropRate,
+)
+from decent_bench.schemes.noise import (
+    GaussianNoise,
+    NoiseScheme,
+    NoNoise,
+)
+from decent_bench.schemes.client_selection import (
+    ClientSelectionScheme,
+    DataSizeSelection,
+    FairSelection,
+    HighLossSelection,
     UniformSelection,
 )
 from decent_array import Array, interoperability as iop

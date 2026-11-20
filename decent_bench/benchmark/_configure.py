@@ -76,6 +76,7 @@ def configure(
         RuntimeError: if configure has already been called.
         ValueError: if ``storage_dir`` contains an experiment but no metadata, or if framework and device are also
             passed. If ``storage_dir`` is empty but framework and device are not passed.
+        ValueError: if ``n_checkpoints`` is not a positive integer.
 
     """
     if _STATE.config is not None:
@@ -107,7 +108,7 @@ def configure(
     # arg validation for new experiment
     if framework is None or device is None:
         raise ValueError("framework and device must be provided when configuring a new experiment")
-    if n_checkpoints <= 0:
+    if isinstance(n_checkpoints, bool) or not isinstance(n_checkpoints, int) or n_checkpoints <= 0:
         raise ValueError(f"n_checkpoints must be a positive integer, got {n_checkpoints}")
 
     # apply configuration
@@ -136,6 +137,6 @@ def get_config() -> Config:
 
 
 def get_checkpoint_manager() -> CheckpointManager | None:
-    """Return the configured checkpoint manager."""
+    """Return the internal storage handler for the current configuration."""
     get_config()
     return _STATE.checkpoint_manager

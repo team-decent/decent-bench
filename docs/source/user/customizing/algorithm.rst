@@ -16,7 +16,6 @@ benchmark problem. In turn these are subclasses of :class:`~decent_bench.algorit
 
 Algorithms are thus characterized by the following:
 
-* ``iterations``: the number of iterations of the algorithm that should be run during benchmarking.
 * ``name``: a representative name (usually the algorithm acronym); algorithms tested during a benchmark run must have unique names.
 * ``__post_init__``: hyperparameter validation can optionally be performed here; if an algorithm implements this method, it will be automatically called after init.
 * ``run``: this method calls ``initialize`` first, then ``step`` for the specified number of iterations. ``run`` must not be modified, only ``initialize`` and ``step``.
@@ -41,13 +40,13 @@ Details on federated algorithms
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Federated algorithms follow the same general pattern discussed above, but in addition expose the
 :func:`~decent_bench.algorithms.federated.FedAlgorithm.aggregate` method and require passing a
-:class:`~decent_bench.schemes.ClientSelectionScheme` as the argument ``selection_scheme``.
+:class:`~decent_bench.schemes.client_selection.ClientSelectionScheme` as the argument ``selection_scheme``.
 Indeed, federated algorithms usually apply *client selection* (a.k.a. *partial participation*), by which the server
 selects only a subsection of the currently active clients for a round of communication (clients send the local models
 to the server, which averages them).
 
-Different :class:`~decent_bench.schemes.ClientSelectionScheme` implementations are available to model different
-strategies, see :mod:`~decent_bench.schemes`.
+Different :class:`~decent_bench.schemes.client_selection.ClientSelectionScheme` implementations are available to model different
+strategies, see the :doc:`API documentation </../api/decent_bench.schemes>`.
 
 .. note:: Aggregation is another place where algorithms might differ from the original papers, or rather, the
     original implementations. Indeed, most papers present federated algorithms as using averaging during the aggregation
@@ -69,7 +68,7 @@ Implementing algorithms from scratch
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Implementing a new algorithm from scratch requires the following:
 
-* **Init**: the algorithm should have as init arguments (in this order): ``iterations``, any hyperparameters (like step-size), initial conditions (like ``x0`` for :math:`x_0`). decent-bench offers some utilities for common initialization choices: :func:`~decent_bench.algorithms.utils.normal_initialization`, :func:`~decent_bench.algorithms.utils.uniform_initialization`, :func:`~decent_bench.algorithms.utils.pytorch_initialization`. Zero initialization is the default when *e.g.* ``x0 = None``.
+* **Init**: the algorithm should accept its hyperparameters (like step-size) and initial conditions (like ``x0`` for :math:`x_0`). decent-bench offers some utilities for common initialization choices: :func:`~decent_bench.algorithms.utils.normal_initialization`, :func:`~decent_bench.algorithms.utils.uniform_initialization`, :func:`~decent_bench.algorithms.utils.pytorch_initialization`. Zero initialization is the default when *e.g.* ``x0 = None``.
 * ``__post_init__``: for custom hyperparameter validation.
 * **Initialize**: during which the states of each agent are initialized, including :attr:`~decent_bench.agents.Agent.x` and any auxiliary variables. :attr:`~decent_bench.agents.Agent.x` represents the local state, for example the parameters of the locally trained model.
 * **Step**: which defines all the steps of the algorithm to be performed during one iteration. This is usually the content of the main for-loop in papers' pseudocode. The step *must* update active agents's :attr:`~decent_bench.agents.Agent.x` states *exactly once*, since the benchmark pipeline assumes that this is the case. As discussed above, ``step`` should also rely (uniquely) on the methods exposed by network object, like :meth:`~decent_bench.networks.Network.active_agents`. This is to ensure that the benchmark setting is correctly represented.

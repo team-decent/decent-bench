@@ -1,6 +1,6 @@
 [project]
 name = "decent-bench"
-version = "0.3.0"
+version = "0.3.1"
 authors = [{name = "Elias Ram"}, {name = "Simon Granström"}, {name = "Adriana Rodriguez"}, {name = "Nicola Bastianello"}]
 maintainers = [{name = "Team Decent"}]
 description = "A benchmarking framework for decentralized optimization"
@@ -36,9 +36,9 @@ torch = [
 kaggle = ["kagglehub>=0.3,<2"]
 
 [dependency-groups]
-lint = ["ruff==0.16.5"]
+lint = ["ruff==0.17.2"]
 typecheck = [
-  "mypy==2.3.1",
+  "mypy==2.4.0",
   "scipy-stubs>=1.18,<2",
   "types-networkx>=3.4,<4",
   "types-tensorflow>=2.18,<3",

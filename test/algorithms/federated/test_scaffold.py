@@ -10,7 +10,8 @@ from decent_bench.agents import Agent
 from decent_bench.algorithms.federated import Scaffold
 from decent_bench.costs import Cost, ZeroCost
 from decent_bench.networks import FedNetwork
-from decent_bench.schemes import ClientSelectionScheme, DropScheme, NoDrops
+from decent_bench.schemes.drop import DropScheme, NoDrops
+from decent_bench.schemes.client_selection import ClientSelectionScheme
 from decent_bench.costs._decorators import autodecorate_cost_method
 
 

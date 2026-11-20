@@ -8,7 +8,7 @@ from decent_array import Array, interoperability as iop
 
 from decent_bench.agents import Agent
 from decent_bench.algorithms.federated import FedAdagrad, FedAdam, FedAvg, FedDyn, FedPD, FedProx, FedYogi, Scaffold
-from decent_bench.costs import BaseRegularizerCost, Cost, EmpiricalRiskCost, ZeroCost
+from decent_bench.costs import RegularizerCost, Cost, EmpiricalRiskCost, ZeroCost
 from decent_bench.utils.types import (
     Dataset,
     EmpiricalRiskIndices,
@@ -64,7 +64,7 @@ class TrackingCost(Cost):
         return x
 
 
-class TrackingRegularizerCost(BaseRegularizerCost):
+class TrackingRegularizerCost(RegularizerCost):
     def __init__(self, gradient_value: float = 0.0):
         super().__init__(shape=(1,))
         self.gradient_kwargs: list[dict[str, Any]] = []

@@ -14,11 +14,14 @@ from decent_bench.benchmark import (
     BenchmarkProblem,
     benchmark,
     configure,
-    create_classification_problem,
 )
+from decent_bench.utils.problem_generation import create_classification_problem
 from decent_bench.costs import LogisticRegressionCost, PyTorchCost
 from decent_bench.networks import FedNetwork, P2PNetwork
-from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
+from decent_bench.schemes.activation import UniformActivationRate
+from decent_bench.schemes.compression import Quantization
+from decent_bench.schemes.noise import GaussianNoise
+from decent_bench.schemes.drop import UniformDropRate
 
 try:
     import torch

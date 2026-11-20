@@ -41,10 +41,13 @@ from decent_bench.algorithms.p2p import (
     SimpleGT,
     WangElia,
 )
-from decent_bench.benchmark import create_regression_problem
+from decent_bench.utils.problem_generation import create_regression_problem
 from decent_bench.costs import LinearRegressionCost, PyTorchCost
 from decent_bench.networks import FedNetwork, P2PNetwork
-from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
+from decent_bench.schemes.activation import UniformActivationRate
+from decent_bench.schemes.compression import Quantization
+from decent_bench.schemes.noise import GaussianNoise
+from decent_bench.schemes.drop import UniformDropRate
 
 num_iterations = 25
 

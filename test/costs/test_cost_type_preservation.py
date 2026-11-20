@@ -7,7 +7,7 @@ from decent_array import Array
 from decent_array import interoperability as iop
 from decent_array.types import Frameworks
 from decent_bench.costs import (
-    BaseRegularizerCost,
+    RegularizerCost,
     Cost,
     EmpiricalRegularizedCost,
     EmpiricalRiskCost,
@@ -66,7 +66,7 @@ def test_regularizer_composition_preserves_regularizer_semantics() -> None:
 
     combined = l1 + l2
 
-    assert isinstance(combined, BaseRegularizerCost)
+    assert isinstance(combined, RegularizerCost)
     assert combined.function(x) == pytest.approx(l1.function(x) + l2.function(x))
     np.testing.assert_allclose(
         iop.to_numpy(combined.gradient(x)),

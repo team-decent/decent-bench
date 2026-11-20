@@ -663,7 +663,7 @@ class TestAgentHistory:
         h[5] = np.array([5.0])
         h[10] = np.array([10.0])
         # Should raise ValueError for iteration < -1
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Iteration must be non-negative or -1"):
             _ = h[-2]
 
     def test_setitem_with_negative_iteration(self):

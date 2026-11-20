@@ -13,15 +13,10 @@ from decent_array import interoperability as iop
 
 from decent_bench.agents import Agent
 from decent_bench.costs import ZeroCost
-from decent_bench.schemes import (
-    AlwaysActive,
-    CompressionScheme,
-    DropScheme,
-    NoCompression,
-    NoDrops,
-    NoiseScheme,
-    NoNoise,
-)
+from decent_bench.schemes.activation import AlwaysActive
+from decent_bench.schemes.compression import CompressionScheme, NoCompression
+from decent_bench.schemes.drop import DropScheme, NoDrops
+from decent_bench.schemes.noise import NoiseScheme, NoNoise
 
 
 class Network(ABC):  # noqa: B024
@@ -31,15 +26,15 @@ class Network(ABC):  # noqa: B024
     Args:
         graph: NetworkX graph defining the network topology, with :class:`~decent_bench.agents.Agent` nodes.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.NoiseScheme` instance when all agents use the same kind of noise scheme, a
-            dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
+            :class:`~decent_bench.schemes.noise.NoiseScheme` instance when all agents use the same kind of noise scheme,
+            a dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
             noise to any agent.
         message_compression: compression scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.CompressionScheme` instance when all agents use the same kind of compression
-            scheme, a dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to
-            apply no compression to any agent.
+            :class:`~decent_bench.schemes.compression.CompressionScheme` instance when all agents use the same kind of
+            compression scheme, a dictionary mapping each agent to its scheme when agents use different schemes, or
+            ``None`` to apply no compression to any agent.
         message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.DropScheme` instance when all agents use the same kind of drop scheme, a
+            :class:`~decent_bench.schemes.drop.DropScheme` instance when all agents use the same kind of drop scheme, a
             dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
             message drop to any agent.
 
@@ -219,7 +214,7 @@ class Network(ABC):  # noqa: B024
         Get all *active* agents.
 
         Whether an :class:`~decent_bench.agents.Agent` is active or not at a given time is defined by its
-        :class:`~decent_bench.schemes.AgentActivationScheme`.
+        :class:`~decent_bench.schemes.activation.AgentActivationScheme`.
         """
         if self._active_agents_cache is None:
             # Cache the active agents for each iterations in case the same iteration is queried multiple times
@@ -267,10 +262,10 @@ class Network(ABC):  # noqa: B024
         Send message to one or more agents.
 
         The message may be compressed, distorted by noise, and/or dropped depending on the network's
-        :class:`~decent_bench.schemes.CompressionScheme`,
-        :class:`~decent_bench.schemes.NoiseScheme`,
-        and :class:`~decent_bench.schemes.DropScheme`. The potentially compressed and noisy message (if not dropped)
-        is then instantaneously available to each receiver.
+        :class:`~decent_bench.schemes.compression.CompressionScheme`,
+        :class:`~decent_bench.schemes.noise.NoiseScheme`,
+        and :class:`~decent_bench.schemes.drop.DropScheme`. The potentially compressed and noisy message (if not
+        dropped) is then instantaneously available to each receiver.
 
         Args:
             sender: sender agent
@@ -354,13 +349,13 @@ class P2PNetwork(Network):
         agents: list of agents corresponding to the nodes in ``graph``. The agents in the list are assigned
             in order to each node of the graph. Agents must have unique ids.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.NoiseScheme` instance to apply the same scheme to all agents, a dictionary
-            mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
+            :class:`~decent_bench.schemes.noise.NoiseScheme` instance to apply the same scheme to all agents, a
+            dictionary mapping each agent to its scheme, or ``None`` to apply no noise to any agent.
         message_compression: compression scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.CompressionScheme` instance to apply the same scheme to all agents, a
-            dictionary mapping each agent to its scheme, or ``None`` to apply no compression to any agent.
+            :class:`~decent_bench.schemes.compression.CompressionScheme` instance to apply the same scheme to all
+            agents, a dictionary mapping each agent to its scheme, or ``None`` to apply no compression to any agent.
         message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.DropScheme` instance to apply the same scheme to all agents, a dictionary
+            :class:`~decent_bench.schemes.drop.DropScheme` instance to apply the same scheme to all agents, a dictionary
             mapping each agent to its scheme, or ``None`` to apply no message drop to any agent.
 
     Raises:
@@ -471,23 +466,23 @@ class FedNetwork(Network):
     Args:
         clients: list of client agents in the network.
         server: server agent in the network. If ``None``, a default server with zero cost and always active scheme will
-            be created. Custom servers must use :class:`~decent_bench.schemes.AlwaysActive`.
+            be created. Custom servers must use :class:`~decent_bench.schemes.activation.AlwaysActive`.
         message_noise: noise scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.NoiseScheme` instance when all agents use the same kind of noise scheme, a
-            dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
+            :class:`~decent_bench.schemes.noise.NoiseScheme` instance when all agents use the same kind of noise scheme,
+            a dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
             noise to any agent.
         message_compression: compression scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.CompressionScheme` instance when all agents use the same kind of compression
-            scheme, a dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to
-            apply no compression to any agent.
+            :class:`~decent_bench.schemes.compression.CompressionScheme` instance when all agents use the same kind of
+            compression scheme, a dictionary mapping each agent to its scheme when agents use different schemes, or
+            ``None`` to apply no compression to any agent.
         message_drop: drop scheme(s) to apply to messages sent by agents in the network. Can be a single
-            :class:`~decent_bench.schemes.DropScheme` instance when all agents use the same kind of drop scheme, a
+            :class:`~decent_bench.schemes.drop.DropScheme` instance when all agents use the same kind of drop scheme, a
             dictionary mapping each agent to its scheme when agents use different schemes, or ``None`` to apply no
             message drop to any agent.
 
     Raises:
         ValueError: if ``clients`` is empty or if a custom ``server`` does not use
-            :class:`~decent_bench.schemes.AlwaysActive`.
+            :class:`~decent_bench.schemes.activation.AlwaysActive`.
 
     """
 
@@ -566,7 +561,7 @@ class FedNetwork(Network):
         Get all *active* client agents (excludes the server/coordinator).
 
         Whether an :class:`~decent_bench.agents.Agent` is active or not at a given time is defined by its
-        :class:`~decent_bench.schemes.AgentActivationScheme`.
+        :class:`~decent_bench.schemes.activation.AgentActivationScheme`.
         """
         # Delegates to Network.active_agents(), which iterates over self.agents() (clients only for FedNetwork).
         return super().active_agents()

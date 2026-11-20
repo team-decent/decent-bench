@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from decent_bench.agents import Agent
 
 
-def infer_client_data_size(client: "Agent") -> float:
+def _infer_client_data_size(client: "Agent") -> float:
     """
     Infer a client's local data size from an empirical-risk cost.
 

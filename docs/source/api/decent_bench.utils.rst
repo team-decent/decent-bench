@@ -5,8 +5,10 @@ decent\_bench.utils
 .. toctree::
    :maxdepth: 2
 
+   decent_bench.utils.problem_generation
    decent_bench.utils.solvers
    decent_bench.utils.types
+   decent_bench.utils.tuning
 
 .. automodule:: decent_bench.utils
    :members:

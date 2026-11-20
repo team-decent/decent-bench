@@ -123,7 +123,7 @@ class RuntimeMetricPlotter:
             description: Human-readable description for the y-axis label
             x_log: Whether the x-axis should be logarithmic
             y_log: Whether the y-axis should be logarithmic
-            save_path: Path to save the plot when updated (if None, no saving is performed)
+            save_path: Directory for saving the plot during normal shutdown (if None, no saving is performed)
 
         """
         if metric_id in self._figures:

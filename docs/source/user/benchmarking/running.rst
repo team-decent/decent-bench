@@ -91,7 +91,8 @@ In both examples, we generate a linear regression problem
 
 .. literalinclude:: ../../../examples/basic_p2p_example.py
     :language: python
-    :lines: 17
+    :start-at: costs, x_optimal, _ = create_regression_problem
+    :end-at: costs, x_optimal, _ = create_regression_problem
 
 characterized by the local costs
 :math:`f_i(x_i) = \frac{1}{m_i} \sum_{h = 1}^{m_i} \frac{1}{2} (a_i^h x_i - b_i^h)^2` with feature vectors
@@ -103,11 +104,13 @@ We then create the federated or peer-to-peer network of agents to solve the prob
 
 .. literalinclude:: ../../../examples/basic_fed_example.py
     :language: python
-    :lines: 17
+    :start-at: network = FedNetwork
+    :end-at: network = FedNetwork
 
 .. literalinclude:: ../../../examples/basic_p2p_example.py
     :language: python
-    :lines: 19-20
+    :start-at: graph = nx.complete_graph
+    :end-at: network = P2PNetwork
 
 where each agent is assigned one of the cost functions :math:`f_i` contained in ``costs``.
 
@@ -115,7 +118,8 @@ These steps set up the benchmark problem, which is represented by the data struc
 
 .. literalinclude:: ../../../examples/basic_fed_example.py
     :language: python
-    :lines: 18
+    :start-at: problem = benchmark.BenchmarkProblem
+    :end-at: problem = benchmark.BenchmarkProblem
 
 The next steps are the execution of the benchmark using the :func:`~decent_bench.benchmark.benchmark` function, passing
 a list of the algorithms to be tested as ``algorithms``, each with its hyperparameters. The results are contained in the
@@ -126,12 +130,14 @@ In the examples, two performance metrics are selected (which are instances of :c
 
 .. literalinclude:: ../../../examples/basic_fed_example.py
     :language: python
-    :lines: 36
+    :start-at: metrics_to_compute =
+    :end-at: metrics_to_compute =
 
 with :class:`~decent_bench.metrics.metric_library.XError` being the distance from the optimal solution, and
-:class:`~decent_bench.metrics.metric_library.GradientNorm` the norm of the gradient of :math:`\sum_{i = 1}^N f_i`. If
+:class:`~decent_bench.metrics.metric_library.GradientNorm` the norm of the gradient of
+:math:`\frac{1}{N}\sum_{i = 1}^N f_i` at the mean agent state. If
 the ``table_metrics`` and ``plot_metrics`` arguments of :func:`~decent_bench.benchmark.compute_metrics` are not specified,
-all the available metrics are used instead. Not all metrics are always available: for example
+predefined lists of table and plot metrics are used instead, excluding metrics unavailable for the problem. For example,
 :class:`~decent_bench.metrics.metric_library.XError` is not available if ``x_optimal`` is not available.
 
 .. note::

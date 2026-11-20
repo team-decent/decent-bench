@@ -1,3 +1,4 @@
+import importlib
 import json
 import logging
 import os
@@ -15,25 +16,31 @@ import pandas as pd
 import pytest
 import zstandard as zstd
 
-from decent_array import interoperability as iop
+from decent_array import Array, interoperability as iop
 from decent_array.types import Devices, Frameworks
 from decent_bench.agents import Agent
 from decent_bench.algorithms import Algorithm
 from decent_bench.algorithms.p2p import ADMM, ATC, DGD
 from decent_bench.benchmark import (
-    BenchmarkResult,
     BenchmarkProblem,
+    BenchmarkResult,
     MetricResult,
     benchmark,
-    create_classification_problem,
+    compute_metrics,
     configure,
+    display_metrics,
     resume_benchmark,
 )
-from decent_bench.costs import LogisticRegressionCost, PyTorchCost
+from decent_bench.costs import LogisticRegressionCost, PyTorchCost, QuadraticCost
 from decent_bench.metrics._metrics_view import NetworkMetricsView
 from decent_bench.networks import Network, P2PNetwork
-from decent_bench.schemes import GaussianNoise, Quantization, UniformActivationRate, UniformDropRate
+from decent_bench.schemes.activation import UniformActivationRate
+from decent_bench.schemes.compression import Quantization
+from decent_bench.schemes.drop import UniformDropRate
+from decent_bench.schemes.noise import GaussianNoise
 from decent_bench.utils._checkpoint_manager import _ZSTD_MAGIC, CheckpointManager  # noqa: PLC2701
+from decent_bench.utils.problem_generation import create_classification_problem
+
 
 def _configure_for_checkpoint(
     storage_dir: Path | None = None,
@@ -54,6 +61,7 @@ def _configure_for_checkpoint(
             storage_dir=storage_dir,
             n_checkpoints=n_checkpoints,
         )
+
 
 try:
     import torch
@@ -114,9 +122,139 @@ def _build_problem_and_algorithms(
     return problem, algorithms
 
 
-def test_init_validates_arguments(tmp_path: Path) -> None:  # noqa: D103
+@pytest.mark.parametrize("n_checkpoints", [-1, 1.5, True])
+def test_init_validates_arguments(tmp_path: Path, n_checkpoints: int) -> None:  # noqa: D103
     with pytest.raises(ValueError, match="n_checkpoints must be a positive integer"):
-        CheckpointManager(tmp_path / "ckpt", n_checkpoints=-1)
+        CheckpointManager(tmp_path / "ckpt", n_checkpoints=n_checkpoints)
+
+
+def _small_checkpoint_problem() -> BenchmarkProblem:
+    agents = [
+        Agent(QuadraticCost(Array(np.eye(1)), Array(np.array([1.0])))),
+        Agent(QuadraticCost(Array(np.eye(1)), Array(np.array([2.0])))),
+    ]
+    return BenchmarkProblem(P2PNetwork(graph=nx.complete_graph(2), agents=agents))
+
+
+@pytest.mark.no_auto_configure
+def test_extended_targets_survive_reload_and_repeated_extensions(  # noqa: D103
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ckpt = tmp_path / "ckpt"
+    _configure_for_checkpoint(ckpt)
+    problem = _small_checkpoint_problem()
+    result = benchmark([DGD()], problem, iterations=2, n_trials=1)
+    metrics = compute_metrics(result, table_metrics=[], plot_metrics=[])
+
+    extended = resume_benchmark(increase_iterations=2, increase_trials=1, create_backup=False)
+    assert extended.iterations == 4
+    assert [len(trials) for trials in extended.states.values()] == [2]
+    assert not CheckpointManager(ckpt).are_metrics_computed()
+    with pytest.raises(ValueError, match="metrics.*out of date"):
+        display_metrics()
+
+    _configure_for_checkpoint(ckpt, open_existing=True)
+    manager = CheckpointManager(ckpt)
+
+    def fail_save(*args: Any, **kwargs: Any) -> None:
+        raise OSError("save failed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(manager, "_save_pickle", fail_save)
+        with pytest.raises(OSError, match="save failed"):
+            manager.save_metrics_result(metrics)
+    assert not manager.are_metrics_computed()
+    loaded = manager.load_benchmark_result()
+    assert loaded.iterations == 4
+    assert [len(trials) for trials in loaded.states.values()] == [2]
+    resumed = resume_benchmark(create_backup=False)
+    assert resumed.iterations == 4
+    assert [len(trials) for trials in resumed.states.values()] == [2]
+
+    extended_again = resume_benchmark(increase_iterations=1, increase_trials=1, create_backup=False)
+    assert extended_again.iterations == 5
+    _configure_for_checkpoint(ckpt, open_existing=True)
+    loaded_again = manager.load_benchmark_result()
+    assert loaded_again.iterations == 5
+    assert [len(trials) for trials in loaded_again.states.values()] == [3]
+    for trials in loaded_again.states.values():
+        assert [trial.agents()[0]._x_history.max() for trial in trials] == [5, 5, 5]
+
+    compute_metrics(extended_again, table_metrics=[], plot_metrics=[])
+    assert manager.load_metrics_result() is not None
+    assert manager.are_metrics_computed()
+
+
+@pytest.mark.no_auto_configure
+def test_resume_after_interrupted_extension_uses_updated_targets(  # noqa: D103
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ckpt = tmp_path / "ckpt"
+    _configure_for_checkpoint(ckpt)
+    problem = _small_checkpoint_problem()
+    original_result = benchmark([DGD()], problem, iterations=2, n_trials=1)
+    benchmark_module = importlib.import_module("decent_bench.benchmark._benchmark")
+
+    def interrupt(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("interrupted")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(benchmark_module, "_benchmark", interrupt)
+        with pytest.raises(RuntimeError, match="interrupted"):
+            resume_benchmark(increase_iterations=2, increase_trials=1, create_backup=False)
+
+    _configure_for_checkpoint(ckpt, open_existing=True)
+    manager = CheckpointManager(ckpt)
+    with pytest.raises(FileNotFoundError):
+        manager.load_metrics_result()
+    compute_metrics(original_result, table_metrics=[], plot_metrics=[])
+    assert manager.are_metrics_computed()
+    resumed = resume_benchmark(create_backup=False)
+    assert not manager.are_metrics_computed()
+    assert resumed.iterations == 4
+    assert [len(trials) for trials in resumed.states.values()] == [2]
+    assert [trial.agents()[0]._x_history.max() for trials in resumed.states.values() for trial in trials] == [4, 4]
+
+
+@pytest.mark.no_auto_configure
+def test_resume_preserves_trial_order_with_mixed_completion(tmp_path: Path) -> None:  # noqa: D103
+    ckpt = tmp_path / "ckpt"
+    _configure_for_checkpoint(ckpt)
+    benchmark([DGD()], _small_checkpoint_problem(), iterations=2, n_trials=1)
+    manager = CheckpointManager(ckpt)
+    algorithm, network = manager.load_trial_result(0, 0)
+    network.agents()[0].data["trial_marker"] = 1
+    manager.mark_trial_complete(
+        alg_idx=0, trial=1, iteration=1, algorithm=algorithm, network=network, rng_state=iop.get_rng_state()
+    )
+    manager.update_run_targets(iterations=2, n_trials=2)
+    manager.unmark_trial_complete(0, 0)
+
+    resumed = resume_benchmark(create_backup=False)
+    trials = next(iter(resumed.states.values()))
+    assert "trial_marker" not in trials[0].agents()[0].data
+    assert trials[1].agents()[0].data["trial_marker"] == 1
+
+
+@pytest.mark.no_auto_configure
+def test_completion_marker_must_match_iteration_target(tmp_path: Path) -> None:  # noqa: D103
+    ckpt = tmp_path / "ckpt"
+    _configure_for_checkpoint(ckpt)
+    benchmark([DGD()], _small_checkpoint_problem(), iterations=2, n_trials=1)
+    manager = CheckpointManager(ckpt)
+    assert manager.is_trial_complete(0, 0, iterations=2)
+    assert not manager.is_trial_complete(0, 0, iterations=3)
+    with pytest.raises(ValueError, match="exceeds the stored iteration target"):
+        manager.is_trial_complete(0, 0, iterations=1)
+
+
+def test_failed_metadata_write_preserves_previous_metadata(tmp_path: Path) -> None:  # noqa: D103
+    manager = CheckpointManager(tmp_path)
+    manager._save_metadata({"iterations": 2})
+    with pytest.raises(TypeError):
+        manager._save_metadata({"iterations": object()})
+    assert manager.load_metadata() == {"iterations": 2}
+    assert list(tmp_path.iterdir()) == [tmp_path / "metadata.json"]
 
 
 @pytest.mark.no_auto_configure
@@ -285,7 +423,7 @@ def test_mark_unmark_and_load_trial_result(tmp_path: Path) -> None:  # noqa: D10
     final_checkpoint = manager.mark_trial_complete(
         alg_idx=0,
         trial=0,
-        iteration=5,
+        iteration=4,
         algorithm=algorithms[0],
         network=problem.network,
         rng_state={"seed": 123, "python_random_state": random.getstate()},
@@ -313,7 +451,7 @@ def test_load_benchmark_result_skips_incomplete_algorithms(  # noqa: D103
     manager.mark_trial_complete(
         alg_idx=0,
         trial=0,
-        iteration=5,
+        iteration=4,
         algorithm=algorithms[0],
         network=problem.network,
         rng_state={"seed": 123, "python_random_state": random.getstate()},
@@ -321,7 +459,7 @@ def test_load_benchmark_result_skips_incomplete_algorithms(  # noqa: D103
     manager.mark_trial_complete(
         alg_idx=0,
         trial=1,
-        iteration=5,
+        iteration=4,
         algorithm=algorithms[0],
         network=problem.network,
         rng_state={"seed": 123, "python_random_state": random.getstate()},

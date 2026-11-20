@@ -6,17 +6,19 @@ decent-bench includes some benchmarks that are already implemented in the ``exam
 with a short description of the use case and features.
 
 
-How to use benchmarks
----------------------
-Benchmarks are implemented as Jupyter notebooks, and include all the code to set up and run the benchmark in a
-self-contained way. Testing a new algorithm on the benchmark is as easy as adding a new item to the list ``algorithms``
-that is passed as argument of :func:`~decent_bench.benchmark.benchmark`. Each notebook also includes a number
-of arguments definitions that can be used to customize the benchmark problem.
+Using benchmarks
+----------------
+Benchmarks are provided as sub-folders of the `examples <https://github.com/team-decent/decent-bench/tree/main/examples>`_
+folder. Each benchmark consists of a Jupyter notebook and additional code in the `src` folder, and is self-contained.
+Benchmarks can be customized by:
+
+#. Adding custom algorithms to test, which are simply passed as arguments of :func:`~decent_bench.benchmark.benchmark`.
+#. Customizing the benchmark settings through the arguments defined at the top of the notebooks.
 
 
 Available benchmarks
 --------------------
-The follwing list includes the currently available benchmarks, specifying to which architectures they apply.
+The following list includes the currently available benchmarks, specifying to which architectures they apply.
 
 * ``consensus`` [peer-to-peer]: this benchmark tests a simple *average consensus* problem, where the agents need to collaboratively compute the average of their initial observations :math:`u_i`.
 * ``FEMNIST`` [federated]: this benchmark tests federated algorithms for a classification task of handwritten characters from the FEMNIST dataset.

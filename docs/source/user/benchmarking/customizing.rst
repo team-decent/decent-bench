@@ -18,10 +18,10 @@ Benchmark settings
 The arguments of :func:`~decent_bench.benchmark.benchmark` allow customization of the benchmark run; the most important
 arguments are:
 
-* ``algorithms``: defines which algorithms should be tested. Each algorithm is an :class:`~decent_bench.algorithms.Algorithm` object initialized with the number of iterations to run (``iterations``) and required hyperparameters.
+* ``algorithms``: defines which algorithms should be tested. Each algorithm is an :class:`~decent_bench.algorithms.Algorithm` object initialized with its required hyperparameters.
 * ``benchmark_problem``: instance of :class:`~decent_bench.benchmark.BenchmarkProblem` which defines the problem.
 * ``n_trials``: if the benchmark setup (network and/or algorithms) have stochastic features, running several trials is necessary. This is possible by setting the ``n_trials`` argument. See more in :ref:`this section <reproducibility>`.
-* ``max_processes``: allows to set the number of threads that should be used to run the simulations.
+* ``max_processes``: sets the maximum number of processes used to run the simulations.
 * ``runtime_metrics``: if the benchmark run is very long, it can be useful to monitor its progress (beyond the progress bar that is displayed by default). This can be done by plotting :class:`~decent_bench.metrics.RuntimeMetric`, which are simple and computationally cheap performance metrics displayed in a plot that evolves as the simulations run. The available runtime metrics are: :tagged:`runtime metric`.
 
 
@@ -36,9 +36,9 @@ displyed with :func:`~decent_bench.benchmark.display_metrics`.
 
 These steps can be customized in several ways. For :func:`~decent_bench.benchmark.compute_metrics`:
 
-* ``table_metrics`` and ``plot_metrics``: these can be different, since some metrics cannot be plotted (*e.g.* :class:`~decent_bench.metrics.metric_library.GradientCalls`, which counts the number of total gradient calls at the end of the simulation). Passing ``None`` to both arguments will use all the available metrics (already divided by table and plot metrics); see :mod:`~decent_bench.metrics.metric_library` for the list of available metrics. These arguments can also be an empty list to avoid computing either table or plot metrics.
+* ``table_metrics`` and ``plot_metrics``: these can be different, since some metrics cannot be plotted (*e.g.* :class:`~decent_bench.metrics.metric_library.GradientCalls`, which counts the number of total gradient calls at the end of the simulation). Passing ``None`` uses a predefined list for that argument, excluding metrics unavailable for the problem. See :mod:`~decent_bench.metrics.metric_library` for available metrics. These arguments can also be an empty list to avoid computing either table or plot metrics.
 * ``statistics_across_agents``: as discussed later in :ref:`this section <reproducibility>`, the benchmark can run several trials and average over the results. Additionally, several metrics yield one value for each agent (this is the case of :class:`~decent_bench.metrics.metric_library.GradientCalls`), and aggregation over the per-agent metrics is required. This can be controlled via the ``statistics_across_agents`` argument, which accepts a list of statistics to be computed across agents (options are: "mean", "std", "max", "min", "median"; "mean", "std" are used by default).
-* Output: the function returns a :class:`~decent_bench.benchmark.MetricResult` object, which contains four ``pandas.DataFrame`` with the computed metrics (the raw data and the aggregated data across trials and agents). The results can thus be easily inspected.
+* Output: the function returns a :class:`~decent_bench.benchmark.MetricResult` object. Its raw table and plot results map metrics to ``pandas.DataFrame`` objects, while its aggregated table and plot results are each a DataFrame.
 
 For :func:`~decent_bench.benchmark.display_metrics`:
 
