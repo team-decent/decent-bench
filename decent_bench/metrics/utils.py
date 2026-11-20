@@ -148,7 +148,7 @@ def _accuracy(agents: Sequence[AgentMetricsView], problem: "BenchmarkProblem", i
             )
             return [np.nan for _ in agents]
 
-        ret.append(float(iop.sum(preds == test_y)) / iop.size(test_y))
+        ret.append(float(iop.mean(preds == test_y)))
 
     return ret
 
