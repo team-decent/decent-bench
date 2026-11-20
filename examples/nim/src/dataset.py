@@ -5,12 +5,13 @@ from typing import cast
 
 import numpy as np
 import torch
+from decent_array import interoperability as iop
 from numpy import float64
 from numpy.typing import NDArray
 from PIL import Image
 
 from decent_bench.datasets import DatasetHandler
-from decent_bench.utils._logger import LOGGER, start_logger
+from decent_bench.utils._logger import LOGGER
 from decent_bench.utils.types import Dataset
 
 
@@ -77,7 +78,6 @@ class NIMDatasetHandler(DatasetHandler):
         occupancy_threshold: float = 0.8,
         overlap: float = 0.0,
     ) -> None:
-        start_logger()
         self.image_file = image_file
         self._n_partitions = n_partitions
         self.samples_per_partition = samples_per_partition
@@ -89,8 +89,8 @@ class NIMDatasetHandler(DatasetHandler):
             raise ValueError("label_balance must be >= 1")
 
         # Load and process the image
-        image = Image.open(self.image_file).convert("L")
-        image_array = np.array(image, dtype=float64) / 255.0
+        with Image.open(self.image_file) as image:
+            image_array = np.array(image.convert("L"), dtype=float64) / 255.0
         self.height, self.width = image_array.shape
         self._feature_norm: float = max(self.height, self.width)
 
@@ -113,7 +113,7 @@ class NIMDatasetHandler(DatasetHandler):
 
     @property
     def n_samples(self) -> int:  # noqa: D102
-        return len(self.get_datapoints())
+        return sum(len(partition) for partition in self._partitions)
 
     @property
     def n_partitions(self) -> int:  # noqa: D102
@@ -144,18 +144,25 @@ class NIMDatasetHandler(DatasetHandler):
     def get_partitions(self) -> Sequence[Dataset]:  # noqa: D102
         return self._partitions
 
+    def split(self, partitions: Sequence[Sequence[int]]) -> list[Dataset]:
+        """Materialize index partitions from the flattened spatial partitions."""
+        indices = self._resolve_partitions(partitions)
+        datapoints = self.get_datapoints()
+        return [[datapoints[index] for index in partition] for partition in indices]
+
     def get_test_set(self, label_balance: float | None = None, num_samples: int | None = None) -> Dataset:
         """Return occupancy grid as the test set."""
-        image = Image.open(self.image_file).convert("L")
-        image_array = np.array(image, dtype=float64) / 255.0
+        with Image.open(self.image_file) as image:
+            image_array = np.array(image.convert("L"), dtype=float64) / 255.0
         occ = image_to_occupancy(image_array, threshold=self.occupancy_threshold)
-        y_coords, x_coords = np.meshgrid(range(self.height), range(self.width), indexing="ij")
-        features = np.column_stack([x_coords.flatten(), y_coords.flatten()]).astype(int)
-        labels = occ.flatten().astype(int)
-
-        raw_test_set: list[tuple[tuple[int, int], int]] = []
-        for (x, y), label in zip(features, labels, strict=True):
-            raw_test_set.append(((int(x), int(y)), int(label)))
+        y_coords, x_coords = np.meshgrid(np.arange(self.height), np.arange(self.width), indexing="ij")
+        raw_test_set = list(
+            zip(
+                zip(x_coords.ravel().tolist(), y_coords.ravel().tolist(), strict=True),
+                occ.ravel().tolist(),
+                strict=True,
+            )
+        )
 
         raw_test_set = self._balance_partitions(
             [raw_test_set],
@@ -165,7 +172,7 @@ class NIMDatasetHandler(DatasetHandler):
         return self._apply_transforms_and_normalize([raw_test_set])[0]
 
     def _feature_transform(self, x: tuple[int, int]) -> torch.Tensor:
-        return torch.tensor(x)
+        return torch.tensor(x, dtype=torch.float32)
 
     def _target_transform(self, x: int) -> torch.Tensor:
         return torch.tensor(x, dtype=torch.float32).unsqueeze(0)
@@ -181,12 +188,7 @@ class NIMDatasetHandler(DatasetHandler):
             ValueError: If it's not possible to create a grid with exactly the requested number of partitions.
 
         """
-        # Create coordinate arrays for all pixels
-        y_coords, x_coords = np.meshgrid(range(self.height), range(self.width), indexing="ij")
-
-        # Create labels: 1 for black (< 0.5), 0 for white (>= 0.5)
-        labels = image_to_occupancy(image_array.flatten(), threshold=self.occupancy_threshold).reshape(-1, 1)
-        features = np.column_stack([x_coords.flatten(), y_coords.flatten()]).astype(int)
+        occ = image_to_occupancy(image_array, threshold=self.occupancy_threshold)
 
         # Find grid dimensions that give exactly the requested number of partitions
         # Try to find the most "square-like" grid that has exactly the requested partitions
@@ -213,22 +215,24 @@ class NIMDatasetHandler(DatasetHandler):
             int(self.overlap * partition_width),
         )
 
-        # Initialize partition lists
-        spatial_partitions: list[list[tuple[tuple[int, int], int]]] = [[] for _ in range(self.n_partitions)]
-
-        # Group pixels by their spatial partition
-        for (x, y), label in zip(features, labels, strict=True):
-            # Find all potential partitions this pixel could belong to based on leakage
-            # Calculate row/column ranges that this pixel might belong to
-            min_row = max(0, int((y - leakage) // partition_height))
-            max_row = min(rows - 1, int((y + leakage) // partition_height))
-            min_col = max(0, int((x - leakage) // partition_width))
-            max_col = min(cols - 1, int((x + leakage) // partition_width))
-
-            # Add the pixel to all partitions it belongs to
-            for r in range(min_row, max_row + 1):
-                for c in range(min_col, max_col + 1):
-                    spatial_partitions[r * cols + c].append(((int(x), int(y)), label.item()))
+        spatial_partitions: list[list[tuple[tuple[int, int], int]]] = []
+        for r in range(rows):
+            y_start = 0 if r == 0 else max(0, r * partition_height - leakage)
+            y_end = self.height if r == rows - 1 else min(self.height, (r + 1) * partition_height + leakage)
+            for c in range(cols):
+                x_start = 0 if c == 0 else max(0, c * partition_width - leakage)
+                x_end = self.width if c == cols - 1 else min(self.width, (c + 1) * partition_width + leakage)
+                ys, xs = np.meshgrid(np.arange(y_start, y_end), np.arange(x_start, x_end), indexing="ij")
+                sub_occ = occ[y_start:y_end, x_start:x_end]
+                spatial_partitions.append(
+                    list(
+                        zip(
+                            zip(xs.ravel().tolist(), ys.ravel().tolist(), strict=True),
+                            sub_occ.ravel().tolist(),
+                            strict=True,
+                        )
+                    )
+                )
 
         return spatial_partitions
 
@@ -241,6 +245,7 @@ class NIMDatasetHandler(DatasetHandler):
         if label_balance is None and samples_per_partition is None:
             return partitions  # No balancing needed
 
+        rng = random.Random(iop.get_seed())
         balanced_partitions: list[list[tuple[tuple[int, int], int]]] = []
         for partition in partitions:
             if not partition:
@@ -250,7 +255,7 @@ class NIMDatasetHandler(DatasetHandler):
             # Only want to have samples_per_partition but not balanced
             if label_balance is None and samples_per_partition is not None:
                 # If only samples_per_partition is set, sample randomly from the partition without balancing
-                balanced_partition = random.sample(partition, min(samples_per_partition, len(partition)))
+                balanced_partition = rng.sample(partition, min(samples_per_partition, len(partition)))
                 balanced_partitions.append(balanced_partition)
                 continue
 
@@ -261,7 +266,7 @@ class NIMDatasetHandler(DatasetHandler):
             if len(class_counts) < 2:
                 # If there's only one class present, we can't balance, so we just sample if needed
                 if samples_per_partition is not None and len(partition) > samples_per_partition:
-                    balanced_partition = random.sample(partition, samples_per_partition)
+                    balanced_partition = rng.sample(partition, samples_per_partition)
                 else:
                     balanced_partition = partition
                 balanced_partitions.append(balanced_partition)
@@ -303,7 +308,7 @@ class NIMDatasetHandler(DatasetHandler):
                 if count > desired_counts[label]:
                     # If there are more samples than the max allowed for this class, sample down to the max allowed
                     label_partition = [item for item in partition if item[1] == label]
-                    subset = random.sample(label_partition, desired_counts[label])
+                    subset = rng.sample(label_partition, desired_counts[label])
                 else:
                     # If there are fewer samples than the max allowed, keep all samples for this class
                     subset = [item for item in partition if item[1] == label]
@@ -322,11 +327,12 @@ class NIMDatasetHandler(DatasetHandler):
         """Normalize features in each partition to [0,1] range based on image norm."""
         transformed_partitions: list[Dataset] = []
         for partition in partitions:
-            transformed_partition = []
-            for feature, label in partition:
-                transformed_partition.append((
-                    self._feature_transform(feature) / self._feature_norm,
-                    self._target_transform(label),
-                ))
+            if not partition:
+                transformed_partitions.append([])
+                continue
+            features, labels = zip(*partition, strict=True)
+            feature_tensors = (torch.tensor(features, dtype=torch.float32) / self._feature_norm).unbind(0)
+            target_tensors = torch.tensor(labels, dtype=torch.float32).unsqueeze(1).unbind(0)
+            transformed_partition = list(zip(feature_tensors, target_tensors, strict=True))
             transformed_partitions.append(cast("Dataset", transformed_partition))
         return transformed_partitions
